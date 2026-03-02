@@ -247,6 +247,7 @@ export default function SetupPage() {
   const totalServices = SERVICE_CONFIGS.filter(s => s.authType !== "desktop").length;
 
   return (
+    <div className="h-full overflow-y-auto">
     <div className="p-6 max-w-3xl mx-auto">
       <div className="mb-6">
         <h1 className="text-xl font-semibold" data-testid="text-setup-title">Setup</h1>
@@ -434,6 +435,7 @@ export default function SetupPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
     </div>
   );
 }

@@ -46,6 +46,17 @@ export default function App() {
                 <main className="flex-1 overflow-hidden flex flex-col">
                   <Router />
                 </main>
+                <footer className="shrink-0 border-t px-4 py-2 text-center text-[11px] text-muted-foreground">
+                  Designed by{" "}
+                  <a
+                    href="https://syncds.ca"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline underline-offset-2 hover:text-foreground transition-colors"
+                  >
+                    Sync Digital Solutions
+                  </a>
+                </footer>
               </div>
             </div>
           </SidebarProvider>

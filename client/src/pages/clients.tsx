@@ -345,6 +345,7 @@ export default function ClientsPage() {
   };
 
   return (
+    <div className="h-full overflow-y-auto">
     <div className="p-6 max-w-5xl mx-auto">
       <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
         <div>
@@ -442,6 +443,7 @@ export default function ClientsPage() {
           )}
         </DialogContent>
       </Dialog>
+    </div>
     </div>
   );
 }

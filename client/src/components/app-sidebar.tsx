@@ -1,4 +1,4 @@
-import { MessageSquare, Users, Settings, Zap, History } from "lucide-react";
+import { FileBarChart, Users, Settings, Zap, History } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import {
   Sidebar,
@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/sidebar";
 
 const navItems = [
-  { title: "Query", url: "/", icon: MessageSquare },
+  { title: "Reports", url: "/", icon: FileBarChart },
   { title: "Clients", url: "/clients", icon: Users },
   { title: "History", url: "/history", icon: History },
   { title: "Setup", url: "/setup", icon: Settings },
@@ -61,7 +61,7 @@ export function AppSidebar() {
       </SidebarContent>
       <SidebarFooter className="p-4">
         <div className="text-[10px] text-muted-foreground text-center">
-          SmartEO v1.0 MVP
+          SmartEO v1.1
         </div>
       </SidebarFooter>
     </Sidebar>

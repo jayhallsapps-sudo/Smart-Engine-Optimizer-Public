@@ -1,0 +1,132 @@
+PRIMARY OUTCOME
+For any client I select, SmartEO should generate:
+- A completed Bi-weekly report as a Google Doc (based on my template)
+- A completed Monthly deck as Google Slides (based on my template)
+- A completed QBR deck as Google Slides (based on my template)
+
+DATA SOURCES (connectors)
+SmartEO must pull data from:
+- Google Search Console (GSC Search Analytics API)
+- Google Analytics 4 (GA4 Data API)
+- CallRail API v3
+Optional (phase 2): import Screaming Frog CSV exports; manual Ahrefs/SEMrush inputs.
+
+IMPORTANT PRINCIPLES
+- Reports must be “answer-first”: put the direct bottom-line findings first, then supporting detail.
+- Reports must focus on business outcomes (leads/calls/verify-insurance/contact actions), not just rankings.
+- Always segment branded vs non-branded in GSC when possible.
+- Keep date ranges consistent across sources in each report (default QoQ for QBR, MoM for Monthly, last 14 days for Bi-weekly).
+
+TEMPLATE-DRIVEN POPULATION (critical)
+I will upload 3 templates (Docs + Slides). Your first job is to:
+1) Parse each template and detect placeholders (e.g., {{client_name}}, {{date_range}}, {{kpi_table}}, etc.)
+2) Build a “Template Mapping” UI where I can map placeholders → data fields or computed blocks
+3) Save these mappings so future templates can be populated automatically
+
+CLIENT CONFIG (required per client)
+Create a Client settings page storing:
+- client_name
+- gsc_site_url (exact GSC property)
+- ga4_property_id
+- callrail_company_id (or account + company)
+- brand_terms[] (for branded filtering)
+- lead_events[] (GA4 event names that count as leads)
+- money_pages[] (URLs we care about: detox/residential/PHP/IOP/OP/verify insurance/contact/location etc.)
+Optional: target_geo (country/state), priority_services[]
+
+REPORT CONTENT REQUIREMENTS (what must be computed)
+
+A) BI-WEEKLY REPORT (Google Doc; last 14 days vs previous 14 days)
+Purpose: momentum + relationship + early risk detection. Keep it short.
+Must include:
+1) Topline snapshot (answer-first)
+- Organic clicks (GSC) delta
+- Organic sessions (GA4) delta
+- Organic leads/conversions (GA4 from lead_events) delta
+- Organic calls (CallRail) delta
+2) What we shipped (pulled from a simple “Work Log” inside the app, entered manually)
+3) What changed + why (3 bullets max; based on largest movers in GSC queries/pages and GA landing pages)
+4) Risks/blocks + what we need from the client (approvals, dev, content input)
+5) Next two weeks: 3–5 prioritized actions
+
+B) MONTHLY REPORT (Google Slides; last 30 days vs previous 30 days)
+Purpose: insights + direction for the next month.
+Must include:
+1) Executive summary slide (answer-first KPI table)
+- GSC: clicks, impressions, CTR, avg position
+- GA4 (organic): sessions, leads, CVR
+- CallRail (organic): calls, unique callers, avg duration, qualified % if tags exist
+2) Visibility & demand slide (GSC)
+- Top query winners/losers (non-branded primary)
+- Top page winners/losers (focus on money_pages)
+3) Conversion performance slide (GA4 + CallRail)
+- Top organic landing pages by leads + CVR
+- Call volume and quality notes (duration, qualified tags, missed calls if available)
+4) Work completed slide (from Work Log) + outcomes
+5) Next month priorities slide (3–5 items) tied to the North Star Metric (NSM) for the client
+
+C) QBR REPORT (Google Slides; last 90 days vs previous 90 days; plus optional YoY)
+Purpose: business impact + expectation reset + next-quarter strategy.
+Must include:
+1) QBR scorecard (NSM pacing + funnel)
+- GSC: clicks/impressions trend
+- GA4: organic sessions, organic leads, CVR
+- CallRail: organic calls, qualified %, avg duration
+2) What worked / what didn’t (derived from biggest drivers)
+- Top 10 pages that drove leads/calls over the quarter
+- Major query intent shifts (non-branded)
+3) Strategic insights (3–5) with evidence from data
+4) Risks/constraints/dependencies (explicit expectation management section)
+5) Next-quarter roadmap (prioritized initiatives with trade-offs)
+- Separate into: Technical, Content, CRO/UX, Local (if applicable)
+6) Appendix slides/tables (exportable)
+- Full top queries table
+- Full top pages table
+- Top landing pages table
+
+NATURAL LANGUAGE QUERIES (MVP)
+Provide a chat input that routes to predefined report builders:
+- “Generate bi-weekly for Anchored Tides”
+- “Generate monthly deck for all clients this month”
+- “Show me QBR drivers for [client]”
+Natural language must NOT create arbitrary queries; it must map to the fixed report builders above.
+
+EXPORT / OUTPUT REQUIREMENTS
+- Bi-weekly: create a Google Doc from template and replace placeholders with computed values and tables.
+- Monthly/QBR: create a Google Slides deck from template and replace placeholders; insert tables as native tables; insert charts as simple images if needed.
+- Provide links to the created Doc/Slides at the end.
+
+TECHNICAL REQUIREMENTS
+- Next.js + TypeScript
+- Postgres + Prisma
+- Google OAuth2 with offline access for GSC/GA4/Docs/Slides APIs
+- CallRail API key stored securely
+- Encrypt stored tokens and API keys
+- Caching layer for report queries to avoid quota issues
+- Audit log of generated reports and underlying query specs
+
+GOOGLE APIS TO USE
+- Search Console API (searchanalytics.query)
+- GA4 Data API (properties.runReport)
+- Google Docs API (batchUpdate)
+- Google Slides API (presentations.batchUpdate)
+
+IMPLEMENTATION STEPS
+1) Build auth + connectors for Google + CallRail
+2) Build Client config CRUD
+3) Build Template ingestion:
+   - upload template file or connect to a Google Doc/Slides template ID
+   - parse placeholders ({{...}}) in text boxes and tables
+   - mapping UI: placeholder → data field/computed block
+4) Build report engines for Bi-weekly, Monthly, QBR using the content requirements above
+5) Build “Generate Report” UI:
+   - select client(s), cadence, date range preset
+   - generate and return output links
+6) Add natural language router to trigger the report engines
+
+QUALITY / GUARDRAILS
+- If a required metric can’t be pulled (missing mapping, missing event definition), show a clear error and what setting needs to be fixed.
+- Never invent numbers. All values must be derived from APIs or explicitly user-entered Work Log.
+- Keep outputs concise and client-safe; internal notes can be toggled on/off.
+
+Deliver the full working codebase, setup instructions, and a short “how to generate your first client report” walkthrough.

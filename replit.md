@@ -29,15 +29,16 @@ server/
   storage.ts           - Database CRUD operations
   db.ts                - Database connection
   encryption.ts        - AES-256-GCM encryption for credentials
-  nlRouter.ts          - Natural language query parser (12 commands)
-  mockData.ts          - Demo data generator with addiction-space content
-  seed.ts              - Seeds 4 recovery centre clients
+  nlRouter.ts          - Natural language query parser (37 commands across all report types)
+  mockData.ts          - Demo data generator with addiction-space content (37 mock generators)
+  airtable.ts          - Airtable REST API integration for work log fetching
+  seed.ts              - Seeds 8 recovery centre clients
 shared/
   schema.ts            - Drizzle schema, types, SERVICE_CONFIGS, COMMANDS
 ```
 
 ## Data Model
-- **clients**: Recovery centre accounts with GSC, GA4, CallRail, CTM, Ahrefs, SEMrush, Screaming Frog configs; brand terms, lead events, money pages, organic source terms
+- **clients**: Recovery centre accounts with GSC, GA4, CallRail, CTM, Ahrefs, SEMrush, Screaming Frog, Nimbata, Airtable configs; brand terms, lead events, money pages, organic source terms, airtableBaseId, airtableTableName
 - **query_logs**: History of NL queries with parsed commands and results
 - **api_credentials**: Encrypted API keys/tokens with `accountLabel` for multi-account support per service
 

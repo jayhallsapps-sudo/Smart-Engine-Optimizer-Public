@@ -481,6 +481,23 @@ export default function SetupPage() {
           ))}
         </div>
 
+        <div className="space-y-3">
+          <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+            Work Tracking
+          </h2>
+          {SERVICE_CONFIGS.filter(s => ["airtable"].includes(s.id)).map(config => (
+            <ServiceSection
+              key={config.id}
+              config={config}
+              credentials={credentials}
+              onAddAccount={handleOpenConnect}
+              onDeleteAccount={(id) => deleteCredentialMutation.mutate(id)}
+              onTestAccount={handleTestAccount}
+              testStates={testStates}
+            />
+          ))}
+        </div>
+
         <Separator className="my-4" />
 
         <div className="space-y-3">

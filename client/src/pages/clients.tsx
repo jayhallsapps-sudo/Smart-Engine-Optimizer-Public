@@ -53,6 +53,7 @@ import {
   KeyRound,
   Download,
   Upload,
+  Database,
 } from "lucide-react";
 import type { Client } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
@@ -134,6 +135,8 @@ interface ClientFormData {
   semrushProjectId: string;
   screamingFrogProfile: string;
   nimbataAccountId: string;
+  airtableBaseId: string;
+  airtableTableName: string;
   brandTerms: string[];
   leadEvents: string[];
   moneyPages: string[];
@@ -151,6 +154,8 @@ const emptyForm: ClientFormData = {
   semrushProjectId: "",
   screamingFrogProfile: "",
   nimbataAccountId: "",
+  airtableBaseId: "",
+  airtableTableName: "",
   brandTerms: [],
   leadEvents: [],
   moneyPages: [],
@@ -200,6 +205,14 @@ function ClientForm({ initial, onSubmit, isPending }: { initial: ClientFormData;
             <div className="space-y-2">
               <Label htmlFor="nimbata" className="flex items-center gap-1.5"><Phone className="w-3 h-3" /> Nimbata Account ID</Label>
               <Input id="nimbata" value={form.nimbataAccountId} onChange={e => update("nimbataAccountId", e.target.value)} placeholder="Nimbata account ID" data-testid="input-nimbata-id" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="airtableBase" className="flex items-center gap-1.5"><Database className="w-3 h-3" /> Airtable Base ID</Label>
+              <Input id="airtableBase" value={form.airtableBaseId} onChange={e => update("airtableBaseId", e.target.value)} placeholder="appXXXXXXXXXXXXXX" data-testid="input-airtable-base-id" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="airtableTable" className="flex items-center gap-1.5"><Database className="w-3 h-3" /> Airtable Table / View Name</Label>
+              <Input id="airtableTable" value={form.airtableTableName} onChange={e => update("airtableTableName", e.target.value)} placeholder="e.g., Work Log" data-testid="input-airtable-table-name" />
             </div>
           </div>
         </TabsContent>
@@ -344,6 +357,16 @@ const SERVICE_DEFS = [
     getValue: (c: Client) => c.screamingFrogProfile,
     format: (v: string) => v,
     isManual: true,
+  },
+  {
+    key: "airtable",
+    label: "Airtable Work Log",
+    short: "Airtable",
+    credService: "airtable",
+    icon: Database,
+    getValue: (c: Client) => (c as any).airtableBaseId,
+    format: (v: string) => v,
+    isManual: false,
   },
 ] as const;
 
@@ -755,6 +778,8 @@ export default function ClientsPage() {
                 semrushProjectId: editingClient.semrushProjectId || "",
                 screamingFrogProfile: editingClient.screamingFrogProfile || "",
                 nimbataAccountId: (editingClient as any).nimbataAccountId || "",
+                airtableBaseId: (editingClient as any).airtableBaseId || "",
+                airtableTableName: (editingClient as any).airtableTableName || "",
                 brandTerms: editingClient.brandTerms || [],
                 leadEvents: editingClient.leadEvents || [],
                 moneyPages: editingClient.moneyPages || [],

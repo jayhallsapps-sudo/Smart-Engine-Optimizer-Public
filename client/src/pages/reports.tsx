@@ -731,55 +731,186 @@ const EXAMPLE_QUERIES_BY_TYPE: Record<ReportType, string[]> = {
 
 const PROMPTS_LIBRARY: Record<ReportType, { label: string; prompt: string }[]> = {
   biweekly: [
-    { label: "Organic traffic snapshot", prompt: "Pull GSC clicks, impressions, CTR and position for the last 14 days vs the prior 14 days. Flag any metric that moved more than 10%." },
-    { label: "Organic sessions & users", prompt: "Pull GA4 organic sessions and new users for the last 14 days vs prior 14 days. Highlight session changes by landing page." },
-    { label: "Organic call volume", prompt: "Pull CallRail organic call count for the last 14 days vs prior 14 days. Flag if calls are up or down and by how much." },
-    { label: "Organic call volume (CTM)", prompt: "Pull CTM organic call count for the last 14 days vs prior 14 days and compare to the same period last month." },
-    { label: "Top query movers", prompt: "Show me the top 5 queries that gained the most clicks and the top 5 that lost the most clicks over the last 14 days. Include position change." },
-    { label: "New content performance", prompt: "Which new or updated pages published in the last 30 days are getting traction in GSC? Show clicks and impressions." },
-    { label: "Position 8–15 opportunities", prompt: "List queries ranking in positions 8–15 with more than 20 impressions over the last 14 days. These are quick-win candidates." },
-    { label: "Branded vs non-branded split", prompt: "Compare branded vs non-branded clicks and impressions in GSC for the last 14 days. Show the percentage split." },
-    { label: "Organic leads & conversions", prompt: "Pull GA4 organic goal completions (contact form, phone click, chat) for the last 14 days vs prior. Tie to the client's top conversion events." },
-    { label: "Page experience signals", prompt: "Summarise Core Web Vitals from GSC for the last 14 days. Flag any URLs with poor LCP, INP or CLS." },
-    { label: "Index coverage check", prompt: "Are there any new crawl errors, excluded pages or coverage issues in GSC this fortnight? List by category." },
-    { label: "Wins & action items", prompt: "Based on the last 14 days of data, summarise the top 3 wins and top 3 priority actions for the next fortnight. Keep it to bullet points." },
+    {
+      label: "Combined funnel snapshot",
+      prompt: "Pull the combined organic funnel for the last 14 days vs the prior 14 days. Show: organic sessions, form conversions, organic calls, total leads (forms + calls), and lead CVR. Present as a single summary block.",
+    },
+    {
+      label: "QTD funnel vs goal",
+      prompt: "Pull quarter-to-date organic sessions, total leads (forms + calls), and CVR. Compare each to the quarterly goal. Flag any metric that is more than 10% below pace.",
+    },
+    {
+      label: "Top 10 pages by sessions",
+      prompt: "Show the top 10 landing pages by organic sessions for the last 14 days vs the prior 14 days. For each page include: sessions, form conversions, organic calls, total leads, CVR, and session delta %.",
+    },
+    {
+      label: "Top 10 pages by conversions",
+      prompt: "Show the top 10 landing pages sorted by total leads (forms + calls) for the last 14 days vs the prior 14 days. Include sessions, forms, calls, total leads, CVR, and lead delta %.",
+    },
+    {
+      label: "Session movers (up & down)",
+      prompt: "Show the top 5 pages that gained the most organic sessions and the top 5 that lost the most organic sessions over the last 14 days vs prior 14. Include current sessions, previous sessions, absolute delta, and delta %.",
+    },
+    {
+      label: "Conversion movers (up & down)",
+      prompt: "Show the top 5 pages that gained the most total leads (calls + forms) and the top 5 that lost the most leads over the last 14 days. Include current leads, previous leads, delta, and delta %.",
+    },
+    {
+      label: "Top 20 GSC queries table",
+      prompt: "Pull the top 20 non-branded GSC queries by clicks for the last 14 days. For each query show: clicks, impressions, CTR, average position, and all four metrics vs the prior 14 days with delta columns.",
+    },
+    {
+      label: "GSC traffic snapshot",
+      prompt: "Pull aggregate GSC clicks, impressions, CTR, and average position for the last 14 days vs the prior 14 days. Flag any metric that moved more than 10%.",
+    },
+    {
+      label: "Call tracking summary",
+      prompt: "Summarise call tracking for the last 14 days: total calls, answered rate, qualified rate, and top 5 traffic sources by call volume. Compare answered and qualified rates to the prior 14-day period and flag any drop.",
+    },
+    {
+      label: "Work log by category",
+      prompt: "Pull the work log for the last 14 days. Group items by category: Content (published / refreshed), Technical, Internal Linking, Local/GBP, Authority/Links. Show each task as a bullet under its category heading.",
+    },
+    {
+      label: "New & updated pages tracker",
+      prompt: "List all pages published or significantly updated in the last 30 days. For each show: URL, target keyword, current GSC index status, and early GSC signal (clicks and impressions to date).",
+    },
+    {
+      label: "Tracking anomaly check",
+      prompt: "Run a tracking health check across GA4, call tracking, and GSC for the last 14 days. Flag: missing or misfiring GA4 events, unexpected drops in call attribution, GSC data gaps, or redirect anomalies. List each issue with priority level.",
+    },
   ],
   monthly: [
-    { label: "Monthly organic traffic MoM", prompt: "Pull GSC clicks, impressions, CTR and avg position for this month vs last month. Highlight anything that moved more than 15%." },
-    { label: "Monthly organic sessions MoM", prompt: "Pull GA4 organic sessions, new users and engagement rate for this month vs last month. Break down by key landing pages." },
-    { label: "Organic call volume MoM", prompt: "Pull CallRail organic call volume for this month vs last month and vs the same month last year." },
-    { label: "Organic call volume MoM (CTM)", prompt: "Pull CTM organic call volume for this month vs last month. Include call duration and missed call rate if available." },
-    { label: "Non-branded keyword wins", prompt: "Show the top 10 non-branded keywords that gained the most clicks this month vs last. Exclude brand terms and navigational queries." },
-    { label: "Conversion & leads summary", prompt: "Summarise all organic goal completions in GA4 for the month. Tie totals to leads, contact forms, phone clicks and chat starts." },
-    { label: "Content performance audit", prompt: "Rank all pages by organic clicks this month. Flag pages that dropped more than 20% MoM and any pages that broke into the top 10." },
-    { label: "Backlink growth (Ahrefs)", prompt: "Pull new referring domains and lost referring domains for the month from Ahrefs. Flag any high-authority gains or losses." },
-    { label: "DR & authority trend", prompt: "What is the current Domain Rating in Ahrefs and how has it trended over the last 3 months? Include linked domains count." },
-    { label: "Keyword rank changes", prompt: "Show me the top 20 keyword rank changes (gains and losses) from SEMrush for the month. Include search volume and previous position." },
-    { label: "Technical issues summary", prompt: "Summarise any new crawl errors, redirect chains, broken links or Core Web Vitals issues flagged this month. Prioritise by impact." },
-    { label: "Screaming Frog diff", prompt: "Compare this month's Screaming Frog crawl to last month's. Flag any new 4xx pages, missing H1s, duplicate titles or slow-loading URLs." },
-    { label: "Competitor visibility snapshot", prompt: "Pull SEMrush visibility scores for the top 3 competitors and compare to our client. Have we gained or lost ground this month?" },
-    { label: "Monthly narrative summary", prompt: "Write a trusted advisor narrative for this month. Cover: what happened in organic, why it happened, what we're doing next, and what we need from the client. Tie every point to admissions leads." },
-    { label: "Next 30-day priorities", prompt: "Based on this month's data, list the top 5 SEO priorities for next month ranked by expected impact on leads and admissions." },
+    {
+      label: "Combined funnel MoM",
+      prompt: "Pull the full organic funnel for this month vs last month. Show: engaged sessions, form conversions, organic calls, total leads (forms + calls), and CVR. Flag each metric with MoM delta % and highlight anything more than 15% off.",
+    },
+    {
+      label: "YoY monthly comparison",
+      prompt: "Compare this month's organic performance to the same month last year. Show: organic sessions, organic calls, form conversions, total leads, and CVR — all with YoY delta % and context on seasonality.",
+    },
+    {
+      label: "GSC monthly snapshot",
+      prompt: "Pull GSC clicks, impressions, CTR, and average position for this month vs last month. Highlight any metric that moved more than 15%.",
+    },
+    {
+      label: "Top 30 GSC queries with MoM delta",
+      prompt: "Pull the top 30 non-branded GSC queries by clicks for this month. Show clicks, impressions, CTR, position, and MoM delta for each metric. Highlight queries where position improved by 3+ places or clicks dropped more than 20%.",
+    },
+    {
+      label: "Top 20 pages — full funnel MoM",
+      prompt: "Pull the top 20 landing pages by organic sessions for this month. For each show: sessions, forms, calls, total leads, CVR, and MoM delta for sessions and leads. Flag pages with more than 20% drop in either metric.",
+    },
+    {
+      label: "Top 20 pages by conversions",
+      prompt: "Pull the top 20 landing pages sorted by total leads (forms + calls) for this month vs last month. Include sessions, forms, calls, total leads, CVR, and lead delta %.",
+    },
+    {
+      label: "High impressions / low CTR finder",
+      prompt: "Find the top 15 non-branded queries with more than 5,000 impressions this month and below-average CTR. Include impressions, clicks, CTR, and average position. These are title/meta description optimisation opportunities.",
+    },
+    {
+      label: "High traffic / low CVR diagnostic",
+      prompt: "Find the top 15 pages with above-average organic sessions but below-average lead CVR for this month. Show sessions, total leads, CVR, the site average CVR, and the gap. These are CRO priority targets.",
+    },
+    {
+      label: "Content output summary",
+      prompt: "List all pages published or refreshed this month. For each show: page title or URL, whether it was new or a refresh, target keyword, publication date, and early GSC performance (impressions and clicks to date).",
+    },
+    {
+      label: "Technical health summary",
+      prompt: "Summarise technical SEO work for the month from Screaming Frog and SEMrush. Show: issues found, issues fixed, outstanding issues, and the top 3–5 remaining critical items with priority and page count affected.",
+    },
+    {
+      label: "Core Web Vitals trend",
+      prompt: "Pull Core Web Vitals status from GSC for this month. Show % of URLs passing Good thresholds for LCP, CLS, and INP (or FID). Flag any regression vs the prior month and list specific failing URL templates.",
+    },
+    {
+      label: "GBP / Local SEO summary",
+      prompt: "Summarise Google Business Profile performance for the month: new reviews, average rating change, posts published, and GBP interactions (calls, direction requests, website clicks). Compare to the prior month.",
+    },
+    {
+      label: "SEMrush / Ahrefs visibility",
+      prompt: "Pull organic visibility and keyword growth from SEMrush and/or Ahrefs for this month vs last month. Show: total keywords tracked, top 3/10/20 counts, DR or Authority Score, and the top 3 competitor visibility scores.",
+    },
+    {
+      label: "Work log by category",
+      prompt: "Pull the work log for this month. Group items by category: Content (published / refreshed), Technical, CRO/UX, Internal Linking, Local/GBP, Authority/Links. Show each task as a bullet under its category heading.",
+    },
+    {
+      label: "Next-month backlog priorities",
+      prompt: "Based on this month's performance data, list the top 5 SEO priorities for next month. For each: what the task is, which metric it addresses, and the expected impact. Rank by estimated lead or sessions impact.",
+    },
   ],
   qbr: [
-    { label: "QoQ organic traffic", prompt: "Pull GSC clicks, impressions, CTR and average position for this quarter vs last quarter. Show percentage change for each metric." },
-    { label: "YoY organic traffic", prompt: "Pull GSC clicks and impressions for this quarter vs the same quarter last year. Highlight seasonal trends." },
-    { label: "QoQ organic sessions", prompt: "Pull GA4 organic sessions, new users and engagement rate for this quarter vs last quarter. Include top 10 landing pages by sessions." },
-    { label: "Organic call volume QoQ", prompt: "Pull CallRail organic calls for this quarter vs last quarter and vs the same quarter last year. Include call duration averages." },
-    { label: "Organic call volume QoQ (CTM)", prompt: "Pull CTM organic calls for this quarter vs last quarter. Include missed call rate and top call sources." },
-    { label: "Leads, VOBs & admissions", prompt: "Summarise all organic-attributed leads, insurance verification requests (VOBs) and confirmed admissions for the quarter. Compare to the prior quarter." },
-    { label: "Keyword portfolio growth", prompt: "How many keywords is the site now ranking for in top 3, top 10 and top 20 positions in SEMrush? Compare to the start of the quarter." },
-    { label: "Top keyword movers QoQ", prompt: "List the top 10 keyword rank improvements and top 10 rank declines from SEMrush for the quarter. Include search volume." },
-    { label: "Backlink profile review", prompt: "Pull the quarter's new referring domains, lost referring domains and total backlink count from Ahrefs. Highlight any notable wins or risks." },
-    { label: "Domain Rating trajectory", prompt: "Show the Domain Rating trend over the last 4 quarters from Ahrefs. Is the site growing authority relative to competitors?" },
-    { label: "Content audit & gap analysis", prompt: "Which pages delivered the most organic clicks this quarter? Which pages underperformed vs expectations? Identify 3 content gaps to fill next quarter." },
-    { label: "Technical health scorecard", prompt: "Summarise technical SEO health for the quarter. Include crawl error trends, Core Web Vitals status, mobile usability issues and HTTPS coverage." },
-    { label: "Screaming Frog quarterly diff", prompt: "Compare the latest Screaming Frog crawl to the crawl from 90 days ago. Quantify changes in 4xx pages, redirect chains, missing meta, and page speed." },
-    { label: "Competitor share of voice", prompt: "Compare organic visibility and estimated traffic share against the top 3 competitors using SEMrush data for the quarter." },
-    { label: "ROI & attribution narrative", prompt: "Calculate estimated organic ROI for the quarter. Use call volume, form completions and known admission value to show the revenue impact of SEO." },
-    { label: "What happened this quarter", prompt: "Write the 'what happened' section of the QBR. Cover organic traffic, calls, leads and any notable algorithm updates or site events that affected performance." },
-    { label: "Why it happened", prompt: "Write the 'why it happened' section. Explain the drivers behind performance changes: content, technical, authority, competition and seasonality." },
-    { label: "Strategy for next quarter", prompt: "Write the 'what we're doing next' section. Outline the top 5 strategic priorities for Q+1 with expected business outcomes tied to admissions and revenue." },
+    {
+      label: "QoQ funnel (sessions → leads)",
+      prompt: "Pull the full organic funnel for this quarter vs the prior quarter. Show: organic sessions, form conversions, organic calls, total leads (forms + calls), CVR, and QoQ delta % for each. This is the top-line funnel block for the QBR deck.",
+    },
+    {
+      label: "YoY quarterly comparison",
+      prompt: "Compare this quarter to the same quarter last year. Show the same funnel metrics — sessions, forms, calls, total leads, CVR — plus VOB volume if available, all with YoY delta % and seasonality context.",
+    },
+    {
+      label: "Monthly trendline within quarter",
+      prompt: "Break down the quarter into its 3 months. For each month show: organic sessions, organic calls, form conversions, total leads, and CVR. Identify whether we're accelerating, flat, or decelerating within the quarter.",
+    },
+    {
+      label: "GSC QoQ snapshot",
+      prompt: "Pull GSC clicks, impressions, CTR, and average position for this quarter vs the prior quarter. Show QoQ delta for each metric and flag any significant shifts.",
+    },
+    {
+      label: "Top 50 GSC queries with QoQ delta",
+      prompt: "Pull the top 50 non-branded GSC queries by clicks for this quarter. Show clicks, impressions, CTR, average position, and QoQ delta for each. Highlight the top 10 movers in each direction.",
+    },
+    {
+      label: "Top 50 landing pages with QoQ delta",
+      prompt: "Pull the top 50 landing pages by organic sessions for this quarter. Show sessions, forms, calls, total leads, CVR, and QoQ delta for sessions and leads. Flag pages that entered or exited the top 50.",
+    },
+    {
+      label: "Query-to-page conversion map",
+      prompt: "For the top 20 landing pages by total leads this quarter, pull the top 2–3 non-branded GSC queries driving clicks to each page. Show page URL, clicks, leads, CVR, and the primary queries alongside their impressions and CTR.",
+    },
+    {
+      label: "Keyword distribution by tier (QoQ)",
+      prompt: "Pull keyword distribution by position tier from SEMrush for this quarter vs last quarter: Top 3, Top 4–10, Top 11–20. Show counts and QoQ delta for each tier. Flag whether we're moving keywords up-funnel.",
+    },
+    {
+      label: "Competitor domain visibility (QoQ)",
+      prompt: "Pull the top 10 competitor domains by organic visibility from SEMrush or Ahrefs. Show their QoQ visibility % change alongside our own. Identify which competitors are gaining or losing ground relative to us.",
+    },
+    {
+      label: "Content production summary",
+      prompt: "Summarise all content published and refreshed during the quarter. For each piece: title/URL, type (new or refresh), target keyword, publish date, and current GSC performance (clicks and impressions). Highlight any pages that broke into top-50 queries.",
+    },
+    {
+      label: "Technical SEO quarterly",
+      prompt: "Summarise technical SEO for the quarter: total issues opened, issues resolved, critical issues outstanding. List the top 5 unresolved issues with priority level, page templates affected, and estimated organic impact.",
+    },
+    {
+      label: "Indexation stability",
+      prompt: "Pull GSC coverage report for this quarter vs the prior quarter. Show total indexed pages, total excluded pages, and a breakdown of exclusion reasons (not indexed, duplicate, redirect, etc.). Flag any trend that could affect organic reach.",
+    },
+    {
+      label: "GBP / Local quarterly",
+      prompt: "Summarise GBP performance across the quarter: total reviews received, average rating and trend, posts published, and total GBP interactions (calls, directions, website clicks). Compare to the prior quarter.",
+    },
+    {
+      label: "Call quality quarterly",
+      prompt: "Summarise call performance for the quarter from CallRail or CTM: total organic calls, answered rate, qualified rate, average call duration, and the top 5 landing pages by call volume. Compare each metric to the prior quarter.",
+    },
+    {
+      label: "Top 10 wins (tied to metrics)",
+      prompt: "List the top 10 wins from the quarter. Each win must be tied to a measurable outcome — e.g., 'Detox page moved from position 14 to 6, +40 clicks/month' or 'Insurance verification page CVR improved from 2.1% to 3.4%'. Be specific.",
+    },
+    {
+      label: "Top 10 risks & problems",
+      prompt: "List the top 10 risks or underperformance issues from the quarter. Each must reference the specific metric or page affected — e.g., 'Homepage organic sessions down 18% QoQ with no clear technical cause' or '3 money pages still not indexed'. Include recommended next step.",
+    },
+    {
+      label: "Next-quarter forecast",
+      prompt: "Build a Q+1 forecast with three scenarios — base, upside, downside — for organic sessions and total leads. State the key assumptions behind each scenario (e.g., content volume, link acquisition, algorithm stability). Express as ranges, not single point estimates.",
+    },
   ],
 };
 

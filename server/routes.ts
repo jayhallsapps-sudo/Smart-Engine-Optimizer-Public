@@ -4,11 +4,12 @@ import { storage } from "./storage";
 import { insertClientSchema } from "@shared/schema";
 import { parseNaturalQuery, getCommandDescription, getDateRangeLabel } from "./nlRouter";
 import { generateMockResult } from "./mockData";
+import { fetchAirtableWorkLog } from "./airtable";
 import { seedDatabase } from "./seed";
 import { encrypt } from "./encryption";
 import { buildGoogleAuthUrl, exchangeCodeForToken, callbackHtml, isGoogleConfigured } from "./googleAuth";
 import { testCredential } from "./connectionTest";
-import { insertSfReportSchema } from "@shared/schema";
+import { insertSfReportSchema, insertCallTrackingReportSchema } from "@shared/schema";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -78,6 +79,54 @@ export async function registerRoutes(
     const client = await storage.getClient(intent.clientId);
     if (!client) return res.status(404).json({ message: "Client not found" });
 
+    if (intent.command === "airtable_work_log") {
+      const { startDate, endDate } = dateRangeToActualDates(intent.dateRange);
+      const airtableResult = await fetchAirtableWorkLog(intent.clientId, startDate, endDate);
+
+      if (!airtableResult.success) {
+        return res.json({
+          success: false,
+          error: airtableResult.error,
+          setupRequired: (airtableResult as any).setupRequired,
+        });
+      }
+
+      const { data } = airtableResult;
+      const tables = Object.entries(data.byCategory).map(([category, items]) => ({
+        title: category,
+        headers: ["Task", "Date", "URL / Page"],
+        rows: items.map(item => [item.task, item.date, item.url ?? "—"]),
+      }));
+
+      const result = {
+        command: "airtable_work_log" as const,
+        clientName: data.clientName,
+        dateRange: data.dateRange,
+        summary: [
+          { label: "Total Items", current: data.totalItems.toString(), previous: "—", delta: "—", deltaPercent: "—", isPositive: true },
+          { label: "Categories", current: Object.keys(data.byCategory).length.toString(), previous: "—", delta: "—", deltaPercent: "—", isPositive: true },
+        ],
+        tables,
+      };
+
+      await storage.createQueryLog({
+        clientId: intent.clientId,
+        command: intent.command,
+        naturalQuery: query,
+        dateRange: intent.dateRange,
+        filters: intent.filters,
+        resultSummary: `Work log: ${data.totalItems} items across ${Object.keys(data.byCategory).length} categories`,
+        resultData: result as any,
+      });
+
+      return res.json({
+        success: true,
+        commandDescription: getCommandDescription(intent.command),
+        dateRangeLabel: data.dateRange,
+        result,
+      });
+    }
+
     const result = generateMockResult(intent.command, client.name, intent.dateRange);
 
     await storage.createQueryLog({
@@ -96,6 +145,42 @@ export async function registerRoutes(
       dateRangeLabel: getDateRangeLabel(intent.dateRange),
       result,
     });
+  });
+
+  function dateRangeToActualDates(dateRange: string): { startDate: string; endDate: string } {
+    const now = new Date();
+    const fmt = (d: Date) => d.toISOString().split("T")[0];
+    const sub = (d: Date, days: number) => { const r = new Date(d); r.setDate(r.getDate() - days); return r; };
+    const end = fmt(now);
+    switch (dateRange) {
+      case "last_14_vs_prev_14": return { startDate: fmt(sub(now, 14)), endDate: end };
+      case "last_30_vs_prev_30": return { startDate: fmt(sub(now, 30)), endDate: end };
+      case "last_365_vs_prev_365": return { startDate: fmt(sub(now, 365)), endDate: end };
+      case "qtd": {
+        const month = now.getMonth();
+        const qStart = new Date(now.getFullYear(), Math.floor(month / 3) * 3, 1);
+        return { startDate: fmt(qStart), endDate: end };
+      }
+      default: return { startDate: fmt(sub(now, 90)), endDate: end };
+    }
+  }
+
+  app.get("/api/clients/:id/airtable-work-log", async (req, res) => {
+    const clientId = Number(req.params.id);
+    const startDate = req.query.startDate as string | undefined;
+    const endDate = req.query.endDate as string | undefined;
+    const now = new Date();
+    const fmt = (d: Date) => d.toISOString().split("T")[0];
+    const sub = (d: Date, days: number) => { const r = new Date(d); r.setDate(r.getDate() - days); return r; };
+    const result = await fetchAirtableWorkLog(
+      clientId,
+      startDate ?? fmt(sub(now, 90)),
+      endDate ?? fmt(now)
+    );
+    if (!result.success) {
+      return res.status(result.setupRequired ? 422 : 500).json({ message: result.error, setupRequired: result.setupRequired });
+    }
+    res.json(result.data);
   });
 
   app.get("/api/query-logs", async (req, res) => {

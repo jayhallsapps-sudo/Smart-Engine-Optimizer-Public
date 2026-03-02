@@ -233,6 +233,7 @@ export default function SetupPage() {
   const [googleConnecting, setGoogleConnecting] = useState(false);
   const [testStates, setTestStates] = useState<Record<number, TestState>>({});
   const [sheetUrlInput, setSheetUrlInput] = useState("");
+  const [sheetsConnecting, setSheetsConnecting] = useState(false);
   const { toast } = useToast();
 
   const { data: googleStatus } = useQuery<{ configured: boolean }>({
@@ -293,6 +294,34 @@ export default function SetupPage() {
     setAccountLabel("");
     setFieldValues({});
     setGoogleConnecting(false);
+  };
+
+  const handleSheetsOAuth = () => {
+    setSheetsConnecting(true);
+    const w = 600, h = 700;
+    const left = Math.round(window.screenX + (window.outerWidth - w) / 2);
+    const top = Math.round(window.screenY + (window.outerHeight - h) / 2);
+    const url = `/api/auth/google/start?service=google_sheets&accountLabel=${encodeURIComponent("Google Sheets")}`;
+    const popup = window.open(url, "google_oauth", `width=${w},height=${h},left=${left},top=${top},scrollbars=yes,resizable=yes`);
+    const messageHandler = (event: MessageEvent) => {
+      if (event.data?.type !== "google_oauth_result") return;
+      window.removeEventListener("message", messageHandler);
+      setSheetsConnecting(false);
+      if (event.data.success) {
+        queryClient.invalidateQueries({ queryKey: ["/api/credentials"] });
+        toast({ title: "Google Sheets access authorized" });
+      } else {
+        toast({ title: "Authorization failed", description: event.data.message, variant: "destructive" });
+      }
+    };
+    window.addEventListener("message", messageHandler);
+    const pollClosed = setInterval(() => {
+      if (popup?.closed) {
+        clearInterval(pollClosed);
+        window.removeEventListener("message", messageHandler);
+        setSheetsConnecting(false);
+      }
+    }, 500);
   };
 
   const handleGoogleOAuth = () => {
@@ -458,56 +487,101 @@ export default function SetupPage() {
             Report Data Source
           </h2>
           <Card className="p-5">
-            <div className="flex items-start gap-4">
-              <div className="flex items-center justify-center w-11 h-11 rounded-lg shrink-0 bg-emerald-600">
-                <FileSpreadsheet className="w-5 h-5 text-white" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between gap-2 mb-1">
-                  <h3 className="font-medium text-sm">Google Sheets Data Source</h3>
-                  {savedSheetUrl ? (
-                    <Badge variant="default" className="text-[10px]">
-                      <CheckCircle className="w-3 h-3 mr-1" /> Connected
-                    </Badge>
-                  ) : (
-                    <Badge variant="secondary" className="text-[10px]">Not connected</Badge>
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground mb-3">
-                  Paste the URL of your master Google Sheet. Report generation will pull context from this sheet for all clients.
-                </p>
-                {savedSheetUrl && (
-                  <div className="flex items-center gap-2 p-2 rounded-md bg-muted/50 mb-3">
-                    <Link className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                    <a
-                      href={savedSheetUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-primary hover:underline truncate"
-                    >
-                      {savedSheetUrl}
-                    </a>
+            {(() => {
+              const sheetsAuthorized = credentials.some(c => c.service === "google_sheets");
+              const fullyConnected = sheetsAuthorized && !!savedSheetUrl;
+              return (
+                <div className="flex items-start gap-4">
+                  <div className="flex items-center justify-center w-11 h-11 rounded-lg shrink-0 bg-emerald-600">
+                    <FileSpreadsheet className="w-5 h-5 text-white" />
                   </div>
-                )}
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="https://docs.google.com/spreadsheets/d/…"
-                    value={sheetUrlInput}
-                    onChange={e => setSheetUrlInput(e.target.value)}
-                    className="text-xs h-8"
-                    data-testid="input-sheet-url"
-                  />
-                  <Button
-                    size="sm"
-                    onClick={() => saveSheetUrlMutation.mutate(sheetUrlInput.trim())}
-                    disabled={!sheetUrlInput.trim() || saveSheetUrlMutation.isPending}
-                    data-testid="button-save-sheet-url"
-                  >
-                    {savedSheetUrl ? "Update" : "Save"}
-                  </Button>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <h3 className="font-medium text-sm">Google Sheets Data Source</h3>
+                      {fullyConnected ? (
+                        <Badge variant="default" className="text-[10px]">
+                          <CheckCircle className="w-3 h-3 mr-1" /> Connected
+                        </Badge>
+                      ) : sheetsAuthorized ? (
+                        <Badge variant="outline" className="text-[10px] text-yellow-700 dark:text-yellow-400 border-yellow-400">
+                          Authorized — add sheet URL
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary" className="text-[10px]">Not connected</Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      The app reads your sheet using your Google account, so your existing share settings work as-is — no need to make it public.
+                    </p>
+
+                    {/* Step 1: Google authorization */}
+                    <div className={`rounded-md border p-3 mb-3 ${sheetsAuthorized ? "border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30" : "border-border bg-muted/30"}`}>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          {sheetsAuthorized
+                            ? <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                            : <div className="w-4 h-4 rounded-full border-2 border-muted-foreground shrink-0" />
+                          }
+                          <div>
+                            <p className="text-xs font-medium">{sheetsAuthorized ? "Google account authorized" : "Step 1 — Authorize your Google account"}</p>
+                            {!sheetsAuthorized && <p className="text-[11px] text-muted-foreground mt-0.5">Grants read-only access to Sheets on your behalf.</p>}
+                          </div>
+                        </div>
+                        {!sheetsAuthorized && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={handleSheetsOAuth}
+                            disabled={sheetsConnecting || !googleStatus?.configured}
+                            className="gap-1.5 shrink-0"
+                            data-testid="button-authorize-sheets"
+                          >
+                            <SiGoogle className="w-3 h-3" />
+                            {sheetsConnecting ? "Waiting…" : "Authorize"}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Step 2: Sheet URL */}
+                    <div className={`rounded-md border p-3 ${!sheetsAuthorized ? "opacity-50 pointer-events-none" : "border-border"}`}>
+                      <p className="text-xs font-medium mb-2">{savedSheetUrl ? "Sheet URL" : "Step 2 — Paste your sheet URL"}</p>
+                      {savedSheetUrl && (
+                        <div className="flex items-center gap-2 p-1.5 rounded bg-muted/50 mb-2">
+                          <Link className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                          <a
+                            href={savedSheetUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs hover:underline truncate"
+                            style={{ color: "hsl(var(--link))" }}
+                          >
+                            {savedSheetUrl}
+                          </a>
+                        </div>
+                      )}
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="https://docs.google.com/spreadsheets/d/…"
+                          value={sheetUrlInput}
+                          onChange={e => setSheetUrlInput(e.target.value)}
+                          className="text-xs h-8"
+                          data-testid="input-sheet-url"
+                        />
+                        <Button
+                          size="sm"
+                          onClick={() => saveSheetUrlMutation.mutate(sheetUrlInput.trim())}
+                          disabled={!sheetUrlInput.trim() || saveSheetUrlMutation.isPending}
+                          data-testid="button-save-sheet-url"
+                        >
+                          {savedSheetUrl ? "Update" : "Save"}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
+              );
+            })()}
           </Card>
         </div>
 

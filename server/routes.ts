@@ -176,6 +176,59 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/sheet-data", async (_req, res) => {
+    try {
+      const sheetUrl = await storage.getSetting("google_sheet_url");
+      if (!sheetUrl) return res.status(404).json({ message: "No sheet URL configured" });
+
+      const sheetsCreds = await storage.getApiCredentialsByService("google_sheets");
+      if (!sheetsCreds.length) return res.status(401).json({ message: "Google Sheets not authorized. Please authorize in Setup." });
+
+      const { decrypt } = await import("./encryption");
+      const refreshToken = decrypt(sheetsCreds[0].encryptedValue);
+
+      const tokenResp = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: process.env.GOOGLE_CLIENT_ID!,
+          client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+          refresh_token: refreshToken,
+          grant_type: "refresh_token",
+        }),
+      });
+      const tokenData = (await tokenResp.json()) as any;
+      if (!tokenData.access_token) {
+        return res.status(401).json({ message: "Failed to get Google access token. Try re-authorizing in Setup." });
+      }
+
+      const match = sheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+      if (!match) return res.status(400).json({ message: "Invalid Google Sheet URL" });
+      const spreadsheetId = match[1];
+
+      const sheetsResp = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?includeGridData=false`,
+        { headers: { Authorization: `Bearer ${tokenData.access_token}` } }
+      );
+      const sheetsData = (await sheetsResp.json()) as any;
+      if (!sheetsResp.ok) {
+        return res.status(sheetsResp.status).json({ message: sheetsData.error?.message || "Failed to read sheet" });
+      }
+
+      const sheets = sheetsData.sheets?.map((s: any) => s.properties?.title) ?? [];
+
+      const valuesResp = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/A1:Z500`,
+        { headers: { Authorization: `Bearer ${tokenData.access_token}` } }
+      );
+      const valuesData = (await valuesResp.json()) as any;
+
+      res.json({ title: sheetsData.properties?.title, sheets, values: valuesData.values ?? [] });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.get("/api/settings", async (_req, res) => {
     const all = await storage.getAllSettings();
     const obj: Record<string, string> = {};

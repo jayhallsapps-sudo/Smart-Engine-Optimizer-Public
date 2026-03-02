@@ -5,6 +5,7 @@ import { encrypt } from "./encryption";
 const GOOGLE_SCOPES: Record<string, string> = {
   google_search_console: "https://www.googleapis.com/auth/webmasters.readonly",
   google_analytics_4: "https://www.googleapis.com/auth/analytics.readonly",
+  google_sheets: "https://www.googleapis.com/auth/spreadsheets.readonly",
 };
 
 interface OAuthState {

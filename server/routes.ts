@@ -293,5 +293,49 @@ export async function registerRoutes(
     res.json({ success: true });
   });
 
+  app.get("/api/call-tracking-reports/summary", async (req, res) => {
+    const rows = await storage.getLatestCallTrackingReportPerClient();
+    res.json(rows);
+  });
+
+  app.get("/api/call-tracking-reports/:id/download", async (req, res) => {
+    const report = await storage.getCallTrackingReport(Number(req.params.id));
+    if (!report) return res.status(404).json({ message: "Not found" });
+    const headers = (report.headers || []);
+    const rows = ((report.data || []) as Record<string, any>[]);
+    const escape = (v: any) => JSON.stringify(String(v ?? ""));
+    const csvLines = [headers.map(escape).join(",")];
+    for (const row of rows) {
+      csvLines.push(headers.map((h: string) => escape(row[h])).join(","));
+    }
+    const csv = csvLines.join("\n");
+    const safeName = (report.filename || ("ct-report-" + report.id)).replace(/[^a-zA-Z0-9._-]/g, "_");
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", "attachment; filename=\"" + safeName + "\"");
+    res.send(csv);
+  });
+
+  app.get("/api/clients/:id/call-tracking-reports", async (req, res) => {
+    const clientId = Number(req.params.id);
+    const reports = await storage.getCallTrackingReports(clientId);
+    res.json(reports.map(r => ({ id: r.id, clientId: r.clientId, reportDate: r.reportDate, filename: r.filename, rowCount: r.rowCount, headers: r.headers, createdAt: r.createdAt })));
+  });
+
+  app.post("/api/clients/:id/call-tracking-reports", async (req, res) => {
+    const clientId = Number(req.params.id);
+    const parsed = insertCallTrackingReportSchema.safeParse({ ...req.body, clientId });
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Invalid call tracking report data", errors: parsed.error.issues });
+    }
+    const report = await storage.createCallTrackingReport(parsed.data);
+    res.status(201).json({ id: report.id, clientId: report.clientId, reportDate: report.reportDate, filename: report.filename, rowCount: report.rowCount, headers: report.headers, createdAt: report.createdAt });
+  });
+
+  app.delete("/api/call-tracking-reports/:id", async (req, res) => {
+    const ok = await storage.deleteCallTrackingReport(Number(req.params.id));
+    if (!ok) return res.status(404).json({ message: "Not found" });
+    res.json({ success: true });
+  });
+
   return httpServer;
 }

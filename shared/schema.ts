@@ -13,6 +13,7 @@ export const clients = pgTable("clients", {
   ahrefsProjectUrl: text("ahrefs_project_url"),
   semrushProjectId: text("semrush_project_id"),
   screamingFrogProfile: text("screaming_frog_profile"),
+  nimbataAccountId: text("nimbata_account_id"),
   brandTerms: text("brand_terms").array().default(sql`'{}'::text[]`),
   leadEvents: text("lead_events").array().default(sql`'{}'::text[]`),
   moneyPages: text("money_pages").array().default(sql`'{}'::text[]`),
@@ -64,6 +65,25 @@ export const sfReports = pgTable("sf_reports", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const callTrackingReports = pgTable("call_tracking_reports", {
+  id: serial("id").primaryKey(),
+  clientId: integer("client_id").notNull(),
+  reportDate: text("report_date").notNull(),
+  filename: text("filename").notNull(),
+  rowCount: integer("row_count").notNull().default(0),
+  headers: text("headers").array(),
+  data: jsonb("data"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertCallTrackingReportSchema = createInsertSchema(callTrackingReports).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type CallTrackingReport = typeof callTrackingReports.$inferSelect;
+export type InsertCallTrackingReport = z.infer<typeof insertCallTrackingReportSchema>;
+
 export const insertSfReportSchema = createInsertSchema(sfReports).omit({
   id: true,
   createdAt: true,
@@ -104,6 +124,7 @@ export const DATA_SERVICES = [
   "ahrefs",
   "semrush",
   "screaming_frog",
+  "nimbata",
 ] as const;
 
 export type DataService = (typeof DATA_SERVICES)[number];
@@ -226,5 +247,16 @@ export const SERVICE_CONFIGS: ServiceConfig[] = [
     color: "bg-yellow-600",
     supportsMultiple: false,
     credentialFields: [],
+  },
+  {
+    id: "nimbata",
+    name: "Nimbata",
+    description: "Call tracking & analytics: calls, sources, recordings, attribution. Used by Williamsburg House.",
+    authType: "api_key",
+    color: "bg-violet-600",
+    supportsMultiple: true,
+    credentialFields: [
+      { key: "api_key", label: "API Key", placeholder: "Enter Nimbata API key", type: "password" },
+    ],
   },
 ];

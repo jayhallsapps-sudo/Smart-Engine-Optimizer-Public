@@ -5,6 +5,7 @@ import {
   queryLogs,
   apiCredentials,
   sfReports,
+  callTrackingReports,
   settings,
   type Client,
   type InsertClient,
@@ -14,6 +15,8 @@ import {
   type InsertApiCredential,
   type SfReport,
   type InsertSfReport,
+  type CallTrackingReport,
+  type InsertCallTrackingReport,
   type Setting,
 } from "@shared/schema";
 
@@ -37,6 +40,11 @@ export interface IStorage {
   createSfReport(report: InsertSfReport): Promise<SfReport>;
   deleteSfReport(id: number): Promise<boolean>;
   getLatestSfReportPerClient(): Promise<Array<{ id: number; clientId: number; reportDate: string; filename: string; rowCount: number; createdAt: Date }>>;
+  getCallTrackingReports(clientId: number): Promise<CallTrackingReport[]>;
+  getCallTrackingReport(id: number): Promise<CallTrackingReport | undefined>;
+  createCallTrackingReport(report: InsertCallTrackingReport): Promise<CallTrackingReport>;
+  deleteCallTrackingReport(id: number): Promise<boolean>;
+  getLatestCallTrackingReportPerClient(): Promise<Array<{ id: number; clientId: number; reportDate: string; filename: string; rowCount: number; createdAt: Date }>>;
 
   getSetting(key: string): Promise<string | null>;
   setSetting(key: string, value: string): Promise<Setting>;
@@ -128,6 +136,39 @@ export class DatabaseStorage implements IStorage {
   async deleteSfReport(id: number): Promise<boolean> {
     const result = await db.delete(sfReports).where(eq(sfReports.id, id)).returning();
     return result.length > 0;
+  }
+
+  async getCallTrackingReports(clientId: number): Promise<CallTrackingReport[]> {
+    return db
+      .select()
+      .from(callTrackingReports)
+      .where(eq(callTrackingReports.clientId, clientId))
+      .orderBy(desc(callTrackingReports.reportDate));
+  }
+
+  async getCallTrackingReport(id: number): Promise<CallTrackingReport | undefined> {
+    const [row] = await db.select().from(callTrackingReports).where(eq(callTrackingReports.id, id));
+    return row;
+  }
+
+  async createCallTrackingReport(report: InsertCallTrackingReport): Promise<CallTrackingReport> {
+    const [created] = await db.insert(callTrackingReports).values(report).returning();
+    return created;
+  }
+
+  async deleteCallTrackingReport(id: number): Promise<boolean> {
+    const result = await db.delete(callTrackingReports).where(eq(callTrackingReports.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async getLatestCallTrackingReportPerClient(): Promise<Array<{ id: number; clientId: number; reportDate: string; filename: string; rowCount: number; createdAt: Date }>> {
+    const rows = await db.execute(sql`
+      SELECT DISTINCT ON (client_id)
+        id, client_id as "clientId", report_date as "reportDate", filename, row_count as "rowCount", created_at as "createdAt"
+      FROM call_tracking_reports
+      ORDER BY client_id, report_date DESC
+    `);
+    return rows.rows as any;
   }
 
   async getLatestSfReportPerClient(): Promise<Array<{ id: number; clientId: number; reportDate: string; filename: string; rowCount: number; createdAt: Date }>> {

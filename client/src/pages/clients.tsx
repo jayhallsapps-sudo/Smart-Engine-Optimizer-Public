@@ -52,6 +52,7 @@ import {
   Circle,
   KeyRound,
   Download,
+  Upload,
 } from "lucide-react";
 import type { Client } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
@@ -64,6 +65,15 @@ type CredentialSafe = {
 };
 
 type SfSummaryRow = {
+  id: number;
+  clientId: number;
+  reportDate: string;
+  filename: string;
+  rowCount: number;
+  createdAt: string;
+};
+
+type CtSummaryRow = {
   id: number;
   clientId: number;
   reportDate: string;
@@ -123,6 +133,7 @@ interface ClientFormData {
   ahrefsProjectUrl: string;
   semrushProjectId: string;
   screamingFrogProfile: string;
+  nimbataAccountId: string;
   brandTerms: string[];
   leadEvents: string[];
   moneyPages: string[];
@@ -139,6 +150,7 @@ const emptyForm: ClientFormData = {
   ahrefsProjectUrl: "",
   semrushProjectId: "",
   screamingFrogProfile: "",
+  nimbataAccountId: "",
   brandTerms: [],
   leadEvents: [],
   moneyPages: [],
@@ -184,6 +196,10 @@ function ClientForm({ initial, onSubmit, isPending }: { initial: ClientFormData;
             <div className="space-y-2">
               <Label htmlFor="ctm" className="flex items-center gap-1.5"><Phone className="w-3 h-3" /> CTM Account ID</Label>
               <Input id="ctm" value={form.ctmAccountId} onChange={e => update("ctmAccountId", e.target.value)} placeholder="CTM-ABC123" data-testid="input-ctm-id" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="nimbata" className="flex items-center gap-1.5"><Phone className="w-3 h-3" /> Nimbata Account ID</Label>
+              <Input id="nimbata" value={form.nimbataAccountId} onChange={e => update("nimbataAccountId", e.target.value)} placeholder="Nimbata account ID" data-testid="input-nimbata-id" />
             </div>
           </div>
         </TabsContent>
@@ -280,6 +296,16 @@ const SERVICE_DEFS = [
     isManual: false,
   },
   {
+    key: "nimbata",
+    label: "Nimbata",
+    short: "Nimbata",
+    credService: "nimbata",
+    icon: Phone,
+    getValue: (c: Client) => (c as any).nimbataAccountId,
+    format: (v: string) => v,
+    isManual: false,
+  },
+  {
     key: "ahrefs",
     label: "Ahrefs",
     short: "Ahrefs",
@@ -300,6 +326,16 @@ const SERVICE_DEFS = [
     isManual: false,
   },
   {
+    key: "ct_manual",
+    label: "Manual Call Tracking",
+    short: "CT Manual",
+    credService: null,
+    icon: Upload,
+    getValue: (_c: Client) => null,
+    format: (v: string) => v,
+    isManual: true,
+  },
+  {
     key: "sf",
     label: "Screaming Frog",
     short: "SF",
@@ -316,11 +352,17 @@ function ServiceRow({
   client,
   credentials,
   sfReport,
+  ctReport,
+  onCtUpload,
+  ctUploading,
 }: {
   def: (typeof SERVICE_DEFS)[number];
   client: Client;
   credentials: CredentialSafe[];
   sfReport?: SfSummaryRow | null;
+  ctReport?: CtSummaryRow | null;
+  onCtUpload?: (file: File) => void;
+  ctUploading?: boolean;
 }) {
   const rawValue = def.getValue(client);
   const hasId = !!rawValue;
@@ -329,11 +371,12 @@ function ServiceRow({
     : [];
   const hasCred = matchingCreds.length > 0;
   const isManual = def.isManual;
-  const hasSfUpload = isManual && !!sfReport;
+  const hasSfUpload = def.key === "sf" && isManual && !!sfReport;
+  const hasCTUpload = def.key === "ct_manual" && isManual && !!ctReport;
 
-  const fullyConnected = hasSfUpload || (hasId && (hasCred || isManual));
+  const fullyConnected = hasSfUpload || hasCTUpload || (hasId && (hasCred || isManual));
   const idOnlyMissingCred = hasId && !hasCred && !isManual;
-  const notConfigured = !hasSfUpload && !hasId;
+  const notConfigured = !hasSfUpload && !hasCTUpload && !hasId;
 
   const Icon = def.icon;
 
@@ -397,7 +440,7 @@ function ServiceRow({
           <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-0.5">No credential saved — go to Setup</p>
         )}
 
-        {isManual && hasSfUpload && (
+        {def.key === "sf" && isManual && hasSfUpload && (
           <div className="flex items-center gap-2 mt-1 flex-wrap">
             <a
               href={"/api/sf-reports/" + sfReport!.id + "/download"}
@@ -411,11 +454,37 @@ function ServiceRow({
             <span className="text-[10px] text-muted-foreground">{sfReport!.rowCount.toLocaleString()} rows · {sfReport!.reportDate}</span>
           </div>
         )}
-        {isManual && !hasSfUpload && hasId && (
-          <p className="text-[10px] text-muted-foreground mt-0.5">No CSV uploaded yet</p>
-        )}
-        {isManual && !hasSfUpload && !hasId && (
+        {def.key === "sf" && isManual && !hasSfUpload && (
           <p className="text-[10px] text-muted-foreground/60 mt-0.5">No uploads</p>
+        )}
+        {def.key === "ct_manual" && isManual && ctReport && (
+          <div className="flex items-center gap-2 mt-1 flex-wrap">
+            <a
+              href={"/api/call-tracking-reports/" + ctReport.id + "/download"}
+              download={ctReport.filename}
+              className="inline-flex items-center gap-1 text-[10px] text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-900/30 rounded px-1.5 py-0.5 hover:underline"
+              data-testid={"ct-download-link-" + client.id}
+            >
+              <Download className="w-2.5 h-2.5" />
+              {ctReport.filename}
+            </a>
+            <span className="text-[10px] text-muted-foreground">{ctReport.rowCount.toLocaleString()} rows · {ctReport.reportDate}</span>
+          </div>
+        )}
+        {def.key === "ct_manual" && isManual && onCtUpload && (
+          <label
+            className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground cursor-pointer mt-1 border rounded px-1.5 py-0.5 transition-colors hover:bg-muted/40"
+            data-testid={"ct-upload-label-" + client.id}
+          >
+            <Upload className="w-2.5 h-2.5" />
+            {ctUploading ? "Uploading…" : ctReport ? "Replace CSV" : "Upload CSV"}
+            <input
+              type="file"
+              accept=".csv"
+              className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) onCtUpload(f); }}
+            />
+          </label>
         )}
       </div>
     </div>
@@ -426,11 +495,13 @@ function ClientCard({
   client,
   credentials,
   sfSummary,
+  ctSummary,
   onEdit,
 }: {
   client: Client;
   credentials: CredentialSafe[];
   sfSummary: SfSummaryRow[];
+  ctSummary: CtSummaryRow[];
   onEdit: () => void;
 }) {
   const { toast } = useToast();
@@ -444,13 +515,42 @@ function ClientCard({
   });
 
   const clientSfReport = sfSummary.find(r => r.clientId === client.id) || null;
+  const clientCtReport = ctSummary.find(r => r.clientId === client.id) || null;
+  const [ctUploading, setCtUploading] = useState(false);
+  const handleCtUpload = async (file: File) => {
+    setCtUploading(true);
+    try {
+      const text = await file.text();
+      const lines = text.split(/\r?\n/).filter(l => l.trim());
+      const headers = lines[0].split(",").map(h => h.replace(/^"|"$/g, "").trim());
+      const rows = lines.slice(1).map(line => {
+        const vals = line.match(/(?:"[^"]*"|[^,])+/g) || [];
+        const obj: Record<string, string> = {};
+        headers.forEach((h, i) => { obj[h] = (vals[i] || "").replace(/^"|"$/g, "").trim(); });
+        return obj;
+      });
+      const today = new Date().toISOString().slice(0, 10);
+      await fetch("/api/clients/" + client.id + "/call-tracking-reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reportDate: today, filename: file.name, rowCount: rows.length, headers, data: rows }),
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/call-tracking-reports/summary"] });
+      toast({ title: "Uploaded", description: rows.length + " rows from " + file.name });
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    } finally {
+      setCtUploading(false);
+    }
+  };
 
   const connectedCount = SERVICE_DEFS.filter(def => {
     const hasId = !!def.getValue(client);
     const hasCred = def.credService
       ? credentials.some(c => c.service === def.credService)
       : true;
-    if (def.isManual) return !!(sfSummary.find(r => r.clientId === client.id));
+    if (def.key === "sf") return !!(sfSummary.find(r => r.clientId === client.id));
+    if (def.key === "ct_manual") return !!(ctSummary.find(r => r.clientId === client.id));
     return hasId && hasCred;
   }).length;
 
@@ -498,7 +598,7 @@ function ClientCard({
 
       <div className="grid grid-cols-1 gap-1.5">
         {SERVICE_DEFS.map(def => (
-          <ServiceRow key={def.key} def={def} client={client} credentials={credentials} sfReport={def.isManual ? clientSfReport : undefined} />
+          <ServiceRow key={def.key} def={def} client={client} credentials={credentials} sfReport={def.key === "sf" ? clientSfReport : undefined} ctReport={def.key === "ct_manual" ? clientCtReport : undefined} onCtUpload={def.key === "ct_manual" ? handleCtUpload : undefined} ctUploading={def.key === "ct_manual" ? ctUploading : undefined} />
         ))}
       </div>
 
@@ -532,6 +632,10 @@ export default function ClientsPage() {
 
   const { data: sfSummary = [] } = useQuery<SfSummaryRow[]>({
     queryKey: ["/api/sf-reports/summary"],
+  });
+
+  const { data: ctSummary = [] } = useQuery<CtSummaryRow[]>({
+    queryKey: ["/api/call-tracking-reports/summary"],
   });
 
   const createMutation = useMutation({
@@ -626,6 +730,7 @@ export default function ClientsPage() {
               client={client}
               credentials={credentials}
               sfSummary={sfSummary}
+              ctSummary={ctSummary}
               onEdit={() => handleEdit(client)}
             />
           ))}
@@ -649,6 +754,7 @@ export default function ClientsPage() {
                 ahrefsProjectUrl: editingClient.ahrefsProjectUrl || "",
                 semrushProjectId: editingClient.semrushProjectId || "",
                 screamingFrogProfile: editingClient.screamingFrogProfile || "",
+                nimbataAccountId: (editingClient as any).nimbataAccountId || "",
                 brandTerms: editingClient.brandTerms || [],
                 leadEvents: editingClient.leadEvents || [],
                 moneyPages: editingClient.moneyPages || [],

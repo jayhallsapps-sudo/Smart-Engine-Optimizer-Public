@@ -46,6 +46,7 @@ import {
   ExternalLink,
   Wifi,
   Loader2,
+  Monitor,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
@@ -110,8 +111,10 @@ function ServiceSection({
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
             <h3 className="font-medium text-sm" data-testid={`text-service-${config.id}`}>{config.name}</h3>
-            <Badge variant={hasAccounts ? "default" : "secondary"} className="text-[10px]">
-              {hasAccounts ? (
+            <Badge variant={config.authType === "desktop" ? "outline" : hasAccounts ? "default" : "secondary"} className="text-[10px]">
+              {config.authType === "desktop" ? (
+                <><Monitor className="w-3 h-3 mr-1" /> Manual Import</>
+              ) : hasAccounts ? (
                 <><CheckCircle2 className="w-3 h-3 mr-1" /> {serviceCredentials.length} Account{serviceCredentials.length > 1 ? "s" : ""}</>
               ) : (
                 <><XCircle className="w-3 h-3 mr-1" /> Not Connected</>
@@ -135,7 +138,7 @@ function ServiceSection({
           {config.authType === "desktop" && (
             <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mb-2">
               <ExternalLink className="w-3 h-3" />
-              Desktop application -- import crawl exports
+              Desktop app — export crawls as CSV and import manually
             </div>
           )}
 

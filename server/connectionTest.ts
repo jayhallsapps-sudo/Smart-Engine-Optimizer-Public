@@ -71,6 +71,38 @@ async function testCallRail(apiKey: string): Promise<TestResult> {
   }
 }
 
+async function testAhrefs(apiKey: string): Promise<TestResult> {
+  try {
+    const resp = await fetch("https://api.ahrefs.com/v3/account-usage", {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    const data = (await resp.json()) as any;
+    if (!resp.ok) throw new Error(data.detail || data.error?.message || resp.statusText);
+    const plan = data.subscription?.plan ?? data.plan ?? "active";
+    return { success: true, message: `Connected — plan: ${plan}` };
+  } catch (err: any) {
+    return { success: false, message: err.message };
+  }
+}
+
+async function testSEMrush(apiKey: string): Promise<TestResult> {
+  try {
+    const resp = await fetch(
+      `https://api.semrush.com/?type=phrase_fullsearch&key=${apiKey}&phrase=test&database=us&display_limit=1`
+    );
+    if (resp.status === 403 || resp.status === 401) {
+      throw new Error("Invalid API key");
+    }
+    if (!resp.ok) {
+      const text = await resp.text();
+      throw new Error(text || resp.statusText);
+    }
+    return { success: true, message: "API key valid" };
+  } catch (err: any) {
+    return { success: false, message: err.message };
+  }
+}
+
 async function testCTM(apiKey: string, apiSecret: string): Promise<TestResult> {
   try {
     const auth = Buffer.from(`${apiKey}:${apiSecret}`).toString("base64");
@@ -104,6 +136,14 @@ export async function testCredential(credentialId: number): Promise<TestResult> 
 
     if (cred.service === "callrail") {
       return testCallRail(value);
+    }
+
+    if (cred.service === "ahrefs") {
+      return testAhrefs(value);
+    }
+
+    if (cred.service === "semrush") {
+      return testSEMrush(value);
     }
 
     if (cred.service === "call_tracking_metrics") {

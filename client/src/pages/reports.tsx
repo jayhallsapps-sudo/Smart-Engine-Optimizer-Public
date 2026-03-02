@@ -56,6 +56,8 @@ import {
   Bug,
   Trash2,
   Calendar,
+  PanelLeftOpen,
+  PanelLeftClose,
 } from "lucide-react";
 import {
   Popover,
@@ -557,13 +559,19 @@ function GenerateReportDialog({
     return "[ Data committed ]";
   };
 
+  const narrativeInstruction = `REPORT FRAMING — TRUSTED ADVISOR NARRATIVE
+Frame each section as a trusted advisor, not a traffic reporter.
+For every insight answer: what happened → why it happened → what we're doing next → what we need from the client.
+Tie all findings to business outcomes: admissions leads, insurance verifications (VOBs), and confirmed admissions. Traffic alone is never the story.
+${"━".repeat(48)}`;
+
   const reportText = [
     `${REPORT_TYPE_LABELS[reportType].toUpperCase()} REPORT`,
     `Client: ${client.name}`,
     `Date: ${now}`,
     `Date Range: ${dateRangeLabel}`,
     "",
-    "━".repeat(48),
+    narrativeInstruction,
     "",
     ...sections.map(s => [
       `## ${s.title}`,
@@ -736,6 +744,99 @@ const EXAMPLE_QUERIES_BY_TYPE: Record<ReportType, string[]> = {
   ],
 };
 
+const PROMPTS_LIBRARY: Record<ReportType, { label: string; prompt: string }[]> = {
+  biweekly: [
+    { label: "Organic traffic snapshot", prompt: "Pull GSC clicks, impressions, CTR and position for the last 14 days vs the prior 14 days. Flag any metric that moved more than 10%." },
+    { label: "Organic sessions & users", prompt: "Pull GA4 organic sessions and new users for the last 14 days vs prior 14 days. Highlight session changes by landing page." },
+    { label: "Organic call volume", prompt: "Pull CallRail organic call count for the last 14 days vs prior 14 days. Flag if calls are up or down and by how much." },
+    { label: "Organic call volume (CTM)", prompt: "Pull CTM organic call count for the last 14 days vs prior 14 days and compare to the same period last month." },
+    { label: "Top query movers", prompt: "Show me the top 5 queries that gained the most clicks and the top 5 that lost the most clicks over the last 14 days. Include position change." },
+    { label: "New content performance", prompt: "Which new or updated pages published in the last 30 days are getting traction in GSC? Show clicks and impressions." },
+    { label: "Position 8–15 opportunities", prompt: "List queries ranking in positions 8–15 with more than 20 impressions over the last 14 days. These are quick-win candidates." },
+    { label: "Branded vs non-branded split", prompt: "Compare branded vs non-branded clicks and impressions in GSC for the last 14 days. Show the percentage split." },
+    { label: "Organic leads & conversions", prompt: "Pull GA4 organic goal completions (contact form, phone click, chat) for the last 14 days vs prior. Tie to the client's top conversion events." },
+    { label: "Page experience signals", prompt: "Summarise Core Web Vitals from GSC for the last 14 days. Flag any URLs with poor LCP, INP or CLS." },
+    { label: "Index coverage check", prompt: "Are there any new crawl errors, excluded pages or coverage issues in GSC this fortnight? List by category." },
+    { label: "Wins & action items", prompt: "Based on the last 14 days of data, summarise the top 3 wins and top 3 priority actions for the next fortnight. Keep it to bullet points." },
+  ],
+  monthly: [
+    { label: "Monthly organic traffic MoM", prompt: "Pull GSC clicks, impressions, CTR and avg position for this month vs last month. Highlight anything that moved more than 15%." },
+    { label: "Monthly organic sessions MoM", prompt: "Pull GA4 organic sessions, new users and engagement rate for this month vs last month. Break down by key landing pages." },
+    { label: "Organic call volume MoM", prompt: "Pull CallRail organic call volume for this month vs last month and vs the same month last year." },
+    { label: "Organic call volume MoM (CTM)", prompt: "Pull CTM organic call volume for this month vs last month. Include call duration and missed call rate if available." },
+    { label: "Non-branded keyword wins", prompt: "Show the top 10 non-branded keywords that gained the most clicks this month vs last. Exclude brand terms and navigational queries." },
+    { label: "Conversion & leads summary", prompt: "Summarise all organic goal completions in GA4 for the month. Tie totals to leads, contact forms, phone clicks and chat starts." },
+    { label: "Content performance audit", prompt: "Rank all pages by organic clicks this month. Flag pages that dropped more than 20% MoM and any pages that broke into the top 10." },
+    { label: "Backlink growth (Ahrefs)", prompt: "Pull new referring domains and lost referring domains for the month from Ahrefs. Flag any high-authority gains or losses." },
+    { label: "DR & authority trend", prompt: "What is the current Domain Rating in Ahrefs and how has it trended over the last 3 months? Include linked domains count." },
+    { label: "Keyword rank changes", prompt: "Show me the top 20 keyword rank changes (gains and losses) from SEMrush for the month. Include search volume and previous position." },
+    { label: "Technical issues summary", prompt: "Summarise any new crawl errors, redirect chains, broken links or Core Web Vitals issues flagged this month. Prioritise by impact." },
+    { label: "Screaming Frog diff", prompt: "Compare this month's Screaming Frog crawl to last month's. Flag any new 4xx pages, missing H1s, duplicate titles or slow-loading URLs." },
+    { label: "Competitor visibility snapshot", prompt: "Pull SEMrush visibility scores for the top 3 competitors and compare to our client. Have we gained or lost ground this month?" },
+    { label: "Monthly narrative summary", prompt: "Write a trusted advisor narrative for this month. Cover: what happened in organic, why it happened, what we're doing next, and what we need from the client. Tie every point to admissions leads." },
+    { label: "Next 30-day priorities", prompt: "Based on this month's data, list the top 5 SEO priorities for next month ranked by expected impact on leads and admissions." },
+  ],
+  qbr: [
+    { label: "QoQ organic traffic", prompt: "Pull GSC clicks, impressions, CTR and average position for this quarter vs last quarter. Show percentage change for each metric." },
+    { label: "YoY organic traffic", prompt: "Pull GSC clicks and impressions for this quarter vs the same quarter last year. Highlight seasonal trends." },
+    { label: "QoQ organic sessions", prompt: "Pull GA4 organic sessions, new users and engagement rate for this quarter vs last quarter. Include top 10 landing pages by sessions." },
+    { label: "Organic call volume QoQ", prompt: "Pull CallRail organic calls for this quarter vs last quarter and vs the same quarter last year. Include call duration averages." },
+    { label: "Organic call volume QoQ (CTM)", prompt: "Pull CTM organic calls for this quarter vs last quarter. Include missed call rate and top call sources." },
+    { label: "Leads, VOBs & admissions", prompt: "Summarise all organic-attributed leads, insurance verification requests (VOBs) and confirmed admissions for the quarter. Compare to the prior quarter." },
+    { label: "Keyword portfolio growth", prompt: "How many keywords is the site now ranking for in top 3, top 10 and top 20 positions in SEMrush? Compare to the start of the quarter." },
+    { label: "Top keyword movers QoQ", prompt: "List the top 10 keyword rank improvements and top 10 rank declines from SEMrush for the quarter. Include search volume." },
+    { label: "Backlink profile review", prompt: "Pull the quarter's new referring domains, lost referring domains and total backlink count from Ahrefs. Highlight any notable wins or risks." },
+    { label: "Domain Rating trajectory", prompt: "Show the Domain Rating trend over the last 4 quarters from Ahrefs. Is the site growing authority relative to competitors?" },
+    { label: "Content audit & gap analysis", prompt: "Which pages delivered the most organic clicks this quarter? Which pages underperformed vs expectations? Identify 3 content gaps to fill next quarter." },
+    { label: "Technical health scorecard", prompt: "Summarise technical SEO health for the quarter. Include crawl error trends, Core Web Vitals status, mobile usability issues and HTTPS coverage." },
+    { label: "Screaming Frog quarterly diff", prompt: "Compare the latest Screaming Frog crawl to the crawl from 90 days ago. Quantify changes in 4xx pages, redirect chains, missing meta, and page speed." },
+    { label: "Competitor share of voice", prompt: "Compare organic visibility and estimated traffic share against the top 3 competitors using SEMrush data for the quarter." },
+    { label: "ROI & attribution narrative", prompt: "Calculate estimated organic ROI for the quarter. Use call volume, form completions and known admission value to show the revenue impact of SEO." },
+    { label: "What happened this quarter", prompt: "Write the 'what happened' section of the QBR. Cover organic traffic, calls, leads and any notable algorithm updates or site events that affected performance." },
+    { label: "Why it happened", prompt: "Write the 'why it happened' section. Explain the drivers behind performance changes: content, technical, authority, competition and seasonality." },
+    { label: "Strategy for next quarter", prompt: "Write the 'what we're doing next' section. Outline the top 5 strategic priorities for Q+1 with expected business outcomes tied to admissions and revenue." },
+  ],
+};
+
+function PromptsPanel({
+  reportType,
+  onSelectPrompt,
+}: {
+  reportType: ReportType;
+  onSelectPrompt: (prompt: string) => void;
+}) {
+  const prompts = PROMPTS_LIBRARY[reportType];
+  const labels: Record<ReportType, string> = {
+    biweekly: "Bi-weekly Prompts",
+    monthly: "Monthly Prompts",
+    qbr: "QBR Prompts",
+  };
+  return (
+    <div className="flex flex-col h-full w-64 border-r bg-muted/20">
+      <div className="px-3 py-2.5 border-b">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{labels[reportType]}</p>
+      </div>
+      <div className="flex-1 overflow-y-auto">
+        {prompts.map((p, i) => (
+          <button
+            key={i}
+            onClick={() => onSelectPrompt(p.prompt)}
+            className="w-full text-left px-3 py-2 hover:bg-accent/60 transition-colors group"
+            data-testid={`prompt-item-${i}`}
+          >
+            <span className="text-[10px] font-semibold text-primary/60 uppercase tracking-wider block mb-0.5">
+              {i + 1}. {p.label}
+            </span>
+            <span className="text-xs text-muted-foreground group-hover:text-foreground leading-snug line-clamp-2">
+              {p.prompt}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function ReportsPage() {
   const [selectedClientId, setSelectedClientId] = useState<string>("");
   const [reportType, setReportType] = useState<ReportType>("qbr");
@@ -749,6 +850,7 @@ export default function ReportsPage() {
   const [inputValue, setInputValue] = useState("");
   const [sfPopoverOpen, setSfPopoverOpen] = useState(false);
   const [sfUploading, setSfUploading] = useState(false);
+  const [promptsPanelOpen, setPromptsPanelOpen] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const sfFileInputRef = useRef<HTMLInputElement>(null);
@@ -931,6 +1033,16 @@ export default function ReportsPage() {
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-3 px-4 py-3 border-b bg-background flex-wrap">
+        <Button
+          size="icon"
+          variant="ghost"
+          onClick={() => setPromptsPanelOpen(v => !v)}
+          className="shrink-0"
+          title={promptsPanelOpen ? "Hide prompts" : "Show prompts"}
+          data-testid="button-toggle-prompts"
+        >
+          {promptsPanelOpen ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeftOpen className="w-4 h-4" />}
+        </Button>
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <div className="w-48 shrink-0">
             {clientsLoading ? (
@@ -1071,6 +1183,15 @@ export default function ReportsPage() {
       </div>
 
       <div className="flex flex-1 overflow-hidden">
+        {promptsPanelOpen && (
+          <PromptsPanel
+            reportType={reportType}
+            onSelectPrompt={(prompt) => {
+              setInputValue(prompt);
+              setTimeout(() => inputRef.current?.focus(), 50);
+            }}
+          />
+        )}
         <div className="flex flex-col flex-1 min-w-0 min-h-0">
           <div className="flex-1 overflow-y-auto">
             {messages.length === 0 ? (
@@ -1190,31 +1311,29 @@ export default function ReportsPage() {
 
           <div className="border-t bg-background p-3">
             <div className="max-w-3xl mx-auto flex items-end gap-2">
-              <div className="flex-1 relative">
-                <textarea
-                  ref={inputRef}
-                  value={inputValue}
-                  onChange={e => setInputValue(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder={selectedClient
-                    ? `Ask about ${selectedClient.name}'s ${reportType === "biweekly" ? "14-day" : reportType === "monthly" ? "30-day" : "quarterly"} data…`
-                    : "Select a client to start querying…"
-                  }
-                  disabled={!selectedClientId}
-                  className="w-full min-h-[40px] max-h-[120px] resize-none rounded-md border bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring pr-12 disabled:opacity-50"
-                  rows={1}
-                  data-testid="input-query"
-                />
-                <Button
-                  size="icon"
-                  className="absolute right-1.5 bottom-1.5"
-                  onClick={handleSubmit}
-                  disabled={!inputValue.trim() || queryMutation.isPending || !selectedClientId}
-                  data-testid="button-submit-query"
-                >
-                  <Send className="w-4 h-4" />
-                </Button>
-              </div>
+              <textarea
+                ref={inputRef}
+                value={inputValue}
+                onChange={e => setInputValue(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={selectedClient
+                  ? `Ask about ${selectedClient.name}'s ${reportType === "biweekly" ? "14-day" : reportType === "monthly" ? "30-day" : "quarterly"} data…`
+                  : "Select a client to start querying…"
+                }
+                disabled={!selectedClientId}
+                className="flex-1 min-h-[40px] max-h-[120px] resize-none rounded-md border bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                rows={1}
+                data-testid="input-query"
+              />
+              <Button
+                size="icon"
+                className="shrink-0"
+                onClick={handleSubmit}
+                disabled={!inputValue.trim() || queryMutation.isPending || !selectedClientId}
+                data-testid="button-submit-query"
+              >
+                <Send className="w-4 h-4" />
+              </Button>
             </div>
             <p className="text-[10px] text-muted-foreground mt-1.5 text-center max-w-3xl mx-auto">
               Results route to the right data source. Press "Commit to Report" on any result to add it to your checklist.

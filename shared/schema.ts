@@ -45,6 +45,14 @@ export const apiCredentials = pgTable("api_credentials", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+export const settings = pgTable("settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type Setting = typeof settings.$inferSelect;
+
 export const sfReports = pgTable("sf_reports", {
   id: serial("id").primaryKey(),
   clientId: integer("client_id").notNull(),

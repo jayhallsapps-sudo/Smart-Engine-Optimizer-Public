@@ -47,6 +47,9 @@ import {
   Wifi,
   Loader2,
   Monitor,
+  FileSpreadsheet,
+  Link,
+  CheckCircle,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
@@ -229,10 +232,34 @@ export default function SetupPage() {
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [googleConnecting, setGoogleConnecting] = useState(false);
   const [testStates, setTestStates] = useState<Record<number, TestState>>({});
+  const [sheetUrlInput, setSheetUrlInput] = useState("");
   const { toast } = useToast();
 
   const { data: googleStatus } = useQuery<{ configured: boolean }>({
     queryKey: ["/api/auth/google/configured"],
+  });
+
+  const { data: appSettings = {} } = useQuery<Record<string, string>>({
+    queryKey: ["/api/settings"],
+  });
+
+  const savedSheetUrl = appSettings["google_sheet_url"] ?? "";
+
+  const saveSheetUrlMutation = useMutation({
+    mutationFn: async (url: string) => {
+      const res = await fetch("/api/settings/google_sheet_url", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ value: url }),
+      });
+      if (!res.ok) throw new Error("Failed to save");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
+      toast({ title: "Sheet URL saved" });
+      setSheetUrlInput("");
+    },
+    onError: () => toast({ title: "Failed to save", variant: "destructive" }),
   });
 
   const { data: credentials = [], isLoading } = useQuery<CredentialSafe[]>({
@@ -422,6 +449,66 @@ export default function SetupPage() {
               testStates={testStates}
             />
           ))}
+        </div>
+
+        <Separator className="my-4" />
+
+        <div className="space-y-3">
+          <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+            Report Data Source
+          </h2>
+          <Card className="p-5">
+            <div className="flex items-start gap-4">
+              <div className="flex items-center justify-center w-11 h-11 rounded-lg shrink-0 bg-emerald-600">
+                <FileSpreadsheet className="w-5 h-5 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <h3 className="font-medium text-sm">Google Sheets Data Source</h3>
+                  {savedSheetUrl ? (
+                    <Badge variant="default" className="text-[10px]">
+                      <CheckCircle className="w-3 h-3 mr-1" /> Connected
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary" className="text-[10px]">Not connected</Badge>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Paste the URL of your master Google Sheet. Report generation will pull context from this sheet for all clients.
+                </p>
+                {savedSheetUrl && (
+                  <div className="flex items-center gap-2 p-2 rounded-md bg-muted/50 mb-3">
+                    <Link className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    <a
+                      href={savedSheetUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-primary hover:underline truncate"
+                    >
+                      {savedSheetUrl}
+                    </a>
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="https://docs.google.com/spreadsheets/d/…"
+                    value={sheetUrlInput}
+                    onChange={e => setSheetUrlInput(e.target.value)}
+                    className="text-xs h-8"
+                    data-testid="input-sheet-url"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={() => saveSheetUrlMutation.mutate(sheetUrlInput.trim())}
+                    disabled={!sheetUrlInput.trim() || saveSheetUrlMutation.isPending}
+                    data-testid="button-save-sheet-url"
+                  >
+                    {savedSheetUrl ? "Update" : "Save"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </Card>
         </div>
 
         <Separator className="my-4" />

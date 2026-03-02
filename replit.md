@@ -59,14 +59,15 @@ shared/
 - `semrush_organic_overview` / `semrush_keyword_rankings` - SEMrush competitive data
 
 ## Reports Page Layout
-- Top bar: Client dropdown + Report type buttons (Bi-Weekly | Monthly | QBR), horizontally aligned
-- Left panel (flex-1): Chat/query interface. Each result card has a "Commit to Report" button.
+- Top bar: Toggle prompts panel button + Client dropdown + Report type buttons (Bi-Weekly | Monthly | QBR)
+- Left panel (w-64, collapsible): Prompts library — type-specific prompts (12 bi-weekly, 15 monthly, 18 QBR). Clicking a prompt fills the textarea. Toggle button in top bar shows/hides.
+- Center panel (flex-1): Chat/query interface. Send button is outside the textarea (flex sibling, not absolutely positioned). Each result card has a "Commit to Report" button.
 - Right panel (w-72): Checklist of required sections for the selected report type. Manual sections have "+ Add manually" for freetext entry. Progress bar shows % complete. "Generate Report" button outputs formatted report.
 - Report types and sections:
   - Bi-Weekly (14d): Topline Snapshot, What We Shipped, What Changed & Why, Risks & Blocks, Next Two Weeks
   - Monthly (30d): Executive Summary KPIs, Visibility & Demand, Conversion Performance, Work Completed, Next Month Priorities
   - QBR (90d): QBR Scorecard, What Worked/Didn't, Strategic Insights, Risks & Constraints, Next Quarter Roadmap, Appendix
-- "Generate Report" compiles all committed data into a formatted text report (downloadable as .txt)
+- "Generate Report" compiles all committed data into a formatted text report (downloadable as .txt) with a trusted advisor narrative instruction block at the top (what happened / why / next steps / what we need from the client — tied to leads/VOBs/admissions)
 
 ## Industry Focus
 Recovery and addiction treatment centres. Seed clients: Anchored Tides Recovery, Bliss Recovery, Horseshoe Ridge Recovery, Heartland Healing Center, Iris Healing, New Day Recovery, Sol Womens Treatment, Williamsburg House. Mock data uses addiction treatment keywords (detox, residential, PHP/IOP, dual diagnosis, insurance verification, admissions).

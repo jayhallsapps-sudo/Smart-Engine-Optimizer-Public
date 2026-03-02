@@ -5,6 +5,7 @@ import {
   queryLogs,
   apiCredentials,
   sfReports,
+  settings,
   type Client,
   type InsertClient,
   type QueryLog,
@@ -13,6 +14,7 @@ import {
   type InsertApiCredential,
   type SfReport,
   type InsertSfReport,
+  type Setting,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -34,6 +36,10 @@ export interface IStorage {
   getSfReport(id: number): Promise<SfReport | undefined>;
   createSfReport(report: InsertSfReport): Promise<SfReport>;
   deleteSfReport(id: number): Promise<boolean>;
+
+  getSetting(key: string): Promise<string | null>;
+  setSetting(key: string, value: string): Promise<Setting>;
+  getAllSettings(): Promise<Setting[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -121,6 +127,24 @@ export class DatabaseStorage implements IStorage {
   async deleteSfReport(id: number): Promise<boolean> {
     const result = await db.delete(sfReports).where(eq(sfReports.id, id)).returning();
     return result.length > 0;
+  }
+
+  async getSetting(key: string): Promise<string | null> {
+    const [row] = await db.select().from(settings).where(eq(settings.key, key));
+    return row?.value ?? null;
+  }
+
+  async setSetting(key: string, value: string): Promise<Setting> {
+    const [row] = await db
+      .insert(settings)
+      .values({ key, value })
+      .onConflictDoUpdate({ target: settings.key, set: { value, updatedAt: new Date() } })
+      .returning();
+    return row;
+  }
+
+  async getAllSettings(): Promise<Setting[]> {
+    return db.select().from(settings);
   }
 }
 

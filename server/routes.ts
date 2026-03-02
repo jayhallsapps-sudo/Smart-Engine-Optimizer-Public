@@ -176,6 +176,20 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/settings", async (_req, res) => {
+    const all = await storage.getAllSettings();
+    const obj: Record<string, string> = {};
+    all.forEach(s => { obj[s.key] = s.value; });
+    res.json(obj);
+  });
+
+  app.put("/api/settings/:key", async (req, res) => {
+    const { value } = req.body;
+    if (typeof value !== "string") return res.status(400).json({ message: "value must be a string" });
+    const setting = await storage.setSetting(req.params.key, value);
+    res.json(setting);
+  });
+
   app.get("/api/clients/:id/sf-reports", async (req, res) => {
     const clientId = Number(req.params.id);
     const reports = await storage.getSfReports(clientId);

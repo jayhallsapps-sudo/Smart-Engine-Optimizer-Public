@@ -814,7 +814,7 @@ function PromptsPanel({
   return (
     <div className="flex flex-col h-full w-64 border-r bg-muted/20">
       <div className="px-3 py-2.5 border-b">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{labels[reportType]}</p>
+        <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "hsl(var(--link))" }}>{labels[reportType]}</p>
       </div>
       <div className="flex-1 overflow-y-auto">
         {prompts.map((p, i) => (
@@ -824,7 +824,7 @@ function PromptsPanel({
             className="w-full text-left px-3 py-2 hover:bg-accent/60 transition-colors group"
             data-testid={`prompt-item-${i}`}
           >
-            <span className="text-[10px] font-semibold text-primary/60 uppercase tracking-wider block mb-0.5">
+            <span className="text-[10px] font-semibold uppercase tracking-wider block mb-0.5" style={{ color: "hsl(var(--link) / 0.75)" }}>
               {i + 1}. {p.label}
             </span>
             <span className="text-xs text-muted-foreground group-hover:text-foreground leading-snug line-clamp-2">

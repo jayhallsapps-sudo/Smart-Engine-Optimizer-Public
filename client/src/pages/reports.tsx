@@ -52,8 +52,17 @@ import {
   Search,
   ChevronRight,
   CheckCheck,
+  Upload,
+  Bug,
+  Trash2,
+  Calendar,
 } from "lucide-react";
-import type { Client, CommandResult } from "@shared/schema";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import type { Client, CommandResult, SfReport } from "@shared/schema";
 import { motion, AnimatePresence } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
 
@@ -738,8 +747,11 @@ export default function ReportsPage() {
   const [manualTargetSection, setManualTargetSection] = useState<ReportSection | null>(null);
   const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
+  const [sfPopoverOpen, setSfPopoverOpen] = useState(false);
+  const [sfUploading, setSfUploading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const sfFileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   const { data: clients = [], isLoading: clientsLoading } = useQuery<Client[]>({
@@ -747,6 +759,63 @@ export default function ReportsPage() {
   });
 
   const selectedClient = clients.find(c => String(c.id) === selectedClientId) || null;
+
+  const { data: sfReports = [] } = useQuery<SfReport[]>({
+    queryKey: ["/api/clients", selectedClientId, "sf-reports"],
+    queryFn: async () => {
+      const res = await fetch(`/api/clients/${selectedClientId}/sf-reports`);
+      return res.json();
+    },
+    enabled: !!selectedClientId,
+  });
+
+  const deleteSfReportMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await fetch(`/api/sf-reports/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete");
+    },
+    onSuccess: () => {
+      rqClient.invalidateQueries({ queryKey: ["/api/clients", selectedClientId, "sf-reports"] });
+      toast({ title: "Crawl removed" });
+    },
+  });
+
+  const handleSfUpload = async (file: File) => {
+    setSfUploading(true);
+    try {
+      const text = await file.text();
+      const lines = text.split(/\r?\n/).filter(l => l.trim());
+      if (lines.length < 2) throw new Error("File appears empty");
+      const headers = lines[0].split(",").map(h => h.replace(/^"|"$/g, "").trim());
+      const rows = lines.slice(1).map(line => {
+        const cols = line.match(/(".*?"|[^,]+|(?<=,)(?=,)|(?<=,)$|^(?=,))/g) ?? line.split(",");
+        const obj: Record<string, string> = {};
+        headers.forEach((h, i) => { obj[h] = (cols[i] ?? "").replace(/^"|"$/g, "").trim(); });
+        return obj;
+      });
+      const today = new Date().toISOString().split("T")[0];
+      const body = {
+        reportDate: today,
+        filename: file.name,
+        rowCount: rows.length,
+        headers,
+        data: rows,
+      };
+      const res = await fetch(`/api/clients/${selectedClientId}/sf-reports`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error("Upload failed");
+      rqClient.invalidateQueries({ queryKey: ["/api/clients", selectedClientId, "sf-reports"] });
+      toast({ title: "Crawl uploaded", description: `${rows.length} rows from ${file.name}` });
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    } finally {
+      setSfUploading(false);
+      if (sfFileInputRef.current) sfFileInputRef.current.value = "";
+    }
+  };
 
   const queryMutation = useMutation({
     mutationFn: async (query: string) => {
@@ -897,6 +966,97 @@ export default function ReportsPage() {
               </Button>
             ))}
           </div>
+
+          {selectedClientId && (
+            <>
+              <div className="w-px h-5 bg-border shrink-0" />
+              <Popover open={sfPopoverOpen} onOpenChange={setSfPopoverOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-1.5 text-yellow-700 dark:text-yellow-400 border-yellow-300 dark:border-yellow-700 hover:bg-yellow-50 dark:hover:bg-yellow-950"
+                    data-testid="button-sf-reports"
+                  >
+                    <Bug className="w-3.5 h-3.5" />
+                    Screaming Frog
+                    {sfReports.length > 0 && (
+                      <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4 ml-0.5">
+                        {sfReports.length}
+                      </Badge>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="start" className="w-80 p-0" data-testid="popover-sf-reports">
+                  <div className="p-3 border-b">
+                    <p className="text-sm font-medium">Screaming Frog Crawls</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">Upload CSV exports from Screaming Frog desktop app</p>
+                  </div>
+
+                  <div className="max-h-64 overflow-y-auto">
+                    {sfReports.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
+                        <Bug className="w-7 h-7 text-muted-foreground/40 mb-2" />
+                        <p className="text-xs text-muted-foreground">No crawls uploaded yet</p>
+                        <p className="text-[10px] text-muted-foreground/60 mt-1">Export as CSV from Screaming Frog, then upload below</p>
+                      </div>
+                    ) : (
+                      <div className="divide-y">
+                        {sfReports.map(report => (
+                          <div key={report.id} className="flex items-start gap-2 p-3 hover:bg-muted/40 transition-colors" data-testid={`row-sf-report-${report.id}`}>
+                            <FileText className="w-4 h-4 text-yellow-600 shrink-0 mt-0.5" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium truncate">{report.filename}</p>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                  <Calendar className="w-3 h-3" />
+                                  {report.reportDate}
+                                </span>
+                                <span className="text-[10px] text-muted-foreground">{report.rowCount.toLocaleString()} rows</span>
+                              </div>
+                            </div>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-6 w-6 shrink-0 text-muted-foreground hover:text-destructive"
+                              onClick={() => deleteSfReportMutation.mutate(report.id)}
+                              data-testid={`button-delete-sf-${report.id}`}
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="p-3 border-t">
+                    <input
+                      ref={sfFileInputRef}
+                      type="file"
+                      accept=".csv"
+                      className="hidden"
+                      onChange={e => { const f = e.target.files?.[0]; if (f) handleSfUpload(f); }}
+                      data-testid="input-sf-file"
+                    />
+                    <Button
+                      size="sm"
+                      className="w-full"
+                      onClick={() => sfFileInputRef.current?.click()}
+                      disabled={sfUploading}
+                      data-testid="button-sf-upload"
+                    >
+                      {sfUploading ? (
+                        <><span className="animate-spin mr-1.5">⏳</span>Uploading…</>
+                      ) : (
+                        <><Upload className="w-3.5 h-3.5 mr-1.5" />Upload New Crawl</>
+                      )}
+                    </Button>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </>
+          )}
         </div>
 
         {selectedClient && (

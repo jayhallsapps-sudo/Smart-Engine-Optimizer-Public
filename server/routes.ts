@@ -8,6 +8,7 @@ import { seedDatabase } from "./seed";
 import { encrypt } from "./encryption";
 import { buildGoogleAuthUrl, exchangeCodeForToken, callbackHtml, isGoogleConfigured } from "./googleAuth";
 import { testCredential } from "./connectionTest";
+import { insertSfReportSchema } from "@shared/schema";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -173,6 +174,34 @@ export async function registerRoutes(
     } catch (err: any) {
       res.send(callbackHtml(false, err.message));
     }
+  });
+
+  app.get("/api/clients/:id/sf-reports", async (req, res) => {
+    const clientId = Number(req.params.id);
+    const reports = await storage.getSfReports(clientId);
+    res.json(reports.map(r => ({ id: r.id, clientId: r.clientId, reportDate: r.reportDate, filename: r.filename, rowCount: r.rowCount, headers: r.headers, createdAt: r.createdAt })));
+  });
+
+  app.post("/api/clients/:id/sf-reports", async (req, res) => {
+    const clientId = Number(req.params.id);
+    const parsed = insertSfReportSchema.safeParse({ ...req.body, clientId });
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Invalid SF report data", errors: parsed.error.issues });
+    }
+    const report = await storage.createSfReport(parsed.data);
+    res.status(201).json({ id: report.id, clientId: report.clientId, reportDate: report.reportDate, filename: report.filename, rowCount: report.rowCount, headers: report.headers, createdAt: report.createdAt });
+  });
+
+  app.get("/api/sf-reports/:id", async (req, res) => {
+    const report = await storage.getSfReport(Number(req.params.id));
+    if (!report) return res.status(404).json({ message: "Not found" });
+    res.json(report);
+  });
+
+  app.delete("/api/sf-reports/:id", async (req, res) => {
+    const ok = await storage.deleteSfReport(Number(req.params.id));
+    if (!ok) return res.status(404).json({ message: "Not found" });
+    res.json({ success: true });
   });
 
   return httpServer;

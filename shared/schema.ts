@@ -45,6 +45,25 @@ export const apiCredentials = pgTable("api_credentials", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+export const sfReports = pgTable("sf_reports", {
+  id: serial("id").primaryKey(),
+  clientId: integer("client_id").notNull(),
+  reportDate: text("report_date").notNull(),
+  filename: text("filename").notNull(),
+  rowCount: integer("row_count").notNull().default(0),
+  headers: text("headers").array(),
+  data: jsonb("data"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertSfReportSchema = createInsertSchema(sfReports).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type SfReport = typeof sfReports.$inferSelect;
+export type InsertSfReport = z.infer<typeof insertSfReportSchema>;
+
 export const insertClientSchema = createInsertSchema(clients).omit({
   id: true,
   createdAt: true,

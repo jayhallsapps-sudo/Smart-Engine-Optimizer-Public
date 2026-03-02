@@ -4,12 +4,15 @@ import {
   clients,
   queryLogs,
   apiCredentials,
+  sfReports,
   type Client,
   type InsertClient,
   type QueryLog,
   type InsertQueryLog,
   type ApiCredential,
   type InsertApiCredential,
+  type SfReport,
+  type InsertSfReport,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -26,6 +29,11 @@ export interface IStorage {
   getApiCredentialsByService(service: string): Promise<ApiCredential[]>;
   createApiCredential(cred: InsertApiCredential): Promise<ApiCredential>;
   deleteApiCredential(id: number): Promise<boolean>;
+
+  getSfReports(clientId: number): Promise<SfReport[]>;
+  getSfReport(id: number): Promise<SfReport | undefined>;
+  createSfReport(report: InsertSfReport): Promise<SfReport>;
+  deleteSfReport(id: number): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -89,6 +97,29 @@ export class DatabaseStorage implements IStorage {
 
   async deleteApiCredential(id: number): Promise<boolean> {
     const result = await db.delete(apiCredentials).where(eq(apiCredentials.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async getSfReports(clientId: number): Promise<SfReport[]> {
+    return db
+      .select()
+      .from(sfReports)
+      .where(eq(sfReports.clientId, clientId))
+      .orderBy(desc(sfReports.reportDate));
+  }
+
+  async getSfReport(id: number): Promise<SfReport | undefined> {
+    const [row] = await db.select().from(sfReports).where(eq(sfReports.id, id));
+    return row;
+  }
+
+  async createSfReport(report: InsertSfReport): Promise<SfReport> {
+    const [created] = await db.insert(sfReports).values(report).returning();
+    return created;
+  }
+
+  async deleteSfReport(id: number): Promise<boolean> {
+    const result = await db.delete(sfReports).where(eq(sfReports.id, id)).returning();
     return result.length > 0;
   }
 }

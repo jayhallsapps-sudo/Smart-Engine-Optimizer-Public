@@ -13,10 +13,20 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
   DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   Globe,
   BarChart3,
@@ -28,71 +38,140 @@ import {
   Link as LinkIcon,
   AlertTriangle,
   Info,
+  Plus,
+  Trash2,
+  Search,
+  Bug,
+  LineChart,
+  ExternalLink,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
+import { SERVICE_CONFIGS, type ServiceConfig } from "@shared/schema";
 
 interface CredentialSafe {
   id: number;
   service: string;
   credentialType: string;
+  accountLabel: string;
   hasValue: boolean;
   metadata: any;
   createdAt: string;
   updatedAt: string;
 }
 
-function IntegrationCard({
-  title,
-  description,
-  icon: Icon,
-  iconBg,
-  connected,
-  onConnect,
-  onDisconnect,
-  children,
+function getServiceIcon(serviceId: string) {
+  switch (serviceId) {
+    case "google_search_console": return Globe;
+    case "google_analytics_4": return BarChart3;
+    case "callrail": return Phone;
+    case "call_tracking_metrics": return Phone;
+    case "ahrefs": return LinkIcon;
+    case "semrush": return LineChart;
+    case "screaming_frog": return Bug;
+    default: return Key;
+  }
+}
+
+function ServiceSection({
+  config,
+  credentials,
+  onAddAccount,
+  onDeleteAccount,
 }: {
-  title: string;
-  description: string;
-  icon: any;
-  iconBg: string;
-  connected: boolean;
-  onConnect?: () => void;
-  onDisconnect?: () => void;
-  children?: React.ReactNode;
+  config: ServiceConfig;
+  credentials: CredentialSafe[];
+  onAddAccount: (config: ServiceConfig) => void;
+  onDeleteAccount: (id: number) => void;
 }) {
+  const Icon = getServiceIcon(config.id);
+  const serviceCredentials = credentials.filter(c => c.service === config.id);
+  const hasAccounts = serviceCredentials.length > 0;
+
   return (
     <Card className="p-5">
       <div className="flex items-start gap-4">
-        <div className={`flex items-center justify-center w-11 h-11 rounded-lg ${iconBg}`}>
+        <div className={`flex items-center justify-center w-11 h-11 rounded-lg shrink-0 ${config.color}`}>
           <Icon className="w-5 h-5 text-white" />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
-            <h3 className="font-medium text-sm">{title}</h3>
-            <Badge variant={connected ? "default" : "secondary"} className="text-[10px]">
-              {connected ? (
-                <><CheckCircle2 className="w-3 h-3 mr-1" /> Connected</>
+            <h3 className="font-medium text-sm" data-testid={`text-service-${config.id}`}>{config.name}</h3>
+            <Badge variant={hasAccounts ? "default" : "secondary"} className="text-[10px]">
+              {hasAccounts ? (
+                <><CheckCircle2 className="w-3 h-3 mr-1" /> {serviceCredentials.length} Account{serviceCredentials.length > 1 ? "s" : ""}</>
               ) : (
                 <><XCircle className="w-3 h-3 mr-1" /> Not Connected</>
               )}
             </Badge>
           </div>
-          <p className="text-xs text-muted-foreground mb-3">{description}</p>
-          {children}
-          <div className="flex gap-2 mt-3 flex-wrap">
-            {!connected && onConnect && (
-              <Button size="sm" onClick={onConnect} data-testid={`button-connect-${title.toLowerCase().replace(/\s+/g, "-")}`}>
-                <LinkIcon className="w-3 h-3 mr-1.5" />
-                Connect
-              </Button>
-            )}
-            {connected && onDisconnect && (
-              <Button size="sm" variant="outline" onClick={onDisconnect} data-testid={`button-disconnect-${title.toLowerCase().replace(/\s+/g, "-")}`}>
-                Disconnect
-              </Button>
-            )}
-          </div>
+          <p className="text-xs text-muted-foreground mb-3">{config.description}</p>
+
+          {config.authType === "oauth" && (
+            <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mb-2">
+              <Shield className="w-3 h-3" />
+              Requires OAuth2 with offline access for refresh tokens
+            </div>
+          )}
+          {config.authType === "api_key" && (
+            <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mb-2">
+              <Key className="w-3 h-3" />
+              API key required
+            </div>
+          )}
+          {config.authType === "desktop" && (
+            <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mb-2">
+              <ExternalLink className="w-3 h-3" />
+              Desktop application -- import crawl exports
+            </div>
+          )}
+
+          {serviceCredentials.length > 0 && (
+            <div className="space-y-1.5 mb-3">
+              {serviceCredentials.map((cred) => (
+                <div key={cred.id} className="flex items-center justify-between gap-2 p-2 rounded-md bg-muted/50">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-green-600 dark:text-green-400 shrink-0" />
+                    <span className="text-xs font-medium truncate">{cred.accountLabel}</span>
+                    <span className="text-[10px] text-muted-foreground">{cred.credentialType.replace(/_/g, " ")}</span>
+                  </div>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button size="icon" variant="ghost" className="h-7 w-7" data-testid={`button-delete-cred-${cred.id}`}>
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Remove {cred.accountLabel}?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This will disconnect the {config.name} account "{cred.accountLabel}". You can re-add it later.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => onDeleteAccount(cred.id)} data-testid="button-confirm-delete-cred">
+                          Remove
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {config.authType !== "desktop" && (config.supportsMultiple || !hasAccounts) && (
+            <Button
+              size="sm"
+              variant={hasAccounts ? "outline" : "default"}
+              onClick={() => onAddAccount(config)}
+              data-testid={`button-add-${config.id}`}
+            >
+              <Plus className="w-3 h-3 mr-1.5" />
+              {hasAccounts ? "Add Another Account" : "Connect"}
+            </Button>
+          )}
         </div>
       </div>
     </Card>
@@ -100,8 +179,10 @@ function IntegrationCard({
 }
 
 export default function SetupPage() {
-  const [callrailKey, setCallrailKey] = useState("");
-  const [callrailDialogOpen, setCallrailDialogOpen] = useState(false);
+  const [connectDialogOpen, setConnectDialogOpen] = useState(false);
+  const [activeService, setActiveService] = useState<ServiceConfig | null>(null);
+  const [accountLabel, setAccountLabel] = useState("");
+  const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const { toast } = useToast();
 
   const { data: credentials = [], isLoading } = useQuery<CredentialSafe[]>({
@@ -109,12 +190,13 @@ export default function SetupPage() {
   });
 
   const saveCredentialMutation = useMutation({
-    mutationFn: async (data: { service: string; credentialType: string; value: string }) => {
+    mutationFn: async (data: { service: string; credentialType: string; value: string; accountLabel: string }) => {
       return apiRequest("POST", "/api/credentials", data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/credentials"] });
-      toast({ title: "Credential saved successfully" });
+      toast({ title: "Account connected successfully" });
+      resetDialog();
     },
   });
 
@@ -124,30 +206,53 @@ export default function SetupPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/credentials"] });
-      toast({ title: "Credential removed" });
+      toast({ title: "Account disconnected" });
     },
   });
 
-  const hasGoogleAuth = credentials.some(c => c.service === "google" && c.hasValue);
-  const hasCallrailKey = credentials.some(c => c.service === "callrail" && c.hasValue);
-  const callrailCred = credentials.find(c => c.service === "callrail");
-
-  const handleSaveCallrailKey = () => {
-    if (!callrailKey.trim()) return;
-    saveCredentialMutation.mutate({
-      service: "callrail",
-      credentialType: "api_key",
-      value: callrailKey,
-    });
-    setCallrailKey("");
-    setCallrailDialogOpen(false);
+  const resetDialog = () => {
+    setConnectDialogOpen(false);
+    setActiveService(null);
+    setAccountLabel("");
+    setFieldValues({});
   };
+
+  const handleOpenConnect = (config: ServiceConfig) => {
+    setActiveService(config);
+    setAccountLabel("");
+    setFieldValues({});
+    setConnectDialogOpen(true);
+  };
+
+  const handleSaveCredentials = () => {
+    if (!activeService || !accountLabel.trim()) return;
+
+    for (const field of activeService.credentialFields) {
+      const value = fieldValues[field.key];
+      if (!value?.trim()) {
+        toast({ title: `Please provide ${field.label}`, variant: "destructive" });
+        return;
+      }
+
+      saveCredentialMutation.mutate({
+        service: activeService.id,
+        credentialType: field.key,
+        value: value.trim(),
+        accountLabel: accountLabel.trim(),
+      });
+    }
+  };
+
+  const connectedCount = new Set(credentials.map(c => c.service)).size;
+  const totalServices = SERVICE_CONFIGS.filter(s => s.authType !== "desktop").length;
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
       <div className="mb-6">
         <h1 className="text-xl font-semibold" data-testid="text-setup-title">Setup</h1>
-        <p className="text-sm text-muted-foreground">Connect your data sources and configure API credentials.</p>
+        <p className="text-sm text-muted-foreground">
+          Connect your data sources. Each service supports multiple accounts for managing different clients.
+        </p>
       </div>
 
       <motion.div
@@ -159,69 +264,62 @@ export default function SetupPage() {
           <div className="flex items-start gap-3">
             <Info className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
             <div>
-              <p className="text-sm font-medium mb-1">Demo Mode Active</p>
+              <p className="text-sm font-medium mb-1">
+                {connectedCount > 0 ? `${connectedCount} of ${totalServices} services connected` : "Demo Mode Active"}
+              </p>
               <p className="text-xs text-muted-foreground">
-                SmartEO is currently running with simulated data. Connect your Google and CallRail accounts below to pull real data. All API keys are encrypted at rest.
+                {connectedCount > 0
+                  ? "Connect additional services below to expand your data sources. All credentials are encrypted at rest."
+                  : "SmartEO is currently running with simulated data. Connect your accounts below to pull real data from your recovery & addiction centre clients. All API keys are encrypted at rest."
+                }
               </p>
             </div>
           </div>
         </Card>
 
         <div className="space-y-3">
-          <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Data Sources</h2>
+          <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+            Analytics & Search
+          </h2>
+          {SERVICE_CONFIGS.filter(s => ["google_search_console", "google_analytics_4"].includes(s.id)).map(config => (
+            <ServiceSection
+              key={config.id}
+              config={config}
+              credentials={credentials}
+              onAddAccount={handleOpenConnect}
+              onDeleteAccount={(id) => deleteCredentialMutation.mutate(id)}
+            />
+          ))}
+        </div>
 
-          <IntegrationCard
-            title="Google Search Console"
-            description="Access search analytics data including queries, pages, clicks, impressions, CTR, and position data."
-            icon={Globe}
-            iconBg="bg-blue-600"
-            connected={hasGoogleAuth}
-            onConnect={() => {
-              toast({
-                title: "Google OAuth",
-                description: "Google OAuth integration requires setting up OAuth2 credentials in Google Cloud Console. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET as environment variables.",
-              });
-            }}
-          >
-            <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-              <Shield className="w-3 h-3" />
-              Requires OAuth2 with offline access for refresh tokens
-            </div>
-          </IntegrationCard>
+        <div className="space-y-3">
+          <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+            Call Tracking
+          </h2>
+          {SERVICE_CONFIGS.filter(s => ["callrail", "call_tracking_metrics"].includes(s.id)).map(config => (
+            <ServiceSection
+              key={config.id}
+              config={config}
+              credentials={credentials}
+              onAddAccount={handleOpenConnect}
+              onDeleteAccount={(id) => deleteCredentialMutation.mutate(id)}
+            />
+          ))}
+        </div>
 
-          <IntegrationCard
-            title="Google Analytics 4"
-            description="Pull organic funnel metrics including sessions, users, conversions, and landing page performance data."
-            icon={BarChart3}
-            iconBg="bg-orange-600"
-            connected={hasGoogleAuth}
-            onConnect={() => {
-              toast({
-                title: "Google OAuth",
-                description: "GA4 uses the same Google OAuth2 credentials as Search Console. Connect Google to enable both.",
-              });
-            }}
-          >
-            <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-              <Shield className="w-3 h-3" />
-              Uses GA4 Data API (same OAuth as GSC)
-            </div>
-          </IntegrationCard>
-
-          <IntegrationCard
-            title="CallRail"
-            description="Track organic phone calls, unique callers, call duration, qualified leads, and call-to-page attribution."
-            icon={Phone}
-            iconBg="bg-green-600"
-            connected={hasCallrailKey}
-            onConnect={() => setCallrailDialogOpen(true)}
-            onDisconnect={callrailCred ? () => deleteCredentialMutation.mutate(callrailCred.id) : undefined}
-          >
-            <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-              <Key className="w-3 h-3" />
-              API v3 key required
-            </div>
-          </IntegrationCard>
+        <div className="space-y-3">
+          <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+            SEO Tools
+          </h2>
+          {SERVICE_CONFIGS.filter(s => ["ahrefs", "semrush", "screaming_frog"].includes(s.id)).map(config => (
+            <ServiceSection
+              key={config.id}
+              config={config}
+              credentials={credentials}
+              onAddAccount={handleOpenConnect}
+              onDeleteAccount={(id) => deleteCredentialMutation.mutate(id)}
+            />
+          ))}
         </div>
 
         <Separator className="my-4" />
@@ -230,7 +328,7 @@ export default function SetupPage() {
           <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Security</h2>
           <Card className="p-4">
             <div className="flex items-start gap-3">
-              <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-muted">
+              <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-muted shrink-0">
                 <Shield className="w-4 h-4" />
               </div>
               <div>
@@ -238,11 +336,11 @@ export default function SetupPage() {
                 <div className="flex items-center gap-2 mb-2">
                   <Badge variant="default" className="text-[10px]">
                     <CheckCircle2 className="w-3 h-3 mr-1" />
-                    Active
+                    AES-256-GCM Active
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  All API keys and refresh tokens are encrypted at rest using server-side encryption. The encryption key is stored as an environment variable (SESSION_SECRET).
+                  All API keys, refresh tokens, and secrets are encrypted at rest using AES-256-GCM. The encryption key is derived from the server-side SESSION_SECRET environment variable.
                 </p>
               </div>
             </div>
@@ -257,10 +355,14 @@ export default function SetupPage() {
             {[
               { cmd: "GSC QoQ Queries", desc: "Top 20 winners & losers by clicks delta", icon: Globe },
               { cmd: "GSC QoQ Pages", desc: "Page performance with money pages focus", icon: Globe },
-              { cmd: "GA4 Organic Funnel", desc: "Sessions, conversions, CVR trends", icon: BarChart3 },
-              { cmd: "GA4 Landing Pages", desc: "Top 20 by conversions with CVR", icon: BarChart3 },
+              { cmd: "GA4 Organic Funnel", desc: "Sessions, admissions leads, CVR trends", icon: BarChart3 },
+              { cmd: "GA4 Landing Pages", desc: "Top 20 by admissions leads with CVR", icon: BarChart3 },
               { cmd: "CallRail Organic Calls", desc: "Calls, unique callers, qualified %", icon: Phone },
-              { cmd: "CallRail Landing Pages", desc: "Call volume by landing page", icon: Phone },
+              { cmd: "CTM Organic Calls", desc: "Call tracking metrics call volume", icon: Phone },
+              { cmd: "Ahrefs Backlinks", desc: "DR, referring domains, top referrers", icon: LinkIcon },
+              { cmd: "Ahrefs Keywords", desc: "Keyword rankings and movements", icon: LinkIcon },
+              { cmd: "SEMrush Overview", desc: "Organic traffic and keyword estimates", icon: LineChart },
+              { cmd: "SEMrush Rankings", desc: "Position tracking with CPC data", icon: LineChart },
             ].map((item, idx) => (
               <Card key={idx} className="p-3 flex items-start gap-3">
                 <item.icon className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
@@ -274,36 +376,58 @@ export default function SetupPage() {
         </div>
       </motion.div>
 
-      <Dialog open={callrailDialogOpen} onOpenChange={setCallrailDialogOpen}>
+      <Dialog open={connectDialogOpen} onOpenChange={(open) => { if (!open) resetDialog(); }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Connect CallRail</DialogTitle>
-            <DialogDescription>Enter your CallRail API v3 key. You can find this in your CallRail account settings.</DialogDescription>
+            <DialogTitle>Connect {activeService?.name}</DialogTitle>
+            <DialogDescription>
+              Add credentials for a {activeService?.name} account. You can add multiple accounts to manage different clients.
+            </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="callrail-key">API Key</Label>
-              <Input
-                id="callrail-key"
-                type="password"
-                value={callrailKey}
-                onChange={e => setCallrailKey(e.target.value)}
-                placeholder="Enter your CallRail API key"
-                data-testid="input-callrail-key"
-              />
+          {activeService && (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="account-label">Account Label *</Label>
+                <Input
+                  id="account-label"
+                  value={accountLabel}
+                  onChange={e => setAccountLabel(e.target.value)}
+                  placeholder="e.g., Main Agency Account, Client X Account"
+                  data-testid="input-account-label"
+                />
+                <p className="text-[10px] text-muted-foreground">
+                  A name to identify this account (e.g., your agency name or client name)
+                </p>
+              </div>
+
+              {activeService.credentialFields.map((field) => (
+                <div key={field.key} className="space-y-2">
+                  <Label htmlFor={field.key}>{field.label} *</Label>
+                  <Input
+                    id={field.key}
+                    type={field.type}
+                    value={fieldValues[field.key] || ""}
+                    onChange={e => setFieldValues(prev => ({ ...prev, [field.key]: e.target.value }))}
+                    placeholder={field.placeholder}
+                    data-testid={`input-${field.key}`}
+                  />
+                </div>
+              ))}
+
+              <div className="flex items-start gap-2 p-3 rounded-md bg-muted/50">
+                <AlertTriangle className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
+                <p className="text-xs text-muted-foreground">
+                  Your credentials will be encrypted with AES-256-GCM and stored securely. They will never be exposed to the frontend.
+                </p>
+              </div>
             </div>
-            <div className="flex items-start gap-2 p-3 rounded-md bg-muted/50">
-              <AlertTriangle className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
-              <p className="text-xs text-muted-foreground">
-                Your API key will be encrypted and stored securely. It will never be exposed to the frontend.
-              </p>
-            </div>
-          </div>
+          )}
           <DialogFooter>
+            <Button variant="outline" onClick={resetDialog}>Cancel</Button>
             <Button
-              onClick={handleSaveCallrailKey}
-              disabled={!callrailKey.trim() || saveCredentialMutation.isPending}
-              data-testid="button-save-callrail-key"
+              onClick={handleSaveCredentials}
+              disabled={!accountLabel.trim() || saveCredentialMutation.isPending}
+              data-testid="button-save-credentials"
             >
               {saveCredentialMutation.isPending ? "Saving..." : "Save & Connect"}
             </Button>

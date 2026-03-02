@@ -107,6 +107,7 @@ export async function registerRoutes(
       id: c.id,
       service: c.service,
       credentialType: c.credentialType,
+      accountLabel: c.accountLabel,
       hasValue: !!c.encryptedValue,
       metadata: c.metadata,
       createdAt: c.createdAt,
@@ -116,17 +117,18 @@ export async function registerRoutes(
   });
 
   app.post("/api/credentials", async (req, res) => {
-    const { service, credentialType, value, metadata } = req.body;
+    const { service, credentialType, value, accountLabel, metadata } = req.body;
     if (!service || !credentialType || !value) {
       return res.status(400).json({ message: "Missing required fields" });
     }
-    const cred = await storage.upsertApiCredential({
+    const cred = await storage.createApiCredential({
       service,
       credentialType,
+      accountLabel: accountLabel || "Default",
       encryptedValue: encrypt(value),
       metadata: metadata || null,
     });
-    res.json({ id: cred.id, service: cred.service, credentialType: cred.credentialType });
+    res.json({ id: cred.id, service: cred.service, credentialType: cred.credentialType, accountLabel: cred.accountLabel });
   });
 
   app.delete("/api/credentials/:id", async (req, res) => {

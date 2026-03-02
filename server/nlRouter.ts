@@ -9,12 +9,18 @@ interface ParsedIntent {
 }
 
 const COMMAND_KEYWORDS: Record<Command, string[]> = {
-  gsc_qoq_queries: ["queries", "keywords", "search terms", "gsc queries", "search queries"],
-  gsc_qoq_pages: ["pages", "gsc pages", "urls", "page performance"],
-  ga4_qoq_organic_funnel: ["funnel", "organic funnel", "conversions", "cvr", "conversion rate", "organic traffic", "sessions"],
+  gsc_qoq_queries: ["queries", "keywords", "search terms", "gsc queries", "search queries", "keyword performance"],
+  gsc_qoq_pages: ["gsc pages", "page performance", "urls performance"],
+  ga4_qoq_organic_funnel: ["funnel", "organic funnel", "conversions", "cvr", "conversion rate", "organic traffic", "sessions", "admissions funnel"],
   ga4_qoq_organic_landing_pages: ["landing pages", "organic landing", "ga4 landing", "ga4 pages", "organic pages"],
-  callrail_qoq_organic_calls: ["calls", "phone calls", "organic calls", "callrail", "call volume", "callers"],
-  callrail_qoq_top_landing_pages: ["call landing", "callrail landing", "call pages", "calls by page", "call landing pages"],
+  callrail_qoq_organic_calls: ["callrail calls", "callrail organic", "callrail volume"],
+  callrail_qoq_top_landing_pages: ["callrail landing", "callrail pages", "calls by page"],
+  ctm_qoq_organic_calls: ["ctm calls", "calltracking calls", "call tracking metrics", "ctm organic", "ctm volume"],
+  ctm_qoq_top_landing_pages: ["ctm landing", "ctm pages", "ctm by page"],
+  ahrefs_backlink_overview: ["backlinks", "backlink overview", "referring domains", "domain rating", "ahrefs backlinks", "dr"],
+  ahrefs_keyword_rankings: ["ahrefs keywords", "ahrefs rankings", "ahrefs keyword", "keyword rankings ahrefs"],
+  semrush_organic_overview: ["semrush overview", "semrush organic", "semrush traffic", "organic research"],
+  semrush_keyword_rankings: ["semrush keywords", "semrush rankings", "semrush keyword", "position tracking"],
 };
 
 const DATE_RANGE_KEYWORDS: Record<string, string> = {
@@ -70,7 +76,13 @@ export function parseNaturalQuery(
   }
 
   if (!detectedCommand) {
-    if (lowerQuery.includes("call")) {
+    if (lowerQuery.includes("backlink") || lowerQuery.includes("referring") || lowerQuery.includes("ahrefs")) {
+      detectedCommand = "ahrefs_backlink_overview";
+    } else if (lowerQuery.includes("semrush")) {
+      detectedCommand = "semrush_organic_overview";
+    } else if (lowerQuery.includes("ctm") || lowerQuery.includes("call tracking metrics") || lowerQuery.includes("calltracking")) {
+      detectedCommand = "ctm_qoq_organic_calls";
+    } else if (lowerQuery.includes("call")) {
       detectedCommand = "callrail_qoq_organic_calls";
     } else if (lowerQuery.includes("land")) {
       detectedCommand = "ga4_qoq_organic_landing_pages";
@@ -78,7 +90,7 @@ export function parseNaturalQuery(
       detectedCommand = "gsc_qoq_queries";
     } else if (lowerQuery.includes("page")) {
       detectedCommand = "gsc_qoq_pages";
-    } else if (lowerQuery.includes("funnel") || lowerQuery.includes("conver")) {
+    } else if (lowerQuery.includes("funnel") || lowerQuery.includes("conver") || lowerQuery.includes("admission")) {
       detectedCommand = "ga4_qoq_organic_funnel";
     } else {
       detectedCommand = "gsc_qoq_queries";
@@ -122,6 +134,12 @@ export function getCommandDescription(command: Command): string {
     ga4_qoq_organic_landing_pages: "GA4 Organic Landing Pages (Quarter over Quarter)",
     callrail_qoq_organic_calls: "CallRail Organic Calls (Quarter over Quarter)",
     callrail_qoq_top_landing_pages: "CallRail Top Landing Pages (Quarter over Quarter)",
+    ctm_qoq_organic_calls: "CTM Organic Calls (Quarter over Quarter)",
+    ctm_qoq_top_landing_pages: "CTM Top Landing Pages (Quarter over Quarter)",
+    ahrefs_backlink_overview: "Ahrefs Backlink Overview",
+    ahrefs_keyword_rankings: "Ahrefs Keyword Rankings",
+    semrush_organic_overview: "SEMrush Organic Overview",
+    semrush_keyword_rankings: "SEMrush Keyword Rankings",
   };
   return descriptions[command];
 }

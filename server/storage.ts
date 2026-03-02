@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { eq, desc } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import {
   clients,
   queryLogs,
@@ -23,8 +23,8 @@ export interface IStorage {
   createQueryLog(log: InsertQueryLog): Promise<QueryLog>;
 
   getApiCredentials(): Promise<ApiCredential[]>;
-  getApiCredential(service: string, credentialType: string): Promise<ApiCredential | undefined>;
-  upsertApiCredential(cred: InsertApiCredential): Promise<ApiCredential>;
+  getApiCredentialsByService(service: string): Promise<ApiCredential[]>;
+  createApiCredential(cred: InsertApiCredential): Promise<ApiCredential>;
   deleteApiCredential(id: number): Promise<boolean>;
 }
 
@@ -75,28 +75,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getApiCredentials(): Promise<ApiCredential[]> {
-    return db.select().from(apiCredentials);
+    return db.select().from(apiCredentials).orderBy(apiCredentials.service, apiCredentials.accountLabel);
   }
 
-  async getApiCredential(service: string, credentialType: string): Promise<ApiCredential | undefined> {
-    const [cred] = await db
-      .select()
-      .from(apiCredentials)
-      .where(eq(apiCredentials.service, service))
-      .then(results => results.filter(r => r.credentialType === credentialType));
-    return cred;
+  async getApiCredentialsByService(service: string): Promise<ApiCredential[]> {
+    return db.select().from(apiCredentials).where(eq(apiCredentials.service, service));
   }
 
-  async upsertApiCredential(cred: InsertApiCredential): Promise<ApiCredential> {
-    const existing = await this.getApiCredential(cred.service, cred.credentialType);
-    if (existing) {
-      const [updated] = await db
-        .update(apiCredentials)
-        .set({ ...cred, updatedAt: new Date() })
-        .where(eq(apiCredentials.id, existing.id))
-        .returning();
-      return updated;
-    }
+  async createApiCredential(cred: InsertApiCredential): Promise<ApiCredential> {
     const [created] = await db.insert(apiCredentials).values(cred).returning();
     return created;
   }

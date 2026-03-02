@@ -259,6 +259,28 @@ export async function registerRoutes(
     res.status(201).json({ id: report.id, clientId: report.clientId, reportDate: report.reportDate, filename: report.filename, rowCount: report.rowCount, headers: report.headers, createdAt: report.createdAt });
   });
 
+  app.get("/api/sf-reports/summary", async (req, res) => {
+    const rows = await storage.getLatestSfReportPerClient();
+    res.json(rows);
+  });
+
+  app.get("/api/sf-reports/:id/download", async (req, res) => {
+    const report = await storage.getSfReport(Number(req.params.id));
+    if (!report) return res.status(404).json({ message: "Not found" });
+    const headers = (report.headers || []);
+    const rows = ((report.data || []) as Record<string, any>[]);
+    const escape = (v: any) => JSON.stringify(String(v ?? ""));
+    const csvLines = [headers.map(escape).join(",")];
+    for (const row of rows) {
+      csvLines.push(headers.map((h: string) => escape(row[h])).join(","));
+    }
+    const csv = csvLines.join("\n");
+    const safeName = (report.filename || ("sf-report-" + report.id)).replace(/[^a-zA-Z0-9._-]/g, "_");
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", "attachment; filename=\"" + safeName + "\"");
+    res.send(csv);
+  });
+
   app.get("/api/sf-reports/:id", async (req, res) => {
     const report = await storage.getSfReport(Number(req.params.id));
     if (!report) return res.status(404).json({ message: "Not found" });

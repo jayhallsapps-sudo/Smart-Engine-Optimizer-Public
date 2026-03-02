@@ -51,6 +51,7 @@ import {
   AlertCircle,
   Circle,
   KeyRound,
+  Download,
 } from "lucide-react";
 import type { Client } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
@@ -60,6 +61,15 @@ type CredentialSafe = {
   id: number;
   service: string;
   accountLabel: string;
+};
+
+type SfSummaryRow = {
+  id: number;
+  clientId: number;
+  reportDate: string;
+  filename: string;
+  rowCount: number;
+  createdAt: string;
 };
 
 function TagInput({ value, onChange, placeholder }: { value: string[]; onChange: (v: string[]) => void; placeholder: string }) {
@@ -305,10 +315,12 @@ function ServiceRow({
   def,
   client,
   credentials,
+  sfReport,
 }: {
   def: (typeof SERVICE_DEFS)[number];
   client: Client;
   credentials: CredentialSafe[];
+  sfReport?: SfSummaryRow | null;
 }) {
   const rawValue = def.getValue(client);
   const hasId = !!rawValue;
@@ -317,10 +329,11 @@ function ServiceRow({
     : [];
   const hasCred = matchingCreds.length > 0;
   const isManual = def.isManual;
+  const hasSfUpload = isManual && !!sfReport;
 
-  const fullyConnected = hasId && (hasCred || isManual);
+  const fullyConnected = hasSfUpload || (hasId && (hasCred || isManual));
   const idOnlyMissingCred = hasId && !hasCred && !isManual;
-  const notConfigured = !hasId;
+  const notConfigured = !hasSfUpload && !hasId;
 
   const Icon = def.icon;
 
@@ -361,7 +374,7 @@ function ServiceRow({
           </p>
         )}
 
-        {!hasId && (
+        {!hasId && !hasSfUpload && (
           <p className="text-[11px] text-muted-foreground/60 mt-0.5">Not configured</p>
         )}
 
@@ -384,8 +397,25 @@ function ServiceRow({
           <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-0.5">No credential saved — go to Setup</p>
         )}
 
-        {isManual && hasId && (
-          <p className="text-[10px] text-muted-foreground mt-0.5">Manual import</p>
+        {isManual && hasSfUpload && (
+          <div className="flex items-center gap-2 mt-1 flex-wrap">
+            <a
+              href={"/api/sf-reports/" + sfReport!.id + "/download"}
+              download={sfReport!.filename}
+              className="inline-flex items-center gap-1 text-[10px] text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-900/30 rounded px-1.5 py-0.5 hover:underline"
+              data-testid={"sf-download-link-" + client.id}
+            >
+              <Download className="w-2.5 h-2.5" />
+              {sfReport!.filename}
+            </a>
+            <span className="text-[10px] text-muted-foreground">{sfReport!.rowCount.toLocaleString()} rows · {sfReport!.reportDate}</span>
+          </div>
+        )}
+        {isManual && !hasSfUpload && hasId && (
+          <p className="text-[10px] text-muted-foreground mt-0.5">No CSV uploaded yet</p>
+        )}
+        {isManual && !hasSfUpload && !hasId && (
+          <p className="text-[10px] text-muted-foreground/60 mt-0.5">No uploads</p>
         )}
       </div>
     </div>
@@ -395,10 +425,12 @@ function ServiceRow({
 function ClientCard({
   client,
   credentials,
+  sfSummary,
   onEdit,
 }: {
   client: Client;
   credentials: CredentialSafe[];
+  sfSummary: SfSummaryRow[];
   onEdit: () => void;
 }) {
   const { toast } = useToast();
@@ -411,11 +443,14 @@ function ClientCard({
     },
   });
 
+  const clientSfReport = sfSummary.find(r => r.clientId === client.id) || null;
+
   const connectedCount = SERVICE_DEFS.filter(def => {
     const hasId = !!def.getValue(client);
     const hasCred = def.credService
       ? credentials.some(c => c.service === def.credService)
       : true;
+    if (def.isManual) return !!(sfSummary.find(r => r.clientId === client.id));
     return hasId && hasCred;
   }).length;
 
@@ -463,7 +498,7 @@ function ClientCard({
 
       <div className="grid grid-cols-1 gap-1.5">
         {SERVICE_DEFS.map(def => (
-          <ServiceRow key={def.key} def={def} client={client} credentials={credentials} />
+          <ServiceRow key={def.key} def={def} client={client} credentials={credentials} sfReport={def.isManual ? clientSfReport : undefined} />
         ))}
       </div>
 
@@ -493,6 +528,10 @@ export default function ClientsPage() {
 
   const { data: credentials = [] } = useQuery<CredentialSafe[]>({
     queryKey: ["/api/credentials"],
+  });
+
+  const { data: sfSummary = [] } = useQuery<SfSummaryRow[]>({
+    queryKey: ["/api/sf-reports/summary"],
   });
 
   const createMutation = useMutation({
@@ -586,6 +625,7 @@ export default function ClientsPage() {
               key={client.id}
               client={client}
               credentials={credentials}
+              sfSummary={sfSummary}
               onEdit={() => handleEdit(client)}
             />
           ))}

@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, sql } from "drizzle-orm";
 import {
   clients,
   queryLogs,
@@ -36,6 +36,7 @@ export interface IStorage {
   getSfReport(id: number): Promise<SfReport | undefined>;
   createSfReport(report: InsertSfReport): Promise<SfReport>;
   deleteSfReport(id: number): Promise<boolean>;
+  getLatestSfReportPerClient(): Promise<Array<{ id: number; clientId: number; reportDate: string; filename: string; rowCount: number; createdAt: Date }>>;
 
   getSetting(key: string): Promise<string | null>;
   setSetting(key: string, value: string): Promise<Setting>;
@@ -127,6 +128,16 @@ export class DatabaseStorage implements IStorage {
   async deleteSfReport(id: number): Promise<boolean> {
     const result = await db.delete(sfReports).where(eq(sfReports.id, id)).returning();
     return result.length > 0;
+  }
+
+  async getLatestSfReportPerClient(): Promise<Array<{ id: number; clientId: number; reportDate: string; filename: string; rowCount: number; createdAt: Date }>> {
+    const rows = await db.execute(sql`
+      SELECT DISTINCT ON (client_id)
+        id, client_id as "clientId", report_date as "reportDate", filename, row_count as "rowCount", created_at as "createdAt"
+      FROM sf_reports
+      ORDER BY client_id, report_date DESC
+    `);
+    return rows.rows as any;
   }
 
   async getSetting(key: string): Promise<string | null> {

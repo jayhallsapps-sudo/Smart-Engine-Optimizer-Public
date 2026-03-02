@@ -73,13 +73,20 @@ async function testCallRail(apiKey: string): Promise<TestResult> {
 
 async function testAhrefs(apiKey: string): Promise<TestResult> {
   try {
-    const resp = await fetch("https://api.ahrefs.com/v3/account-usage", {
+    const url = "https://api.ahrefs.com/v3/site-explorer/domain-rating?target=ahrefs.com&date=2024-01-01";
+    const resp = await fetch(url, {
       headers: { Authorization: `Bearer ${apiKey}` },
     });
-    const data = (await resp.json()) as any;
-    if (!resp.ok) throw new Error(data.detail || data.error?.message || resp.statusText);
-    const plan = data.subscription?.plan ?? data.plan ?? "active";
-    return { success: true, message: `Connected — plan: ${plan}` };
+    const text = await resp.text();
+    let data: any;
+    try { data = JSON.parse(text); } catch { data = null; }
+    if (!resp.ok) {
+      const msg = data?.detail ?? data?.error?.message ?? text ?? resp.statusText;
+      throw new Error(msg);
+    }
+    const dr = data?.domain_rating?.domain_rating ?? data?.domain_rating ?? null;
+    const msg = dr !== null ? `Connected — DR: ${dr}` : "Connected";
+    return { success: true, message: msg };
   } catch (err: any) {
     return { success: false, message: err.message };
   }
@@ -88,13 +95,16 @@ async function testAhrefs(apiKey: string): Promise<TestResult> {
 async function testSEMrush(apiKey: string): Promise<TestResult> {
   try {
     const resp = await fetch(
-      `https://api.semrush.com/?type=phrase_fullsearch&key=${apiKey}&phrase=test&database=us&display_limit=1`
+      `https://api.semrush.com/?type=phrase_this&key=${apiKey}&phrase=seo&database=us&export_columns=Ph,Nq`
     );
-    if (resp.status === 403 || resp.status === 401) {
+    const text = await resp.text();
+    if (resp.status === 403 || resp.status === 401 || text.startsWith("ERROR 50")) {
       throw new Error("Invalid API key");
     }
+    if (text.startsWith("ERROR")) {
+      throw new Error(text.trim());
+    }
     if (!resp.ok) {
-      const text = await resp.text();
       throw new Error(text || resp.statusText);
     }
     return { success: true, message: "API key valid" };

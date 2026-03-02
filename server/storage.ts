@@ -1,38 +1,110 @@
-import { type User, type InsertUser } from "@shared/schema";
-import { randomUUID } from "crypto";
-
-// modify the interface with any CRUD methods
-// you might need
+import { db } from "./db";
+import { eq, desc } from "drizzle-orm";
+import {
+  clients,
+  queryLogs,
+  apiCredentials,
+  type Client,
+  type InsertClient,
+  type QueryLog,
+  type InsertQueryLog,
+  type ApiCredential,
+  type InsertApiCredential,
+} from "@shared/schema";
 
 export interface IStorage {
-  getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
+  getClients(): Promise<Client[]>;
+  getClient(id: number): Promise<Client | undefined>;
+  createClient(client: InsertClient): Promise<Client>;
+  updateClient(id: number, client: Partial<InsertClient>): Promise<Client | undefined>;
+  deleteClient(id: number): Promise<boolean>;
+
+  getQueryLogs(clientId?: number, limit?: number): Promise<QueryLog[]>;
+  createQueryLog(log: InsertQueryLog): Promise<QueryLog>;
+
+  getApiCredentials(): Promise<ApiCredential[]>;
+  getApiCredential(service: string, credentialType: string): Promise<ApiCredential | undefined>;
+  upsertApiCredential(cred: InsertApiCredential): Promise<ApiCredential>;
+  deleteApiCredential(id: number): Promise<boolean>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<string, User>;
-
-  constructor() {
-    this.users = new Map();
+export class DatabaseStorage implements IStorage {
+  async getClients(): Promise<Client[]> {
+    return db.select().from(clients).orderBy(clients.name);
   }
 
-  async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
+  async getClient(id: number): Promise<Client | undefined> {
+    const [client] = await db.select().from(clients).where(eq(clients.id, id));
+    return client;
   }
 
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
+  async createClient(client: InsertClient): Promise<Client> {
+    const [created] = await db.insert(clients).values(client).returning();
+    return created;
   }
 
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
-    return user;
+  async updateClient(id: number, client: Partial<InsertClient>): Promise<Client | undefined> {
+    const [updated] = await db
+      .update(clients)
+      .set({ ...client, updatedAt: new Date() })
+      .where(eq(clients.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteClient(id: number): Promise<boolean> {
+    const result = await db.delete(clients).where(eq(clients.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async getQueryLogs(clientId?: number, limit = 50): Promise<QueryLog[]> {
+    if (clientId) {
+      return db
+        .select()
+        .from(queryLogs)
+        .where(eq(queryLogs.clientId, clientId))
+        .orderBy(desc(queryLogs.createdAt))
+        .limit(limit);
+    }
+    return db.select().from(queryLogs).orderBy(desc(queryLogs.createdAt)).limit(limit);
+  }
+
+  async createQueryLog(log: InsertQueryLog): Promise<QueryLog> {
+    const [created] = await db.insert(queryLogs).values(log).returning();
+    return created;
+  }
+
+  async getApiCredentials(): Promise<ApiCredential[]> {
+    return db.select().from(apiCredentials);
+  }
+
+  async getApiCredential(service: string, credentialType: string): Promise<ApiCredential | undefined> {
+    const [cred] = await db
+      .select()
+      .from(apiCredentials)
+      .where(eq(apiCredentials.service, service))
+      .then(results => results.filter(r => r.credentialType === credentialType));
+    return cred;
+  }
+
+  async upsertApiCredential(cred: InsertApiCredential): Promise<ApiCredential> {
+    const existing = await this.getApiCredential(cred.service, cred.credentialType);
+    if (existing) {
+      const [updated] = await db
+        .update(apiCredentials)
+        .set({ ...cred, updatedAt: new Date() })
+        .where(eq(apiCredentials.id, existing.id))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(apiCredentials).values(cred).returning();
+    return created;
+  }
+
+  async deleteApiCredential(id: number): Promise<boolean> {
+    const result = await db.delete(apiCredentials).where(eq(apiCredentials.id, id)).returning();
+    return result.length > 0;
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();

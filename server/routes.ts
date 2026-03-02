@@ -7,6 +7,7 @@ import { generateMockResult } from "./mockData";
 import { seedDatabase } from "./seed";
 import { encrypt } from "./encryption";
 import { buildGoogleAuthUrl, exchangeCodeForToken, callbackHtml, isGoogleConfigured } from "./googleAuth";
+import { testCredential } from "./connectionTest";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -136,6 +137,11 @@ export async function registerRoutes(
     const deleted = await storage.deleteApiCredential(Number(req.params.id));
     if (!deleted) return res.status(404).json({ message: "Credential not found" });
     res.json({ success: true });
+  });
+
+  app.post("/api/credentials/:id/test", async (req, res) => {
+    const result = await testCredential(Number(req.params.id));
+    res.json(result);
   });
 
   app.get("/api/auth/google/configured", (_req, res) => {

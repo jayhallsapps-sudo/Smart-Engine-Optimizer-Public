@@ -44,6 +44,8 @@ import {
   Bug,
   LineChart,
   ExternalLink,
+  Wifi,
+  Loader2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
@@ -74,16 +76,26 @@ function getServiceIcon(serviceId: string) {
   }
 }
 
+interface TestState {
+  testing: boolean;
+  success?: boolean;
+  message?: string;
+}
+
 function ServiceSection({
   config,
   credentials,
   onAddAccount,
   onDeleteAccount,
+  onTestAccount,
+  testStates,
 }: {
   config: ServiceConfig;
   credentials: CredentialSafe[];
   onAddAccount: (config: ServiceConfig) => void;
   onDeleteAccount: (id: number) => void;
+  onTestAccount: (id: number) => void;
+  testStates: Record<number, TestState>;
 }) {
   const Icon = getServiceIcon(config.id);
   const serviceCredentials = credentials.filter(c => c.service === config.id);
@@ -129,36 +141,64 @@ function ServiceSection({
 
           {serviceCredentials.length > 0 && (
             <div className="space-y-1.5 mb-3">
-              {serviceCredentials.map((cred) => (
-                <div key={cred.id} className="flex items-center justify-between gap-2 p-2 rounded-md bg-muted/50">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-green-600 dark:text-green-400 shrink-0" />
-                    <span className="text-xs font-medium truncate">{cred.accountLabel}</span>
-                    <span className="text-[10px] text-muted-foreground">{cred.credentialType.replace(/_/g, " ")}</span>
+              {serviceCredentials.map((cred) => {
+                const ts = testStates?.[cred.id];
+                return (
+                  <div key={cred.id} className="flex flex-col gap-1">
+                    <div className="flex items-center justify-between gap-2 p-2 rounded-md bg-muted/50">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-green-600 dark:text-green-400 shrink-0" />
+                        <span className="text-xs font-medium truncate">{cred.accountLabel}</span>
+                        <span className="text-[10px] text-muted-foreground">{cred.credentialType.replace(/_/g, " ")}</span>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7"
+                          onClick={() => onTestAccount(cred.id)}
+                          disabled={ts?.testing}
+                          title="Test connection"
+                          data-testid={`button-test-cred-${cred.id}`}
+                        >
+                          {ts?.testing
+                            ? <Loader2 className="w-3 h-3 animate-spin" />
+                            : <Wifi className="w-3 h-3" />}
+                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button size="icon" variant="ghost" className="h-7 w-7" data-testid={`button-delete-cred-${cred.id}`}>
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Remove {cred.accountLabel}?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This will disconnect the {config.name} account "{cred.accountLabel}". You can re-add it later.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => onDeleteAccount(cred.id)} data-testid="button-confirm-delete-cred">
+                                Remove
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    </div>
+                    {ts && !ts.testing && ts.success !== undefined && (
+                      <div className={`flex items-center gap-1.5 px-2 py-1 rounded text-[10px] ${ts.success ? "text-green-700 dark:text-green-400 bg-green-500/10" : "text-red-700 dark:text-red-400 bg-red-500/10"}`}>
+                        {ts.success
+                          ? <CheckCircle2 className="w-3 h-3 shrink-0" />
+                          : <XCircle className="w-3 h-3 shrink-0" />}
+                        {ts.success ? "Connected — " : "Failed — "}{ts.message}
+                      </div>
+                    )}
                   </div>
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button size="icon" variant="ghost" className="h-7 w-7" data-testid={`button-delete-cred-${cred.id}`}>
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Remove {cred.accountLabel}?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          This will disconnect the {config.name} account "{cred.accountLabel}". You can re-add it later.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => onDeleteAccount(cred.id)} data-testid="button-confirm-delete-cred">
-                          Remove
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 
@@ -185,6 +225,7 @@ export default function SetupPage() {
   const [accountLabel, setAccountLabel] = useState("");
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [googleConnecting, setGoogleConnecting] = useState(false);
+  const [testStates, setTestStates] = useState<Record<number, TestState>>({});
   const { toast } = useToast();
 
   const { data: googleStatus } = useQuery<{ configured: boolean }>({
@@ -255,6 +296,17 @@ export default function SetupPage() {
         setGoogleConnecting(false);
       }
     }, 500);
+  };
+
+  const handleTestAccount = async (id: number) => {
+    setTestStates(prev => ({ ...prev, [id]: { testing: true } }));
+    try {
+      const res = await fetch(`/api/credentials/${id}/test`, { method: "POST" });
+      const data = await res.json() as { success: boolean; message: string };
+      setTestStates(prev => ({ ...prev, [id]: { testing: false, success: data.success, message: data.message } }));
+    } catch {
+      setTestStates(prev => ({ ...prev, [id]: { testing: false, success: false, message: "Request failed" } }));
+    }
   };
 
   const handleOpenConnect = (config: ServiceConfig) => {
@@ -329,6 +381,8 @@ export default function SetupPage() {
               credentials={credentials}
               onAddAccount={handleOpenConnect}
               onDeleteAccount={(id) => deleteCredentialMutation.mutate(id)}
+              onTestAccount={handleTestAccount}
+              testStates={testStates}
             />
           ))}
         </div>
@@ -344,6 +398,8 @@ export default function SetupPage() {
               credentials={credentials}
               onAddAccount={handleOpenConnect}
               onDeleteAccount={(id) => deleteCredentialMutation.mutate(id)}
+              onTestAccount={handleTestAccount}
+              testStates={testStates}
             />
           ))}
         </div>
@@ -359,6 +415,8 @@ export default function SetupPage() {
               credentials={credentials}
               onAddAccount={handleOpenConnect}
               onDeleteAccount={(id) => deleteCredentialMutation.mutate(id)}
+              onTestAccount={handleTestAccount}
+              testStates={testStates}
             />
           ))}
         </div>

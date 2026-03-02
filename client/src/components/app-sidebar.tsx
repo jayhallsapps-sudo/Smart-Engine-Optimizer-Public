@@ -11,6 +11,8 @@ import {
   SidebarMenuItem,
   SidebarHeader,
   SidebarFooter,
+  SidebarRail,
+  useSidebar,
 } from "@/components/ui/sidebar";
 
 const navItems = [
@@ -20,21 +22,32 @@ const navItems = [
   { title: "Setup", url: "/setup", icon: Settings },
 ];
 
+function SidebarLogo() {
+  const { state } = useSidebar();
+  const collapsed = state === "collapsed";
+
+  return (
+    <Link href="/" className="flex items-center gap-2 px-2">
+      <div className="flex items-center justify-center w-8 h-8 rounded-md bg-primary shrink-0">
+        <Zap className="w-4 h-4 text-primary-foreground" />
+      </div>
+      {!collapsed && (
+        <div>
+          <h1 className="text-sm font-semibold tracking-tight" data-testid="text-app-name">SmartEO</h1>
+          <p className="text-[10px] text-muted-foreground leading-none">Smart Engine Optimization</p>
+        </div>
+      )}
+    </Link>
+  );
+}
+
 export function AppSidebar() {
   const [location] = useLocation();
 
   return (
-    <Sidebar>
+    <Sidebar collapsible="icon">
       <SidebarHeader className="p-4 pb-2">
-        <Link href="/" className="flex items-center gap-2 px-2">
-          <div className="flex items-center justify-center w-8 h-8 rounded-md bg-primary">
-            <Zap className="w-4 h-4 text-primary-foreground" />
-          </div>
-          <div>
-            <h1 className="text-sm font-semibold tracking-tight" data-testid="text-app-name">SmartEO</h1>
-            <p className="text-[10px] text-muted-foreground leading-none">Smart Engine Optimization</p>
-          </div>
-        </Link>
+        <SidebarLogo />
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
@@ -45,6 +58,7 @@ export function AppSidebar() {
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     asChild
+                    tooltip={item.title}
                     data-active={location === item.url || (item.url !== "/" && location.startsWith(item.url))}
                     className="data-[active=true]:bg-sidebar-accent"
                   >
@@ -60,10 +74,11 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter className="p-4">
-        <div className="text-[10px] text-muted-foreground text-center">
+        <div className="text-[10px] text-muted-foreground text-center group-data-[collapsible=icon]:hidden">
           SmartEO v1.1
         </div>
       </SidebarFooter>
+      <SidebarRail />
     </Sidebar>
   );
 }

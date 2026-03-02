@@ -1,0 +1,68 @@
+Build an MVP web app called “QBR Copilot” that lets me ask natural-language questions and returns QBR-ready data from:
+- Google Search Console (Search Analytics)
+- Google Analytics 4 (Data API)
+- CallRail (API v3)
+
+AUTONOMY LEVEL: High autonomy for implementation choices and completing the full build end-to-end. Do not ask questions unless a missing value blocks running the app (e.g., OAuth credentials). Use sensible defaults.
+
+CORE REQUIREMENTS
+1) Tech stack
+- Next.js (App Router) + TypeScript
+- Server routes in Next.js for API calls
+- Postgres (Neon or Replit Postgres) via Prisma ORM
+- Minimal UI using a simple component library or basic Tailwind
+
+2) Authentication / secrets
+- Implement Google OAuth2 for GSC + GA4. Use offline access and refresh tokens.
+- Store refresh tokens encrypted at rest (use a server-side encryption key in env vars).
+- CallRail uses an API key stored encrypted at rest.
+- Provide an env var setup guide on first run.
+
+3) Data model (Prisma)
+- User
+- Client (belongs to User)
+  - name
+  - gsc_site_url
+  - ga4_property_id
+  - callrail_company_id
+  - brand_terms (string array)
+  - lead_events (string array)
+  - money_pages (string array, optional)
+  - createdAt/updatedAt
+- QueryLog
+  - userId, clientId
+  - command
+  - dateRange
+  - filters JSON
+  - createdAt
+- Cache table (optional but preferred)
+  - key, payload JSON, expiresAt
+
+4) Commands (hard-code these; NL router selects among them)
+GSC:
+- gsc_qoq_queries: last 90 days vs previous 90 days; dimensions=query; metrics=clicks, impressions, ctr, position. Return top 20 winners and top 20 losers by clicks delta. Support filter branded vs non-branded using client.brand_terms.
+- gsc_qoq_pages: same but dimension=page. Also include an optional “money_pages focus” section when client.money_pages present.
+
+GA4:
+- ga4_qoq_organic_funnel: last 90 vs previous 90; filter to Organic Search; metrics=sessions, totalUsers (optional), conversions (derived from client.lead_events summed), CVR=conversions/sessions. Return QoQ delta.
+- ga4_qoq_organic_landing_pages: last 90 vs previous 90; dimension=landingPage; same organic filter; report top 20 by conversions and include sessions + CVR.
+
+CallRail:
+- callrail_qoq_organic_calls: last 90 vs previous 90; filter to organic sources (make this configurable per client if needed with a simple “callrail_organic_source_terms[]” field; otherwise default to “google / organic” matching). Return calls, unique callers, avg duration, first-time caller count if available; include QoQ deltas. If tags/qualification exist in payload, compute qualified %.
+- callrail_qoq_top_landing_pages: last 90 vs previous 90; group calls by landing_page if available; top 20.
+
+5) Natural language interface
+- A chat-like input where I can type requests.
+- Implement a deterministic router:
+  - Identify client by name match (or ask me to pick from a dropdown if ambiguous).
+  - Detect timeframe keywords: “QoQ” (default), “last 30”, “YoY” (optional).
+  - Detect intent keywords: queries/pages/landing pages/funnel/calls.
+  - Map to one of the commands above and run it.
+- Display:
+  - Answer-first summary (key metrics + deltas)
+  - Tables for winners/losers
+  - CSV download button per result
+
+6) UX pages
+- /setup: connect Google, save CallRail API key, set encryption key status
+- /clients: list + add

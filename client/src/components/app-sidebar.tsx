@@ -27,7 +27,10 @@ function SidebarLogo() {
   const collapsed = state === "collapsed";
 
   return (
-    <Link href="/" className="flex items-center gap-2 px-2">
+    <Link
+      href="/"
+      className="flex items-center gap-2 px-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
+    >
       <div className="flex items-center justify-center w-8 h-8 rounded-md bg-primary shrink-0">
         <Zap className="w-4 h-4 text-primary-foreground" />
       </div>
@@ -46,7 +49,7 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader className="p-4 pb-2">
+      <SidebarHeader className="p-4 pb-2 group-data-[collapsible=icon]:p-2 group-data-[collapsible=icon]:pb-2">
         <SidebarLogo />
       </SidebarHeader>
       <SidebarContent>

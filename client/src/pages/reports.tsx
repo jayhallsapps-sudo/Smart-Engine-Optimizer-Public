@@ -271,6 +271,54 @@ const REPORT_DATE_RANGES: Record<ReportType, string> = {
   qbr: "last_90_vs_prev_90",
 };
 
+function inferSection(command: string, reportType: ReportType): string {
+  const map: Record<ReportType, Record<string, string>> = {
+    qbr: {
+      gsc_qoq_queries: "qbr_scorecard",
+      gsc_qoq_pages: "qbr_scorecard",
+      ga4_qoq_organic_funnel: "qbr_scorecard",
+      callrail_qoq_organic_calls: "qbr_scorecard",
+      ctm_qoq_organic_calls: "qbr_scorecard",
+      ahrefs_backlink_overview: "qbr_scorecard",
+      semrush_organic_overview: "qbr_scorecard",
+      ga4_qoq_organic_landing_pages: "qbr_drivers",
+      callrail_qoq_top_landing_pages: "qbr_drivers",
+      ctm_qoq_top_landing_pages: "qbr_drivers",
+      ahrefs_keyword_rankings: "qbr_drivers",
+      semrush_keyword_rankings: "qbr_drivers",
+    },
+    monthly: {
+      ga4_qoq_organic_funnel: "mo_exec",
+      callrail_qoq_organic_calls: "mo_exec",
+      ctm_qoq_organic_calls: "mo_exec",
+      ahrefs_backlink_overview: "mo_exec",
+      semrush_organic_overview: "mo_exec",
+      gsc_qoq_queries: "mo_visibility",
+      gsc_qoq_pages: "mo_visibility",
+      ahrefs_keyword_rankings: "mo_visibility",
+      semrush_keyword_rankings: "mo_visibility",
+      ga4_qoq_organic_landing_pages: "mo_conversion",
+      callrail_qoq_top_landing_pages: "mo_conversion",
+      ctm_qoq_top_landing_pages: "mo_conversion",
+    },
+    biweekly: {
+      ga4_qoq_organic_funnel: "bw_topline",
+      callrail_qoq_organic_calls: "bw_topline",
+      ctm_qoq_organic_calls: "bw_topline",
+      ahrefs_backlink_overview: "bw_topline",
+      semrush_organic_overview: "bw_topline",
+      gsc_qoq_queries: "bw_changes",
+      gsc_qoq_pages: "bw_changes",
+      ga4_qoq_organic_landing_pages: "bw_changes",
+      callrail_qoq_top_landing_pages: "bw_changes",
+      ctm_qoq_top_landing_pages: "bw_changes",
+      ahrefs_keyword_rankings: "bw_changes",
+      semrush_keyword_rankings: "bw_changes",
+    },
+  };
+  return map[reportType]?.[command] ?? REPORT_SECTIONS[reportType].find(s => !s.manualInput)?.id ?? REPORT_SECTIONS[reportType][0].id;
+}
+
 function getCommandIcon(command?: string) {
   if (!command) return <Search className="w-4 h-4" />;
   if (command.startsWith("gsc")) return <Globe className="w-4 h-4" />;
@@ -330,28 +378,11 @@ function ResultDisplay({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <div className="flex items-center gap-2">
-          {getCommandIcon(result.command)}
-          <span className="text-sm font-medium">{commandDescription}</span>
-          <Minus className="w-3 h-3 text-muted-foreground" />
-          <span className="text-xs text-muted-foreground">{dateRangeLabel}</span>
-        </div>
-        {onCommit && (
-          <Button
-            size="sm"
-            variant={isCommitted ? "secondary" : "default"}
-            onClick={onCommit}
-            disabled={isCommitted}
-            data-testid="button-commit-result"
-          >
-            {isCommitted ? (
-              <><CheckCircle2 className="w-3 h-3 mr-1.5" /> Committed</>
-            ) : (
-              <><CheckCheck className="w-3 h-3 mr-1.5" /> Commit to Report</>
-            )}
-          </Button>
-        )}
+      <div className="flex items-center gap-2 flex-wrap">
+        {getCommandIcon(result.command)}
+        <span className="text-sm font-medium">{commandDescription}</span>
+        <Minus className="w-3 h-3 text-muted-foreground" />
+        <span className="text-xs text-muted-foreground">{dateRangeLabel}</span>
       </div>
 
       {result.summary.length > 0 && (
@@ -401,81 +432,25 @@ function ResultDisplay({
           </div>
         </div>
       ))}
-    </div>
-  );
-}
 
-function CommitDialog({
-  open,
-  onOpenChange,
-  reportType,
-  committedSections,
-  onCommit,
-}: {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  reportType: ReportType;
-  committedSections: Record<string, CommittedSection>;
-  onCommit: (sectionId: string) => void;
-}) {
-  const sections = REPORT_SECTIONS[reportType];
-  const [selected, setSelected] = useState<string>("");
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Commit to Report Section</DialogTitle>
-          <DialogDescription>
-            Choose which section of the {REPORT_TYPE_LABELS[reportType]} report this data belongs to.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-2">
-          {sections.filter(s => !s.manualInput).map(section => {
-            const isAlreadyCommitted = !!committedSections[section.id];
-            return (
-              <button
-                key={section.id}
-                onClick={() => setSelected(section.id)}
-                className={`w-full text-left p-3 rounded-md border transition-colors ${
-                  selected === section.id
-                    ? "border-primary bg-primary/5"
-                    : "border-border hover:border-muted-foreground/50"
-                } ${isAlreadyCommitted ? "opacity-60" : ""}`}
-                data-testid={`button-section-${section.id}`}
-              >
-                <div className="flex items-center gap-2">
-                  <section.icon className="w-4 h-4 text-muted-foreground shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium">{section.title}</p>
-                    <p className="text-[10px] text-muted-foreground">{section.description}</p>
-                  </div>
-                  {isAlreadyCommitted && (
-                    <Badge variant="secondary" className="text-[10px] shrink-0">Filled</Badge>
-                  )}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+      {onCommit && (
+        <div className="pt-1 flex justify-end">
           <Button
-            onClick={() => {
-              if (selected) {
-                onCommit(selected);
-                setSelected("");
-                onOpenChange(false);
-              }
-            }}
-            disabled={!selected}
-            data-testid="button-confirm-commit"
+            size="sm"
+            variant={isCommitted ? "secondary" : "default"}
+            onClick={onCommit}
+            disabled={isCommitted}
+            data-testid="button-commit-result"
           >
-            Commit
+            {isCommitted ? (
+              <><CheckCircle2 className="w-3 h-3 mr-1.5" /> Committed</>
+            ) : (
+              <><CheckCheck className="w-3 h-3 mr-1.5" /> Commit</>
+            )}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -534,7 +509,7 @@ function GenerateReportDialog({
   onOpenChange: (v: boolean) => void;
   reportType: ReportType;
   client: Client | null;
-  committedSections: Record<string, CommittedSection>;
+  committedSections: Record<string, CommittedSection[]>;
 }) {
   if (!client) return null;
   const sections = REPORT_SECTIONS[reportType];
@@ -545,18 +520,21 @@ function GenerateReportDialog({
   const now = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 
   const formatSectionContent = (section: ReportSection): string => {
-    const committed = committedSections[section.id];
-    if (!committed) return "[ No data committed ]";
-    if (committed.manualText) return committed.manualText;
-    if (committed.response?.result) {
-      const r = committed.response.result;
-      const summaryLines = r.summary.map(s =>
-        `  • ${s.label}: ${s.current} (vs ${s.previous} | ${s.deltaPercent})`
-      ).join("\n");
-      const tableCount = r.tables.length;
-      return `${summaryLines}${tableCount > 0 ? `\n  [${tableCount} data table${tableCount > 1 ? "s" : ""} attached]` : ""}`;
-    }
-    return "[ Data committed ]";
+    const items = committedSections[section.id];
+    if (!items || items.length === 0) return "[ No data committed ]";
+    return items.map((committed, i) => {
+      const prefix = items.length > 1 ? `[${i + 1}] ` : "";
+      if (committed.manualText) return `${prefix}${committed.manualText}`;
+      if (committed.response?.result) {
+        const r = committed.response.result;
+        const summaryLines = r.summary.map(s =>
+          `  • ${s.label}: ${s.current} (vs ${s.previous} | ${s.deltaPercent})`
+        ).join("\n");
+        const tableCount = r.tables.length;
+        return `${prefix}${committed.response.commandDescription ?? ""}${summaryLines ? "\n" + summaryLines : ""}${tableCount > 0 ? `\n  [${tableCount} data table${tableCount > 1 ? "s" : ""} attached]` : ""}`;
+      }
+      return `${prefix}[ Data committed ]`;
+    }).join("\n\n");
   };
 
   const narrativeInstruction = `REPORT FRAMING — TRUSTED ADVISOR NARRATIVE
@@ -625,12 +603,12 @@ function ChecklistPanel({
   onGenerate,
 }: {
   reportType: ReportType;
-  committedSections: Record<string, CommittedSection>;
+  committedSections: Record<string, CommittedSection[]>;
   onManualAdd: (section: ReportSection) => void;
   onGenerate: () => void;
 }) {
   const sections = REPORT_SECTIONS[reportType];
-  const filledCount = sections.filter(s => !!committedSections[s.id]).length;
+  const filledCount = sections.filter(s => (committedSections[s.id]?.length ?? 0) > 0).length;
   const pct = Math.round((filledCount / sections.length) * 100);
 
   return (
@@ -651,37 +629,44 @@ function ChecklistPanel({
 
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
         {sections.map((section) => {
-          const committed = committedSections[section.id];
+          const items = committedSections[section.id] ?? [];
+          const hasItems = items.length > 0;
           const SIcon = section.icon;
           return (
             <div
               key={section.id}
-              className={`rounded-md border p-3 transition-colors ${committed ? "border-primary/30 bg-primary/5" : "border-border"}`}
+              className={`rounded-md border p-3 transition-colors ${hasItems ? "border-primary/30 bg-primary/5" : "border-border"}`}
               data-testid={`checklist-item-${section.id}`}
             >
               <div className="flex items-start gap-2">
-                {committed ? (
+                {hasItems ? (
                   <CheckCircle2 className="w-4 h-4 text-primary shrink-0 mt-0.5" />
                 ) : (
                   <Circle className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
                 )}
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium leading-tight">{section.title}</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-xs font-medium leading-tight">{section.title}</p>
+                    {items.length > 1 && (
+                      <Badge variant="secondary" className="text-[9px] px-1 py-0 h-4">{items.length}</Badge>
+                    )}
+                  </div>
                   <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">{section.description}</p>
-                  {!committed && section.dateRange && (
+                  {!hasItems && section.dateRange && (
                     <p className="text-[10px] text-muted-foreground/60 mt-0.5">{section.dateRange}</p>
                   )}
-                  {committed?.manualText && (
-                    <p className="text-[10px] text-muted-foreground mt-1 italic line-clamp-2">
-                      {committed.manualText}
-                    </p>
+                  {items.length > 0 && (
+                    <div className="mt-1 space-y-0.5">
+                      {items.map((item, i) => (
+                        <p key={i} className="text-[10px] text-primary/80 truncate">
+                          {item.manualText
+                            ? item.manualText.slice(0, 60) + (item.manualText.length > 60 ? "…" : "")
+                            : item.response?.commandDescription ?? "Data committed"}
+                        </p>
+                      ))}
+                    </div>
                   )}
-                  {committed?.response?.commandDescription && (
-                    <p className="text-[10px] text-primary/80 mt-1">
-                      {committed.response.commandDescription}
-                    </p>
-                  )}
-                  {!committed && section.manualInput && (
+                  {section.manualInput && (
                     <Button
                       size="sm"
                       variant="ghost"
@@ -689,10 +674,10 @@ function ChecklistPanel({
                       onClick={() => onManualAdd(section)}
                       data-testid={`button-manual-${section.id}`}
                     >
-                      + Add manually
+                      {hasItems ? "+ Add more" : "+ Add manually"}
                     </Button>
                   )}
-                  {!committed && !section.manualInput && section.hints.length > 0 && (
+                  {!hasItems && !section.manualInput && section.hints.length > 0 && (
                     <p className="text-[10px] text-muted-foreground/60 mt-1 italic">
                       Ask in chat → Commit
                     </p>
@@ -841,9 +826,7 @@ export default function ReportsPage() {
   const [selectedClientId, setSelectedClientId] = useState<string>("");
   const [reportType, setReportType] = useState<ReportType>("qbr");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [committedSections, setCommittedSections] = useState<Record<string, CommittedSection>>({});
-  const [commitDialogOpen, setCommitDialogOpen] = useState(false);
-  const [commitTargetMessageId, setCommitTargetMessageId] = useState<string | null>(null);
+  const [committedSections, setCommittedSections] = useState<Record<string, CommittedSection[]>>({});
   const [manualDialogOpen, setManualDialogOpen] = useState(false);
   const [manualTargetSection, setManualTargetSection] = useState<ReportSection | null>(null);
   const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
@@ -972,27 +955,25 @@ export default function ReportsPage() {
   };
 
   const handleCommitClick = (messageId: string) => {
-    setCommitTargetMessageId(messageId);
-    setCommitDialogOpen(true);
-  };
-
-  const handleCommit = (sectionId: string) => {
-    const msg = messages.find(m => m.id === commitTargetMessageId);
-    if (!msg?.response) return;
-
+    const msg = messages.find(m => m.id === messageId);
+    if (!msg?.response?.result) return;
+    const sectionId = inferSection(msg.response.result.command, reportType);
+    const sectionTitle = REPORT_SECTIONS[reportType].find(s => s.id === sectionId)?.title;
     setCommittedSections(prev => ({
       ...prev,
-      [sectionId]: {
-        sectionId,
-        messageId: msg.id,
-        response: msg.response,
-        committedAt: new Date(),
-      },
+      [sectionId]: [
+        ...(prev[sectionId] ?? []),
+        {
+          sectionId,
+          messageId: msg.id,
+          response: msg.response,
+          committedAt: new Date(),
+        },
+      ],
     }));
     setMessages(prev => prev.map(m =>
-      m.id === commitTargetMessageId ? { ...m, committedTo: sectionId } : m
+      m.id === messageId ? { ...m, committedTo: sectionId } : m
     ));
-    const sectionTitle = REPORT_SECTIONS[reportType].find(s => s.id === sectionId)?.title;
     toast({ title: `Committed to "${sectionTitle}"` });
   };
 
@@ -1000,11 +981,14 @@ export default function ReportsPage() {
     if (!manualTargetSection) return;
     setCommittedSections(prev => ({
       ...prev,
-      [manualTargetSection.id]: {
-        sectionId: manualTargetSection.id,
-        manualText: text,
-        committedAt: new Date(),
-      },
+      [manualTargetSection.id]: [
+        ...(prev[manualTargetSection.id] ?? []),
+        {
+          sectionId: manualTargetSection.id,
+          manualText: text,
+          committedAt: new Date(),
+        },
+      ],
     }));
     toast({ title: `"${manualTargetSection.title}" saved to report` });
   };
@@ -1336,7 +1320,7 @@ export default function ReportsPage() {
               </Button>
             </div>
             <p className="text-[10px] text-muted-foreground mt-1.5 text-center max-w-3xl mx-auto">
-              Results route to the right data source. Press "Commit to Report" on any result to add it to your checklist.
+              Results route to the right data source. Press "Commit" on any result to add it to your report.
             </p>
           </div>
         </div>
@@ -1353,14 +1337,6 @@ export default function ReportsPage() {
           />
         </div>
       </div>
-
-      <CommitDialog
-        open={commitDialogOpen}
-        onOpenChange={setCommitDialogOpen}
-        reportType={reportType}
-        committedSections={committedSections}
-        onCommit={handleCommit}
-      />
 
       <ManualInputDialog
         open={manualDialogOpen}

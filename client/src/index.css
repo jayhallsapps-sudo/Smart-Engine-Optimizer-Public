@@ -18,27 +18,28 @@
   --sidebar: 0 0% 96%;
   --sidebar-foreground: 0 0% 9%;
   --sidebar-border: 0 0% 92%;
-  --sidebar-primary: 217 91% 42%;
+  --sidebar-primary: 4 83% 44%;
   --sidebar-primary-foreground: 0 0% 98%;
   --sidebar-accent: 0 0% 90%;
   --sidebar-accent-foreground: 0 0% 9%;
-  --sidebar-ring: 217 91% 42%;
+  --sidebar-ring: 4 83% 44%;
   --popover: 0 0% 94%;
   --popover-foreground: 0 0% 9%;
   --popover-border: 0 0% 88%;
-  --primary: 217 91% 42%;
+  --primary: 4 83% 44%;
   --primary-foreground: 0 0% 98%;
   --secondary: 0 0% 88%;
   --secondary-foreground: 0 0% 9%;
   --muted: 0 0% 92%;
   --muted-foreground: 0 0% 35%;
-  --accent: 217 15% 92%;
-  --accent-foreground: 217 15% 12%;
+  --accent: 4 12% 92%;
+  --accent-foreground: 4 12% 12%;
   --destructive: 0 84% 38%;
   --destructive-foreground: 0 0% 98%;
   --input: 0 0% 75%;
-  --ring: 217 91% 42%;
-  --chart-1: 217 91% 38%;
+  --ring: 4 83% 44%;
+  --link: 340 72% 52%;
+  --chart-1: 4 83% 40%;
   --chart-2: 197 71% 42%;
   --chart-3: 162 63% 35%;
   --chart-4: 271 81% 45%;
@@ -102,27 +103,28 @@
   --sidebar: 0 0% 11%;
   --sidebar-foreground: 0 0% 95%;
   --sidebar-border: 0 0% 15%;
-  --sidebar-primary: 217 91% 52%;
+  --sidebar-primary: 4 83% 54%;
   --sidebar-primary-foreground: 0 0% 98%;
   --sidebar-accent: 0 0% 16%;
   --sidebar-accent-foreground: 0 0% 95%;
-  --sidebar-ring: 217 91% 52%;
+  --sidebar-ring: 4 83% 54%;
   --popover: 0 0% 13%;
   --popover-foreground: 0 0% 95%;
   --popover-border: 0 0% 18%;
-  --primary: 217 91% 42%;
+  --primary: 4 83% 54%;
   --primary-foreground: 0 0% 98%;
   --secondary: 0 0% 18%;
   --secondary-foreground: 0 0% 95%;
   --muted: 0 0% 15%;
   --muted-foreground: 0 0% 70%;
-  --accent: 217 12% 17%;
-  --accent-foreground: 217 12% 92%;
+  --accent: 4 10% 18%;
+  --accent-foreground: 4 10% 92%;
   --destructive: 0 84% 38%;
   --destructive-foreground: 0 0% 98%;
   --input: 0 0% 35%;
-  --ring: 217 91% 52%;
-  --chart-1: 217 91% 65%;
+  --ring: 4 83% 54%;
+  --link: 340 72% 72%;
+  --chart-1: 4 83% 65%;
   --chart-2: 197 71% 60%;
   --chart-3: 162 63% 55%;
   --chart-4: 271 81% 68%;
@@ -172,6 +174,14 @@
 
   body {
     @apply font-sans antialiased bg-background text-foreground;
+  }
+
+  a {
+    color: hsl(var(--link));
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    color: hsl(var(--link));
   }
 }
 

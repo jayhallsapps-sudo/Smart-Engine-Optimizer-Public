@@ -48,6 +48,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
 import { SERVICE_CONFIGS, type ServiceConfig } from "@shared/schema";
+import { SiGoogle } from "react-icons/si";
 
 interface CredentialSafe {
   id: number;
@@ -183,7 +184,12 @@ export default function SetupPage() {
   const [activeService, setActiveService] = useState<ServiceConfig | null>(null);
   const [accountLabel, setAccountLabel] = useState("");
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
+  const [googleConnecting, setGoogleConnecting] = useState(false);
   const { toast } = useToast();
+
+  const { data: googleStatus } = useQuery<{ configured: boolean }>({
+    queryKey: ["/api/auth/google/configured"],
+  });
 
   const { data: credentials = [], isLoading } = useQuery<CredentialSafe[]>({
     queryKey: ["/api/credentials"],
@@ -215,6 +221,40 @@ export default function SetupPage() {
     setActiveService(null);
     setAccountLabel("");
     setFieldValues({});
+    setGoogleConnecting(false);
+  };
+
+  const handleGoogleOAuth = () => {
+    if (!activeService || !accountLabel.trim()) return;
+    setGoogleConnecting(true);
+
+    const w = 600, h = 700;
+    const left = Math.round(window.screenX + (window.outerWidth - w) / 2);
+    const top = Math.round(window.screenY + (window.outerHeight - h) / 2);
+    const url = `/api/auth/google/start?service=${activeService.id}&accountLabel=${encodeURIComponent(accountLabel.trim())}`;
+    const popup = window.open(url, "google_oauth", `width=${w},height=${h},left=${left},top=${top},scrollbars=yes,resizable=yes`);
+
+    const messageHandler = (event: MessageEvent) => {
+      if (event.data?.type !== "google_oauth_result") return;
+      window.removeEventListener("message", messageHandler);
+      if (event.data.success) {
+        queryClient.invalidateQueries({ queryKey: ["/api/credentials"] });
+        toast({ title: `${activeService.name} connected successfully` });
+        resetDialog();
+      } else {
+        setGoogleConnecting(false);
+        toast({ title: "Connection failed", description: event.data.message, variant: "destructive" });
+      }
+    };
+    window.addEventListener("message", messageHandler);
+
+    const pollClosed = setInterval(() => {
+      if (popup?.closed) {
+        clearInterval(pollClosed);
+        window.removeEventListener("message", messageHandler);
+        setGoogleConnecting(false);
+      }
+    }, 500);
   };
 
   const handleOpenConnect = (config: ServiceConfig) => {
@@ -401,37 +441,69 @@ export default function SetupPage() {
                 </p>
               </div>
 
-              {activeService.credentialFields.map((field) => (
-                <div key={field.key} className="space-y-2">
-                  <Label htmlFor={field.key}>{field.label} *</Label>
-                  <Input
-                    id={field.key}
-                    type={field.type}
-                    value={fieldValues[field.key] || ""}
-                    onChange={e => setFieldValues(prev => ({ ...prev, [field.key]: e.target.value }))}
-                    placeholder={field.placeholder}
-                    data-testid={`input-${field.key}`}
-                  />
-                </div>
-              ))}
-
-              <div className="flex items-start gap-2 p-3 rounded-md bg-muted/50">
-                <AlertTriangle className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
-                <p className="text-xs text-muted-foreground">
-                  Your credentials will be encrypted with AES-256-GCM and stored securely. They will never be exposed to the frontend.
-                </p>
-              </div>
+              {activeService.authType === "oauth" ? (
+                <>
+                  {!googleStatus?.configured && (
+                    <div className="flex items-start gap-2 p-3 rounded-md bg-yellow-500/10 border border-yellow-500/20">
+                      <AlertTriangle className="w-4 h-4 text-yellow-600 dark:text-yellow-400 shrink-0 mt-0.5" />
+                      <p className="text-xs text-yellow-700 dark:text-yellow-300">
+                        <strong>Google OAuth not configured.</strong> Add <code className="font-mono bg-yellow-100 dark:bg-yellow-900/30 px-1 rounded">GOOGLE_CLIENT_ID</code> and <code className="font-mono bg-yellow-100 dark:bg-yellow-900/30 px-1 rounded">GOOGLE_CLIENT_SECRET</code> secrets, then register <code className="font-mono bg-yellow-100 dark:bg-yellow-900/30 px-1 rounded">/api/auth/google/callback</code> as an authorized redirect URI in your Google Cloud Console.
+                      </p>
+                    </div>
+                  )}
+                  <div className="flex items-start gap-2 p-3 rounded-md bg-muted/50">
+                    <Shield className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
+                    <p className="text-xs text-muted-foreground">
+                      You'll be redirected to Google to approve access. The refresh token is stored encrypted — your password is never shared with this app.
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {activeService.credentialFields.map((field) => (
+                    <div key={field.key} className="space-y-2">
+                      <Label htmlFor={field.key}>{field.label} *</Label>
+                      <Input
+                        id={field.key}
+                        type={field.type}
+                        value={fieldValues[field.key] || ""}
+                        onChange={e => setFieldValues(prev => ({ ...prev, [field.key]: e.target.value }))}
+                        placeholder={field.placeholder}
+                        data-testid={`input-${field.key}`}
+                      />
+                    </div>
+                  ))}
+                  <div className="flex items-start gap-2 p-3 rounded-md bg-muted/50">
+                    <AlertTriangle className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
+                    <p className="text-xs text-muted-foreground">
+                      Your credentials are encrypted with AES-256-GCM and stored securely. They will never be exposed to the frontend.
+                    </p>
+                  </div>
+                </>
+              )}
             </div>
           )}
           <DialogFooter>
             <Button variant="outline" onClick={resetDialog}>Cancel</Button>
-            <Button
-              onClick={handleSaveCredentials}
-              disabled={!accountLabel.trim() || saveCredentialMutation.isPending}
-              data-testid="button-save-credentials"
-            >
-              {saveCredentialMutation.isPending ? "Saving..." : "Save & Connect"}
-            </Button>
+            {activeService?.authType === "oauth" ? (
+              <Button
+                onClick={handleGoogleOAuth}
+                disabled={!accountLabel.trim() || googleConnecting || !googleStatus?.configured}
+                data-testid="button-google-oauth"
+                className="gap-2"
+              >
+                <SiGoogle className="w-3.5 h-3.5" />
+                {googleConnecting ? "Waiting for Google..." : "Sign in with Google"}
+              </Button>
+            ) : (
+              <Button
+                onClick={handleSaveCredentials}
+                disabled={!accountLabel.trim() || saveCredentialMutation.isPending}
+                data-testid="button-save-credentials"
+              >
+                {saveCredentialMutation.isPending ? "Saving..." : "Save & Connect"}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -131,13 +131,11 @@ export const SERVICE_CONFIGS: ServiceConfig[] = [
   {
     id: "google_search_console",
     name: "Google Search Console",
-    description: "Search analytics: queries, pages, clicks, impressions, CTR, position. Requires Google OAuth.",
+    description: "Search analytics: queries, pages, clicks, impressions, CTR, position.",
     authType: "oauth",
     color: "bg-blue-600",
     supportsMultiple: true,
-    credentialFields: [
-      { key: "refresh_token", label: "Refresh Token", placeholder: "Paste OAuth refresh token", type: "password" },
-    ],
+    credentialFields: [],
   },
   {
     id: "google_analytics_4",
@@ -146,9 +144,7 @@ export const SERVICE_CONFIGS: ServiceConfig[] = [
     authType: "oauth",
     color: "bg-orange-600",
     supportsMultiple: true,
-    credentialFields: [
-      { key: "refresh_token", label: "Refresh Token", placeholder: "Paste OAuth refresh token", type: "password" },
-    ],
+    credentialFields: [],
   },
   {
     id: "callrail",

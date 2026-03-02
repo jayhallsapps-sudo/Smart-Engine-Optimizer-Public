@@ -6,6 +6,7 @@ import { parseNaturalQuery, getCommandDescription, getDateRangeLabel } from "./n
 import { generateMockResult } from "./mockData";
 import { seedDatabase } from "./seed";
 import { encrypt } from "./encryption";
+import { buildGoogleAuthUrl, exchangeCodeForToken, callbackHtml, isGoogleConfigured } from "./googleAuth";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -135,6 +136,37 @@ export async function registerRoutes(
     const deleted = await storage.deleteApiCredential(Number(req.params.id));
     if (!deleted) return res.status(404).json({ message: "Credential not found" });
     res.json({ success: true });
+  });
+
+  app.get("/api/auth/google/configured", (_req, res) => {
+    res.json({ configured: isGoogleConfigured() });
+  });
+
+  app.get("/api/auth/google/start", (req, res) => {
+    try {
+      const service = req.query.service as string;
+      const accountLabel = req.query.accountLabel as string;
+      if (!service || !accountLabel) {
+        return res.status(400).send("Missing service or accountLabel");
+      }
+      const url = buildGoogleAuthUrl(service, accountLabel);
+      res.redirect(url);
+    } catch (err: any) {
+      res.status(500).send(callbackHtml(false, err.message));
+    }
+  });
+
+  app.get("/api/auth/google/callback", async (req, res) => {
+    const { code, state, error } = req.query as Record<string, string>;
+    if (error || !code || !state) {
+      return res.send(callbackHtml(false, error || "Authorization was denied"));
+    }
+    try {
+      await exchangeCodeForToken(code, state);
+      res.send(callbackHtml(true, "Connected"));
+    } catch (err: any) {
+      res.send(callbackHtml(false, err.message));
+    }
   });
 
   return httpServer;

@@ -47,10 +47,20 @@ import {
   LinkIcon,
   LineChart,
   Bug,
+  CheckCircle2,
+  AlertCircle,
+  Circle,
+  KeyRound,
 } from "lucide-react";
 import type { Client } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
+
+type CredentialSafe = {
+  id: number;
+  service: string;
+  accountLabel: string;
+};
 
 function TagInput({ value, onChange, placeholder }: { value: string[]; onChange: (v: string[]) => void; placeholder: string }) {
   const [input, setInput] = useState("");
@@ -218,7 +228,179 @@ function ClientForm({ initial, onSubmit, isPending }: { initial: ClientFormData;
   );
 }
 
-function ClientCard({ client, onEdit }: { client: Client; onEdit: () => void }) {
+const SERVICE_DEFS = [
+  {
+    key: "gsc",
+    label: "Search Console",
+    short: "GSC",
+    credService: "google_search_console",
+    icon: Globe,
+    getValue: (c: Client) => c.gscSiteUrl,
+    format: (v: string) => v.replace(/^https?:\/\//, "").replace(/\/$/, ""),
+    isManual: false,
+  },
+  {
+    key: "ga4",
+    label: "Analytics 4",
+    short: "GA4",
+    credService: "google_analytics_4",
+    icon: BarChart3,
+    getValue: (c: Client) => c.ga4PropertyId,
+    format: (v: string) => v,
+    isManual: false,
+  },
+  {
+    key: "callrail",
+    label: "CallRail",
+    short: "CallRail",
+    credService: "callrail",
+    icon: Phone,
+    getValue: (c: Client) => c.callrailCompanyId,
+    format: (v: string) => v,
+    isManual: false,
+  },
+  {
+    key: "ctm",
+    label: "Call Tracking Metrics",
+    short: "CTM",
+    credService: "call_tracking_metrics",
+    icon: Phone,
+    getValue: (c: Client) => c.ctmAccountId,
+    format: (v: string) => v,
+    isManual: false,
+  },
+  {
+    key: "ahrefs",
+    label: "Ahrefs",
+    short: "Ahrefs",
+    credService: "ahrefs",
+    icon: LinkIcon,
+    getValue: (c: Client) => c.ahrefsProjectUrl,
+    format: (v: string) => v.replace(/^https?:\/\//, "").replace(/\/$/, ""),
+    isManual: false,
+  },
+  {
+    key: "semrush",
+    label: "SEMrush",
+    short: "SEMrush",
+    credService: "semrush",
+    icon: LineChart,
+    getValue: (c: Client) => c.semrushProjectId,
+    format: (v: string) => v,
+    isManual: false,
+  },
+  {
+    key: "sf",
+    label: "Screaming Frog",
+    short: "SF",
+    credService: null,
+    icon: Bug,
+    getValue: (c: Client) => c.screamingFrogProfile,
+    format: (v: string) => v,
+    isManual: true,
+  },
+] as const;
+
+function ServiceRow({
+  def,
+  client,
+  credentials,
+}: {
+  def: (typeof SERVICE_DEFS)[number];
+  client: Client;
+  credentials: CredentialSafe[];
+}) {
+  const rawValue = def.getValue(client);
+  const hasId = !!rawValue;
+  const matchingCreds = def.credService
+    ? credentials.filter(c => c.service === def.credService)
+    : [];
+  const hasCred = matchingCreds.length > 0;
+  const isManual = def.isManual;
+
+  const fullyConnected = hasId && (hasCred || isManual);
+  const idOnlyMissingCred = hasId && !hasCred && !isManual;
+  const notConfigured = !hasId;
+
+  const Icon = def.icon;
+
+  return (
+    <div
+      className={`flex items-start gap-3 px-3 py-2.5 rounded-md border text-sm ${
+        fullyConnected
+          ? "bg-green-50 border-green-100 dark:bg-green-950/20 dark:border-green-900/40"
+          : idOnlyMissingCred
+          ? "bg-amber-50 border-amber-100 dark:bg-amber-950/20 dark:border-amber-900/40"
+          : "bg-muted/30 border-border/50 opacity-60"
+      }`}
+      data-testid={`service-row-${def.key}-${client.id}`}
+    >
+      <div className="mt-0.5 shrink-0">
+        {fullyConnected ? (
+          <CheckCircle2 className="w-4 h-4 text-green-600 dark:text-green-400" />
+        ) : idOnlyMissingCred ? (
+          <AlertCircle className="w-4 h-4 text-amber-500" />
+        ) : (
+          <Circle className="w-4 h-4 text-muted-foreground/40" />
+        )}
+      </div>
+
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5">
+          <Icon className="w-3 h-3 shrink-0 text-muted-foreground" />
+          <span className="font-medium text-xs">{def.label}</span>
+        </div>
+
+        {hasId && (
+          <p
+            className="text-[11px] text-muted-foreground mt-0.5 truncate font-mono"
+            title={rawValue ?? ""}
+            data-testid={`service-id-${def.key}-${client.id}`}
+          >
+            {def.format(rawValue!)}
+          </p>
+        )}
+
+        {!hasId && (
+          <p className="text-[11px] text-muted-foreground/60 mt-0.5">Not configured</p>
+        )}
+
+        {hasId && matchingCreds.length > 0 && (
+          <div className="flex items-center gap-1 mt-1 flex-wrap">
+            {matchingCreds.map(cred => (
+              <span
+                key={cred.id}
+                className="inline-flex items-center gap-0.5 text-[10px] text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-900/30 rounded px-1.5 py-0.5"
+                data-testid={`cred-label-${def.key}-${cred.id}`}
+              >
+                <KeyRound className="w-2.5 h-2.5" />
+                {cred.accountLabel}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {hasId && !hasCred && !isManual && (
+          <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-0.5">No credential saved — go to Setup</p>
+        )}
+
+        {isManual && hasId && (
+          <p className="text-[10px] text-muted-foreground mt-0.5">Manual import</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ClientCard({
+  client,
+  credentials,
+  onEdit,
+}: {
+  client: Client;
+  credentials: CredentialSafe[];
+  onEdit: () => void;
+}) {
   const { toast } = useToast();
 
   const deleteMutation = useMutation({
@@ -229,33 +411,29 @@ function ClientCard({ client, onEdit }: { client: Client; onEdit: () => void }) 
     },
   });
 
-  const integrations = [
-    { label: "GSC", connected: !!client.gscSiteUrl, icon: Globe },
-    { label: "GA4", connected: !!client.ga4PropertyId, icon: BarChart3 },
-    { label: "CallRail", connected: !!client.callrailCompanyId, icon: Phone },
-    { label: "CTM", connected: !!client.ctmAccountId, icon: Phone },
-    { label: "Ahrefs", connected: !!client.ahrefsProjectUrl, icon: LinkIcon },
-    { label: "SEMrush", connected: !!client.semrushProjectId, icon: LineChart },
-    { label: "SF", connected: !!client.screamingFrogProfile, icon: Bug },
-  ];
-
-  const connectedCount = integrations.filter(i => i.connected).length;
+  const connectedCount = SERVICE_DEFS.filter(def => {
+    const hasId = !!def.getValue(client);
+    const hasCred = def.credService
+      ? credentials.some(c => c.service === def.credService)
+      : true;
+    return hasId && hasCred;
+  }).length;
 
   return (
     <Card className="p-4 space-y-3">
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-10 h-10 rounded-md bg-accent">
+          <div className="flex items-center justify-center w-10 h-10 rounded-md bg-accent shrink-0">
             <Building2 className="w-5 h-5 text-accent-foreground" />
           </div>
           <div>
             <h3 className="font-medium text-sm" data-testid={`text-client-name-${client.id}`}>{client.name}</h3>
             <p className="text-xs text-muted-foreground">
-              {client.gscSiteUrl || "No site URL configured"} -- {connectedCount} source{connectedCount !== 1 ? "s" : ""}
+              {connectedCount} of {SERVICE_DEFS.length} sources connected
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 shrink-0">
           <Button size="icon" variant="ghost" onClick={onEdit} data-testid={`button-edit-client-${client.id}`}>
             <Pencil className="w-3.5 h-3.5" />
           </Button>
@@ -283,22 +461,14 @@ function ClientCard({ client, onEdit }: { client: Client; onEdit: () => void }) 
         </div>
       </div>
 
-      <div className="flex items-center gap-1.5 flex-wrap">
-        {integrations.filter(i => i.connected).map((int) => (
-          <Badge key={int.label} variant="default" className="text-[10px]">
-            <int.icon className="w-3 h-3 mr-1" />
-            {int.label}
-          </Badge>
-        ))}
-        {integrations.filter(i => !i.connected).map((int) => (
-          <Badge key={int.label} variant="secondary" className="text-[10px] opacity-50">
-            {int.label}
-          </Badge>
+      <div className="grid grid-cols-1 gap-1.5">
+        {SERVICE_DEFS.map(def => (
+          <ServiceRow key={def.key} def={def} client={client} credentials={credentials} />
         ))}
       </div>
 
       {(client.brandTerms && client.brandTerms.length > 0) && (
-        <div className="flex items-center gap-1 flex-wrap">
+        <div className="flex items-center gap-1 flex-wrap pt-1 border-t">
           <span className="text-[10px] text-muted-foreground mr-1">Brand:</span>
           {client.brandTerms.slice(0, 3).map((term, idx) => (
             <Badge key={idx} variant="secondary" className="text-[10px]">{term}</Badge>
@@ -319,6 +489,10 @@ export default function ClientsPage() {
 
   const { data: clients = [], isLoading } = useQuery<Client[]>({
     queryKey: ["/api/clients"],
+  });
+
+  const { data: credentials = [] } = useQuery<CredentialSafe[]>({
+    queryKey: ["/api/credentials"],
   });
 
   const createMutation = useMutation({
@@ -380,11 +554,10 @@ export default function ClientsPage() {
               <div className="space-y-3">
                 <Skeleton className="h-10 w-3/4" />
                 <Skeleton className="h-4 w-1/2" />
-                <div className="flex gap-2 flex-wrap">
-                  <Skeleton className="h-5 w-14" />
-                  <Skeleton className="h-5 w-14" />
-                  <Skeleton className="h-5 w-16" />
-                  <Skeleton className="h-5 w-12" />
+                <div className="flex flex-col gap-1.5">
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-full" />
                 </div>
               </div>
             </Card>
@@ -409,7 +582,12 @@ export default function ClientsPage() {
           className="grid grid-cols-1 md:grid-cols-2 gap-4"
         >
           {clients.map((client) => (
-            <ClientCard key={client.id} client={client} onEdit={() => handleEdit(client)} />
+            <ClientCard
+              key={client.id}
+              client={client}
+              credentials={credentials}
+              onEdit={() => handleEdit(client)}
+            />
           ))}
         </motion.div>
       )}

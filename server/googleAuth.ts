@@ -43,7 +43,7 @@ export function buildGoogleAuthUrl(service: string, accountLabel: string): strin
     response_type: "code",
     scope,
     access_type: "offline",
-    prompt: "consent",
+    prompt: "select_account consent",
     state,
   });
 

@@ -58,6 +58,64 @@ export async function registerRoutes(
 ): Promise<Server> {
   await seedDatabase();
 
+  // Fetch GBP accounts + locations using stored OAuth token
+  app.get("/api/gbp/locations", async (_req, res) => {
+    try {
+      const accessToken = await getGoogleAccessToken("google_business_profile");
+      if (!accessToken) {
+        return res.status(401).json({ message: "Google Business Profile not connected. Connect it in Setup → Analytics & Search." });
+      }
+
+      const accountsResp = await fetch(
+        "https://mybusinessaccountmanagement.googleapis.com/v1/accounts",
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      const accountsData = await accountsResp.json() as any;
+      if (!accountsResp.ok) {
+        return res.status(accountsResp.status).json({ message: accountsData.error?.message ?? "Failed to fetch GBP accounts" });
+      }
+
+      const accounts: any[] = accountsData.accounts ?? [];
+      if (!accounts.length) {
+        return res.json({ locations: [] });
+      }
+
+      const allLocations: { name: string; displayName: string; address: string; resourceName: string }[] = [];
+
+      await Promise.all(
+        accounts.map(async (account: any) => {
+          try {
+            const locResp = await fetch(
+              `https://mybusinessbusinessinformation.googleapis.com/v1/${account.name}/locations?readMask=name,title,storefrontAddress&pageSize=100`,
+              { headers: { Authorization: `Bearer ${accessToken}` } }
+            );
+            const locData = await locResp.json() as any;
+            const locs: any[] = locData.locations ?? [];
+            for (const loc of locs) {
+              const addr = loc.storefrontAddress;
+              const addressLine = addr
+                ? [addr.locality, addr.administrativeArea].filter(Boolean).join(", ")
+                : "";
+              allLocations.push({
+                name: loc.title ?? loc.name,
+                displayName: loc.title ?? loc.name,
+                address: addressLine,
+                resourceName: `${account.name}/${loc.name}`,
+              });
+            }
+          } catch {
+            // skip accounts with no location access
+          }
+        })
+      );
+
+      res.json({ locations: allLocations });
+    } catch (err: any) {
+      console.error("[GBP] /api/gbp/locations error:", err.message);
+      res.status(500).json({ message: "Failed to fetch GBP locations: " + err.message });
+    }
+  });
+
   app.get("/api/clients", async (_req, res) => {
     const clients = await storage.getClients();
     res.json(clients);

@@ -59,6 +59,8 @@ import {
   XCircle,
   ArrowLeftRight,
   MapPin,
+  Loader2,
+  RefreshCw,
 } from "lucide-react";
 import type { Client } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
@@ -172,6 +174,96 @@ const emptyForm: ClientFormData = {
   ctmOrganicSourceTerms: ["google / organic"],
 };
 
+interface GbpLocation {
+  name: string;
+  displayName: string;
+  address: string;
+  resourceName: string;
+}
+
+function GbpLocationPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [locations, setLocations] = useState<GbpLocation[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [fetched, setFetched] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  const fetchLocations = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/gbp/locations");
+      const data = await res.json() as any;
+      if (!res.ok) throw new Error(data.message || "Failed to fetch locations");
+      setLocations(data.locations ?? []);
+      setFetched(true);
+      if ((data.locations ?? []).length === 0) {
+        toast({ title: "No GBP locations found", description: "Make sure GBP is connected in Setup → Analytics & Search.", variant: "destructive" });
+      }
+    } catch (err: any) {
+      setError(err.message);
+      toast({ title: "Could not fetch GBP locations", description: err.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <Label htmlFor="gbpLocation" className="flex items-center gap-1.5">
+        <MapPin className="w-3 h-3" /> Google Business Profile Location
+      </Label>
+      <div className="flex gap-2">
+        {fetched && locations.length > 0 ? (
+          <select
+            value={value}
+            onChange={e => onChange(e.target.value)}
+            className="flex-1 text-sm rounded-md border bg-background px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring"
+            data-testid="select-gbp-location"
+          >
+            <option value="">— Select a location —</option>
+            {locations.map(loc => (
+              <option key={loc.resourceName} value={loc.resourceName}>
+                {loc.displayName}{loc.address ? ` · ${loc.address}` : ""}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <Input
+            id="gbpLocation"
+            value={value}
+            onChange={e => onChange(e.target.value)}
+            placeholder="Click 'Fetch' to load your GBP locations"
+            data-testid="input-gbp-location"
+            className="flex-1"
+          />
+        )}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={fetchLocations}
+          disabled={loading}
+          data-testid="button-fetch-gbp-locations"
+          className="shrink-0"
+        >
+          {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+          <span className="ml-1.5">{fetched ? "Refresh" : "Fetch"}</span>
+        </Button>
+      </div>
+      {error && <p className="text-[11px] text-destructive">{error}</p>}
+      {!fetched && (
+        <p className="text-[11px] text-muted-foreground">
+          Click Fetch to load locations from your connected GBP account, then select one from the dropdown.
+        </p>
+      )}
+      {fetched && value && (
+        <p className="text-[11px] text-muted-foreground font-mono truncate">{value}</p>
+      )}
+    </div>
+  );
+}
+
 function ClientForm({ initial, onSubmit, isPending }: { initial: ClientFormData; onSubmit: (data: ClientFormData) => void; isPending: boolean }) {
   const [form, setForm] = useState<ClientFormData>(initial);
 
@@ -227,10 +319,8 @@ function ClientForm({ initial, onSubmit, isPending }: { initial: ClientFormData;
               <Label htmlFor="airtableView" className="flex items-center gap-1.5"><Database className="w-3 h-3" /> Airtable View Name</Label>
               <Input id="airtableView" value={form.airtableViewName} onChange={e => update("airtableViewName", e.target.value)} placeholder="Published" data-testid="input-airtable-view-name" />
             </div>
-            <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="gbpLocation" className="flex items-center gap-1.5"><MapPin className="w-3 h-3" /> Google Business Profile Location</Label>
-              <Input id="gbpLocation" value={form.gbpLocationName} onChange={e => update("gbpLocationName", e.target.value)} placeholder="accounts/123456789/locations/987654321" data-testid="input-gbp-location" />
-              <p className="text-[11px] text-muted-foreground">Find this in Google Business Profile Manager → your location URL. Required to pull reviews and ratings.</p>
+            <div className="md:col-span-2">
+              <GbpLocationPicker value={form.gbpLocationName} onChange={v => update("gbpLocationName", v)} />
             </div>
           </div>
         </TabsContent>

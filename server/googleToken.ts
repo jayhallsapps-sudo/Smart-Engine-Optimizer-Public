@@ -1,0 +1,96 @@
+import { storage } from "./storage";
+import { decrypt } from "./encryption";
+
+export async function getGoogleAccessToken(service: string): Promise<string | null> {
+  const creds = await storage.getApiCredentialsByService(service);
+  if (!creds.length) return null;
+
+  const refreshToken = decrypt(creds[0].encryptedValue);
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  if (!clientId || !clientSecret) return null;
+
+  const resp = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+      client_id: clientId,
+      client_secret: clientSecret,
+    }),
+  });
+
+  const data = await resp.json() as any;
+  return data.access_token ?? null;
+}
+
+export function extractDomain(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    const u = new URL(url.startsWith("http") ? url : `https://${url}`);
+    return u.hostname.replace(/^www\./, "");
+  } catch {
+    return null;
+  }
+}
+
+export function dateRangeToGoogleDates(dateRange: string): {
+  startDate: string;
+  endDate: string;
+  prevStartDate: string;
+  prevEndDate: string;
+} {
+  const now = new Date();
+  const fmt = (d: Date) => d.toISOString().split("T")[0];
+  const sub = (d: Date, days: number) => {
+    const r = new Date(d);
+    r.setDate(r.getDate() - days);
+    return r;
+  };
+
+  const endDate = fmt(now);
+
+  if (dateRange === "last_14_vs_prev_14") {
+    const startDate = fmt(sub(now, 14));
+    const prevEndDate = fmt(sub(now, 15));
+    const prevStartDate = fmt(sub(now, 28));
+    return { startDate, endDate, prevStartDate, prevEndDate };
+  }
+  if (dateRange === "last_30_vs_prev_30") {
+    const startDate = fmt(sub(now, 30));
+    const prevEndDate = fmt(sub(now, 31));
+    const prevStartDate = fmt(sub(now, 60));
+    return { startDate, endDate, prevStartDate, prevEndDate };
+  }
+  if (dateRange === "last_365_vs_prev_365") {
+    const startDate = fmt(sub(now, 365));
+    const prevEndDate = fmt(sub(now, 366));
+    const prevStartDate = fmt(sub(now, 730));
+    return { startDate, endDate, prevStartDate, prevEndDate };
+  }
+  if (dateRange === "qtd") {
+    const month = now.getMonth();
+    const qStartMonth = Math.floor(month / 3) * 3;
+    const qStart = new Date(now.getFullYear(), qStartMonth, 1);
+    const prevQStart = new Date(now.getFullYear(), qStartMonth - 3, 1);
+    const prevQEnd = new Date(now.getFullYear(), qStartMonth, 0);
+    return { startDate: fmt(qStart), endDate, prevStartDate: fmt(prevQStart), prevEndDate: fmt(prevQEnd) };
+  }
+  // default: last_90_vs_prev_90
+  const startDate = fmt(sub(now, 90));
+  const prevEndDate = fmt(sub(now, 91));
+  const prevStartDate = fmt(sub(now, 180));
+  return { startDate, endDate, prevStartDate, prevEndDate };
+}
+
+export function pctDelta(current: number, previous: number): string {
+  if (previous === 0) return current > 0 ? "+∞%" : "—";
+  const pct = ((current - previous) / previous) * 100;
+  return `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`;
+}
+
+export function fmtDelta(current: number, previous: number): string {
+  const d = current - previous;
+  return `${d >= 0 ? "+" : ""}${d.toLocaleString()}`;
+}

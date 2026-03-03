@@ -12,6 +12,13 @@ import { testCredential } from "./connectionTest";
 import { insertSfReportSchema, insertCallTrackingReportSchema } from "@shared/schema";
 import { generateBiweeklyDocx, generatePptx } from "./reportGenerators";
 import type { SectionData } from "./reportGenerators";
+import { queryGsc, handlesGscCommand } from "./gscClient";
+import { queryGa4, handlesGa4Command } from "./ga4Client";
+import { queryCallRail, handlesCallRailCommand } from "./callrailClient";
+import { queryCtm, handlesCtmCommand } from "./ctmClient";
+import { querySemrush, handlesSemrushCommand } from "./semrushClient";
+import { queryGbp } from "./gbpClient";
+import { querySfReport, handlesSfCommand } from "./sfClient";
 
 const AHREFS_COMMANDS = new Set([
   "ahrefs_backlink_overview",
@@ -181,7 +188,46 @@ export async function registerRoutes(
       });
     }
 
-    const result = generateMockResult(intent.command, client.name, intent.dateRange);
+    // Live data dispatch — priority: Google → Screaming Frog → CallRail/CTM → SEMrush → GBP → mock
+    let result: any = null;
+    let liveSource: string | null = null;
+
+    try {
+      if (handlesGscCommand(intent.command)) {
+        result = await queryGsc(intent.command, client, intent.dateRange);
+        if (result) liveSource = "gsc";
+      }
+      if (!result && handlesGa4Command(intent.command)) {
+        result = await queryGa4(intent.command, client, intent.dateRange);
+        if (result) liveSource = "ga4";
+      }
+      if (!result && handlesSfCommand(intent.command)) {
+        result = await querySfReport(intent.command, client, intent.dateRange);
+        if (result) liveSource = "screaming_frog";
+      }
+      if (!result && handlesCallRailCommand(intent.command)) {
+        result = await queryCallRail(intent.command, client, intent.dateRange);
+        if (result) liveSource = "callrail";
+      }
+      if (!result && handlesCtmCommand(intent.command)) {
+        result = await queryCtm(intent.command, client, intent.dateRange);
+        if (result) liveSource = "ctm";
+      }
+      if (!result && handlesSemrushCommand(intent.command)) {
+        result = await querySemrush(intent.command, client, intent.dateRange);
+        if (result) liveSource = "semrush";
+      }
+      if (!result && intent.command === "gbp_local_summary") {
+        result = await queryGbp(intent.command, client, intent.dateRange);
+        if (result) liveSource = "gbp";
+      }
+    } catch (liveErr: any) {
+      console.warn(`[Live] ${intent.command} failed (${liveErr.message}) — falling back to mock`);
+    }
+
+    if (!result) {
+      result = generateMockResult(intent.command, client.name, intent.dateRange);
+    }
 
     await storage.createQueryLog({
       clientId: intent.clientId,
@@ -189,7 +235,7 @@ export async function registerRoutes(
       naturalQuery: query,
       dateRange: intent.dateRange,
       filters: intent.filters,
-      resultSummary: result.summary.map(s => `${s.label}: ${s.current} (${s.deltaPercent})`).join("; "),
+      resultSummary: result.summary.map((s: any) => `${s.label}: ${s.current} (${s.deltaPercent})`).join("; "),
       resultData: result as any,
     });
 
@@ -197,6 +243,7 @@ export async function registerRoutes(
       success: true,
       commandDescription: getCommandDescription(intent.command),
       dateRangeLabel: getDateRangeLabel(intent.dateRange),
+      liveSource,
       result,
     });
   });

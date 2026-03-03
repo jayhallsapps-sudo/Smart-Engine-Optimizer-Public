@@ -74,6 +74,7 @@ interface QueryResponse {
   suggestions?: string[];
   commandDescription?: string;
   dateRangeLabel?: string;
+  liveSource?: string;
   result?: CommandResult;
 }
 
@@ -411,7 +412,17 @@ function ResultDisplay({
   isCommitted?: boolean;
 }) {
   if (!response.result) return null;
-  const { result, commandDescription, dateRangeLabel } = response;
+  const { result, commandDescription, dateRangeLabel, liveSource } = response;
+
+  const LIVE_SOURCE_LABELS: Record<string, string> = {
+    gsc: "Live · GSC",
+    ga4: "Live · GA4",
+    screaming_frog: "Live · Screaming Frog",
+    callrail: "Live · CallRail",
+    ctm: "Live · CTM",
+    semrush: "Live · SEMrush",
+    gbp: "Live · GBP",
+  };
 
   const downloadCSV = (table: CommandResult["tables"][0]) => {
     const csvContent = [
@@ -434,6 +445,12 @@ function ResultDisplay({
         <span className="text-sm font-medium">{commandDescription}</span>
         <Minus className="w-3 h-3 text-muted-foreground" />
         <span className="text-xs text-muted-foreground">{dateRangeLabel}</span>
+        {liveSource && (
+          <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 ml-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+            {LIVE_SOURCE_LABELS[liveSource] ?? "Live"}
+          </span>
+        )}
       </div>
 
       {result.summary.length > 0 && (

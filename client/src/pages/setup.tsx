@@ -50,6 +50,7 @@ import {
   FileSpreadsheet,
   Link,
   CheckCircle,
+  MapPin,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
@@ -77,6 +78,7 @@ function getServiceIcon(serviceId: string) {
     case "ahrefs": return LinkIcon;
     case "semrush": return LineChart;
     case "screaming_frog": return Bug;
+    case "google_business_profile": return MapPin;
     default: return Key;
   }
 }
@@ -454,7 +456,7 @@ export default function SetupPage() {
           <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
             Analytics & Search
           </h2>
-          {SERVICE_CONFIGS.filter(s => ["google_search_console", "google_analytics_4"].includes(s.id)).map(config => (
+          {SERVICE_CONFIGS.filter(s => ["google_search_console", "google_analytics_4", "google_business_profile"].includes(s.id)).map(config => (
             <ServiceSection
               key={config.id}
               config={config}

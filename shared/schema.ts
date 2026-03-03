@@ -22,6 +22,7 @@ export const clients = pgTable("clients", {
   moneyPages: text("money_pages").array().default(sql`'{}'::text[]`),
   callrailOrganicSourceTerms: text("callrail_organic_source_terms").array().default(sql`'{}'::text[]`),
   ctmOrganicSourceTerms: text("ctm_organic_source_terms").array().default(sql`'{}'::text[]`),
+  gbpLocationName: text("gbp_location_name"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -122,6 +123,7 @@ export type InsertApiCredential = z.infer<typeof insertApiCredentialSchema>;
 export const DATA_SERVICES = [
   "google_search_console",
   "google_analytics_4",
+  "google_business_profile",
   "callrail",
   "call_tracking_metrics",
   "ahrefs",
@@ -221,6 +223,15 @@ export const SERVICE_CONFIGS: ServiceConfig[] = [
     authType: "oauth",
     color: "bg-orange-600",
     supportsMultiple: true,
+    credentialFields: [],
+  },
+  {
+    id: "google_business_profile",
+    name: "Google Business Profile",
+    description: "GBP reviews, star ratings, local insights (calls, direction requests, website clicks).",
+    authType: "oauth",
+    color: "bg-blue-500",
+    supportsMultiple: false,
     credentialFields: [],
   },
   {

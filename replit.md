@@ -25,39 +25,65 @@ client/src/
     history.tsx        - Query log history
 server/
   index.ts             - Express server entry
-  routes.ts            - API routes
+  routes.ts            - API routes with live data dispatcher (priority: Google→SF→CallRail→CTM→SEMrush→GBP→mock)
   storage.ts           - Database CRUD operations
   db.ts                - Database connection
   encryption.ts        - AES-256-GCM encryption for credentials
-  nlRouter.ts          - Natural language query parser (37 commands across all report types)
+  nlRouter.ts          - NL query parser with weighted source-priority scoring (37 commands)
   mockData.ts          - Demo data generator with addiction-space content (37 mock generators)
-  airtable.ts          - Airtable REST API integration for work log fetching
+  googleToken.ts       - Shared Google OAuth token exchange + date utilities
+  gscClient.ts         - Live Google Search Console API (gsc_top_queries, gsc_qoq_queries/pages, query_to_page, high_imp_low_ctr)
+  ga4Client.ts         - Live GA4 Data API (funnel, landing pages, session movers, QTD, YoY)
+  callrailClient.ts    - Live CallRail v3 API (calls, landing pages, summary)
+  ctmClient.ts         - Live CallTrackingMetrics API (calls, landing pages)
+  semrushClient.ts     - Live SEMrush API (organic overview, keyword rankings, distribution, competitors)
+  gbpClient.ts         - Live Google Business Profile API (reviews, star rating)
+  sfClient.ts          - Screaming Frog stored data reader (technical health, new pages diff)
+  airtable.ts          - Live Airtable REST API for work log
+  reportGenerators.ts  - .docx (biweekly) and .pptx (monthly/QBR) generators
+  googleAuth.ts        - Google OAuth flow (GSC, GA4, GBP, Sheets scopes)
   seed.ts              - Seeds 8 recovery centre clients
 shared/
-  schema.ts            - Drizzle schema, types, SERVICE_CONFIGS, COMMANDS
+  schema.ts            - Drizzle schema, types, SERVICE_CONFIGS (10 services incl. GBP), COMMANDS (37)
 ```
 
 ## Data Model
-- **clients**: Recovery centre accounts with GSC, GA4, CallRail, CTM, Ahrefs, SEMrush, Screaming Frog, Nimbata, Airtable configs; brand terms, lead events, money pages, organic source terms, airtableBaseId, airtableTableName
+- **clients**: Recovery centre accounts with GSC, GA4, CallRail, CTM, SEMrush, Screaming Frog, Nimbata, Airtable, GBP configs; brand terms, lead events, money pages, organic source terms, gbpLocationName
 - **query_logs**: History of NL queries with parsed commands and results
 - **api_credentials**: Encrypted API keys/tokens with `accountLabel` for multi-account support per service
 
-## Data Sources (7)
-1. Google Search Console (OAuth)
-2. Google Analytics 4 (OAuth)
-3. CallRail (API key)
-4. CallTrackingMetrics (API key + secret)
-5. Ahrefs (API key)
-6. SEMrush (API key)
-7. Screaming Frog (desktop import, no credentials)
+## Data Source Priority
+When multiple sources can answer a query, the system picks the highest-priority one:
+1. Google (GSC, GA4) — Tier 1
+2. Screaming Frog — Tier 2
+3. Call tracking (CallRail, CTM, Nimbata) — Tier 3
+4. Airtable — Tier 4
+5. SEMrush — Tier 5
+6. Ahrefs — Tier 6 (blocked, MCP/Connect only)
 
-## Available Commands (12)
-- `gsc_qoq_queries` / `gsc_qoq_pages` - GSC search performance
-- `ga4_qoq_organic_funnel` / `ga4_qoq_organic_landing_pages` - GA4 organic metrics
-- `callrail_qoq_organic_calls` / `callrail_qoq_top_landing_pages` - CallRail call tracking
-- `ctm_qoq_organic_calls` / `ctm_qoq_top_landing_pages` - CTM call tracking
-- `ahrefs_backlink_overview` / `ahrefs_keyword_rankings` - Ahrefs SEO data
-- `semrush_organic_overview` / `semrush_keyword_rankings` - SEMrush competitive data
+## Data Sources (10)
+1. Google Search Console (OAuth) — LIVE
+2. Google Analytics 4 (OAuth) — LIVE
+3. Google Business Profile (OAuth, scope: business.manage) — LIVE
+4. CallRail (API key) — LIVE
+5. CallTrackingMetrics (API key + secret) — LIVE
+6. SEMrush (API key) — LIVE
+7. Screaming Frog (desktop CSV import) — LIVE (reads stored crawl data)
+8. Nimbata (API key) — mock fallback
+9. Airtable (PAT) — LIVE
+10. Ahrefs — BLOCKED (MCP/Connect only)
+
+## Live vs Mock fallback
+Each live client returns `null` if the client is not configured (no siteUrl, propertyId, etc.) or if no credential is stored. Routes dispatcher falls back to mock in that case with a console warning. If the live client throws (API error), it also falls back to mock.
+
+## Available Commands (37)
+GSC: gsc_top_queries, gsc_qoq_queries, gsc_qoq_pages, gsc_query_to_page_map, gsc_high_impressions_low_ctr, gsc_high_traffic_low_cvr, gsc_indexation_stability
+GA4: ga4_combined_funnel, ga4_qoq_organic_funnel, ga4_landing_pages_by_sessions, ga4_qoq_organic_landing_pages, ga4_landing_pages_by_conversions, ga4_qtd_totals, ga4_session_movers, ga4_conversion_movers, ga4_yoy_comparison
+CallRail: callrail_summary, callrail_qoq_organic_calls, callrail_qoq_top_landing_pages
+CTM: ctm_qoq_organic_calls, ctm_qoq_top_landing_pages
+SEMrush: semrush_organic_overview, semrush_keyword_rankings, semrush_keyword_distribution, semrush_competitor_visibility
+Ahrefs (blocked): ahrefs_backlink_overview, ahrefs_keyword_rankings, ahrefs_competitor_visibility
+Other: gbp_local_summary, content_output_summary, technical_health_summary, core_web_vitals, new_pages_tracker, tracking_anomaly_check, monthly_trendline, quarterly_forecast, airtable_work_log
 
 ## Reports Page Layout
 - Top bar: Toggle prompts panel button + Client dropdown + Report type buttons (Bi-Weekly | Monthly | QBR)

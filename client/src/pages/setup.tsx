@@ -115,25 +115,38 @@ function ServiceSection({
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
             <h3 className="font-medium text-sm" data-testid={`text-service-${config.id}`}>{config.name}</h3>
-            <Badge variant={config.authType === "desktop" ? "outline" : hasAccounts ? "default" : "secondary"} className="text-[10px]">
-              {config.authType === "desktop" ? (
-                <><Monitor className="w-3 h-3 mr-1" /> Manual Import</>
-              ) : hasAccounts ? (
-                <><CheckCircle2 className="w-3 h-3 mr-1" /> {serviceCredentials.length} Account{serviceCredentials.length > 1 ? "s" : ""}</>
-              ) : (
-                <><XCircle className="w-3 h-3 mr-1" /> Not Connected</>
-              )}
-            </Badge>
+            <Badge
+            variant={(config.authType as string) === "mcp_only" ? "outline" : config.authType === "desktop" ? "outline" : hasAccounts ? "default" : "secondary"}
+            className="text-[10px]"
+          >
+            {(config.authType as string) === "mcp_only" ? (
+              <><XCircle className="w-3 h-3 mr-1" /> Not Connected</>
+            ) : config.authType === "desktop" ? (
+              <><Monitor className="w-3 h-3 mr-1" /> Manual Import</>
+            ) : hasAccounts ? (
+              <><CheckCircle2 className="w-3 h-3 mr-1" /> {serviceCredentials.length} Account{serviceCredentials.length > 1 ? "s" : ""}</>
+            ) : (
+              <><XCircle className="w-3 h-3 mr-1" /> Not Connected</>
+            )}
+          </Badge>
           </div>
           <p className="text-xs text-muted-foreground mb-3">{config.description}</p>
 
-          {config.authType === "oauth" && (
+          {(config.authType as string) === "mcp_only" && (
+            <div className="rounded-md border border-amber-300/50 bg-amber-500/5 p-3 mb-2">
+              <p className="text-xs font-medium text-amber-700 dark:text-amber-400 mb-0.5">Not available on this plan</p>
+              <p className="text-[11px] text-muted-foreground leading-snug">
+                {config.name} data is only accessible via Ahrefs Connect / MCP integration. Direct API access is disabled. Features using {config.name} data will show an error until the integration is available.
+              </p>
+            </div>
+          )}
+          {(config.authType as string) !== "mcp_only" && config.authType === "oauth" && (
             <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mb-2">
               <Shield className="w-3 h-3" />
               Requires OAuth2 with offline access for refresh tokens
             </div>
           )}
-          {config.authType === "api_key" && (
+          {(config.authType as string) !== "mcp_only" && config.authType === "api_key" && (
             <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mb-2">
               <Key className="w-3 h-3" />
               API key required
@@ -146,7 +159,7 @@ function ServiceSection({
             </div>
           )}
 
-          {serviceCredentials.length > 0 && (
+          {(config.authType as string) !== "mcp_only" && serviceCredentials.length > 0 && (
             <div className="space-y-1.5 mb-3">
               {serviceCredentials.map((cred) => {
                 const ts = testStates?.[cred.id];
@@ -209,7 +222,7 @@ function ServiceSection({
             </div>
           )}
 
-          {config.authType !== "desktop" && (config.supportsMultiple || !hasAccounts) && (
+          {(config.authType as string) !== "desktop" && (config.authType as string) !== "mcp_only" && (config.supportsMultiple || !hasAccounts) && (
             <Button
               size="sm"
               variant={hasAccounts ? "outline" : "default"}
@@ -396,7 +409,7 @@ export default function SetupPage() {
   };
 
   const connectedCount = new Set(credentials.map(c => c.service)).size;
-  const totalServices = SERVICE_CONFIGS.filter(s => s.authType !== "desktop").length;
+  const totalServices = SERVICE_CONFIGS.filter(s => s.authType !== "desktop" && (s.authType as string) !== "mcp_only").length;
 
   return (
     <div className="h-full overflow-y-auto">

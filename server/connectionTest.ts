@@ -71,25 +71,12 @@ async function testCallRail(apiKey: string): Promise<TestResult> {
   }
 }
 
-async function testAhrefs(apiKey: string): Promise<TestResult> {
-  try {
-    const url = "https://api.ahrefs.com/v3/site-explorer/domain-rating?target=ahrefs.com&date=2024-01-01";
-    const resp = await fetch(url, {
-      headers: { Authorization: `Bearer ${apiKey}` },
-    });
-    const text = await resp.text();
-    let data: any;
-    try { data = JSON.parse(text); } catch { data = null; }
-    if (!resp.ok) {
-      const msg = data?.detail ?? data?.error?.message ?? text ?? resp.statusText;
-      throw new Error(msg);
-    }
-    const dr = data?.domain_rating?.domain_rating ?? data?.domain_rating ?? null;
-    const msg = dr !== null ? `Connected — DR: ${dr}` : "Connected";
-    return { success: true, message: msg };
-  } catch (err: any) {
-    return { success: false, message: err.message };
-  }
+async function testAhrefs(_ignored: string): Promise<TestResult> {
+  return {
+    success: false,
+    message:
+      "Ahrefs direct API access is disabled. Ahrefs data is only available via Ahrefs Connect / MCP integration. This plan does not include a Replit MCP connector for Ahrefs — features requiring Ahrefs data are unavailable.",
+  };
 }
 
 async function testSEMrush(apiKey: string): Promise<TestResult> {

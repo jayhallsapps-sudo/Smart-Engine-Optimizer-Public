@@ -183,10 +183,10 @@ const REPORT_SECTIONS: Record<ReportType, ReportSection[]> = {
     {
       id: "mo_keywords",
       title: "Keyword Tracking",
-      description: "Keyword rankings, distribution, and visibility from Ahrefs/SEMrush",
+      description: "Keyword rankings, distribution, and visibility from SEMrush",
       icon: Search,
       manualInput: false,
-      hints: ["Ahrefs keyword rankings this month", "SEMrush keyword distribution", "Keyword distribution by tier"],
+      hints: ["SEMrush keyword distribution", "SEMrush keyword rankings this month", "Keyword distribution by tier"],
       dateRange: "Last 30 days",
     },
     {
@@ -224,7 +224,7 @@ const REPORT_SECTIONS: Record<ReportType, ReportSection[]> = {
       description: "Full funnel QoQ: GSC, GA4 organic, CallRail calls, keyword rankings",
       icon: TrendingUp,
       manualInput: false,
-      hints: ["GSC QoQ query performance", "GA4 organic funnel quarter over quarter", "CallRail organic calls QoQ", "Ahrefs backlink overview"],
+      hints: ["GSC QoQ query performance", "GA4 organic funnel quarter over quarter", "CallRail organic calls QoQ", "SEMrush organic overview QoQ"],
       dateRange: "Last 90 days vs previous 90 days",
     },
     {
@@ -1046,7 +1046,7 @@ const EXAMPLE_QUERIES_BY_TYPE: Record<ReportType, string[]> = {
     "GSC QoQ query performance",
     "GA4 organic funnel quarter over quarter",
     "CallRail organic calls QoQ",
-    "Ahrefs backlink overview",
+    "SEMrush organic overview QoQ",
   ],
 };
 
@@ -1151,8 +1151,8 @@ const PROMPTS_LIBRARY: Record<ReportType, { label: string; prompt: string }[]> =
       prompt: "Summarise Google Business Profile performance for the month: new reviews, average rating change, posts published, and GBP interactions (calls, direction requests, website clicks). Compare to the prior month.",
     },
     {
-      label: "SEMrush / Ahrefs visibility",
-      prompt: "Pull organic visibility and keyword growth from SEMrush and/or Ahrefs for this month vs last month. Show: total keywords tracked, top 3/10/20 counts, DR or Authority Score, and the top 3 competitor visibility scores.",
+      label: "SEMrush keyword visibility",
+      prompt: "Pull organic visibility and keyword growth from SEMrush for this month vs last month. Show: total keywords tracked, top 3/10/20 counts, Authority Score, and the top 3 competitor visibility scores.",
     },
     {
       label: "Work log by category",
@@ -1198,7 +1198,7 @@ const PROMPTS_LIBRARY: Record<ReportType, { label: string; prompt: string }[]> =
     },
     {
       label: "Competitor domain visibility (QoQ)",
-      prompt: "Pull the top 10 competitor domains by organic visibility from SEMrush or Ahrefs. Show their QoQ visibility % change alongside our own. Identify which competitors are gaining or losing ground relative to us.",
+      prompt: "Pull the top 10 competitor domains by organic visibility from SEMrush. Show their QoQ visibility % change alongside our own. Identify which competitors are gaining or losing ground relative to us.",
     },
     {
       label: "Content production summary",
@@ -1637,7 +1637,7 @@ export default function ReportsPage() {
                   <p className="text-muted-foreground mb-6 text-sm">
                     {selectedClient
                       ? `Ask questions about ${selectedClient.name}'s data, then commit each answer to the right panel to build your ${REPORT_TYPE_LABELS[reportType]} report.`
-                      : "Choose a client and report type above, then ask questions to pull data from GSC, GA4, CallRail, Ahrefs, and more."
+                      : "Choose a client and report type above, then ask questions to pull data from GSC, GA4, CallRail, SEMrush, and more."
                     }
                   </p>
 

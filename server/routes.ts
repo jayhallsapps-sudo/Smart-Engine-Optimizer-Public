@@ -13,6 +13,38 @@ import { insertSfReportSchema, insertCallTrackingReportSchema } from "@shared/sc
 import { generateBiweeklyDocx, generatePptx } from "./reportGenerators";
 import type { SectionData } from "./reportGenerators";
 
+const AHREFS_COMMANDS = new Set([
+  "ahrefs_backlink_overview",
+  "ahrefs_keyword_rankings",
+  "ahrefs_competitor_visibility",
+]);
+
+const AHREFS_BLOCKED_DOMAIN = "api.ahrefs.com";
+
+function guardAhrefsOutbound(url: string): void {
+  try {
+    const host = new URL(url).hostname;
+    if (host === AHREFS_BLOCKED_DOMAIN || host.endsWith("." + AHREFS_BLOCKED_DOMAIN)) {
+      throw new Error(
+        `[GUARDRAIL] Outbound request to ${AHREFS_BLOCKED_DOMAIN} is blocked. ` +
+        "Ahrefs data is only available via Ahrefs Connect / MCP integration on this plan."
+      );
+    }
+  } catch (e: any) {
+    if (e.message.startsWith("[GUARDRAIL]")) throw e;
+  }
+}
+
+interface AhrefsUsageEntry {
+  clientId: number;
+  clientName: string;
+  command: string;
+  requestedAt: string;
+  blockedReason: string;
+}
+
+const ahrefsUsageLog: AhrefsUsageEntry[] = [];
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -134,6 +166,21 @@ export async function registerRoutes(
       });
     }
 
+    if (AHREFS_COMMANDS.has(intent.command)) {
+      ahrefsUsageLog.push({
+        clientId: intent.clientId,
+        clientName: client.name,
+        command: intent.command,
+        requestedAt: new Date().toISOString(),
+        blockedReason: "Ahrefs Connect / MCP integration not available on this plan",
+      });
+      return res.json({
+        success: false,
+        error: "Ahrefs not connected via integrations on this plan. Ahrefs data is only available through Ahrefs Connect / MCP — not via direct API. Please contact your plan administrator.",
+        ahrefsBlocked: true,
+      });
+    }
+
     const result = generateMockResult(intent.command, client.name, intent.dateRange);
 
     await storage.createQueryLog({
@@ -194,6 +241,15 @@ export async function registerRoutes(
     const clientId = req.query.clientId ? Number(req.query.clientId) : undefined;
     const logs = await storage.getQueryLogs(clientId);
     res.json(logs);
+  });
+
+  app.get("/api/ahrefs/usage", (_req, res) => {
+    res.json({
+      status: "blocked",
+      reason: "Ahrefs Connect / MCP integration is not available on this Replit plan. Direct API access to api.ahrefs.com is disabled by guardrail.",
+      totalBlockedRequests: ahrefsUsageLog.length,
+      entries: ahrefsUsageLog.slice(-50),
+    });
   });
 
   app.get("/api/credentials", async (_req, res) => {

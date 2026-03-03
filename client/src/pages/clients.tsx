@@ -511,6 +511,8 @@ function ServiceRow({
   ctReport,
   onCtUpload,
   ctUploading,
+  onSfUpload,
+  sfUploading,
   onSfCompare,
 }: {
   def: (typeof SERVICE_DEFS)[number];
@@ -520,6 +522,8 @@ function ServiceRow({
   ctReport?: CtSummaryRow | null;
   onCtUpload?: (file: File) => void;
   ctUploading?: boolean;
+  onSfUpload?: (file: File) => void;
+  sfUploading?: boolean;
   onSfCompare?: () => void;
 }) {
   const rawValue = def.getValue(client);

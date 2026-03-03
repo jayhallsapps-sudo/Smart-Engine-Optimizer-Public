@@ -1437,9 +1437,28 @@ export default function ReportsPage() {
   const [manualTargetSection, setManualTargetSection] = useState<ReportSection | null>(null);
   const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
-  const [sfFromId, setSfFromId] = useState<number | null>(null);
-  const [sfToId, setSfToId] = useState<number | null>(null);
+  const [sfActiveId, setSfActiveId] = useState<number | null>(null);
+  const [sfCompareId, setSfCompareId] = useState<number | null>(null);
+  const [sfCompareEnabled, setSfCompareEnabled] = useState(false);
   const [sfUploading, setSfUploading] = useState(false);
+
+  const todayStr = () => new Date().toISOString().slice(0, 10);
+  const daysAgoStr = (n: number) => {
+    const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10);
+  };
+  const defaultDates = (type: ReportType) => {
+    if (type === "biweekly") return { start: daysAgoStr(14), end: todayStr() };
+    if (type === "monthly")  return { start: daysAgoStr(30), end: todayStr() };
+    return { start: daysAgoStr(90), end: todayStr() };
+  };
+  const shiftOneYearBack = (s: string) => { const d = new Date(s); d.setFullYear(d.getFullYear() - 1); return d.toISOString().slice(0, 10); };
+
+  const initDates = defaultDates(reportType);
+  const [dateStart, setDateStart] = useState(initDates.start);
+  const [dateEnd,   setDateEnd]   = useState(initDates.end);
+  const [dateCompareEnabled, setDateCompareEnabled] = useState(false);
+  const [compareDateStart, setCompareDateStart] = useState(() => shiftOneYearBack(initDates.start));
+  const [compareDateEnd,   setCompareDateEnd]   = useState(() => shiftOneYearBack(initDates.end));
   const [promptsPanelOpen, setPromptsPanelOpen] = useState(true);
   const [buildPhase, setBuildPhase] = useState<BuildPhase>("idle");
   const [sectionStatuses, setSectionStatuses] = useState<Record<string, SectionBuildStatus>>({});
@@ -1465,18 +1484,28 @@ export default function ReportsPage() {
 
   useEffect(() => {
     if (sfReports.length > 0) {
-      setSfToId(prev => (prev && sfReports.some(r => r.id === prev)) ? prev : sfReports[0].id);
-      setSfFromId(prev => (prev && sfReports.some(r => r.id === prev)) ? prev : (sfReports[1]?.id ?? null));
+      setSfActiveId(prev => (prev && sfReports.some(r => r.id === prev)) ? prev : sfReports[0].id);
+      setSfCompareId(prev => (prev && sfReports.some(r => r.id === prev)) ? prev : (sfReports[1]?.id ?? null));
     } else {
-      setSfToId(null);
-      setSfFromId(null);
+      setSfActiveId(null);
+      setSfCompareId(null);
     }
   }, [sfReports]);
 
   useEffect(() => {
-    setSfToId(null);
-    setSfFromId(null);
+    setSfActiveId(null);
+    setSfCompareId(null);
+    setSfCompareEnabled(false);
   }, [selectedClientId]);
+
+  useEffect(() => {
+    const d = defaultDates(reportType);
+    setDateStart(d.start);
+    setDateEnd(d.end);
+    setCompareDateStart(shiftOneYearBack(d.start));
+    setCompareDateEnd(shiftOneYearBack(d.end));
+    setDateCompareEnabled(false);
+  }, [reportType]);
 
   const deleteSfReportMutation = useMutation({
     mutationFn: async (id: number) => {
@@ -1518,7 +1547,7 @@ export default function ReportsPage() {
       if (!res.ok) throw new Error("Upload failed");
       const created = await res.json();
       rqClient.invalidateQueries({ queryKey: ["/api/clients", selectedClientId, "sf-reports"] });
-      if (created?.id) setSfToId(created.id);
+      if (created?.id) setSfActiveId(created.id);
       toast({ title: "Crawl uploaded", description: `${rows.length} rows from ${file.name}` });
     } catch (err: any) {
       toast({ title: "Upload failed", description: err.message, variant: "destructive" });
@@ -1748,10 +1777,60 @@ export default function ReportsPage() {
           </Select>
         </div>
 
+        {selectedClientId && (
+          <div className="flex items-center gap-1.5 shrink-0">
+            <Calendar className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            <input
+              type="date"
+              value={dateStart}
+              onChange={e => setDateStart(e.target.value)}
+              className="h-7 text-xs border border-input rounded px-1.5 bg-background text-foreground w-[118px] focus:outline-none focus:ring-1 focus:ring-ring"
+              data-testid="input-date-start"
+            />
+            <span className="text-xs text-muted-foreground">–</span>
+            <input
+              type="date"
+              value={dateEnd}
+              onChange={e => setDateEnd(e.target.value)}
+              className="h-7 text-xs border border-input rounded px-1.5 bg-background text-foreground w-[118px] focus:outline-none focus:ring-1 focus:ring-ring"
+              data-testid="input-date-end"
+            />
+            <label className="flex items-center gap-1 cursor-pointer ml-1 shrink-0" data-testid="label-date-compare">
+              <input
+                type="checkbox"
+                checked={dateCompareEnabled}
+                onChange={e => setDateCompareEnabled(e.target.checked)}
+                className="rounded"
+                data-testid="checkbox-date-compare"
+              />
+              <span className="text-xs text-muted-foreground">Compare</span>
+            </label>
+            {dateCompareEnabled && (
+              <>
+                <input
+                  type="date"
+                  value={compareDateStart}
+                  onChange={e => setCompareDateStart(e.target.value)}
+                  className="h-7 text-xs border border-input rounded px-1.5 bg-background text-foreground w-[118px] focus:outline-none focus:ring-1 focus:ring-ring"
+                  data-testid="input-compare-date-start"
+                />
+                <span className="text-xs text-muted-foreground">–</span>
+                <input
+                  type="date"
+                  value={compareDateEnd}
+                  onChange={e => setCompareDateEnd(e.target.value)}
+                  className="h-7 text-xs border border-input rounded px-1.5 bg-background text-foreground w-[118px] focus:outline-none focus:ring-1 focus:ring-ring"
+                  data-testid="input-compare-date-end"
+                />
+              </>
+            )}
+          </div>
+        )}
+
         {selectedClientId && buildPhase === "idle" && (
           <Button
             size="sm"
-            className="shrink-0 gap-1.5 ml-2"
+            className="shrink-0 gap-1.5"
             onClick={handleAutoBuild}
             data-testid="button-auto-build"
           >
@@ -1764,7 +1843,7 @@ export default function ReportsPage() {
           <Button
             size="sm"
             variant="outline"
-            className="shrink-0 gap-1.5 ml-2"
+            className="shrink-0 gap-1.5"
             onClick={handleAutoBuild}
             data-testid="button-rebuild"
           >
@@ -1776,26 +1855,7 @@ export default function ReportsPage() {
         {selectedClientId && (
           <div className="flex items-center gap-2 ml-auto shrink-0">
             <Bug className="w-3.5 h-3.5 text-yellow-600 dark:text-yellow-500 shrink-0" />
-            <span className="text-xs text-muted-foreground shrink-0">Compare</span>
-
-            <Select
-              value={sfFromId ? String(sfFromId) : "__none__"}
-              onValueChange={v => setSfFromId(v === "__none__" ? null : Number(v))}
-            >
-              <SelectTrigger className="h-7 text-xs w-48" data-testid="select-sf-from">
-                <SelectValue placeholder="Select crawl…" />
-              </SelectTrigger>
-              <SelectContent align="end">
-                <SelectItem value="__none__">No crawl selected</SelectItem>
-                {sfReports.map(r => (
-                  <SelectItem key={r.id} value={String(r.id)} data-testid={`sf-from-option-${r.id}`}>
-                    {r.reportDate} — {r.filename}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <span className="text-xs text-muted-foreground shrink-0">to</span>
+            <span className="text-xs text-muted-foreground shrink-0">SF Crawl</span>
 
             <input
               ref={sfFileInputRef}
@@ -1805,20 +1865,21 @@ export default function ReportsPage() {
               onChange={e => { const f = e.target.files?.[0]; if (f) handleSfUpload(f); }}
               data-testid="input-sf-file"
             />
+
             <Select
-              value={sfToId ? String(sfToId) : "__none__"}
+              value={sfActiveId ? String(sfActiveId) : "__none__"}
               onValueChange={v => {
                 if (v === "__upload__") { sfFileInputRef.current?.click(); return; }
-                setSfToId(v === "__none__" ? null : Number(v));
+                setSfActiveId(v === "__none__" ? null : Number(v));
               }}
             >
-              <SelectTrigger className="h-7 text-xs w-48" data-testid="select-sf-to">
-                <SelectValue placeholder="Select or upload…" />
+              <SelectTrigger className="h-7 text-xs w-48" data-testid="select-sf-active">
+                <SelectValue placeholder="Select crawl…" />
               </SelectTrigger>
               <SelectContent align="end">
                 <SelectItem value="__none__">No crawl selected</SelectItem>
                 {sfReports.map(r => (
-                  <SelectItem key={r.id} value={String(r.id)} data-testid={`sf-to-option-${r.id}`}>
+                  <SelectItem key={r.id} value={String(r.id)} data-testid={`sf-active-option-${r.id}`}>
                     {r.reportDate} — {r.filename}
                   </SelectItem>
                 ))}
@@ -1827,6 +1888,36 @@ export default function ReportsPage() {
                 </SelectItem>
               </SelectContent>
             </Select>
+
+            <label className="flex items-center gap-1 cursor-pointer shrink-0" data-testid="label-sf-compare">
+              <input
+                type="checkbox"
+                checked={sfCompareEnabled}
+                onChange={e => setSfCompareEnabled(e.target.checked)}
+                className="rounded"
+                data-testid="checkbox-sf-compare"
+              />
+              <span className="text-xs text-muted-foreground">Compare</span>
+            </label>
+
+            {sfCompareEnabled && (
+              <Select
+                value={sfCompareId ? String(sfCompareId) : "__none__"}
+                onValueChange={v => setSfCompareId(v === "__none__" ? null : Number(v))}
+              >
+                <SelectTrigger className="h-7 text-xs w-48" data-testid="select-sf-compare">
+                  <SelectValue placeholder="Compare crawl…" />
+                </SelectTrigger>
+                <SelectContent align="end">
+                  <SelectItem value="__none__">No crawl selected</SelectItem>
+                  {sfReports.map(r => (
+                    <SelectItem key={r.id} value={String(r.id)} data-testid={`sf-compare-option-${r.id}`}>
+                      {r.reportDate} — {r.filename}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
         )}
       </div>

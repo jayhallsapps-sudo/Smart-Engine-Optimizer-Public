@@ -86,11 +86,18 @@ interface ChatMessage {
   committedTo?: string;
 }
 
+interface WorkLogRow {
+  area: string;
+  whatWeDid: string;
+  whatsNext: string;
+}
+
 interface CommittedSection {
   sectionId: string;
   messageId?: string;
   response?: QueryResponse;
   manualText?: string;
+  workLogRows?: WorkLogRow[];
   committedAt: Date;
 }
 
@@ -109,46 +116,37 @@ interface ReportSection {
 const REPORT_SECTIONS: Record<ReportType, ReportSection[]> = {
   biweekly: [
     {
-      id: "bw_topline",
-      title: "Topline Snapshot",
-      description: "Organic clicks, sessions, leads, and calls (last 14 days vs prev 14 days)",
+      id: "bw_purpose",
+      title: "Purpose",
+      description: "Auto-filled: meeting purpose statement",
+      icon: FileText,
+      manualInput: false,
+      hints: [],
+      dateRange: "",
+    },
+    {
+      id: "bw_pulse",
+      title: "Performance Pulse & Key Insights",
+      description: "Organic traffic trends, lead pacing, and what's driving movement",
       icon: TrendingUp,
       manualInput: false,
-      hints: ["Show GSC clicks last 14 days", "GA4 organic sessions this fortnight", "CallRail organic calls last 14 days"],
+      hints: ["GSC clicks last 14 days", "GA4 organic sessions this fortnight", "CallRail organic calls last 14 days", "Top query movers last 14 days"],
       dateRange: "Last 14 days vs previous 14 days",
     },
     {
-      id: "bw_shipped",
-      title: "What We Shipped",
-      description: "Work completed in the past two weeks (manual work log entry)",
+      id: "bw_progress",
+      title: "Progress & Quick Wins",
+      description: "Work completed — Area, What We Did / Learned, What's Next",
       icon: ClipboardList,
       manualInput: true,
-      hints: [],
+      hints: ["work log last 14 days"],
       dateRange: "",
     },
     {
-      id: "bw_changes",
-      title: "What Changed & Why",
-      description: "3 bullets on largest movers from GSC queries/pages and GA landing pages",
-      icon: GitMerge,
-      manualInput: false,
-      hints: ["Top query winners and losers last 14 days", "Page performance movers", "What changed in organic traffic"],
-      dateRange: "Last 14 days",
-    },
-    {
-      id: "bw_risks",
-      title: "Risks & Blocks",
-      description: "Risks, blockers, and what we need from the client",
-      icon: AlertTriangle,
-      manualInput: true,
-      hints: [],
-      dateRange: "",
-    },
-    {
-      id: "bw_next",
-      title: "Next Two Weeks",
-      description: "3–5 prioritized actions for the upcoming fortnight",
-      icon: CalendarCheck,
+      id: "bw_partnership",
+      title: "Partnerships & Alignment",
+      description: "Open discussion, feedback, next steps, and upcoming deliverables",
+      icon: CheckCircle2,
       manualInput: true,
       hints: [],
       dateRange: "",
@@ -156,105 +154,114 @@ const REPORT_SECTIONS: Record<ReportType, ReportSection[]> = {
   ],
   monthly: [
     {
-      id: "mo_exec",
-      title: "Executive Summary KPIs",
-      description: "GSC clicks/impressions/CTR/position, GA4 organic sessions/leads/CVR, CallRail calls",
+      id: "mo_qtd",
+      title: "QTD Key Performance Indicators",
+      description: "Quarter-to-date organic sessions, leads, CVR vs goal",
       icon: TrendingUp,
       manualInput: false,
-      hints: ["GSC month over month performance", "GA4 organic funnel monthly", "CallRail organic calls monthly"],
-      dateRange: "Last 30 days vs previous 30 days",
-    },
-    {
-      id: "mo_visibility",
-      title: "Visibility & Demand",
-      description: "Top query winners/losers (non-branded) and money page performance",
-      icon: Globe,
-      manualInput: false,
-      hints: ["Non-branded keyword winners this month", "Top page movers MoM", "Money pages performance"],
-      dateRange: "Last 30 days",
+      hints: ["QTD organic funnel vs goal", "Quarter to date totals", "QTD sessions and leads"],
+      dateRange: "Quarter to date",
     },
     {
       id: "mo_conversion",
-      title: "Conversion Performance",
-      description: "Top organic landing pages by leads & CVR, call volume and quality",
+      title: "Top Conversion Locations",
+      description: "Top organic landing pages by leads & CVR, call volume by page",
       icon: BarChart3,
       manualInput: false,
-      hints: ["GA4 organic landing pages by conversions", "CallRail organic calls by landing page", "Top converting pages this month"],
+      hints: ["Top pages by conversions this month", "GA4 organic landing pages by conversions", "CallRail organic calls by landing page"],
       dateRange: "Last 30 days",
     },
     {
-      id: "mo_work",
-      title: "Work Completed",
-      description: "Work log from this month and outcomes delivered",
-      icon: ClipboardList,
+      id: "mo_gsc",
+      title: "Google Search Console Performance",
+      description: "Clicks, impressions, CTR, position — MoM trends and top queries",
+      icon: Globe,
+      manualInput: false,
+      hints: ["GSC month over month performance", "Top 30 GSC queries with MoM delta", "GSC monthly snapshot"],
+      dateRange: "Last 30 days vs previous 30 days",
+    },
+    {
+      id: "mo_keywords",
+      title: "Keyword Tracking",
+      description: "Keyword rankings, distribution, and visibility from Ahrefs/SEMrush",
+      icon: Search,
+      manualInput: false,
+      hints: ["Ahrefs keyword rankings this month", "SEMrush keyword distribution", "Keyword distribution by tier"],
+      dateRange: "Last 30 days",
+    },
+    {
+      id: "mo_initiatives",
+      title: "Supporting Strategic Initiatives",
+      description: "Work completed this month and outcomes delivered",
+      icon: GitMerge,
       manualInput: true,
-      hints: [],
+      hints: ["work log this month"],
       dateRange: "",
     },
     {
-      id: "mo_priorities",
-      title: "Next Month Priorities",
-      description: "3–5 items tied to the North Star Metric for the client",
+      id: "mo_audit",
+      title: "AUDIT Content",
+      description: "Technical health, crawl issues, Core Web Vitals, indexation",
+      icon: Bug,
+      manualInput: true,
+      hints: ["Technical health summary", "Core Web Vitals trend", "Indexation stability"],
+      dateRange: "",
+    },
+    {
+      id: "mo_content",
+      title: "Content Completion",
+      description: "Pages published, refreshed, and early GSC performance signals",
       icon: CalendarCheck,
       manualInput: true,
-      hints: [],
+      hints: ["Content output summary", "New & updated pages tracker"],
       dateRange: "",
     },
   ],
   qbr: [
     {
-      id: "qbr_scorecard",
-      title: "QBR Scorecard",
-      description: "NSM pacing + full funnel: GSC trends, GA4 organic, CallRail qualified calls",
+      id: "qbr_performance",
+      title: "Performance Review",
+      description: "Full funnel QoQ: GSC, GA4 organic, CallRail calls, keyword rankings",
       icon: TrendingUp,
       manualInput: false,
-      hints: ["QBR GSC query performance quarter over quarter", "GA4 organic funnel QoQ", "CallRail organic calls QoQ", "Ahrefs backlink overview"],
+      hints: ["GSC QoQ query performance", "GA4 organic funnel quarter over quarter", "CallRail organic calls QoQ", "Ahrefs backlink overview"],
       dateRange: "Last 90 days vs previous 90 days",
     },
     {
-      id: "qbr_drivers",
-      title: "What Worked / What Didn't",
-      description: "Top 10 pages that drove leads, major query intent shifts (non-branded)",
+      id: "qbr_strategy",
+      title: "Strategy Overview",
+      description: "Top pages that drove leads, query intent shifts, keyword wins/losses",
       icon: GitMerge,
       manualInput: false,
-      hints: ["Top landing pages by leads QBR", "Non-branded keyword winners and losers", "Page performance quarter over quarter"],
+      hints: ["Top 50 landing pages with QoQ delta", "Top 50 GSC queries with QoQ delta", "Keyword distribution by tier QoQ"],
       dateRange: "Last 90 days",
     },
     {
-      id: "qbr_insights",
-      title: "Strategic Insights",
-      description: "3–5 data-backed strategic insights for the quarter",
+      id: "qbr_strategic_plan",
+      title: "Strategic Plan",
+      description: "Data-backed strategic insights and recommendations for next quarter",
       icon: Lightbulb,
       manualInput: true,
       hints: [],
       dateRange: "",
     },
     {
-      id: "qbr_risks",
-      title: "Risks & Constraints",
-      description: "Expectation management: blockers, dependencies, external factors",
-      icon: AlertTriangle,
-      manualInput: true,
-      hints: [],
-      dateRange: "",
-    },
-    {
       id: "qbr_roadmap",
-      title: "Next Quarter Roadmap",
-      description: "Prioritized initiatives (Technical, Content, CRO/UX, Local)",
+      title: "Roadmap & Alignment",
+      description: "Prioritized Q+1 initiatives: Technical, Content, CRO/UX, Local",
       icon: CalendarCheck,
       manualInput: true,
       hints: [],
       dateRange: "",
     },
     {
-      id: "qbr_appendix",
-      title: "Appendix",
-      description: "Full query tables, page tables, landing page tables",
-      icon: FileText,
-      manualInput: false,
-      hints: ["Full top queries report", "Full top pages report", "All organic landing pages"],
-      dateRange: "Last 90 days",
+      id: "qbr_partnership",
+      title: "Partnership Items",
+      description: "Risks, blockers, dependencies, and open client discussion items",
+      icon: AlertTriangle,
+      manualInput: true,
+      hints: [],
+      dateRange: "",
     },
   ],
 };
@@ -274,49 +281,93 @@ const REPORT_DATE_RANGES: Record<ReportType, string> = {
 function inferSection(command: string, reportType: ReportType): string {
   const map: Record<ReportType, Record<string, string>> = {
     qbr: {
-      gsc_qoq_queries: "qbr_scorecard",
-      gsc_qoq_pages: "qbr_scorecard",
-      ga4_qoq_organic_funnel: "qbr_scorecard",
-      callrail_qoq_organic_calls: "qbr_scorecard",
-      ctm_qoq_organic_calls: "qbr_scorecard",
-      ahrefs_backlink_overview: "qbr_scorecard",
-      semrush_organic_overview: "qbr_scorecard",
-      ga4_qoq_organic_landing_pages: "qbr_drivers",
-      callrail_qoq_top_landing_pages: "qbr_drivers",
-      ctm_qoq_top_landing_pages: "qbr_drivers",
-      ahrefs_keyword_rankings: "qbr_drivers",
-      semrush_keyword_rankings: "qbr_drivers",
+      gsc_qoq_queries: "qbr_performance",
+      gsc_qoq_pages: "qbr_performance",
+      ga4_qoq_organic_funnel: "qbr_performance",
+      callrail_qoq_organic_calls: "qbr_performance",
+      ctm_qoq_organic_calls: "qbr_performance",
+      ahrefs_backlink_overview: "qbr_performance",
+      semrush_organic_overview: "qbr_performance",
+      ga4_combined_funnel: "qbr_performance",
+      monthly_trendline: "qbr_performance",
+      ga4_qoq_organic_landing_pages: "qbr_strategy",
+      callrail_qoq_top_landing_pages: "qbr_strategy",
+      ctm_qoq_top_landing_pages: "qbr_strategy",
+      ahrefs_keyword_rankings: "qbr_strategy",
+      semrush_keyword_rankings: "qbr_strategy",
+      semrush_keyword_distribution: "qbr_strategy",
+      semrush_competitor_visibility: "qbr_strategy",
+      ahrefs_competitor_visibility: "qbr_strategy",
+      gsc_top_queries: "qbr_strategy",
+      gsc_query_to_page_map: "qbr_strategy",
+      content_output_summary: "qbr_strategic_plan",
+      technical_health_summary: "qbr_strategic_plan",
+      quarterly_forecast: "qbr_roadmap",
+      airtable_work_log: "qbr_strategic_plan",
     },
     monthly: {
-      ga4_qoq_organic_funnel: "mo_exec",
-      callrail_qoq_organic_calls: "mo_exec",
-      ctm_qoq_organic_calls: "mo_exec",
-      ahrefs_backlink_overview: "mo_exec",
-      semrush_organic_overview: "mo_exec",
-      gsc_qoq_queries: "mo_visibility",
-      gsc_qoq_pages: "mo_visibility",
-      ahrefs_keyword_rankings: "mo_visibility",
-      semrush_keyword_rankings: "mo_visibility",
-      ga4_qoq_organic_landing_pages: "mo_conversion",
+      ga4_qtd_totals: "mo_qtd",
+      ga4_combined_funnel: "mo_qtd",
+      ga4_qoq_organic_funnel: "mo_qtd",
+      callrail_summary: "mo_qtd",
+      ga4_landing_pages_by_conversions: "mo_conversion",
+      ga4_high_traffic_low_cvr: "mo_conversion",
+      callrail_qoq_organic_calls: "mo_qtd",
       callrail_qoq_top_landing_pages: "mo_conversion",
+      ctm_qoq_organic_calls: "mo_qtd",
       ctm_qoq_top_landing_pages: "mo_conversion",
+      gsc_qoq_queries: "mo_gsc",
+      gsc_qoq_pages: "mo_gsc",
+      gsc_top_queries: "mo_gsc",
+      gsc_high_impressions_low_ctr: "mo_gsc",
+      gsc_indexation_stability: "mo_audit",
+      ahrefs_keyword_rankings: "mo_keywords",
+      semrush_keyword_rankings: "mo_keywords",
+      semrush_keyword_distribution: "mo_keywords",
+      ahrefs_backlink_overview: "mo_keywords",
+      semrush_organic_overview: "mo_keywords",
+      airtable_work_log: "mo_initiatives",
+      content_output_summary: "mo_content",
+      new_pages_tracker: "mo_content",
+      technical_health_summary: "mo_audit",
+      core_web_vitals: "mo_audit",
+      tracking_anomaly_check: "mo_audit",
+      gbp_local_summary: "mo_initiatives",
+      monthly_trendline: "mo_gsc",
+      ga4_yoy_comparison: "mo_gsc",
+      ga4_session_movers: "mo_conversion",
+      ga4_conversion_movers: "mo_conversion",
+      ga4_landing_pages_by_sessions: "mo_conversion",
+      gsc_high_traffic_low_cvr: "mo_conversion",
     },
     biweekly: {
-      ga4_qoq_organic_funnel: "bw_topline",
-      callrail_qoq_organic_calls: "bw_topline",
-      ctm_qoq_organic_calls: "bw_topline",
-      ahrefs_backlink_overview: "bw_topline",
-      semrush_organic_overview: "bw_topline",
-      gsc_qoq_queries: "bw_changes",
-      gsc_qoq_pages: "bw_changes",
-      ga4_qoq_organic_landing_pages: "bw_changes",
-      callrail_qoq_top_landing_pages: "bw_changes",
-      ctm_qoq_top_landing_pages: "bw_changes",
-      ahrefs_keyword_rankings: "bw_changes",
-      semrush_keyword_rankings: "bw_changes",
+      ga4_qoq_organic_funnel: "bw_pulse",
+      ga4_combined_funnel: "bw_pulse",
+      ga4_qtd_totals: "bw_pulse",
+      callrail_qoq_organic_calls: "bw_pulse",
+      callrail_summary: "bw_pulse",
+      ctm_qoq_organic_calls: "bw_pulse",
+      gsc_qoq_queries: "bw_pulse",
+      gsc_qoq_pages: "bw_pulse",
+      gsc_top_queries: "bw_pulse",
+      ga4_qoq_organic_landing_pages: "bw_pulse",
+      ga4_landing_pages_by_sessions: "bw_pulse",
+      ga4_landing_pages_by_conversions: "bw_pulse",
+      ga4_session_movers: "bw_pulse",
+      ga4_conversion_movers: "bw_pulse",
+      callrail_qoq_top_landing_pages: "bw_pulse",
+      ctm_qoq_top_landing_pages: "bw_pulse",
+      ahrefs_keyword_rankings: "bw_pulse",
+      semrush_keyword_rankings: "bw_pulse",
+      airtable_work_log: "bw_progress",
+      content_output_summary: "bw_progress",
+      new_pages_tracker: "bw_progress",
+      technical_health_summary: "bw_progress",
+      tracking_anomaly_check: "bw_progress",
+      gbp_local_summary: "bw_progress",
     },
   };
-  return map[reportType]?.[command] ?? REPORT_SECTIONS[reportType].find(s => !s.manualInput)?.id ?? REPORT_SECTIONS[reportType][0].id;
+  return map[reportType]?.[command] ?? REPORT_SECTIONS[reportType].find(s => !s.manualInput && s.id !== "bw_purpose")?.id ?? REPORT_SECTIONS[reportType][0].id;
 }
 
 function getCommandIcon(command?: string) {
@@ -459,19 +510,144 @@ function ManualInputDialog({
   onOpenChange,
   section,
   onSave,
+  onSaveWorkLog,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   section: ReportSection | null;
   onSave: (text: string) => void;
+  onSaveWorkLog?: (rows: WorkLogRow[]) => void;
 }) {
   const [text, setText] = useState("");
+  const [wlArea, setWlArea] = useState("");
+  const [wlDid, setWlDid] = useState("");
+  const [wlNext, setWlNext] = useState("");
+  const [wlRows, setWlRows] = useState<WorkLogRow[]>([]);
 
   useEffect(() => {
-    if (open) setText("");
+    if (open) {
+      setText("");
+      setWlArea("");
+      setWlDid("");
+      setWlNext("");
+      setWlRows([]);
+    }
   }, [open]);
 
   if (!section) return null;
+
+  const isWorkLog = section.id === "bw_progress";
+
+  const handleAddRow = () => {
+    if (!wlDid.trim()) return;
+    setWlRows(prev => [...prev, { area: wlArea.trim(), whatWeDid: wlDid.trim(), whatsNext: wlNext.trim() }]);
+    setWlArea("");
+    setWlDid("");
+    setWlNext("");
+  };
+
+  const handleRemoveRow = (idx: number) => {
+    setWlRows(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleSaveWorkLog = () => {
+    const finalRows = [...wlRows];
+    if (wlDid.trim()) finalRows.push({ area: wlArea.trim(), whatWeDid: wlDid.trim(), whatsNext: wlNext.trim() });
+    if (finalRows.length === 0) return;
+    onSaveWorkLog?.(finalRows);
+    onOpenChange(false);
+  };
+
+  if (isWorkLog) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Progress & Quick Wins</DialogTitle>
+            <DialogDescription>Add work items — Area, What We Did / Learned, What's Next</DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto space-y-4">
+            {wlRows.length > 0 && (
+              <div className="rounded-md border overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-[10px] w-[22%]">Area</TableHead>
+                      <TableHead className="text-[10px] w-[38%]">What We Did / Learned</TableHead>
+                      <TableHead className="text-[10px] w-[33%]">What's Next</TableHead>
+                      <TableHead className="text-[10px] w-[7%]"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {wlRows.map((row, i) => (
+                      <TableRow key={i}>
+                        <TableCell className="text-xs py-1.5">{row.area || "—"}</TableCell>
+                        <TableCell className="text-xs py-1.5">{row.whatWeDid}</TableCell>
+                        <TableCell className="text-xs py-1.5">{row.whatsNext || "—"}</TableCell>
+                        <TableCell className="py-1.5">
+                          <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => handleRemoveRow(i)}>
+                            <Trash2 className="w-3 h-3 text-destructive" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+            <div className="space-y-3 border rounded-md p-3 bg-muted/30">
+              <p className="text-xs font-medium text-muted-foreground">Add a row</p>
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="text-[10px] text-muted-foreground mb-1 block">Area</label>
+                  <input
+                    value={wlArea}
+                    onChange={e => setWlArea(e.target.value)}
+                    placeholder="e.g. New Content"
+                    className="w-full text-xs rounded border bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
+                    data-testid="input-wl-area"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-muted-foreground mb-1 block">What We Did / Learned</label>
+                  <Textarea
+                    value={wlDid}
+                    onChange={e => setWlDid(e.target.value)}
+                    placeholder="What we delivered or learned…"
+                    className="text-xs min-h-[60px] resize-none"
+                    data-testid="input-wl-did"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-muted-foreground mb-1 block">What's Next</label>
+                  <Textarea
+                    value={wlNext}
+                    onChange={e => setWlNext(e.target.value)}
+                    placeholder="Next steps…"
+                    className="text-xs min-h-[60px] resize-none"
+                    data-testid="input-wl-next"
+                  />
+                </div>
+              </div>
+              <Button size="sm" variant="outline" onClick={handleAddRow} disabled={!wlDid.trim()} data-testid="button-add-wl-row">
+                + Add Row
+              </Button>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button
+              onClick={handleSaveWorkLog}
+              disabled={wlRows.length === 0 && !wlDid.trim()}
+              data-testid="button-save-manual"
+            >
+              Save to Report
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -511,85 +687,221 @@ function GenerateReportDialog({
   client: Client | null;
   committedSections: Record<string, CommittedSection[]>;
 }) {
+  const [attendees, setAttendees] = useState("");
+  const [downloading, setDownloading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [driveLink, setDriveLink] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    if (open) {
+      setDriveLink(null);
+      setAttendees("");
+    }
+  }, [open]);
+
   if (!client) return null;
-  const sections = REPORT_SECTIONS[reportType];
-  const dateRangeLabel = reportType === "biweekly" ? "Last 14 Days vs Previous 14 Days"
-    : reportType === "monthly" ? "Last 30 Days vs Previous 30 Days"
-    : "Last 90 Days vs Previous 90 Days";
 
   const now = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+  const fileExt = reportType === "biweekly" ? "docx" : "pptx";
+  const fileLabel = reportType === "biweekly" ? ".docx" : ".pptx";
 
-  const formatSectionContent = (section: ReportSection): string => {
-    const items = committedSections[section.id];
-    if (!items || items.length === 0) return "[ No data committed ]";
-    return items.map((committed, i) => {
-      const prefix = items.length > 1 ? `[${i + 1}] ` : "";
-      if (committed.manualText) return `${prefix}${committed.manualText}`;
-      if (committed.response?.result) {
-        const r = committed.response.result;
-        const summaryLines = r.summary.map(s =>
-          `  • ${s.label}: ${s.current} (vs ${s.previous} | ${s.deltaPercent})`
-        ).join("\n");
-        const tableCount = r.tables.length;
-        return `${prefix}${committed.response.commandDescription ?? ""}${summaryLines ? "\n" + summaryLines : ""}${tableCount > 0 ? `\n  [${tableCount} data table${tableCount > 1 ? "s" : ""} attached]` : ""}`;
+  const sections = REPORT_SECTIONS[reportType];
+  const filledCount = sections.filter(s =>
+    s.id === "bw_purpose" || (committedSections[s.id]?.length ?? 0) > 0
+  ).length;
+
+  function buildSectionsPayload() {
+    return sections
+      .filter(s => s.id !== "bw_purpose")
+      .map(s => {
+        const items = committedSections[s.id] ?? [];
+        return {
+          sectionId: s.id,
+          title: s.title,
+          items: items.map(committed => {
+            if (committed.workLogRows) {
+              return { tableRows: committed.workLogRows };
+            }
+            if (committed.manualText) {
+              return { manualText: committed.manualText };
+            }
+            if (committed.response?.result) {
+              const r = committed.response.result;
+              return {
+                commandDescription: committed.response.commandDescription,
+                dateRangeLabel: committed.response.dateRangeLabel,
+                summary: r.summary.map(s => ({
+                  label: s.label,
+                  current: s.current,
+                  previous: s.previous,
+                  deltaPercent: s.deltaPercent,
+                  isPositive: s.isPositive,
+                })),
+                tables: r.tables.map(t => ({
+                  title: t.title,
+                  headers: t.headers,
+                  rows: t.rows,
+                })),
+              };
+            }
+            return {};
+          }).filter(i => Object.keys(i).length > 0),
+        };
+      });
+  }
+
+  const handleDownload = async () => {
+    setDownloading(true);
+    try {
+      const res = await fetch("/api/reports/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reportType,
+          clientId: client.id,
+          sections: buildSectionsPayload(),
+          attendees,
+          date: now,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as any;
+        throw new Error(err.message || "Export failed");
       }
-      return `${prefix}[ Data committed ]`;
-    }).join("\n\n");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${client.name.toLowerCase().replace(/\s+/g, "_")}_${reportType}_${Date.now()}.${fileExt}`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast({ title: `Report downloaded as ${fileLabel}` });
+    } catch (err: any) {
+      toast({ title: "Download failed", description: err.message, variant: "destructive" });
+    } finally {
+      setDownloading(false);
+    }
   };
 
-  const narrativeInstruction = `REPORT FRAMING — TRUSTED ADVISOR NARRATIVE
-Frame each section as a trusted advisor, not a traffic reporter.
-For every insight answer: what happened → why it happened → what we're doing next → what we need from the client.
-Tie all findings to business outcomes: admissions leads, insurance verifications (VOBs), and confirmed admissions. Traffic alone is never the story.
-${"━".repeat(48)}`;
-
-  const reportText = [
-    `${REPORT_TYPE_LABELS[reportType].toUpperCase()} REPORT`,
-    `Client: ${client.name}`,
-    `Date: ${now}`,
-    `Date Range: ${dateRangeLabel}`,
-    "",
-    narrativeInstruction,
-    "",
-    ...sections.map(s => [
-      `## ${s.title}`,
-      s.description,
-      "",
-      formatSectionContent(s),
-      "",
-    ]).flat(),
-    "━".repeat(48),
-    "Generated by SmartEO",
-  ].join("\n");
-
-  const downloadReport = () => {
-    const blob = new Blob([reportText], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${client.name.toLowerCase().replace(/\s+/g, "_")}_${reportType}_report.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const handleUploadToDrive = async () => {
+    setUploading(true);
+    setDriveLink(null);
+    try {
+      const res = await fetch("/api/reports/upload-to-drive", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reportType,
+          clientId: client.id,
+          sections: buildSectionsPayload(),
+          attendees,
+          date: now,
+        }),
+      });
+      const data = await res.json() as any;
+      if (!res.ok) throw new Error(data.message || "Upload failed");
+      setDriveLink(data.webViewLink);
+      toast({ title: "Uploaded to Google Drive", description: data.fileName });
+    } catch (err: any) {
+      toast({ title: "Drive upload failed", description: err.message, variant: "destructive" });
+    } finally {
+      setUploading(false);
+    }
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+      <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>{REPORT_TYPE_LABELS[reportType]} Report — {client.name}</DialogTitle>
-          <DialogDescription>{dateRangeLabel}</DialogDescription>
+          <DialogDescription>
+            {filledCount} of {sections.length} sections filled
+          </DialogDescription>
         </DialogHeader>
-        <div className="flex-1 overflow-y-auto">
-          <pre className="text-xs font-mono whitespace-pre-wrap bg-muted/30 rounded-md p-4 border">
-            {reportText}
-          </pre>
+
+        <div className="space-y-4">
+          {reportType === "biweekly" && (
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Attendees</label>
+              <input
+                value={attendees}
+                onChange={e => setAttendees(e.target.value)}
+                placeholder="Names of meeting attendees…"
+                className="w-full text-sm rounded-md border bg-background px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring"
+                data-testid="input-attendees"
+              />
+            </div>
+          )}
+
+          <div className="rounded-md border bg-muted/30 p-3 space-y-1">
+            {sections.map(s => {
+              const filled = s.id === "bw_purpose" || (committedSections[s.id]?.length ?? 0) > 0;
+              return (
+                <div key={s.id} className="flex items-center gap-2 text-xs">
+                  {filled
+                    ? <CheckCircle2 className="w-3.5 h-3.5 text-primary shrink-0" />
+                    : <Circle className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                  }
+                  <span className={filled ? "text-foreground" : "text-muted-foreground"}>{s.title}</span>
+                  {!filled && <span className="text-muted-foreground/60 italic">(empty)</span>}
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="text-[11px] text-muted-foreground">
+            {reportType === "biweekly"
+              ? "Downloads as a formatted Word document (.docx)"
+              : "Downloads as a PowerPoint presentation (.pptx)"}
+            {" — or upload directly to Google Drive."}
+          </div>
+
+          {driveLink && (
+            <div className="flex items-center gap-2 rounded-md border border-primary/30 bg-primary/5 p-3">
+              <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium">Uploaded to Google Drive</p>
+                <a
+                  href={driveLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[11px] text-primary hover:underline truncate block"
+                  data-testid="link-drive-file"
+                >
+                  Open in Google Drive →
+                </a>
+              </div>
+            </div>
+          )}
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={downloadReport} data-testid="button-download-report">
-            <Download className="w-3.5 h-3.5 mr-1.5" />
-            Download .txt
+
+        <DialogFooter className="flex-col sm:flex-row gap-2">
+          <Button
+            variant="outline"
+            onClick={handleUploadToDrive}
+            disabled={uploading || downloading}
+            className="w-full sm:w-auto"
+            data-testid="button-upload-drive"
+          >
+            {uploading ? (
+              <><div className="w-3.5 h-3.5 mr-1.5 rounded-full border-2 border-current border-t-transparent animate-spin" />Uploading…</>
+            ) : (
+              <><Upload className="w-3.5 h-3.5 mr-1.5" />Upload to Google Drive</>
+            )}
           </Button>
-          <Button onClick={() => onOpenChange(false)}>Close</Button>
+          <Button
+            onClick={handleDownload}
+            disabled={downloading || uploading}
+            className="w-full sm:w-auto"
+            data-testid="button-download-report"
+          >
+            {downloading ? (
+              <><div className="w-3.5 h-3.5 mr-1.5 rounded-full border-2 border-current border-t-transparent animate-spin" />Generating…</>
+            ) : (
+              <><Download className="w-3.5 h-3.5 mr-1.5" />Download {fileLabel}</>
+            )}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -608,7 +920,8 @@ function ChecklistPanel({
   onGenerate: () => void;
 }) {
   const sections = REPORT_SECTIONS[reportType];
-  const filledCount = sections.filter(s => (committedSections[s.id]?.length ?? 0) > 0).length;
+  const isFilled = (s: ReportSection) => s.id === "bw_purpose" || (committedSections[s.id]?.length ?? 0) > 0;
+  const filledCount = sections.filter(isFilled).length;
   const pct = Math.round((filledCount / sections.length) * 100);
 
   return (
@@ -630,8 +943,8 @@ function ChecklistPanel({
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
         {sections.map((section) => {
           const items = committedSections[section.id] ?? [];
-          const hasItems = items.length > 0;
-          const SIcon = section.icon;
+          const isAutoPurpose = section.id === "bw_purpose";
+          const hasItems = isAutoPurpose || items.length > 0;
           return (
             <div
               key={section.id}
@@ -650,23 +963,31 @@ function ChecklistPanel({
                     {items.length > 1 && (
                       <Badge variant="secondary" className="text-[9px] px-1 py-0 h-4">{items.length}</Badge>
                     )}
+                    {isAutoPurpose && (
+                      <Badge variant="secondary" className="text-[9px] px-1 py-0 h-4">auto</Badge>
+                    )}
                   </div>
                   <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">{section.description}</p>
                   {!hasItems && section.dateRange && (
                     <p className="text-[10px] text-muted-foreground/60 mt-0.5">{section.dateRange}</p>
                   )}
-                  {items.length > 0 && (
+                  {isAutoPurpose && (
+                    <p className="text-[10px] text-primary/70 mt-0.5 italic">Pre-filled from template</p>
+                  )}
+                  {!isAutoPurpose && items.length > 0 && (
                     <div className="mt-1 space-y-0.5">
                       {items.map((item, i) => (
                         <p key={i} className="text-[10px] text-primary/80 truncate">
-                          {item.manualText
+                          {item.workLogRows
+                            ? `${item.workLogRows.length} work item${item.workLogRows.length > 1 ? "s" : ""}`
+                            : item.manualText
                             ? item.manualText.slice(0, 60) + (item.manualText.length > 60 ? "…" : "")
                             : item.response?.commandDescription ?? "Data committed"}
                         </p>
                       ))}
                     </div>
                   )}
-                  {section.manualInput && (
+                  {!isAutoPurpose && section.manualInput && (
                     <Button
                       size="sm"
                       variant="ghost"
@@ -674,10 +995,10 @@ function ChecklistPanel({
                       onClick={() => onManualAdd(section)}
                       data-testid={`button-manual-${section.id}`}
                     >
-                      {hasItems ? "+ Add more" : "+ Add manually"}
+                      {items.length > 0 ? "+ Add more" : "+ Add manually"}
                     </Button>
                   )}
-                  {!hasItems && !section.manualInput && section.hints.length > 0 && (
+                  {!isAutoPurpose && !hasItems && !section.manualInput && section.hints.length > 0 && (
                     <p className="text-[10px] text-muted-foreground/60 mt-1 italic">
                       Ask in chat → Commit
                     </p>
@@ -1142,6 +1463,22 @@ export default function ReportsPage() {
     toast({ title: `"${manualTargetSection.title}" saved to report` });
   };
 
+  const handleManualWorkLogSave = (rows: WorkLogRow[]) => {
+    if (!manualTargetSection) return;
+    setCommittedSections(prev => ({
+      ...prev,
+      [manualTargetSection.id]: [
+        ...(prev[manualTargetSection.id] ?? []),
+        {
+          sectionId: manualTargetSection.id,
+          workLogRows: rows,
+          committedAt: new Date(),
+        },
+      ],
+    }));
+    toast({ title: `${rows.length} item${rows.length > 1 ? "s" : ""} added to "Progress & Quick Wins"` });
+  };
+
   const handleExampleClick = (example: string) => {
     if (!selectedClientId) {
       toast({ title: "Select a client first", variant: "destructive" });
@@ -1446,6 +1783,7 @@ export default function ReportsPage() {
         onOpenChange={setManualDialogOpen}
         section={manualTargetSection}
         onSave={handleManualSave}
+        onSaveWorkLog={handleManualWorkLogSave}
       />
 
       <GenerateReportDialog

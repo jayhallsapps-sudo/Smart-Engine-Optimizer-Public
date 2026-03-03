@@ -10,6 +10,8 @@ import { encrypt } from "./encryption";
 import { buildGoogleAuthUrl, exchangeCodeForToken, callbackHtml, isGoogleConfigured } from "./googleAuth";
 import { testCredential } from "./connectionTest";
 import { insertSfReportSchema, insertCallTrackingReportSchema } from "@shared/schema";
+import { generateBiweeklyDocx, generatePptx } from "./reportGenerators";
+import type { SectionData } from "./reportGenerators";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -501,6 +503,135 @@ export async function registerRoutes(
     const ok = await storage.deleteCallTrackingReport(Number(req.params.id));
     if (!ok) return res.status(404).json({ message: "Not found" });
     res.json({ success: true });
+  });
+
+  app.post("/api/reports/export", async (req, res) => {
+    const { reportType, clientId, sections, attendees, date } = req.body;
+    if (!reportType || !sections) {
+      return res.status(400).json({ message: "reportType and sections are required" });
+    }
+    const client = clientId ? await storage.getClient(Number(clientId)) : null;
+    const clientName = client?.name ?? "Client";
+    const reportDate = date || new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+
+    const MONTHLY_LABEL = "Monthly SEO Report";
+    const QBR_LABEL = "Quarterly Business Review";
+    const BIWEEKLY_LABEL = "Bi-Weekly SEO Meeting";
+
+    try {
+      if (reportType === "biweekly") {
+        const buffer = await generateBiweeklyDocx(clientName, attendees || "", reportDate, sections as SectionData[]);
+        const filename = `${clientName.toLowerCase().replace(/\s+/g, "_")}_biweekly_${Date.now()}.docx`;
+        res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+        res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+        res.send(buffer);
+      } else {
+        const label = reportType === "monthly" ? MONTHLY_LABEL : QBR_LABEL;
+        const buffer = await generatePptx(clientName, label, reportDate, sections as SectionData[]);
+        const filename = `${clientName.toLowerCase().replace(/\s+/g, "_")}_${reportType}_${Date.now()}.pptx`;
+        res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
+        res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+        res.send(buffer);
+      }
+    } catch (err: any) {
+      console.error("Report generation error:", err);
+      res.status(500).json({ message: "Failed to generate report: " + err.message });
+    }
+  });
+
+  app.post("/api/reports/upload-to-drive", async (req, res) => {
+    const { reportType, clientId, sections, attendees, date } = req.body;
+    if (!reportType || !sections) {
+      return res.status(400).json({ message: "reportType and sections are required" });
+    }
+
+    const { decrypt } = await import("./encryption");
+    const gscCreds = await storage.getApiCredentialsByService("google_search_console");
+    const ga4Creds = await storage.getApiCredentialsByService("google_analytics_4");
+    const allCreds = [...gscCreds, ...ga4Creds];
+    if (!allCreds.length) {
+      return res.status(400).json({ message: "No Google account connected. Connect Google Search Console or GA4 in Settings → Connections to enable Drive upload." });
+    }
+    const refreshToken = decrypt(allCreds[0].encryptedValue);
+    const googleClientId = process.env.GOOGLE_CLIENT_ID;
+    const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    if (!googleClientId || !googleClientSecret) {
+      return res.status(500).json({ message: "Google OAuth credentials not configured on server." });
+    }
+    const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: refreshToken,
+        client_id: googleClientId,
+        client_secret: googleClientSecret,
+      }),
+    });
+    const tokenData = await tokenRes.json() as any;
+    if (!tokenData.access_token) {
+      return res.status(401).json({ message: "Failed to obtain Google access token. Please reconnect Google in Settings." });
+    }
+    const googleAccessToken = tokenData.access_token;
+
+    const client = clientId ? await storage.getClient(Number(clientId)) : null;
+    const clientName = client?.name ?? "Client";
+    const reportDate = date || new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+    const MONTHLY_LABEL = "Monthly SEO Report";
+    const QBR_LABEL = "Quarterly Business Review";
+
+    try {
+      let fileBuffer: Buffer;
+      let mimeType: string;
+      let filename: string;
+      let driveConvertMime: string;
+
+      if (reportType === "biweekly") {
+        fileBuffer = await generateBiweeklyDocx(clientName, attendees || "", reportDate, sections as SectionData[]);
+        mimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+        filename = `${clientName} — Bi-Weekly SEO Meeting ${reportDate}`;
+        driveConvertMime = "application/vnd.google-apps.document";
+      } else {
+        const label = reportType === "monthly" ? MONTHLY_LABEL : QBR_LABEL;
+        fileBuffer = await generatePptx(clientName, label, reportDate, sections as SectionData[]);
+        mimeType = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+        filename = `${clientName} — ${label} ${reportDate}`;
+        driveConvertMime = "application/vnd.google-apps.presentation";
+      }
+
+      const metadata = JSON.stringify({ name: filename, mimeType: driveConvertMime });
+      const boundary = "-------webserv_boundary";
+      const delimiter = `\r\n--${boundary}\r\n`;
+      const closeDelimiter = `\r\n--${boundary}--`;
+
+      const metaPart = `${delimiter}Content-Type: application/json; charset=UTF-8\r\n\r\n${metadata}`;
+      const filePart = `${delimiter}Content-Type: ${mimeType}\r\nContent-Transfer-Encoding: base64\r\n\r\n${fileBuffer.toString("base64")}`;
+      const body = metaPart + filePart + closeDelimiter;
+
+      const uploadRes = await fetch(
+        "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${googleAccessToken}`,
+            "Content-Type": `multipart/related; boundary=${boundary}`,
+          },
+          body,
+        }
+      );
+
+      if (!uploadRes.ok) {
+        const errBody = await uploadRes.json().catch(() => ({})) as any;
+        const msg = errBody?.error?.message || uploadRes.statusText;
+        return res.status(uploadRes.status).json({ message: `Google Drive upload failed: ${msg}` });
+      }
+
+      const driveFile = await uploadRes.json() as { id: string; name: string; webViewLink: string };
+      res.json({ success: true, fileId: driveFile.id, fileName: driveFile.name, webViewLink: driveFile.webViewLink });
+    } catch (err: any) {
+      console.error("Drive upload error:", err);
+      res.status(500).json({ message: "Upload failed: " + err.message });
+    }
   });
 
   return httpServer;

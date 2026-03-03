@@ -92,10 +92,15 @@ export async function registerRoutes(
       }
 
       const { data } = airtableResult;
-      const tables = Object.entries(data.byCategory).map(([category, items]) => ({
-        title: category,
-        headers: ["Task", "Date", "URL / Page"],
-        rows: items.map(item => [item.task, item.date, item.url ?? "—"]),
+      const CREDIT_TYPE_LABELS: Record<string, string> = {
+        Scale: "New Content (Scale)",
+        Optimization: "Content Optimization",
+        "CRO Update": "CRO/UX Update",
+      };
+      const tables = Object.entries(data.byCreditType).map(([creditType, items]) => ({
+        title: CREDIT_TYPE_LABELS[creditType] ?? creditType,
+        headers: ["Task", "Status", "Due Date", "URL / Page"],
+        rows: items.map(item => [item.task, item.status ?? "—", item.date, item.url ?? "—"]),
       }));
 
       const result = {
@@ -104,7 +109,7 @@ export async function registerRoutes(
         dateRange: data.dateRange,
         summary: [
           { label: "Total Items", current: data.totalItems.toString(), previous: "—", delta: "—", deltaPercent: "—", isPositive: true },
-          { label: "Categories", current: Object.keys(data.byCategory).length.toString(), previous: "—", delta: "—", deltaPercent: "—", isPositive: true },
+          { label: "Work Types", current: Object.keys(data.byCreditType).length.toString(), previous: "—", delta: "—", deltaPercent: "—", isPositive: true },
         ],
         tables,
       };
@@ -115,7 +120,7 @@ export async function registerRoutes(
         naturalQuery: query,
         dateRange: intent.dateRange,
         filters: intent.filters,
-        resultSummary: `Work log: ${data.totalItems} items across ${Object.keys(data.byCategory).length} categories`,
+        resultSummary: `Work log: ${data.totalItems} items across ${Object.keys(data.byCreditType).length} work types`,
         resultData: result as any,
       });
 
@@ -376,6 +381,74 @@ export async function registerRoutes(
     const ok = await storage.deleteSfReport(Number(req.params.id));
     if (!ok) return res.status(404).json({ message: "Not found" });
     res.json({ success: true });
+  });
+
+  app.get("/api/clients/:id/sf-diff", async (req, res) => {
+    const clientId = Number(req.params.id);
+    const reports = await storage.getSfReports(clientId);
+    if (reports.length < 2) {
+      return res.status(400).json({ message: "Need at least 2 Screaming Frog crawls on file to compare. Upload a new crawl to see what changed." });
+    }
+    const [newReport, oldReport] = reports;
+    const URL_COL = ["Address", "URL", "address", "url"].find(k => (newReport.headers || []).includes(k)) ?? "Address";
+    const STATUS_COL = ["Status Code", "Status code", "status_code", "Status"].find(k => (newReport.headers || []).includes(k)) ?? "Status Code";
+    const INDEX_COL = ["Indexability", "indexability"].find(k => (newReport.headers || []).includes(k)) ?? "Indexability";
+    const H1_COL = ["H1-1", "H1", "h1"].find(k => (newReport.headers || []).includes(k)) ?? "H1-1";
+
+    const oldRows = (oldReport.data || []) as Record<string, any>[];
+    const newRows = (newReport.data || []) as Record<string, any>[];
+    const oldByUrl = new Map(oldRows.map(r => [r[URL_COL], r]));
+    const newByUrl = new Map(newRows.map(r => [r[URL_COL], r]));
+
+    type DiffItem = { url: string; oldStatus?: string; newStatus?: string; oldIndex?: string; newIndex?: string; change: string };
+    const fixed: DiffItem[] = [];
+    const newIssues: DiffItem[] = [];
+    const statusChanges: DiffItem[] = [];
+    const newPages: string[] = [];
+    const removedPages: string[] = [];
+
+    const isError = (code: string | undefined) => {
+      const n = Number(code);
+      return n >= 400;
+    };
+
+    for (const [url, newRow] of Array.from(newByUrl)) {
+      const oldRow = oldByUrl.get(url);
+      if (!oldRow) { newPages.push(url); continue; }
+      const oldStatus = String(oldRow[STATUS_COL] ?? "");
+      const newStatus = String(newRow[STATUS_COL] ?? "");
+      if (oldStatus !== newStatus) {
+        const wasError = isError(oldStatus);
+        const isNowError = isError(newStatus);
+        if (wasError && !isNowError) {
+          fixed.push({ url, oldStatus, newStatus, change: "fixed" });
+        } else if (!wasError && isNowError) {
+          newIssues.push({ url, oldStatus, newStatus, change: "broken" });
+        } else {
+          statusChanges.push({ url, oldStatus, newStatus, change: "changed" });
+        }
+      }
+    }
+    for (const [url] of Array.from(oldByUrl)) {
+      if (!newByUrl.has(url)) removedPages.push(url);
+    }
+
+    res.json({
+      oldReport: { id: oldReport.id, filename: oldReport.filename, reportDate: oldReport.reportDate, rowCount: oldReport.rowCount },
+      newReport: { id: newReport.id, filename: newReport.filename, reportDate: newReport.reportDate, rowCount: newReport.rowCount },
+      summary: {
+        fixed: fixed.length,
+        newIssues: newIssues.length,
+        statusChanges: statusChanges.length,
+        newPages: newPages.length,
+        removedPages: removedPages.length,
+      },
+      fixed,
+      newIssues,
+      statusChanges,
+      newPages: newPages.slice(0, 50),
+      removedPages: removedPages.slice(0, 50),
+    });
   });
 
   app.get("/api/call-tracking-reports/summary", async (req, res) => {

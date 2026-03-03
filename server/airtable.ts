@@ -4,10 +4,10 @@ import { decrypt } from "./encryption";
 export interface WorkLogItem {
   id: string;
   task: string;
-  category: string;
+  creditType: string;
   date: string;
   url?: string;
-  notes?: string;
+  status?: string;
 }
 
 export interface WorkLogResult {
@@ -15,19 +15,22 @@ export interface WorkLogResult {
   dateRange: string;
   baseId: string;
   tableName: string;
+  viewName: string;
   totalItems: number;
-  byCategory: Record<string, WorkLogItem[]>;
+  byCreditType: Record<string, WorkLogItem[]>;
 }
 
-const CATEGORY_ORDER = [
-  "Content",
-  "Technical",
-  "CRO/UX",
-  "Internal Linking",
-  "Local/GBP",
-  "Authority/Links",
-  "Other",
-];
+const CREDIT_TYPE_ORDER = ["Scale", "Optimization", "CRO Update", "Other"];
+
+const CREDIT_TYPE_LABELS: Record<string, string> = {
+  Scale: "New Content (Scale)",
+  Optimization: "Content Optimization",
+  "CRO Update": "CRO/UX Update",
+};
+
+export function getCreditTypeLabel(raw: string): string {
+  return CREDIT_TYPE_LABELS[raw] ?? raw;
+}
 
 export async function fetchAirtableWorkLog(
   clientId: number,
@@ -41,6 +44,7 @@ export async function fetchAirtableWorkLog(
 
   const airtableBaseId = (client as any).airtableBaseId as string | null;
   const airtableTableName = (client as any).airtableTableName as string | null;
+  const airtableViewName = (client as any).airtableViewName as string | null ?? "Published";
 
   if (!airtableBaseId || !airtableTableName) {
     return {
@@ -61,12 +65,14 @@ export async function fetchAirtableWorkLog(
 
   const pat = decrypt(creds[0].encryptedValue);
 
-  const filterFormula = buildFilterFormula(startDate, endDate);
-  const url = `https://api.airtable.com/v0/${airtableBaseId}/${encodeURIComponent(airtableTableName)}?${new URLSearchParams({
-    filterByFormula: filterFormula,
-    sort: JSON.stringify([{ field: "Date", direction: "desc" }]),
+  const params = new URLSearchParams({
+    filterByFormula: buildFilterFormula(startDate, endDate),
+    sort: JSON.stringify([{ field: "Due", direction: "desc" }]),
     maxRecords: "200",
-  })}`;
+  });
+  if (airtableViewName) params.set("view", airtableViewName);
+
+  const url = `https://api.airtable.com/v0/${airtableBaseId}/${encodeURIComponent(airtableTableName)}?${params}`;
 
   let resp: Response;
   try {
@@ -94,7 +100,7 @@ export async function fetchAirtableWorkLog(
       return {
         success: false,
         setupRequired: true,
-        error: `Airtable table not found. Check the Base ID (${airtableBaseId}) and Table Name (${airtableTableName}) in the client settings.`,
+        error: `Airtable table/view not found. Check the Base ID (${airtableBaseId}), Table Name (${airtableTableName}), and View Name (${airtableViewName}) in the client settings.`,
       };
     }
     return { success: false, error: `Airtable API error (${resp.status}): ${msg}` };
@@ -105,30 +111,30 @@ export async function fetchAirtableWorkLog(
 
   const items: WorkLogItem[] = records.map((r: any) => {
     const f = r.fields ?? {};
-    const rawCat = String(f["Category"] ?? f["Type"] ?? f["Work Type"] ?? "Other").trim();
-    const category = normalizeCategory(rawCat);
+    const rawCreditType = String(f["Credit Type"] ?? "Other").trim();
+    const creditType = CREDIT_TYPE_ORDER.includes(rawCreditType) ? rawCreditType : "Other";
     return {
       id: r.id,
-      task: String(f["Task"] ?? f["Name"] ?? f["Description"] ?? f["Work"] ?? "Untitled").trim(),
-      category,
-      date: String(f["Date"] ?? f["Date Completed"] ?? f["Completed"] ?? "").trim(),
-      url: f["URL"] ?? f["Page URL"] ?? f["Page"] ?? undefined,
-      notes: f["Notes"] ?? f["Details"] ?? undefined,
+      task: String(f["Name"] ?? f["Task"] ?? f["Description"] ?? "Untitled").trim(),
+      creditType,
+      date: String(f["Due"] ?? f["Date"] ?? "").trim(),
+      url: f["Final URL"] ?? f["URL"] ?? f["Page URL"] ?? undefined,
+      status: f["Status"] ?? undefined,
     };
   });
 
-  const byCategory: Record<string, WorkLogItem[]> = {};
+  const byCreditType: Record<string, WorkLogItem[]> = {};
   for (const item of items) {
-    if (!byCategory[item.category]) byCategory[item.category] = [];
-    byCategory[item.category].push(item);
+    if (!byCreditType[item.creditType]) byCreditType[item.creditType] = [];
+    byCreditType[item.creditType].push(item);
   }
 
-  const orderedByCategory: Record<string, WorkLogItem[]> = {};
-  for (const cat of CATEGORY_ORDER) {
-    if (byCategory[cat]) orderedByCategory[cat] = byCategory[cat];
+  const ordered: Record<string, WorkLogItem[]> = {};
+  for (const ct of CREDIT_TYPE_ORDER) {
+    if (byCreditType[ct]) ordered[ct] = byCreditType[ct];
   }
-  for (const cat of Object.keys(byCategory)) {
-    if (!orderedByCategory[cat]) orderedByCategory[cat] = byCategory[cat];
+  for (const ct of Object.keys(byCreditType)) {
+    if (!ordered[ct]) ordered[ct] = byCreditType[ct];
   }
 
   return {
@@ -138,24 +144,14 @@ export async function fetchAirtableWorkLog(
       dateRange: `${startDate} → ${endDate}`,
       baseId: airtableBaseId,
       tableName: airtableTableName,
+      viewName: airtableViewName,
       totalItems: items.length,
-      byCategory: orderedByCategory,
+      byCreditType: ordered,
     },
   };
 }
 
 function buildFilterFormula(startDate: string, endDate: string): string {
   if (!startDate || !endDate) return "";
-  return `AND(IS_AFTER({Date}, "${startDate}"), IS_BEFORE({Date}, "${endDate}"))`;
-}
-
-function normalizeCategory(raw: string): string {
-  const lower = raw.toLowerCase();
-  if (lower.includes("content")) return "Content";
-  if (lower.includes("tech")) return "Technical";
-  if (lower.includes("cro") || lower.includes("ux") || lower.includes("conversion")) return "CRO/UX";
-  if (lower.includes("internal") || lower.includes("link build") || lower.includes("interlinking")) return "Internal Linking";
-  if (lower.includes("local") || lower.includes("gbp") || lower.includes("google business")) return "Local/GBP";
-  if (lower.includes("author") || lower.includes("backlink") || lower.includes("outreach") || lower.includes("pr")) return "Authority/Links";
-  return raw || "Other";
+  return `AND(IS_AFTER({Due}, "${startDate}"), IS_BEFORE({Due}, "${endDate}"))`;
 }

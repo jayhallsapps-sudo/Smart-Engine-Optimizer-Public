@@ -54,6 +54,10 @@ import {
   Download,
   Upload,
   Database,
+  GitCompare,
+  CheckCheck,
+  XCircle,
+  ArrowLeftRight,
 } from "lucide-react";
 import type { Client } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
@@ -137,6 +141,7 @@ interface ClientFormData {
   nimbataAccountId: string;
   airtableBaseId: string;
   airtableTableName: string;
+  airtableViewName: string;
   brandTerms: string[];
   leadEvents: string[];
   moneyPages: string[];
@@ -156,6 +161,7 @@ const emptyForm: ClientFormData = {
   nimbataAccountId: "",
   airtableBaseId: "",
   airtableTableName: "",
+  airtableViewName: "Published",
   brandTerms: [],
   leadEvents: [],
   moneyPages: [],
@@ -211,8 +217,12 @@ function ClientForm({ initial, onSubmit, isPending }: { initial: ClientFormData;
               <Input id="airtableBase" value={form.airtableBaseId} onChange={e => update("airtableBaseId", e.target.value)} placeholder="appXXXXXXXXXXXXXX" data-testid="input-airtable-base-id" />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="airtableTable" className="flex items-center gap-1.5"><Database className="w-3 h-3" /> Airtable Table / View Name</Label>
-              <Input id="airtableTable" value={form.airtableTableName} onChange={e => update("airtableTableName", e.target.value)} placeholder="e.g., Work Log" data-testid="input-airtable-table-name" />
+              <Label htmlFor="airtableTable" className="flex items-center gap-1.5"><Database className="w-3 h-3" /> Airtable Table Name</Label>
+              <Input id="airtableTable" value={form.airtableTableName} onChange={e => update("airtableTableName", e.target.value)} placeholder="e.g., Anchored Tides" data-testid="input-airtable-table-name" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="airtableView" className="flex items-center gap-1.5"><Database className="w-3 h-3" /> Airtable View Name</Label>
+              <Input id="airtableView" value={form.airtableViewName} onChange={e => update("airtableViewName", e.target.value)} placeholder="Published" data-testid="input-airtable-view-name" />
             </div>
           </div>
         </TabsContent>
@@ -378,6 +388,7 @@ function ServiceRow({
   ctReport,
   onCtUpload,
   ctUploading,
+  onSfCompare,
 }: {
   def: (typeof SERVICE_DEFS)[number];
   client: Client;
@@ -386,6 +397,7 @@ function ServiceRow({
   ctReport?: CtSummaryRow | null;
   onCtUpload?: (file: File) => void;
   ctUploading?: boolean;
+  onSfCompare?: () => void;
 }) {
   const rawValue = def.getValue(client);
   const hasId = !!rawValue;
@@ -475,6 +487,16 @@ function ServiceRow({
               {sfReport!.filename}
             </a>
             <span className="text-[10px] text-muted-foreground">{sfReport!.rowCount.toLocaleString()} rows · {sfReport!.reportDate}</span>
+            {onSfCompare && (
+              <button
+                onClick={onSfCompare}
+                className="inline-flex items-center gap-1 text-[10px] text-blue-700 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/30 rounded px-1.5 py-0.5 hover:underline"
+                data-testid={"sf-compare-btn-" + client.id}
+              >
+                <GitCompare className="w-2.5 h-2.5" />
+                Compare crawls
+              </button>
+            )}
           </div>
         )}
         {def.key === "sf" && isManual && !hasSfUpload && (
@@ -540,6 +562,30 @@ function ClientCard({
   const clientSfReport = sfSummary.find(r => r.clientId === client.id) || null;
   const clientCtReport = ctSummary.find(r => r.clientId === client.id) || null;
   const [ctUploading, setCtUploading] = useState(false);
+  const [sfDiffOpen, setSfDiffOpen] = useState(false);
+  const [sfDiffLoading, setSfDiffLoading] = useState(false);
+  const [sfDiffData, setSfDiffData] = useState<any>(null);
+  const [sfDiffError, setSfDiffError] = useState<string | null>(null);
+
+  const handleSfCompare = async () => {
+    setSfDiffOpen(true);
+    setSfDiffLoading(true);
+    setSfDiffData(null);
+    setSfDiffError(null);
+    try {
+      const res = await fetch(`/api/clients/${client.id}/sf-diff`);
+      const json = await res.json();
+      if (!res.ok) {
+        setSfDiffError(json.message || "Failed to compare crawls");
+      } else {
+        setSfDiffData(json);
+      }
+    } catch (e: any) {
+      setSfDiffError(e.message || "Network error");
+    } finally {
+      setSfDiffLoading(false);
+    }
+  };
   const handleCtUpload = async (file: File) => {
     setCtUploading(true);
     try {
@@ -621,9 +667,87 @@ function ClientCard({
 
       <div className="grid grid-cols-1 gap-1.5">
         {SERVICE_DEFS.map(def => (
-          <ServiceRow key={def.key} def={def} client={client} credentials={credentials} sfReport={def.key === "sf" ? clientSfReport : undefined} ctReport={def.key === "ct_manual" ? clientCtReport : undefined} onCtUpload={def.key === "ct_manual" ? handleCtUpload : undefined} ctUploading={def.key === "ct_manual" ? ctUploading : undefined} />
+          <ServiceRow key={def.key} def={def} client={client} credentials={credentials} sfReport={def.key === "sf" ? clientSfReport : undefined} ctReport={def.key === "ct_manual" ? clientCtReport : undefined} onCtUpload={def.key === "ct_manual" ? handleCtUpload : undefined} ctUploading={def.key === "ct_manual" ? ctUploading : undefined} onSfCompare={def.key === "sf" && clientSfReport ? handleSfCompare : undefined} />
         ))}
       </div>
+
+      <Dialog open={sfDiffOpen} onOpenChange={setSfDiffOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><GitCompare className="w-4 h-4" /> Crawl Comparison — {client.name}</DialogTitle>
+            {sfDiffData && (
+              <DialogDescription>
+                {sfDiffData.oldReport.filename} → {sfDiffData.newReport.filename}
+              </DialogDescription>
+            )}
+          </DialogHeader>
+          {sfDiffLoading && <div className="py-8 text-center text-sm text-muted-foreground">Comparing crawls…</div>}
+          {sfDiffError && <div className="py-4 text-sm text-red-600 dark:text-red-400">{sfDiffError}</div>}
+          {sfDiffData && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-3 gap-3">
+                <div className="rounded-md border p-3 text-center bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-900/40">
+                  <p className="text-xl font-bold text-green-700 dark:text-green-400" data-testid="sf-diff-fixed-count">{sfDiffData.summary.fixed}</p>
+                  <p className="text-xs text-green-700 dark:text-green-400 mt-0.5 flex items-center justify-center gap-1"><CheckCheck className="w-3 h-3" /> Fixed</p>
+                </div>
+                <div className="rounded-md border p-3 text-center bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900/40">
+                  <p className="text-xl font-bold text-red-700 dark:text-red-400" data-testid="sf-diff-new-issues-count">{sfDiffData.summary.newIssues}</p>
+                  <p className="text-xs text-red-700 dark:text-red-400 mt-0.5 flex items-center justify-center gap-1"><XCircle className="w-3 h-3" /> New Issues</p>
+                </div>
+                <div className="rounded-md border p-3 text-center">
+                  <p className="text-xl font-bold" data-testid="sf-diff-changes-count">{sfDiffData.summary.statusChanges}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5 flex items-center justify-center gap-1"><ArrowLeftRight className="w-3 h-3" /> Status Changes</p>
+                </div>
+              </div>
+              {sfDiffData.fixed.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-semibold text-green-700 dark:text-green-400 mb-1.5 flex items-center gap-1"><CheckCheck className="w-3 h-3" /> Fixed ({sfDiffData.fixed.length})</h4>
+                  <div className="rounded-md border overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead className="bg-muted/50"><tr><th className="text-left px-2 py-1.5 font-medium">URL</th><th className="text-left px-2 py-1.5 font-medium w-20">Was</th><th className="text-left px-2 py-1.5 font-medium w-20">Now</th></tr></thead>
+                      <tbody>{sfDiffData.fixed.map((item: any, i: number) => (
+                        <tr key={i} className="border-t"><td className="px-2 py-1.5 truncate max-w-[320px] font-mono text-[11px]" title={item.url}>{item.url}</td><td className="px-2 py-1.5 text-red-600">{item.oldStatus}</td><td className="px-2 py-1.5 text-green-600">{item.newStatus}</td></tr>
+                      ))}</tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+              {sfDiffData.newIssues.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-semibold text-red-700 dark:text-red-400 mb-1.5 flex items-center gap-1"><XCircle className="w-3 h-3" /> New Issues ({sfDiffData.newIssues.length})</h4>
+                  <div className="rounded-md border overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead className="bg-muted/50"><tr><th className="text-left px-2 py-1.5 font-medium">URL</th><th className="text-left px-2 py-1.5 font-medium w-20">Was</th><th className="text-left px-2 py-1.5 font-medium w-20">Now</th></tr></thead>
+                      <tbody>{sfDiffData.newIssues.map((item: any, i: number) => (
+                        <tr key={i} className="border-t"><td className="px-2 py-1.5 truncate max-w-[320px] font-mono text-[11px]" title={item.url}>{item.url}</td><td className="px-2 py-1.5 text-green-600">{item.oldStatus}</td><td className="px-2 py-1.5 text-red-600">{item.newStatus}</td></tr>
+                      ))}</tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+              {sfDiffData.statusChanges.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-semibold mb-1.5 flex items-center gap-1"><ArrowLeftRight className="w-3 h-3" /> Other Status Changes ({sfDiffData.statusChanges.length})</h4>
+                  <div className="rounded-md border overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead className="bg-muted/50"><tr><th className="text-left px-2 py-1.5 font-medium">URL</th><th className="text-left px-2 py-1.5 font-medium w-20">Was</th><th className="text-left px-2 py-1.5 font-medium w-20">Now</th></tr></thead>
+                      <tbody>{sfDiffData.statusChanges.map((item: any, i: number) => (
+                        <tr key={i} className="border-t"><td className="px-2 py-1.5 truncate max-w-[320px] font-mono text-[11px]" title={item.url}>{item.url}</td><td className="px-2 py-1.5">{item.oldStatus}</td><td className="px-2 py-1.5">{item.newStatus}</td></tr>
+                      ))}</tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+              {sfDiffData.newPages.length > 0 && (
+                <p className="text-xs text-muted-foreground">{sfDiffData.summary.newPages} new pages crawled · {sfDiffData.summary.removedPages} pages removed since last crawl.</p>
+              )}
+              {sfDiffData.fixed.length === 0 && sfDiffData.newIssues.length === 0 && sfDiffData.statusChanges.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">No status code changes between these two crawls.</p>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {(client.brandTerms && client.brandTerms.length > 0) && (
         <div className="flex items-center gap-1 flex-wrap pt-1 border-t">
@@ -780,6 +904,7 @@ export default function ClientsPage() {
                 nimbataAccountId: (editingClient as any).nimbataAccountId || "",
                 airtableBaseId: (editingClient as any).airtableBaseId || "",
                 airtableTableName: (editingClient as any).airtableTableName || "",
+                airtableViewName: (editingClient as any).airtableViewName || "Published",
                 brandTerms: editingClient.brandTerms || [],
                 leadEvents: editingClient.leadEvents || [],
                 moneyPages: editingClient.moneyPages || [],

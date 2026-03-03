@@ -16,6 +16,7 @@ export const clients = pgTable("clients", {
   nimbataAccountId: text("nimbata_account_id"),
   airtableBaseId: text("airtable_base_id"),
   airtableTableName: text("airtable_table_name"),
+  airtableViewName: text("airtable_view_name"),
   brandTerms: text("brand_terms").array().default(sql`'{}'::text[]`),
   leadEvents: text("lead_events").array().default(sql`'{}'::text[]`),
   moneyPages: text("money_pages").array().default(sql`'{}'::text[]`),

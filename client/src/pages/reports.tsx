@@ -131,7 +131,7 @@ const REPORT_SECTIONS: Record<ReportType, ReportSection[]> = {
       description: "Organic traffic trends, lead pacing, and what's driving movement",
       icon: TrendingUp,
       manualInput: false,
-      hints: ["GSC clicks last 14 days", "GA4 organic sessions this fortnight", "CallRail organic calls last 14 days", "Top query movers last 14 days"],
+      hints: ["GSC query performance last 14 days", "Organic funnel last 14 days", "CallRail organic calls last 14 days", "Session movers last 14 days"],
       dateRange: "Last 14 days vs previous 14 days",
     },
     {
@@ -160,7 +160,7 @@ const REPORT_SECTIONS: Record<ReportType, ReportSection[]> = {
       description: "Quarter-to-date organic sessions, leads, CVR vs goal",
       icon: TrendingUp,
       manualInput: false,
-      hints: ["QTD organic funnel vs goal", "Quarter to date totals", "QTD sessions and leads"],
+      hints: ["Quarter to date sessions and leads", "QTD totals this quarter", "QTD sessions and leads"],
       dateRange: "Quarter to date",
     },
     {
@@ -178,7 +178,7 @@ const REPORT_SECTIONS: Record<ReportType, ReportSection[]> = {
       description: "Clicks, impressions, CTR, position — MoM trends and top queries",
       icon: Globe,
       manualInput: false,
-      hints: ["GSC month over month performance", "Top 30 GSC queries with MoM delta", "GSC monthly snapshot"],
+      hints: ["GSC query performance month over month", "Top queries last 30 days", "Page performance last 30 days"],
       dateRange: "Last 30 days vs previous 30 days",
     },
     {
@@ -234,7 +234,7 @@ const REPORT_SECTIONS: Record<ReportType, ReportSection[]> = {
       description: "Top pages that drove leads, query intent shifts, keyword wins/losses",
       icon: GitMerge,
       manualInput: false,
-      hints: ["Top 50 landing pages with QoQ delta", "Top 50 GSC queries with QoQ delta", "Keyword distribution by tier QoQ"],
+      hints: ["GA4 landing pages quarter over quarter", "GSC queries quarter over quarter", "Keyword distribution by tier QoQ"],
       dateRange: "Last 90 days",
     },
     {

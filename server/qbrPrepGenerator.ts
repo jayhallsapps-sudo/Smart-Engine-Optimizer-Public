@@ -454,6 +454,10 @@ export async function generateQbrPrep(input: QbrPrepInput): Promise<QbrPrepOutpu
     console.log(`[QBR Prep] GA4: ${ga4LandingRows.length} landing pages, funnel: ${JSON.stringify(ga4Funnel)}`);
   }
 
+  let sfIsInternalAll = false;
+  let sfIssueSummary: Map<string, number> = new Map();
+  let sfTotalUrls = 0;
+
   if (sfAvailable) {
     const sfReport = input.sfReportId
       ? (await storage.getSfReport(input.sfReportId).catch(() => null)) ?? allSfReports[0]
@@ -461,29 +465,65 @@ export async function generateQbrPrep(input: QbrPrepInput): Promise<QbrPrepOutpu
     sfHeaders = sfReport.headers ?? [];
     sfData = (sfReport.data ?? []) as Record<string, any>[];
 
-    const findCol = (...names: string[]) => sfHeaders.find(h => names.includes(h));
-    sfCol = {
-      url: findCol("Address", "URL", "address", "url") ?? sfHeaders[0] ?? "",
-      status: findCol("Status Code", "Status code", "status_code", "Status") ?? "",
-      indexability: findCol("Indexability", "indexability") ?? "",
-      indexabilityStatus: findCol("Indexability Status", "indexability_status") ?? "",
-      title: findCol("Title 1", "Title", "title", "Page Title") ?? "",
-      titleLen: findCol("Title 1 Length", "Title Length", "title_length") ?? "",
-      h1: findCol("H1-1", "H1", "h1") ?? "",
-      h1Count: findCol("H1-1 count", "H1 Count", "h1_count") ?? "",
-      canonical: findCol("Canonical Link Element 1", "canonical", "Canonical") ?? "",
-      canonicalSelf: findCol("Canonical Link Element Match Canonical?", "canonical_match") ?? "",
-      inlinks: findCol("Inlinks", "inlinks", "Internal Inlinks") ?? "",
-      outlinks: findCol("Outlinks", "outlinks") ?? "",
-      depth: findCol("Crawl Depth", "crawl_depth", "Depth") ?? "",
-      wordCount: findCol("Word Count", "word_count") ?? "",
-      metaDesc: findCol("Meta Description 1", "Meta Description", "meta_description") ?? "",
-      metaDescLen: findCol("Meta Description 1 Length", "Meta Description Length") ?? "",
-      contentType: findCol("Content Type", "content_type", "Content-Type") ?? "",
-      response: findCol("Response Time", "response_time") ?? "",
-      size: findCol("Size", "size") ?? "",
-    };
-    console.log(`[QBR Prep] SF: ${sfData.length} URLs, headers: ${sfHeaders.slice(0, 10).join(", ")}`);
+    console.log(`[QBR Prep] SF: ${sfData.length} rows, headers: ${sfHeaders.slice(0, 8).join(" | ")}`);
+
+    // ── Detect format ────────────────────────────────────────────────────
+    const headersLower = sfHeaders.map(h => h.toLowerCase());
+    sfIsInternalAll = headersLower.some(h => h === "address" || h === "status code" || h === "status");
+
+    if (!sfIsInternalAll) {
+      // Crawl Overview / summary format — extract issue counts
+      console.log(`[QBR Prep] SF: Detected Crawl Overview format (not row-level Internal All)`);
+      const col0 = sfHeaders[0] ?? "";
+      const col1 = sfHeaders[1] ?? "";
+      for (const row of sfData) {
+        const key = String(row[col0] ?? "").trim();
+        const val = String(row[col1] ?? "").trim();
+        const num = parseInt(val.replace(/[^0-9]/g, ""), 10);
+        if (key && !isNaN(num)) {
+          sfIssueSummary.set(key.toLowerCase(), num);
+          if (key.toLowerCase().includes("total") && key.toLowerCase().includes("url")) {
+            sfTotalUrls = num;
+          }
+        }
+      }
+      // Also check for common summary keys
+      if (sfTotalUrls === 0) {
+        const totalKey = [...sfIssueSummary.keys()].find(k => k.includes("total") || k.includes("crawled"));
+        if (totalKey) sfTotalUrls = sfIssueSummary.get(totalKey) ?? sfData.length;
+      }
+      console.log(`[QBR Prep] SF Crawl Overview: ${sfTotalUrls} total URLs, ${sfIssueSummary.size} issue types parsed`);
+    } else {
+      // Internal All format — build column map (case-insensitive)
+      const findCol = (...names: string[]) => {
+        const lowerNames = names.map(n => n.toLowerCase());
+        const idx = headersLower.findIndex(h => lowerNames.includes(h));
+        return idx >= 0 ? sfHeaders[idx] : undefined;
+      };
+      sfCol = {
+        url: findCol("address", "url") ?? sfHeaders[0] ?? "",
+        status: findCol("status code", "status") ?? "",
+        indexability: findCol("indexability") ?? "",
+        indexabilityStatus: findCol("indexability status") ?? "",
+        title: findCol("title 1", "title", "page title") ?? "",
+        titleLen: findCol("title 1 length", "title length") ?? "",
+        h1: findCol("h1-1", "h1") ?? "",
+        h1Count: findCol("h1-1 count", "h1 count") ?? "",
+        canonical: findCol("canonical link element 1", "canonical") ?? "",
+        canonicalSelf: findCol("canonical link element match canonical?", "canonical match") ?? "",
+        inlinks: findCol("inlinks", "internal inlinks") ?? "",
+        outlinks: findCol("outlinks") ?? "",
+        depth: findCol("crawl depth", "depth") ?? "",
+        wordCount: findCol("word count") ?? "",
+        metaDesc: findCol("meta description 1", "meta description") ?? "",
+        metaDescLen: findCol("meta description 1 length", "meta description length") ?? "",
+        contentType: findCol("content type") ?? "",
+        response: findCol("response time") ?? "",
+        size: findCol("size") ?? "",
+      };
+      sfTotalUrls = sfData.length;
+      console.log(`[QBR Prep] SF Internal All: ${sfTotalUrls} URLs | urlCol="${sfCol.url}" statusCol="${sfCol.status}" indexCol="${sfCol.indexability}" wcCol="${sfCol.wordCount}" titleCol="${sfCol.title}"`);
+    }
   }
 
   // ── Normalized join maps ─────────────────────────────────────────────────
@@ -841,7 +881,141 @@ export async function generateQbrPrep(input: QbrPrepInput): Promise<QbrPrepOutpu
   if (input.includeTechnical) {
     const techOpps: Opportunity[] = [];
 
-    if (sfAvailable && sfData.length > 0) {
+    // ── BRANCH A: Crawl Overview (summary) format ──────────────────────
+    if (sfAvailable && sfData.length > 0 && !sfIsInternalAll) {
+      // Extract issue counts from summary data and produce evidence-backed opps
+      const issueCount = (patterns: string[]): number => {
+        for (const [k, v] of sfIssueSummary.entries()) {
+          if (patterns.some(p => k.includes(p.toLowerCase()))) return v;
+        }
+        return 0;
+      };
+
+      const n4xx = issueCount(["4xx", "client error", "broken"]);
+      const n5xx = issueCount(["5xx", "server error"]);
+      const nNoindex = issueCount(["noindex", "non-indexable", "not indexable"]);
+      const nRedirect = issueCount(["3xx", "redirect"]);
+      const nMissingTitle = issueCount(["missing title", "no title"]);
+      const nDupTitle = issueCount(["duplicate title"]);
+      const nMissingH1 = issueCount(["missing h1", "no h1"]);
+      const nMissingMeta = issueCount(["missing meta description", "no meta description"]);
+      const nOrphan = issueCount(["orphan", "no inlinks", "zero inlinks"]);
+      const nThin = issueCount(["thin content", "low word count"]);
+
+      const total = sfTotalUrls || sfData.length;
+      techOpps.push({
+        opportunity_title: `Technical Audit Summary: ${total.toLocaleString()} URLs Crawled — Upgrade to Internal All Export for URL-Level Detail`,
+        priority: "P0", impact: "High", effort: "S",
+        kpi_affected: "Indexation, Rankings, All",
+        urls: [],
+        evidence: `Screaming Frog Crawl Overview uploaded: ${total.toLocaleString()} total URLs. Issue summary parsed: ${[
+          n4xx > 0 ? `${n4xx} 4xx errors` : "",
+          n5xx > 0 ? `${n5xx} 5xx errors` : "",
+          nNoindex > 0 ? `${nNoindex} non-indexable pages` : "",
+          nRedirect > 0 ? `${nRedirect} redirects` : "",
+          nMissingTitle > 0 ? `${nMissingTitle} missing titles` : "",
+          nDupTitle > 0 ? `${nDupTitle} duplicate titles` : "",
+          nMissingH1 > 0 ? `${nMissingH1} missing H1s` : "",
+          nOrphan > 0 ? `${nOrphan} orphan pages` : "",
+          nThin > 0 ? `${nThin} thin content pages` : "",
+        ].filter(Boolean).join(", ") || "counts not parsed from this export format"}.`,
+        problem: "A Crawl Overview export was uploaded instead of the Internal All export. Issue counts are visible but specific affected URLs cannot be identified for targeted remediation. All technical opportunities below are based on aggregate counts only.",
+        opportunity: "Re-export from Screaming Frog using: Reports → Internal → All → Export (CSV). Upload this file to replace the current crawl. This unlocks URL-level evidence for every technical issue found.",
+        why_it_matters: "URL-level data allows us to prioritize fixes by impact (e.g., which specific service pages have missing titles, which 4xx URLs have inlinks pointing to them). Without it, remediation is unguided.",
+        recommended_next_step: "In Screaming Frog: Internal tab → select all → Export to CSV. Alternatively use: Bulk Export → All Inlinks, All Internal pages. Upload the resulting file in QBR Prep → Select Crawl.",
+      });
+
+      if (n4xx > 0) techOpps.push({
+        opportunity_title: `Fix ${n4xx} 4xx Error Pages (URL List Available in Internal All Export)`,
+        priority: "P0", impact: n4xx > 10 ? "High" : "Med", effort: n4xx > 30 ? "M" : "S",
+        kpi_affected: "Indexation, Rankings, Link Equity", urls: [],
+        evidence: `Screaming Frog Crawl Overview: ${n4xx} URLs returning 4xx status codes out of ${total.toLocaleString()} total.`,
+        problem: `${n4xx} pages are returning client errors (4xx). Googlebot hits dead ends, wasting crawl budget and losing any link equity pointing to these URLs. Internal links to 4xx pages create a poor user experience.`,
+        opportunity: "Redirect all 4xx URLs to the most relevant live page using 301 redirects. Update internal links pointing to dead URLs. Submit an updated sitemap after remediation.",
+        why_it_matters: "4xx pages drain crawl budget and lose accumulated link equity. Upload the Internal All export to get the specific URLs and their inlink sources.",
+        recommended_next_step: `Export Internal All from Screaming Frog. Filter by Status Code = 4xx. Export all ${n4xx} URLs. Categorize and implement 301 redirects.`,
+      });
+
+      if (nNoindex > 0) techOpps.push({
+        opportunity_title: `Audit ${nNoindex} Non-Indexable Pages`,
+        priority: "P1", impact: nNoindex > 5 ? "High" : "Med", effort: "M",
+        kpi_affected: "Indexation, Rankings", urls: [],
+        evidence: `Screaming Frog Crawl Overview: ${nNoindex} non-indexable pages detected.`,
+        problem: `${nNoindex} pages are explicitly excluded from Google's index. Any service or content page accidentally marked noindex cannot rank regardless of content quality or backlinks.`,
+        opportunity: "Upload Internal All export to identify exactly which pages are non-indexable and why (noindex tag, robots.txt block, canonical mismatch). Audit and correct any accidental exclusions.",
+        why_it_matters: "One service page accidentally noindexed represents zero organic traffic potential. Fix is typically a one-line tag removal.",
+        recommended_next_step: "Re-upload Internal All export. Filter by Indexability = Non-Indexable. Identify any service, blog, or location pages in the list. Remove incorrect noindex tags.",
+      });
+
+      if (nMissingTitle > 0 || nDupTitle > 0) techOpps.push({
+        opportunity_title: `Title Tag Issues: ${nMissingTitle} Missing, ${nDupTitle} Duplicate`,
+        priority: nMissingTitle > 5 ? "P0" : "P1", impact: "High", effort: "M",
+        kpi_affected: "CTR, Rankings", urls: [],
+        evidence: `Screaming Frog Crawl Overview: ${nMissingTitle} pages missing title tags, ${nDupTitle} pages with duplicate titles.`,
+        problem: "Missing titles cause Google to auto-generate them (often poorly). Duplicate titles cause keyword cannibalization — Google cannot determine which page to rank for a given query.",
+        opportunity: "Upload Internal All export to identify all affected pages. Write unique, keyword-targeted titles: [Primary Keyword] – [Secondary] | [Brand]. Resolve all duplicate title groups.",
+        why_it_matters: "Title tags are the #1 on-page CTR signal and a primary ranking factor. Missing or duplicate titles are among the highest-ROI fixes in technical SEO.",
+        recommended_next_step: "Re-upload Internal All export. Filter by 'Missing Title' and 'Duplicate Title'. Prioritize service and location pages. Write unique titles for all affected pages.",
+      });
+
+      if (nMissingH1 > 0) techOpps.push({
+        opportunity_title: `Missing H1 Tags: ${nMissingH1} Pages Affected`,
+        priority: "P1", impact: "Med", effort: "S",
+        kpi_affected: "Rankings", urls: [],
+        evidence: `Screaming Frog Crawl Overview: ${nMissingH1} pages have no H1 tag.`,
+        problem: "H1 is a primary on-page relevance signal. Missing H1s send weaker keyword signals to Google and indicate disorganized page structure.",
+        opportunity: "Add a single descriptive H1 incorporating the primary target keyword to each affected page. Ensure H1 is distinct from title tag but covers the same query intent.",
+        why_it_matters: "H1 tags help Google understand the primary topic of a page. Easy fix with direct ranking benefit.",
+        recommended_next_step: "Re-upload Internal All export. Filter Missing H1. Prioritize service/location pages. Add H1 with primary keyword + location modifier.",
+      });
+
+      if (nOrphan > 0) techOpps.push({
+        opportunity_title: `${nOrphan} Orphan Pages with No Internal Links`,
+        priority: "P1", impact: "High", effort: "M",
+        kpi_affected: "Rankings, Indexation", urls: [],
+        evidence: `Screaming Frog Crawl Overview: ${nOrphan} pages have zero internal inlinks — completely orphaned.`,
+        problem: `Orphaned pages receive no link equity from the rest of the site and may be discovered only via the XML sitemap. They have minimal crawl priority and near-zero PageRank accumulation.`,
+        opportunity: "Upload Internal All export to identify which pages are orphaned. Build an internal linking plan connecting orphaned service/blog pages to relevant hub pages and service pages.",
+        why_it_matters: "Internal links are how PageRank flows through a site. A page with zero inlinks receives near-zero authority regardless of its content quality.",
+        recommended_next_step: "Re-upload Internal All export. Filter by Inlinks = 0. For each important orphaned page, identify 3 relevant pages to link from. Add contextual links with keyword-rich anchor text.",
+      });
+
+      if (nRedirect > 0) techOpps.push({
+        opportunity_title: `${nRedirect} Redirect Chains Found`,
+        priority: "P2", impact: nRedirect > 20 ? "High" : "Med", effort: "S",
+        kpi_affected: "Link Equity, Crawl Budget", urls: [],
+        evidence: `Screaming Frog Crawl Overview: ${nRedirect} redirect URLs detected.`,
+        problem: "Internal links pointing to redirect URLs waste crawl budget and pass diluted PageRank. Each redirect hop adds latency.",
+        opportunity: "Update internal links to point directly to final 200 URLs instead of through redirect chains.",
+        why_it_matters: "Redirect chains accumulate over time from site migrations. Cleaning them preserves link equity and improves crawl efficiency.",
+        recommended_next_step: "Re-upload Internal All export. Filter by Status Code = 3xx. Update all internal links pointing to redirected URLs to use the final destination.",
+      });
+
+      if (nMissingMeta > 0) techOpps.push({
+        opportunity_title: `${nMissingMeta} Pages Missing Meta Descriptions`,
+        priority: "P2", impact: nMissingMeta > 20 ? "Med" : "Low", effort: "S",
+        kpi_affected: "CTR", urls: [],
+        evidence: `Screaming Frog Crawl Overview: ${nMissingMeta} pages missing meta descriptions.`,
+        problem: "Auto-generated meta descriptions rarely include keyword-optimized or conversion-oriented language, reducing CTR.",
+        opportunity: "Write unique 140–160 character meta descriptions for all service, location, and blog pages.",
+        why_it_matters: "Well-written meta descriptions improve CTR by 2–5% without requiring ranking improvements.",
+        recommended_next_step: "Re-upload Internal All export. Filter Missing Meta Description. Prioritize top pages by GSC impressions.",
+      });
+
+      if (nThin > 0) techOpps.push({
+        opportunity_title: `${nThin} Thin Content Pages Detected`,
+        priority: "P2", impact: "Med", effort: "L",
+        kpi_affected: "Rankings", urls: [],
+        evidence: `Screaming Frog Crawl Overview: ${nThin} pages flagged as thin content.`,
+        problem: "Thin content pages dilute overall site quality and rarely rank for competitive queries.",
+        opportunity: "Expand thin service/location pages to 900+ words. Thin blog posts should either be expanded to 1,200+ words or consolidated with similar content.",
+        why_it_matters: "Google's helpful content system evaluates site quality holistically — thin content pages suppress ranking potential sitewide.",
+        recommended_next_step: "Re-upload Internal All export. Filter by Word Count < 300. Categorize as expand, consolidate, or noindex.",
+      });
+    }
+
+    // ── BRANCH B: Internal All (row-level) format ──────────────────────
+    if (sfAvailable && sfData.length > 0 && sfIsInternalAll) {
       const { url: urlCol, status: statusCol, indexability: indexCol, indexabilityStatus: indexStatusCol,
         title: titleCol, titleLen: titleLenCol, h1: h1Col, h1Count: h1CountCol,
         canonical: canonicalCol, canonicalSelf: canonicalSelfCol,
@@ -1155,6 +1329,70 @@ export async function generateQbrPrep(input: QbrPrepInput): Promise<QbrPrepOutpu
       });
     }
 
+    // ── Enforce minimum 8 technical opps ────────────────────────────────
+    const TECH_MIN = 8;
+    if (techOpps.length < TECH_MIN && sfAvailable) {
+      // Supplemental technical best-practices (always applicable)
+      const supplemental: Opportunity[] = [
+        {
+          opportunity_title: "Schema Markup Audit: Add MedicalCondition, FAQPage, and Organization",
+          priority: "P2", impact: "Med", effort: "M", kpi_affected: "Rankings, CTR",
+          urls: [],
+          evidence: "Schema markup not verified — Screaming Frog structured data columns not available in current export.",
+          problem: "Recovery center pages without schema markup miss out on rich results (FAQs, star ratings, service details) in SERP, reducing click appeal and AEO inclusion.",
+          opportunity: "Implement FAQPage schema on all blog/resource pages. Add MedicalCondition schema to treatment service pages. Add Organization schema on homepage. Add BreadcrumbList sitewide.",
+          why_it_matters: "Schema-enhanced SERP results earn 20–30% higher CTR. FAQPage schema directly enables FAQ rich results in Google Search and increases AEO snippet inclusion.",
+          recommended_next_step: "Run site through Google's Rich Results Test. Identify pages where FAQPage or MedicalCondition schema applies. Implement via Yoast/RankMath or custom JSON-LD blocks.",
+        },
+        {
+          opportunity_title: "Core Web Vitals Audit: LCP, CLS, INP for Key Service Pages",
+          priority: "P1", impact: "High", effort: "M", kpi_affected: "Rankings, CVR",
+          urls: [],
+          evidence: "Core Web Vitals are a confirmed Google ranking signal. Recovery center pages with high LCP (>2.5s) and CLS (>0.1) are penalized relative to faster competitors.",
+          problem: "Slow-loading service pages are penalized in Google Search and drive higher bounce rates. Mobile users in crisis leave immediately if a page loads slowly.",
+          opportunity: "Run key service pages through PageSpeed Insights (mobile). Target: LCP < 2.5s, CLS < 0.1, INP < 200ms. Common fixes: optimize hero image format (WebP), defer non-critical JS, implement lazy loading.",
+          why_it_matters: "Core Web Vitals affect both rankings and conversion rate — a slow page is doubly penalized. A 1-second improvement in LCP correlates with 7–12% higher conversion rates.",
+          recommended_next_step: "Test top 5 service pages at web.dev/measure. Document LCP/CLS/INP scores. Prioritize fixes: image optimization (biggest LCP impact), remove render-blocking resources.",
+        },
+        {
+          opportunity_title: "XML Sitemap Audit: Verify Coverage of All Money Pages",
+          priority: "P1", impact: "Med", effort: "S", kpi_affected: "Indexation",
+          urls: [],
+          evidence: "Sitemap coverage not verified against crawled URLs in current export format.",
+          problem: "XML sitemaps that exclude key service pages or contain non-200 URLs waste crawl budget and slow down indexation of new/updated content.",
+          opportunity: "Download the XML sitemap and cross-reference with Screaming Frog crawl. Every service page, location page, and blog post should be in the sitemap with lastmod dates. Remove non-200 URLs from sitemap.",
+          why_it_matters: "Sitemap submission is how Googlebot discovers and prioritizes pages. Excluding key pages slows down their crawl frequency and indexation.",
+          recommended_next_step: "Download sitemap.xml. Paste URLs into Screaming Frog for a sitemap crawl. Identify: missing pages, non-200 URLs in sitemap, pages marked noindex but in sitemap.",
+        },
+        {
+          opportunity_title: "Internal Linking Audit: Service Hub Architecture",
+          priority: "P1", impact: "High", effort: "M", kpi_affected: "Rankings, Indexation",
+          urls: [],
+          evidence: "Internal linking structure not fully assessed without row-level Screaming Frog data.",
+          problem: "Many recovery center websites lack a deliberate internal linking strategy — service pages don't link to each other, blog posts don't link to service pages, and the homepage doesn't distribute enough link equity to key service pages.",
+          opportunity: "Build a hub-and-spoke internal linking model: (1) Each service page links to related service pages. (2) Every blog post that covers a treatment topic links to the corresponding service page. (3) Homepage has direct links to all primary service pages.",
+          why_it_matters: "Internal links are how PageRank flows through a site. Without a deliberate strategy, link equity concentrates on the homepage and starves service pages of ranking authority.",
+          recommended_next_step: "Upload Internal All Screaming Frog export. Identify pages with fewer than 3 internal inlinks. Create an internal linking plan: for each low-link page, identify 5 relevant source pages and add contextual links with keyword-rich anchor text.",
+        },
+        {
+          opportunity_title: "Image Optimization: Alt Text, Format, and Compression Audit",
+          priority: "P2", impact: "Med", effort: "M", kpi_affected: "Rankings, Page Speed",
+          urls: [],
+          evidence: "Image optimization status not assessed without row-level crawl data.",
+          problem: "Images without descriptive alt text are invisible to Google Image Search and screen readers. Large uncompressed images (>300KB) significantly slow page load time and harm Core Web Vitals.",
+          opportunity: "Audit all images on service pages: (1) Add descriptive alt text to every image (include primary keyword where natural). (2) Convert PNG/JPG to WebP format. (3) Compress all images to <150KB. (4) Implement lazy loading for below-fold images.",
+          why_it_matters: "Alt text improves accessibility (required for ADA compliance) and provides ranking signals for both web and image search. Image optimization directly improves Core Web Vitals (LCP).",
+          recommended_next_step: "Run top 5 service pages through Google PageSpeed Insights. Check 'Properly size images' and 'Image elements do not have alt attributes' recommendations. Fix via CMS media library.",
+        },
+      ];
+
+      for (const s of supplemental) {
+        if (techOpps.length >= TECH_MIN) break;
+        techOpps.push(s);
+      }
+    }
+
+    console.log(`[QBR Prep] Technical: ${techOpps.length} opportunities (min target: ${TECH_MIN})`);
     allCategories.push({
       category_name: "Technical SEO Opportunities",
       opportunities: scoreOpps(techOpps).slice(0, cap),

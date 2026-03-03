@@ -1,0 +1,107 @@
+Please check our article against this guidance:
+
+1. Answer-first formatting
+    - Put the direct answer in the first 1–3 sentences (the “definition / bottom line”).
+    - Follow with supporting detail, not suspense intros.
+2. Clear intent coverage
+    - Identify the primary query intent plus 4–8 common sub-intents (cost drivers, eligibility, steps, pros/cons, etc.).
+    - Make sure each sub-intent has a distinct section; avoid repeating the same answer in multiple places.
+3. Extractable structure
+    - Use descriptive H2s that read like questions or direct topics (not clever titles).
+    - Keep paragraphs tight; one idea per paragraph.
+    - Use lists for steps, criteria, comparisons.
+    - Add a table when users are comparing options, prices, features, timelines.
+4. Entity clarity and disambiguation
+    - Use the exact terms people search (and define acronyms immediately).
+    - Be explicit about scope: who/where/what the answer applies to (country, state/province, payer type, program type).
+5. Specificity and “numbers with context”
+    - Provide ranges, not vibes; explain what drives variance.
+    - When you cite numbers, add the conditions (inpatient vs outpatient, length of stay, insurance, location).
+6. Evidence and trust signals (E-E-A-T aligned)
+    - Make claims attributable: cite reputable sources; avoid “studies show” with no source.
+    - Include author credentials, review process (medical/legal review if relevant), and last updated.
+    - Add safety language for YMYL topics (health/finance): what’s general info vs what requires a professional.
+7. FAQ design that doesn’t cannibalize the main content
+    - Use FAQs to capture secondary/long-tail questions, not to restate your H2s.
+    - Keep each answer 40–80 words, direct and complete.
+8. Consistent terminology + internal linking
+    - Use consistent labels for the same thing (don’t alternate between 5 names).
+    - Link to deeper pages for subtopics so the main article stays clean.
+9. Snippet-friendly elements
+    - “Key takeaways” box (3–6 bullets).
+    - Short definitions (“X is …”).
+    - Step-by-step sections (“How to …”).
+    - Comparison table + quick recommendation criteria.
+10. Machine-readable enhancements (optional but helpful)
+    - Add relevant schema where appropriate (usually FAQPage, sometimes HowTo; avoid spammy overuse).
+    - Ensure the page is easy to parse: clean HTML, no critical content trapped in accordions or images.
+- [ ]  The system will give back an analysis.
+- [ ]  “I've reviewed the X points you have presented. Please update the article to include coverage of each and then re-audit to tell me what you were able to do what I will need to do manually.”
+- [ ]  Finally, check for the following AI signals that hurt content:
+    - [ ]  “Not only… but also” constructions: “Not only does X do Y, but it also does Z.”
+    - [ ]  Sentences start with “then,” “this,” or” that”: “Then you should…” “Then the system…” “This shows…” “This means…”
+    - [ ]  Introductory filler: “In this article,” “We’ll explore,” and “Let’s take a look”.
+    - [ ]  “Conclusion” starters: “In conclusion,” or other AI equivalents of clearing your throat.
+- [ ]  Address any final points of worry. Common:
+    - [ ]  Check for redundancy between headers and body content.
+    - [ ]  Ensure FAQs questions are H3.
+    - [ ]  Make sure no links in the article link to a single word unless it’s a definition (rare).
+    - [ ]  Include a medical disclaimer at the end of the article similar to: *This page provides general educational information only. It is not a substitute for advice from a licensed clinician, financial advisor, or insurance professional. Speak with a qualified professional for guidance specific to your situation.*
+    - [ ]  Are there any links used more than once in this article?
+    - [ ]  Never cite a competitor.
+    - [ ]  Ensure the first paragraph of the main body of the blog has a valid and applicable internal link.
+    - [ ]  Ask for a readability report.
+- [ ]  Final level of optimization:
+
+You are optimizing the current article for 2026 search + AEO. The article already has TL;DR, a Table of Contents, and a 6–12 question FAQ. Do not rewrite the entire article. Make targeted edits that increase contextual clarity, entity coverage, and chunk retrievability while staying compliant with E-E-A-T and YMYL.
+
+Perform in this order:
+1.	Axis topic + topic definition
+
+```
+•	State the single “axis topic” the article is truly about (1 line).
+•	Write a 2-sentence topic definition that removes ambiguity for both humans and machines.
+•	List 10–20 essential entities/concepts that should appear on-page for full topical clarity (substance/condition, withdrawal terms, treatment levels, therapies, safety, co-occurring, timelines, cost/insurance, etc., as relevant).
+
+2.	Contextual density audit (secondary + tertiary coverage)
+
+•	List missing or thin subtopics needed to make the article “complete” for the axis topic.
+•	Label each item as Missing or Thin.
+•	For each item, specify where it should be added (which section header it belongs under, or “add new H2”).
+
+3.	Linguistic struts (high-impact additions that do real work)
+
+•	Propose 8–14 “struts” as specific H2/H3 inserts or rewrites (not generic).
+•	For each strut: provide the exact header text + 3–6 bullets of what must be said.
+•	Each strut must serve one intent: define, differentiate, warn/safety, guide next step, eligibility/fit, comparisons, timelines, relapse risk, family support, insurance/cost, or local considerations.
+
+4.	Retrievability + chunking improvements (AEO-first)
+
+•	Identify 6–10 spots where paragraphs are too long, mixed-topic, or bury the lead.
+•	Provide rewritten versions of only those spots, using:
+•	answer-first first sentence
+•	short paragraphs
+•	tight lists where appropriate
+•	wording that can be extracted as a standalone answer by an AI assistant
+
+5.	Completeness check (without citing competitors)
+
+•	Output 8–12 “must-cover concepts” that authoritative pages usually include for this topic.
+•	Mark each as present (strong), present (thin), or missing; specify the exact insertion location.
+
+6.	Internal linking plan (cluster reinforcement)
+
+•	Recommend 8–15 internal links in this format:
+•	Anchor text:
+•	Destination page (use the best existing relevant page on the site):
+•	Why this link matters (relationship it reinforces):
+
+7.	Declaration layer (explicit entity clarity)
+
+•	Provide 5–8 “declaration statements” (single sentences) that clearly state what the centre offers relative to this topic (levels of care, who it helps, geography, how to reach out).
+•	Indicate where each statement should go (intro, treatment options section, CTA area, etc.).
+
+8.	Final deliverable: change set only
+```
+
+Return output in three sections:

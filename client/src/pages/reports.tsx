@@ -1319,6 +1319,7 @@ function AutoBuildLivePanel({
   sectionStatuses,
   onGenerateReport,
   onBackToManual,
+  onManualAdd,
 }: {
   reportType: ReportType;
   selectedClient: Client | null;
@@ -1326,6 +1327,7 @@ function AutoBuildLivePanel({
   sectionStatuses: Record<string, SectionBuildStatus>;
   onGenerateReport: () => void;
   onBackToManual: () => void;
+  onManualAdd: (section: ReportSection) => void;
 }) {
   const sections = REPORT_SECTIONS[reportType];
   const autoSections = sections.filter(s => !MANUAL_SECTIONS.has(s.id));
@@ -1408,6 +1410,17 @@ function AutoBuildLivePanel({
                 <p className="text-sm font-medium truncate">{section.title}</p>
                 <p className="text-[11px] text-muted-foreground">{label}</p>
               </div>
+              {isManual && !isPurpose && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-6 text-[10px] px-2 shrink-0"
+                  onClick={() => onManualAdd(section)}
+                  data-testid={`button-auto-manual-${section.id}`}
+                >
+                  + Fill in
+                </Button>
+              )}
             </div>
           );
         })}
@@ -1941,6 +1954,10 @@ export default function ReportsPage() {
               sectionStatuses={sectionStatuses}
               onGenerateReport={() => setGenerateDialogOpen(true)}
               onBackToManual={() => { setBuildPhase("idle"); setPromptsPanelOpen(true); }}
+              onManualAdd={(section) => {
+                setManualTargetSection(section);
+                setManualDialogOpen(true);
+              }}
             />
           </div>
         )}

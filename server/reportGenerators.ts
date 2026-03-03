@@ -14,7 +14,10 @@ import {
   convertInchesToTwip,
   PageBreak,
 } from "docx";
-import PptxGenJS from "pptxgenjs";
+import PptxGenJSImport from "pptxgenjs";
+// tsx/ESM interop: pptxgenjs exports the constructor as module.exports in CJS.
+// moduleResolution:"bundler" may give us the namespace object instead of the fn.
+const PptxGenJS: any = typeof PptxGenJSImport === "function" ? PptxGenJSImport : (PptxGenJSImport as any).default ?? PptxGenJSImport;
 
 export interface SectionData {
   sectionId: string;
@@ -381,7 +384,7 @@ const SLIDE_TEXT = "1F2937";
 const SLIDE_SUBTEXT = "6B7280";
 const SLIDE_HIGHLIGHT = "E8F0FE";
 
-function addTitleSlide(pptx: PptxGenJS, clientName: string, reportLabel: string, date: string) {
+function addTitleSlide(pptx: any, clientName: string, reportLabel: string, date: string) {
   const slide = pptx.addSlide();
   slide.background = { color: SLIDE_ACCENT };
 
@@ -417,7 +420,7 @@ function addTitleSlide(pptx: PptxGenJS, clientName: string, reportLabel: string,
 }
 
 function addSectionSlide(
-  pptx: PptxGenJS,
+  pptx: any,
   sectionNum: number,
   sectionTitle: string,
   items: CommittedItem[]
@@ -499,7 +502,7 @@ function addSectionSlide(
         }
 
         const colW = 9.2 / tbl.headers.length;
-        const rows: PptxGenJS.TableRow[] = [
+        const rows: any[] = [
           tbl.headers.map(h => ({
             text: h,
             options: { bold: true, fontSize: 9, color: "FFFFFF", fill: { color: SLIDE_ACCENT }, align: "center" as const },

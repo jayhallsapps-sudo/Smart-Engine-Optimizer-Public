@@ -52,20 +52,20 @@ const SOURCE_PRIORITY: Record<Command, number> = {
   // Tier 4 — Airtable
   airtable_work_log: 4,
   content_output_summary: 4,
-  // Tier 5 — SEMrush
-  semrush_organic_overview: 5,
-  semrush_keyword_rankings: 5,
-  semrush_keyword_distribution: 5,
-  semrush_competitor_visibility: 5,
-  // Tier 6 — Ahrefs (blocked)
-  ahrefs_backlink_overview: 6,
-  ahrefs_keyword_rankings: 6,
-  ahrefs_competitor_visibility: 6,
-  // Tier 9 — Neutral / utility
-  gbp_local_summary: 9,
-  tracking_anomaly_check: 9,
-  monthly_trendline: 9,
-  quarterly_forecast: 9,
+  // Tier 5 — GBP & utility signals
+  gbp_local_summary: 5,
+  tracking_anomaly_check: 5,
+  monthly_trendline: 5,
+  quarterly_forecast: 5,
+  // Tier 6 — SEMrush
+  semrush_organic_overview: 6,
+  semrush_keyword_rankings: 6,
+  semrush_keyword_distribution: 6,
+  semrush_competitor_visibility: 6,
+  // Tier 7 — Ahrefs (blocked)
+  ahrefs_backlink_overview: 7,
+  ahrefs_keyword_rankings: 7,
+  ahrefs_competitor_visibility: 7,
 };
 
 /**

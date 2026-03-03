@@ -648,35 +648,6 @@ export async function registerRoutes(
       return res.status(400).json({ message: "reportType and sections are required" });
     }
 
-    const { decrypt } = await import("./encryption");
-    const gscCreds = await storage.getApiCredentialsByService("google_search_console");
-    const ga4Creds = await storage.getApiCredentialsByService("google_analytics_4");
-    const allCreds = [...gscCreds, ...ga4Creds];
-    if (!allCreds.length) {
-      return res.status(400).json({ message: "No Google account connected. Connect Google Search Console or GA4 in Settings → Connections to enable Drive upload." });
-    }
-    const refreshToken = decrypt(allCreds[0].encryptedValue);
-    const googleClientId = process.env.GOOGLE_CLIENT_ID;
-    const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
-    if (!googleClientId || !googleClientSecret) {
-      return res.status(500).json({ message: "Google OAuth credentials not configured on server." });
-    }
-    const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        grant_type: "refresh_token",
-        refresh_token: refreshToken,
-        client_id: googleClientId,
-        client_secret: googleClientSecret,
-      }),
-    });
-    const tokenData = await tokenRes.json() as any;
-    if (!tokenData.access_token) {
-      return res.status(401).json({ message: "Failed to obtain Google access token. Please reconnect Google in Settings." });
-    }
-    const googleAccessToken = tokenData.access_token;
-
     const client = clientId ? await storage.getClient(Number(clientId)) : null;
     const clientName = client?.name ?? "Client";
     const reportDate = date || new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
@@ -702,24 +673,32 @@ export async function registerRoutes(
         driveConvertMime = "application/vnd.google-apps.presentation";
       }
 
+      // Use Replit Google Drive connector — handles OAuth token injection & refresh automatically
+      const { ReplitConnectors } = await import("@replit/connectors-sdk");
+      const connectors = new ReplitConnectors();
+
+      const boundary = "-------webserv_drive_boundary";
+      const CRLF = "\r\n";
       const metadata = JSON.stringify({ name: filename, mimeType: driveConvertMime });
-      const boundary = "-------webserv_boundary";
-      const delimiter = `\r\n--${boundary}\r\n`;
-      const closeDelimiter = `\r\n--${boundary}--`;
 
-      const metaPart = `${delimiter}Content-Type: application/json; charset=UTF-8\r\n\r\n${metadata}`;
-      const filePart = `${delimiter}Content-Type: ${mimeType}\r\nContent-Transfer-Encoding: base64\r\n\r\n${fileBuffer.toString("base64")}`;
-      const body = metaPart + filePart + closeDelimiter;
+      const metaBuf = Buffer.from(
+        `--${boundary}${CRLF}Content-Type: application/json; charset=UTF-8${CRLF}${CRLF}${metadata}${CRLF}`,
+        "utf8"
+      );
+      const filePrefixBuf = Buffer.from(
+        `--${boundary}${CRLF}Content-Type: ${mimeType}${CRLF}${CRLF}`,
+        "utf8"
+      );
+      const closeBuf = Buffer.from(`${CRLF}--${boundary}--`, "utf8");
+      const bodyBuffer = Buffer.concat([metaBuf, filePrefixBuf, fileBuffer, closeBuf]);
 
-      const uploadRes = await fetch(
-        "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink",
+      const uploadRes = await connectors.proxy(
+        "google-drive",
+        "/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink",
         {
           method: "POST",
-          headers: {
-            Authorization: `Bearer ${googleAccessToken}`,
-            "Content-Type": `multipart/related; boundary=${boundary}`,
-          },
-          body,
+          headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
+          body: bodyBuffer,
         }
       );
 

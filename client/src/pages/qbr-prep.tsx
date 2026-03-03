@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useState, useRef, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -37,6 +37,7 @@ import {
   Link2,
   Activity,
   Settings2,
+  Bug,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { Client } from "@shared/schema";
@@ -252,8 +253,17 @@ function CategorySection({ cat }: { cat: OpportunityCategory }) {
   );
 }
 
+interface SfReport {
+  id: number;
+  clientId: number;
+  reportDate: string;
+  filename: string;
+  rowCount: number;
+}
+
 export default function QbrPrepPage() {
   const { toast } = useToast();
+  const rqClient = useQueryClient();
 
   const [clientId, setClientId] = useState<string>("");
   const [pastQuarter, setPastQuarter] = useState<string>("Q4");
@@ -266,10 +276,64 @@ export default function QbrPrepPage() {
   const [includeTracking, setIncludeTracking] = useState(true);
   const [opportunityCapPerCategory, setOpportunityCapPerCategory] = useState<string>("10");
   const [result, setResult] = useState<QbrPrepOutput | null>(null);
+  const [sfActiveId, setSfActiveId] = useState<number | null>(null);
+  const [sfUploading, setSfUploading] = useState(false);
+  const sfFileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: clients = [] } = useQuery<Client[]>({
     queryKey: ["/api/clients"],
   });
+
+  const { data: sfReports = [] } = useQuery<SfReport[]>({
+    queryKey: ["/api/clients", clientId, "sf-reports"],
+    enabled: !!clientId,
+  });
+
+  useEffect(() => {
+    if (sfReports.length > 0 && !sfActiveId) {
+      setSfActiveId(sfReports[0].id);
+    }
+    if (sfReports.length === 0) {
+      setSfActiveId(null);
+    }
+  }, [sfReports]);
+
+  const handleSfUpload = async (file: File) => {
+    if (!clientId) return;
+    setSfUploading(true);
+    try {
+      const text = await file.text();
+      const lines = text.split(/\r?\n/).filter(l => l.trim());
+      if (lines.length < 2) throw new Error("File appears empty");
+      const headers = lines[0].split(",").map(h => h.replace(/^"|"$/g, "").trim());
+      const rows = lines.slice(1).map(line => {
+        const cols = line.match(/(".*?"|[^,]+|(?<=,)(?=,)|(?<=,)$|^(?=,))/g) ?? line.split(",");
+        const obj: Record<string, string> = {};
+        headers.forEach((h, i) => { obj[h] = (cols[i] ?? "").replace(/^"|"$/g, "").trim(); });
+        return obj;
+      });
+      const today = new Date().toISOString().split("T")[0];
+      const res = await fetch(`/api/clients/${clientId}/sf-reports`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reportDate: today, filename: file.name, rowCount: rows.length, headers, data: rows }),
+      });
+      if (!res.ok) throw new Error("Upload failed");
+      const created = await res.json();
+      rqClient.invalidateQueries({ queryKey: ["/api/clients", clientId, "sf-reports"] });
+      if (created?.id) setSfActiveId(created.id);
+      toast({ title: "Crawl uploaded", description: `${rows.length} rows from ${file.name}` });
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    } finally {
+      setSfUploading(false);
+      if (sfFileInputRef.current) sfFileInputRef.current.value = "";
+    }
+  };
+
+  useEffect(() => {
+    setSfActiveId(null);
+  }, [clientId]);
 
   const selectedClient = clients.find(c => String(c.id) === clientId);
 
@@ -287,6 +351,7 @@ export default function QbrPrepPage() {
         includeTracking,
         opportunityCapPerCategory: Number(opportunityCapPerCategory),
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Los_Angeles",
+        sfReportId: sfActiveId ?? undefined,
       });
       return res.json();
     },
@@ -481,6 +546,62 @@ export default function QbrPrepPage() {
                 </Select>
               </div>
             </div>
+          </div>
+
+          <Separator />
+
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
+              <Bug className="w-3 h-3" />
+              Screaming Frog Crawl
+            </p>
+
+            <input
+              ref={sfFileInputRef}
+              type="file"
+              accept=".csv"
+              className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleSfUpload(f); e.target.value = ""; }}
+              data-testid="input-sf-file"
+            />
+
+            {clientId ? (
+              <Select
+                value={sfActiveId ? String(sfActiveId) : "__none__"}
+                onValueChange={v => {
+                  if (v === "__upload__") { sfFileInputRef.current?.click(); return; }
+                  setSfActiveId(v === "__none__" ? null : Number(v));
+                }}
+              >
+                <SelectTrigger className="h-8 text-xs w-full" data-testid="select-sf-crawl">
+                  <SelectValue placeholder="Select crawl…" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">No crawl selected</SelectItem>
+                  {sfReports.map(r => (
+                    <SelectItem key={r.id} value={String(r.id)} data-testid={`sf-option-${r.id}`}>
+                      {r.reportDate} — {r.filename} ({r.rowCount.toLocaleString()} rows)
+                    </SelectItem>
+                  ))}
+                  <SelectItem value="__upload__" data-testid="sf-upload-option">
+                    {sfUploading ? "Uploading…" : "↑ Upload new crawl CSV…"}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            ) : (
+              <p className="text-[11px] text-muted-foreground">Select a client first</p>
+            )}
+
+            {sfActiveId && sfReports.length > 0 && (
+              <p className="text-[10px] text-green-600 dark:text-green-400 mt-1">
+                ✓ {sfReports.find(r => r.id === sfActiveId)?.rowCount.toLocaleString()} URLs will be analyzed
+              </p>
+            )}
+            {clientId && sfReports.length === 0 && !sfUploading && (
+              <p className="text-[10px] text-muted-foreground mt-1">
+                No crawl uploaded yet — use "↑ Upload new crawl CSV…"
+              </p>
+            )}
           </div>
 
           <Separator />

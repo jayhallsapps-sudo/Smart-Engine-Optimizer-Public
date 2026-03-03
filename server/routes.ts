@@ -881,6 +881,7 @@ export async function registerRoutes(
       includeTracking = true,
       opportunityCapPerCategory = 10,
       timezone = "America/Los_Angeles",
+      sfReportId,
     } = req.body;
 
     if (!clientId || !pastQuarter || !futureQuarter) {
@@ -900,6 +901,7 @@ export async function registerRoutes(
         includeTracking: Boolean(includeTracking),
         opportunityCapPerCategory: Number(opportunityCapPerCategory),
         timezone: String(timezone),
+        sfReportId: sfReportId ? Number(sfReportId) : undefined,
       });
       res.json(output);
     } catch (err: any) {

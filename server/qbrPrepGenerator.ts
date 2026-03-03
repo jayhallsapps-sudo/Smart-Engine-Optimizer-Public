@@ -20,6 +20,7 @@ export interface QbrPrepInput {
   includeTracking: boolean;
   opportunityCapPerCategory: number;
   timezone: string;
+  sfReportId?: number;
 }
 
 export interface Opportunity {
@@ -276,8 +277,8 @@ export async function generateQbrPrep(input: QbrPrepInput): Promise<QbrPrepOutpu
 
   console.log(`[QBR Prep] GSC available: ${gscAvailable}, GA4 available: ${ga4Available}`);
 
-  const sfReports = await storage.getSfReports(client.id).catch(() => []);
-  const sfAvailable = sfReports.length > 0;
+  const allSfReports = await storage.getSfReports(client.id).catch(() => []);
+  const sfAvailable = allSfReports.length > 0;
 
   const callrailCreds = await storage.getApiCredentialsByService("callrail").catch(() => []);
   const ctmCreds = await storage.getApiCredentialsByService("ctm").catch(() => []);
@@ -414,9 +415,11 @@ export async function generateQbrPrep(input: QbrPrepInput): Promise<QbrPrepOutpu
   }
 
   if (sfAvailable) {
-    const latest = sfReports[0];
-    sfHeaders = latest.headers ?? [];
-    sfData = (latest.data ?? []) as Record<string, any>[];
+    const sfReport = input.sfReportId
+      ? (await storage.getSfReport(input.sfReportId).catch(() => null)) ?? allSfReports[0]
+      : allSfReports[0];
+    sfHeaders = sfReport.headers ?? [];
+    sfData = (sfReport.data ?? []) as Record<string, any>[];
 
     const findCol = (...names: string[]) => sfHeaders.find(h => names.includes(h));
     sfCol = {

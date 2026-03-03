@@ -75,6 +75,9 @@ export async function registerRoutes(
       if (!accountsResp.ok) {
         const rawMsg: string = accountsData.error?.message ?? "";
         // Detect API not enabled error and provide actionable link
+        if (rawMsg.toLowerCase().includes("quota") || rawMsg.toLowerCase().includes("rate limit")) {
+          return res.status(429).json({ message: "Google API rate limit hit — wait 60 seconds and try again." });
+        }
         if (rawMsg.includes("has not been used") || rawMsg.includes("is disabled")) {
           const projectMatch = rawMsg.match(/project (\d+)/);
           const projectId = projectMatch?.[1] ?? "";

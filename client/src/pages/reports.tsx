@@ -962,7 +962,8 @@ export default function ReportsPage() {
   const [manualTargetSection, setManualTargetSection] = useState<ReportSection | null>(null);
   const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
-  const [selectedSfReportId, setSelectedSfReportId] = useState<number | null>(null);
+  const [sfFromId, setSfFromId] = useState<number | null>(null);
+  const [sfToId, setSfToId] = useState<number | null>(null);
   const [sfUploading, setSfUploading] = useState(false);
   const [promptsPanelOpen, setPromptsPanelOpen] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -987,17 +988,17 @@ export default function ReportsPage() {
 
   useEffect(() => {
     if (sfReports.length > 0) {
-      setSelectedSfReportId(prev => {
-        if (prev && sfReports.some(r => r.id === prev)) return prev;
-        return sfReports[0].id;
-      });
+      setSfToId(prev => (prev && sfReports.some(r => r.id === prev)) ? prev : sfReports[0].id);
+      setSfFromId(prev => (prev && sfReports.some(r => r.id === prev)) ? prev : (sfReports[1]?.id ?? null));
     } else {
-      setSelectedSfReportId(null);
+      setSfToId(null);
+      setSfFromId(null);
     }
   }, [sfReports]);
 
   useEffect(() => {
-    setSelectedSfReportId(null);
+    setSfToId(null);
+    setSfFromId(null);
   }, [selectedClientId]);
 
   const deleteSfReportMutation = useMutation({
@@ -1040,7 +1041,7 @@ export default function ReportsPage() {
       if (!res.ok) throw new Error("Upload failed");
       const created = await res.json();
       rqClient.invalidateQueries({ queryKey: ["/api/clients", selectedClientId, "sf-reports"] });
-      if (created?.id) setSelectedSfReportId(created.id);
+      if (created?.id) setSfToId(created.id);
       toast({ title: "Crawl uploaded", description: `${rows.length} rows from ${file.name}` });
     } catch (err: any) {
       toast({ title: "Upload failed", description: err.message, variant: "destructive" });
@@ -1164,19 +1165,20 @@ export default function ReportsPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center gap-3 px-4 py-3 border-b bg-background flex-wrap">
-        <Button
-          size="icon"
-          variant="ghost"
-          onClick={() => setPromptsPanelOpen(v => !v)}
-          className="shrink-0"
-          title={promptsPanelOpen ? "Hide prompts" : "Show prompts"}
-          data-testid="button-toggle-prompts"
-        >
-          {promptsPanelOpen ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeftOpen className="w-4 h-4" />}
-        </Button>
-        <div className="flex items-center gap-2 flex-1 min-w-0">
-          <div className="w-48 shrink-0">
+      <div className="flex flex-col border-b bg-background">
+        <div className="flex items-center gap-3 px-4 py-3 flex-wrap">
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={() => setPromptsPanelOpen(v => !v)}
+            className="shrink-0"
+            title={promptsPanelOpen ? "Hide prompts" : "Show prompts"}
+            data-testid="button-toggle-prompts"
+          >
+            {promptsPanelOpen ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeftOpen className="w-4 h-4" />}
+          </Button>
+
+          <div className="w-52 shrink-0">
             {clientsLoading ? (
               <Skeleton className="h-9 w-full" />
             ) : (
@@ -1195,54 +1197,46 @@ export default function ReportsPage() {
             )}
           </div>
 
-          <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
-
-          <div className="flex gap-1.5">
-            {(["biweekly", "monthly", "qbr"] as ReportType[]).map(type => (
-              <Button
-                key={type}
-                size="sm"
-                variant={reportType === type ? "default" : "outline"}
-                onClick={() => setReportType(type)}
-                data-testid={`button-report-type-${type}`}
-              >
-                {REPORT_TYPE_LABELS[type]}
-              </Button>
-            ))}
+          <div className="w-40 shrink-0">
+            <Select value={reportType} onValueChange={v => setReportType(v as ReportType)}>
+              <SelectTrigger data-testid="select-report-type">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(["biweekly", "monthly", "qbr"] as ReportType[]).map(type => (
+                  <SelectItem key={type} value={type} data-testid={`select-report-type-${type}`}>
+                    {REPORT_TYPE_LABELS[type]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-
-          {selectedClient && (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground ml-auto">
-              <span className="font-medium">{selectedClient.name}</span>
-              <Minus className="w-3 h-3" />
-              <span>{REPORT_TYPE_LABELS[reportType]}</span>
-              <Minus className="w-3 h-3" />
-              <span>{reportType === "biweekly" ? "14d vs 14d" : reportType === "monthly" ? "30d vs 30d" : "90d vs 90d"}</span>
-            </div>
-          )}
         </div>
 
         {selectedClientId && (
           <div className="flex items-center gap-2 px-4 py-2 border-t bg-muted/20 flex-wrap">
             <Bug className="w-3.5 h-3.5 text-yellow-600 dark:text-yellow-500 shrink-0" />
-            <span className="text-xs font-medium text-muted-foreground shrink-0">Screaming Frog</span>
-            <div className="w-px h-4 bg-border shrink-0" />
+            <span className="text-xs text-muted-foreground shrink-0">Compare</span>
+
             <Select
-              value={selectedSfReportId ? String(selectedSfReportId) : "__none__"}
-              onValueChange={v => setSelectedSfReportId(v === "__none__" ? null : Number(v))}
+              value={sfFromId ? String(sfFromId) : "__none__"}
+              onValueChange={v => setSfFromId(v === "__none__" ? null : Number(v))}
             >
-              <SelectTrigger className="h-7 text-xs w-72" data-testid="select-sf-baseline">
-                <SelectValue placeholder="No crawl selected" />
+              <SelectTrigger className="h-7 text-xs w-56" data-testid="select-sf-from">
+                <SelectValue placeholder="Select crawl…" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="__none__">No crawl selected</SelectItem>
                 {sfReports.map(r => (
-                  <SelectItem key={r.id} value={String(r.id)} data-testid={`sf-option-${r.id}`}>
-                    {r.filename} — {r.reportDate} ({r.rowCount.toLocaleString()} rows)
+                  <SelectItem key={r.id} value={String(r.id)} data-testid={`sf-from-option-${r.id}`}>
+                    {r.reportDate} — {r.filename}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+
+            <span className="text-xs text-muted-foreground shrink-0">to</span>
+
             <input
               ref={sfFileInputRef}
               type="file"
@@ -1251,32 +1245,28 @@ export default function ReportsPage() {
               onChange={e => { const f = e.target.files?.[0]; if (f) handleSfUpload(f); }}
               data-testid="input-sf-file"
             />
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 text-xs gap-1.5"
-              onClick={() => sfFileInputRef.current?.click()}
-              disabled={sfUploading}
-              data-testid="button-sf-upload"
+            <Select
+              value={sfToId ? String(sfToId) : "__none__"}
+              onValueChange={v => {
+                if (v === "__upload__") { sfFileInputRef.current?.click(); return; }
+                setSfToId(v === "__none__" ? null : Number(v));
+              }}
             >
-              <Upload className="w-3 h-3" />
-              {sfUploading ? "Uploading…" : "Upload new crawl"}
-            </Button>
-            {selectedSfReportId && (
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-7 text-xs gap-1 text-muted-foreground hover:text-destructive"
-                onClick={() => { deleteSfReportMutation.mutate(selectedSfReportId); setSelectedSfReportId(null); }}
-                data-testid="button-sf-delete-selected"
-              >
-                <Trash2 className="w-3 h-3" />
-                Remove
-              </Button>
-            )}
-            {sfReports.length > 0 && (
-              <span className="text-[10px] text-muted-foreground ml-1">{sfReports.length}/24 stored</span>
-            )}
+              <SelectTrigger className="h-7 text-xs w-64" data-testid="select-sf-to">
+                <SelectValue placeholder="Select or upload crawl…" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">No crawl selected</SelectItem>
+                {sfReports.map(r => (
+                  <SelectItem key={r.id} value={String(r.id)} data-testid={`sf-to-option-${r.id}`}>
+                    {r.reportDate} — {r.filename}
+                  </SelectItem>
+                ))}
+                <SelectItem value="__upload__" data-testid="sf-upload-option">
+                  {sfUploading ? "Uploading…" : "↑ Upload new crawl…"}
+                </SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         )}
       </div>

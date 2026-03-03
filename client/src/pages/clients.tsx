@@ -58,6 +58,7 @@ import {
   CheckCheck,
   XCircle,
   ArrowLeftRight,
+  MapPin,
 } from "lucide-react";
 import type { Client } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
@@ -142,6 +143,7 @@ interface ClientFormData {
   airtableBaseId: string;
   airtableTableName: string;
   airtableViewName: string;
+  gbpLocationName: string;
   brandTerms: string[];
   leadEvents: string[];
   moneyPages: string[];
@@ -162,6 +164,7 @@ const emptyForm: ClientFormData = {
   airtableBaseId: "",
   airtableTableName: "",
   airtableViewName: "Published",
+  gbpLocationName: "",
   brandTerms: [],
   leadEvents: [],
   moneyPages: [],
@@ -223,6 +226,11 @@ function ClientForm({ initial, onSubmit, isPending }: { initial: ClientFormData;
             <div className="space-y-2">
               <Label htmlFor="airtableView" className="flex items-center gap-1.5"><Database className="w-3 h-3" /> Airtable View Name</Label>
               <Input id="airtableView" value={form.airtableViewName} onChange={e => update("airtableViewName", e.target.value)} placeholder="Published" data-testid="input-airtable-view-name" />
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="gbpLocation" className="flex items-center gap-1.5"><MapPin className="w-3 h-3" /> Google Business Profile Location</Label>
+              <Input id="gbpLocation" value={form.gbpLocationName} onChange={e => update("gbpLocationName", e.target.value)} placeholder="accounts/123456789/locations/987654321" data-testid="input-gbp-location" />
+              <p className="text-[11px] text-muted-foreground">Find this in Google Business Profile Manager → your location URL. Required to pull reviews and ratings.</p>
             </div>
           </div>
         </TabsContent>
@@ -905,6 +913,7 @@ export default function ClientsPage() {
                 airtableBaseId: (editingClient as any).airtableBaseId || "",
                 airtableTableName: (editingClient as any).airtableTableName || "",
                 airtableViewName: (editingClient as any).airtableViewName || "Published",
+                gbpLocationName: (editingClient as any).gbpLocationName || "",
                 brandTerms: editingClient.brandTerms || [],
                 leadEvents: editingClient.leadEvents || [],
                 moneyPages: editingClient.moneyPages || [],

@@ -1,4 +1,4 @@
-import { FileBarChart, Users, Settings, Zap, History, Sparkles } from "lucide-react";
+import { CalendarDays, BarChart3, TrendingUp, Sparkles, Users, Settings, Zap, History } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import {
   Sidebar,
@@ -17,9 +17,14 @@ import {
 } from "@/components/ui/sidebar";
 import { ThemeToggle } from "@/components/theme-toggle";
 
-const navItems = [
-  { title: "Reports", url: "/", icon: FileBarChart },
+const reportItems = [
+  { title: "Bi-Weekly", url: "/biweekly", icon: CalendarDays },
+  { title: "Monthly", url: "/monthly", icon: BarChart3 },
+  { title: "QBR Full", url: "/qbr", icon: TrendingUp },
   { title: "QBR Prep", url: "/qbr-prep", icon: Sparkles },
+];
+
+const utilItems = [
   { title: "Clients", url: "/clients", icon: Users },
   { title: "History", url: "/history", icon: History },
   { title: "Setup", url: "/setup", icon: Settings },
@@ -31,7 +36,7 @@ function SidebarLogo() {
 
   return (
     <Link
-      href="/"
+      href="/biweekly"
       className="flex items-center gap-2 px-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
     >
       <div className="flex items-center justify-center w-8 h-8 rounded-md bg-primary shrink-0">
@@ -57,24 +62,51 @@ export function AppSidebar() {
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Navigation</SidebarGroupLabel>
+          <SidebarGroupLabel>Reports</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton
-                    asChild
-                    tooltip={item.title}
-                    data-active={location === item.url || (item.url !== "/" && location.startsWith(item.url))}
-                    className="data-[active=true]:bg-sidebar-accent"
-                  >
-                    <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase()}`}>
-                      <item.icon className="w-4 h-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+              {reportItems.map(item => {
+                const isActive = location === item.url;
+                return (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton
+                      asChild
+                      tooltip={item.title}
+                      isActive={isActive}
+                    >
+                      <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase().replace(/\s/g, "-")}`}>
+                        <item.icon className="w-4 h-4 shrink-0" />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Tools</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {utilItems.map(item => {
+                const isActive = location === item.url;
+                return (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton
+                      asChild
+                      tooltip={item.title}
+                      isActive={isActive}
+                    >
+                      <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase()}`}>
+                        <item.icon className="w-4 h-4 shrink-0" />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -82,7 +114,7 @@ export function AppSidebar() {
       <SidebarFooter className="p-2">
         <div className="flex items-center justify-between gap-1 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:justify-center">
           <div className="text-[10px] text-muted-foreground group-data-[collapsible=icon]:hidden">
-            SmartEO v1.1
+            SmartEO v1.2
           </div>
           <div className="flex items-center gap-1 group-data-[collapsible=icon]:flex-col">
             <ThemeToggle />

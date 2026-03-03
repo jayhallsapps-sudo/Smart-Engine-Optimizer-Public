@@ -1,4 +1,4 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -12,12 +12,25 @@ import ClientsPage from "@/pages/clients";
 import SetupPage from "@/pages/setup";
 import HistoryPage from "@/pages/history";
 import QbrPrepPage from "@/pages/qbr-prep";
+import BiweeklyPage from "@/pages/biweekly";
+import MonthlyPage from "@/pages/monthly";
+import QbrFullPage from "@/pages/qbr-full";
+
+function RootRedirect() {
+  const [, setLocation] = useLocation();
+  setLocation("/biweekly");
+  return null;
+}
 
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={ReportsPage} />
+      <Route path="/" component={RootRedirect} />
+      <Route path="/biweekly" component={BiweeklyPage} />
+      <Route path="/monthly" component={MonthlyPage} />
+      <Route path="/qbr" component={QbrFullPage} />
       <Route path="/qbr-prep" component={QbrPrepPage} />
+      <Route path="/reports" component={ReportsPage} />
       <Route path="/clients" component={ClientsPage} />
       <Route path="/setup" component={SetupPage} />
       <Route path="/history" component={HistoryPage} />

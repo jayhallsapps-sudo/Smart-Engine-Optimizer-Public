@@ -489,7 +489,7 @@ export async function generateQbrPrep(input: QbrPrepInput): Promise<QbrPrepOutpu
       }
       // Also check for common summary keys
       if (sfTotalUrls === 0) {
-        const totalKey = [...sfIssueSummary.keys()].find(k => k.includes("total") || k.includes("crawled"));
+        const totalKey = Array.from(sfIssueSummary.keys()).find(k => k.includes("total") || k.includes("crawled"));
         if (totalKey) sfTotalUrls = sfIssueSummary.get(totalKey) ?? sfData.length;
       }
       console.log(`[QBR Prep] SF Crawl Overview: ${sfTotalUrls} total URLs, ${sfIssueSummary.size} issue types parsed`);
@@ -885,7 +885,7 @@ export async function generateQbrPrep(input: QbrPrepInput): Promise<QbrPrepOutpu
     if (sfAvailable && sfData.length > 0 && !sfIsInternalAll) {
       // Extract issue counts from summary data and produce evidence-backed opps
       const issueCount = (patterns: string[]): number => {
-        for (const [k, v] of sfIssueSummary.entries()) {
+        for (const [k, v] of Array.from(sfIssueSummary.entries())) {
           if (patterns.some(p => k.includes(p.toLowerCase()))) return v;
         }
         return 0;
@@ -1508,7 +1508,7 @@ export async function generateQbrPrep(input: QbrPrepInput): Promise<QbrPrepOutpu
         page: string; mobileCvr: number; desktopCvr: number;
         mobileSessions: number; mobilePct: number;
       }> = [];
-      for (const [page, data] of deviceMap.entries()) {
+      for (const [page, data] of Array.from(deviceMap.entries())) {
         const mobileCvr = pct(data.mobile.c, data.mobile.s);
         const desktopCvr = pct(data.desktop.c, data.desktop.s);
         const totalSessions = data.mobile.s + data.desktop.s;

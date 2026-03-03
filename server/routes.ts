@@ -14,6 +14,9 @@ import { generateBiweeklyDocx, generatePptx, generateQbrPrepDocx } from "./repor
 import type { SectionData } from "./reportGenerators";
 import { generateQbrPrep } from "./qbrPrepGenerator";
 import type { QbrPrepJson } from "./qbrPrepGenerator";
+import { generateBiweekly } from "./biweeklyGenerator";
+import { generateMonthly } from "./monthlyGenerator";
+import { generateQbrFull } from "./qbrGenerator";
 import { queryGsc, handlesGscCommand } from "./gscClient";
 import { queryGa4, handlesGa4Command } from "./ga4Client";
 import { queryCallRail, handlesCallRailCommand } from "./callrailClient";
@@ -966,6 +969,208 @@ export async function registerRoutes(
       res.json({ success: true, fileId: driveFile.id, fileName: driveFile.name, webViewLink: driveFile.webViewLink });
     } catch (err: any) {
       console.error("QBR Prep Drive upload error:", err);
+      res.status(500).json({ message: "Upload failed: " + err.message });
+    }
+  });
+
+  app.post("/api/reports/biweekly/generate", async (req, res) => {
+    const { clientId, timezone } = req.body;
+    if (!clientId) return res.status(400).json({ message: "clientId is required" });
+    try {
+      const output = await generateBiweekly({ clientId: Number(clientId), timezone: timezone ?? "America/Los_Angeles" });
+      res.json(output);
+    } catch (err: any) {
+      console.error("Biweekly generation error:", err);
+      res.status(500).json({ message: "Failed to generate Biweekly report: " + err.message });
+    }
+  });
+
+  app.post("/api/reports/biweekly/docx", async (req, res) => {
+    const { json, edits } = req.body as { json: any; edits?: Record<string, string> };
+    if (!json) return res.status(400).json({ message: "json is required" });
+    try {
+      const sections: SectionData[] = (json.sections ?? []).map((s: any) => {
+        const items: any[] = [];
+        if (s.metrics?.length) items.push({ summary: s.metrics.map((m: any) => ({ label: m.label, current: m.current, previous: m.previous ?? "—", deltaPercent: m.delta ?? "—", isPositive: m.isPositive ?? true })) });
+        if (s.bullets?.length) items.push({ manualText: (s.bullets as string[]).map((b, bi) => edits?.[`${s.id}_bullet_${bi}`] ?? b).join("\n") });
+        if (s.workLog?.length) items.push({ tableRows: (s.workLog as any[]).map((r: any, ri: number) => ({ area: r.area, whatWeDid: edits?.[`${s.id}_worklog_${ri}_did`] ?? r.whatWeDid, whatsNext: edits?.[`${s.id}_worklog_${ri}_next`] ?? r.whatsNext })) });
+        if (s.table) items.push({ tables: [{ title: s.title, headers: s.table.headers, rows: s.table.rows }] });
+        return { sectionId: s.id, title: s.title ?? "", items };
+      });
+      const clientName = edits?.["client_name"] ?? json.client_name;
+      const attendees = edits?.["attendees"] ?? json.attendees ?? "";
+      const buffer = await generateBiweeklyDocx(clientName, attendees, json.date, sections);
+      const slug = clientName.toLowerCase().replace(/\s+/g, "_");
+      const filename = `${slug}_biweekly_${json.date.replace(/[\s,]/g, "_")}.docx`;
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.send(buffer);
+    } catch (err: any) {
+      console.error("Biweekly DOCX error:", err);
+      res.status(500).json({ message: "Failed to generate DOCX: " + err.message });
+    }
+  });
+
+  app.post("/api/reports/biweekly/upload-to-drive", async (req, res) => {
+    const { json, edits } = req.body as { json: any; edits?: Record<string, string> };
+    if (!json) return res.status(400).json({ message: "json is required" });
+    try {
+      const sections: SectionData[] = (json.sections ?? []).map((s: any) => {
+        const items: any[] = [];
+        if (s.metrics?.length) items.push({ summary: s.metrics.map((m: any) => ({ label: m.label, current: m.current, previous: m.previous ?? "—", deltaPercent: m.delta ?? "—", isPositive: m.isPositive ?? true })) });
+        if (s.bullets?.length) items.push({ manualText: (s.bullets as string[]).join("\n") });
+        if (s.workLog?.length) items.push({ tableRows: s.workLog });
+        if (s.table) items.push({ tables: [{ title: s.title, headers: s.table.headers, rows: s.table.rows }] });
+        return { sectionId: s.id, title: s.title ?? "", items };
+      });
+      const buffer = await generateBiweeklyDocx(edits?.["client_name"] ?? json.client_name, edits?.["attendees"] ?? json.attendees ?? "", json.date, sections);
+      const { ReplitConnectors } = await import("@replit/connectors-sdk");
+      const connectors = new ReplitConnectors();
+      const filename = `${json.client_name} Biweekly SEO ${json.date}.docx`;
+      const metadata = JSON.stringify({ name: filename });
+      const boundary = "-------smarteo_bw_boundary";
+      const CRLF = "\r\n";
+      const metaBuf = Buffer.from(`--${boundary}${CRLF}Content-Type: application/json; charset=UTF-8${CRLF}${CRLF}${metadata}${CRLF}`, "utf8");
+      const filePrefixBuf = Buffer.from(`--${boundary}${CRLF}Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document${CRLF}${CRLF}`, "utf8");
+      const closeBuf = Buffer.from(`${CRLF}--${boundary}--`, "utf8");
+      const bodyBuffer = Buffer.concat([metaBuf, filePrefixBuf, buffer, closeBuf]);
+      const uploadRes = await connectors.proxy("google-drive", "/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink", { method: "POST", headers: { "Content-Type": `multipart/related; boundary=${boundary}` }, body: bodyBuffer });
+      if (!uploadRes.ok) { const e = await uploadRes.json().catch(() => ({}) as any); return res.status(uploadRes.status).json({ message: `Drive upload failed: ${(e as any)?.error?.message ?? uploadRes.statusText}` }); }
+      const driveFile = await uploadRes.json() as any;
+      res.json({ success: true, fileId: driveFile.id, fileName: driveFile.name, webViewLink: driveFile.webViewLink });
+    } catch (err: any) {
+      res.status(500).json({ message: "Upload failed: " + err.message });
+    }
+  });
+
+  app.post("/api/reports/monthly/generate", async (req, res) => {
+    const { clientId, month, year, timezone } = req.body;
+    if (!clientId || !month || !year) return res.status(400).json({ message: "clientId, month, year are required" });
+    try {
+      const output = await generateMonthly({ clientId: Number(clientId), month: Number(month), year: Number(year), timezone: timezone ?? "America/Los_Angeles" });
+      res.json(output);
+    } catch (err: any) {
+      console.error("Monthly generation error:", err);
+      res.status(500).json({ message: "Failed to generate Monthly report: " + err.message });
+    }
+  });
+
+  app.post("/api/reports/monthly/pptx", async (req, res) => {
+    const { json, edits } = req.body as { json: any; edits?: Record<string, string> };
+    if (!json) return res.status(400).json({ message: "json is required" });
+    try {
+      const sections: SectionData[] = (json.slides ?? []).filter((s: any) => s.type !== "title").map((s: any, idx: number) => {
+        const items: any[] = [];
+        if (s.metrics?.length) items.push({ summary: s.metrics.map((m: any) => ({ label: m.label, current: m.current, previous: m.previous ?? "—", deltaPercent: m.delta ?? "—", isPositive: m.isPositive ?? true })) });
+        if (s.table) items.push({ tables: [{ title: s.subtitle ?? "", headers: s.table.headers, rows: s.table.rows }] });
+        if (s.bullets) items.push({ manualText: (s.bullets as string[]).join("\n") });
+        return { sectionId: `slide_${idx}`, title: edits?.[`${s.id}_title`] ?? s.title ?? "", items };
+      });
+      const titleSlide = (json.slides as any[]).find((s: any) => s.type === "title");
+      const buffer = await generatePptx(edits?.["title_client"] ?? json.client_name, json.report_title, new Date(json.generated_at).toLocaleDateString("en-US"), sections);
+      const slug = json.client_name.toLowerCase().replace(/\s+/g, "_");
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
+      res.setHeader("Content-Disposition", `attachment; filename="${slug}_monthly_${json.month_label.replace(/\s/g, "_")}.pptx"`);
+      res.send(buffer);
+    } catch (err: any) {
+      console.error("Monthly PPTX error:", err);
+      res.status(500).json({ message: "Failed to generate PPTX: " + err.message });
+    }
+  });
+
+  app.post("/api/reports/monthly/upload-to-drive", async (req, res) => {
+    const { json, edits } = req.body as { json: any; edits?: Record<string, string> };
+    if (!json) return res.status(400).json({ message: "json is required" });
+    try {
+      const sections: SectionData[] = (json.slides ?? []).filter((s: any) => s.type !== "title").map((s: any, idx: number) => {
+        const items: any[] = [];
+        if (s.metrics?.length) items.push({ summary: s.metrics.map((m: any) => ({ label: m.label, current: m.current, previous: m.previous ?? "—", deltaPercent: m.delta ?? "—", isPositive: m.isPositive ?? true })) });
+        if (s.table) items.push({ tables: [{ title: s.subtitle ?? "", headers: s.table.headers, rows: s.table.rows }] });
+        if (s.bullets) items.push({ manualText: (s.bullets as string[]).join("\n") });
+        return { sectionId: `slide_${idx}`, title: s.title ?? "", items };
+      });
+      const buffer = await generatePptx(json.client_name, json.report_title, new Date(json.generated_at).toLocaleDateString("en-US"), sections);
+      const { ReplitConnectors } = await import("@replit/connectors-sdk");
+      const connectors = new ReplitConnectors();
+      const filename = `${json.client_name} Monthly SEO ${json.month_label}.pptx`;
+      const metadata = JSON.stringify({ name: filename });
+      const boundary = "-------smarteo_mo_boundary";
+      const CRLF = "\r\n";
+      const metaBuf = Buffer.from(`--${boundary}${CRLF}Content-Type: application/json; charset=UTF-8${CRLF}${CRLF}${metadata}${CRLF}`, "utf8");
+      const filePrefixBuf = Buffer.from(`--${boundary}${CRLF}Content-Type: application/vnd.openxmlformats-officedocument.presentationml.presentation${CRLF}${CRLF}`, "utf8");
+      const closeBuf = Buffer.from(`${CRLF}--${boundary}--`, "utf8");
+      const bodyBuffer = Buffer.concat([metaBuf, filePrefixBuf, buffer, closeBuf]);
+      const uploadRes = await connectors.proxy("google-drive", "/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink", { method: "POST", headers: { "Content-Type": `multipart/related; boundary=${boundary}` }, body: bodyBuffer });
+      if (!uploadRes.ok) { const e = await uploadRes.json().catch(() => ({}) as any); return res.status(uploadRes.status).json({ message: `Drive upload failed: ${(e as any)?.error?.message ?? uploadRes.statusText}` }); }
+      const driveFile = await uploadRes.json() as any;
+      res.json({ success: true, fileId: driveFile.id, fileName: driveFile.name, webViewLink: driveFile.webViewLink });
+    } catch (err: any) {
+      res.status(500).json({ message: "Upload failed: " + err.message });
+    }
+  });
+
+  app.post("/api/reports/qbr-full/generate", async (req, res) => {
+    const { clientId, quarter, year, timezone } = req.body;
+    if (!clientId || !quarter || !year) return res.status(400).json({ message: "clientId, quarter, year are required" });
+    try {
+      const output = await generateQbrFull({ clientId: Number(clientId), quarter: Number(quarter), year: Number(year), timezone: timezone ?? "America/Los_Angeles" });
+      res.json(output);
+    } catch (err: any) {
+      console.error("QBR Full generation error:", err);
+      res.status(500).json({ message: "Failed to generate QBR report: " + err.message });
+    }
+  });
+
+  app.post("/api/reports/qbr-full/pptx", async (req, res) => {
+    const { json, edits } = req.body as { json: any; edits?: Record<string, string> };
+    if (!json) return res.status(400).json({ message: "json is required" });
+    try {
+      const sections: SectionData[] = (json.slides ?? []).filter((s: any) => s.type !== "title").map((s: any, idx: number) => {
+        const items: any[] = [];
+        if (s.metrics?.length) items.push({ summary: s.metrics.map((m: any) => ({ label: m.label, current: m.current, previous: m.previous ?? "—", deltaPercent: m.delta ?? "—", isPositive: m.isPositive ?? true })) });
+        if (s.table) items.push({ tables: [{ title: s.subtitle ?? "", headers: s.table.headers, rows: s.table.rows }] });
+        if (s.bullets) items.push({ manualText: (s.bullets as string[]).join("\n") });
+        if (s.leftContent?.table) items.push({ tables: [{ title: "", headers: s.leftContent.table.headers, rows: s.leftContent.table.rows }] });
+        return { sectionId: `slide_${idx}`, title: edits?.[`${s.id}_title`] ?? s.title ?? "", items };
+      });
+      const buffer = await generatePptx(json.client_name, json.report_title, new Date(json.generated_at).toLocaleDateString("en-US"), sections);
+      const slug = json.client_name.toLowerCase().replace(/\s+/g, "_");
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
+      res.setHeader("Content-Disposition", `attachment; filename="${slug}_qbr_${json.quarter_label.replace(/\s/g, "_")}.pptx"`);
+      res.send(buffer);
+    } catch (err: any) {
+      console.error("QBR PPTX error:", err);
+      res.status(500).json({ message: "Failed to generate PPTX: " + err.message });
+    }
+  });
+
+  app.post("/api/reports/qbr-full/upload-to-drive", async (req, res) => {
+    const { json } = req.body as { json: any };
+    if (!json) return res.status(400).json({ message: "json is required" });
+    try {
+      const sections: SectionData[] = (json.slides ?? []).filter((s: any) => s.type !== "title").map((s: any, idx: number) => {
+        const items: any[] = [];
+        if (s.metrics?.length) items.push({ summary: s.metrics.map((m: any) => ({ label: m.label, current: m.current, previous: m.previous ?? "—", deltaPercent: m.delta ?? "—", isPositive: m.isPositive ?? true })) });
+        if (s.table) items.push({ tables: [{ title: s.subtitle ?? "", headers: s.table.headers, rows: s.table.rows }] });
+        if (s.bullets) items.push({ manualText: (s.bullets as string[]).join("\n") });
+        return { sectionId: `slide_${idx}`, title: s.title ?? "", items };
+      });
+      const buffer = await generatePptx(json.client_name, json.report_title, new Date(json.generated_at).toLocaleDateString("en-US"), sections);
+      const { ReplitConnectors } = await import("@replit/connectors-sdk");
+      const connectors = new ReplitConnectors();
+      const filename = `${json.client_name} QBR ${json.quarter_label}.pptx`;
+      const metadata = JSON.stringify({ name: filename });
+      const boundary = "-------smarteo_qbrf_boundary";
+      const CRLF = "\r\n";
+      const metaBuf = Buffer.from(`--${boundary}${CRLF}Content-Type: application/json; charset=UTF-8${CRLF}${CRLF}${metadata}${CRLF}`, "utf8");
+      const filePrefixBuf = Buffer.from(`--${boundary}${CRLF}Content-Type: application/vnd.openxmlformats-officedocument.presentationml.presentation${CRLF}${CRLF}`, "utf8");
+      const closeBuf = Buffer.from(`${CRLF}--${boundary}--`, "utf8");
+      const bodyBuffer = Buffer.concat([metaBuf, filePrefixBuf, buffer, closeBuf]);
+      const uploadRes = await connectors.proxy("google-drive", "/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink", { method: "POST", headers: { "Content-Type": `multipart/related; boundary=${boundary}` }, body: bodyBuffer });
+      if (!uploadRes.ok) { const e = await uploadRes.json().catch(() => ({}) as any); return res.status(uploadRes.status).json({ message: `Drive upload failed: ${(e as any)?.error?.message ?? uploadRes.statusText}` }); }
+      const driveFile = await uploadRes.json() as any;
+      res.json({ success: true, fileId: driveFile.id, fileName: driveFile.name, webViewLink: driveFile.webViewLink });
+    } catch (err: any) {
       res.status(500).json({ message: "Upload failed: " + err.message });
     }
   });

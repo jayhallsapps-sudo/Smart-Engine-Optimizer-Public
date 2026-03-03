@@ -253,6 +253,46 @@ function shortUrl(url: string): string {
   return url.replace(/^https?:\/\/[^/]+/, "") || "/";
 }
 
+function normUrl(url: string): string {
+  if (!url) return "";
+  try {
+    const lower = url.toLowerCase().trim();
+    const u = new URL(lower.startsWith("http") ? lower : `https://${lower}`);
+    u.hash = "";
+    let path = u.pathname;
+    if (path.length > 1 && path.endsWith("/")) path = path.slice(0, -1);
+    u.pathname = path;
+    return u.origin + u.pathname + u.search;
+  } catch {
+    return url.toLowerCase().trim().replace(/\/$/, "") || "/";
+  }
+}
+
+function baseDomain(siteUrl: string): string {
+  if (!siteUrl) return "";
+  if (siteUrl.startsWith("sc-domain:")) return `https://${siteUrl.replace("sc-domain:", "")}`;
+  try {
+    const u = new URL(siteUrl);
+    return `${u.protocol}//${u.hostname}`;
+  } catch {
+    return siteUrl.replace(/\/$/, "");
+  }
+}
+
+function ga4PathToNorm(path: string, siteUrl: string): string {
+  if (!path || path === "(not set)") return "";
+  if (path.startsWith("http")) return normUrl(path);
+  const base = baseDomain(siteUrl);
+  return normUrl(`${base}${path.startsWith("/") ? path : "/" + path}`);
+}
+
+function percentile(arr: number[], p: number): number {
+  if (arr.length === 0) return 0;
+  const sorted = [...arr].sort((a, b) => a - b);
+  const idx = Math.ceil((p / 100) * sorted.length) - 1;
+  return sorted[Math.max(0, idx)];
+}
+
 export async function generateQbrPrep(input: QbrPrepInput): Promise<QbrPrepOutput> {
   const client = await storage.getClient(input.clientId);
   if (!client) throw new Error("Client not found");
@@ -446,6 +486,34 @@ export async function generateQbrPrep(input: QbrPrepInput): Promise<QbrPrepOutpu
     console.log(`[QBR Prep] SF: ${sfData.length} URLs, headers: ${sfHeaders.slice(0, 10).join(", ")}`);
   }
 
+  // ── Normalized join maps ─────────────────────────────────────────────────
+  const siteBase = baseDomain(client.gscSiteUrl ?? "");
+
+  const sfByNorm = new Map<string, Record<string, any>>();
+  if (sfAvailable && sfCol.url) {
+    for (const row of sfData) {
+      const raw = String(row[sfCol.url] ?? "");
+      if (raw) sfByNorm.set(normUrl(raw), row);
+    }
+  }
+
+  const gscByNorm = new Map<string, any>();
+  for (const row of gscPageRows) {
+    const raw = String(row.keys?.[0] ?? "");
+    if (raw) gscByNorm.set(normUrl(raw), row);
+  }
+
+  const ga4ByNorm = new Map<string, any>();
+  for (const row of ga4LandingRows) {
+    const norm = ga4PathToNorm(row.page, client.gscSiteUrl ?? "");
+    if (norm) ga4ByNorm.set(norm, row);
+  }
+
+  // Coverage diagnostics (internal)
+  const gscMatchesSf = gscPageRows.filter(r => sfByNorm.has(normUrl(String(r.keys?.[0] ?? "")))).length;
+  const ga4MatchesSf = ga4LandingRows.filter(r => sfByNorm.has(ga4PathToNorm(r.page, client.gscSiteUrl ?? ""))).length;
+  console.log(`[QBR Prep] Coverage: SF=${sfData.length} URLs | GSC=${gscPageRows.length} pages (${gscMatchesSf} match SF) | GA4=${ga4LandingRows.length} pages (${ga4MatchesSf} match SF)`);
+
   const totalGscClicks = gscPageRows.reduce((s: number, r: any) => s + (r.clicks ?? 0), 0);
   const totalGscImpressions = gscPageRows.reduce((s: number, r: any) => s + (r.impressions ?? 0), 0);
   const totalPrevGscClicks = gscPrevPageRows.reduce((s: number, r: any) => s + (r.clicks ?? 0), 0);
@@ -469,128 +537,120 @@ export async function generateQbrPrep(input: QbrPrepInput): Promise<QbrPrepOutpu
 
   if (input.includeContent) {
     const contentOpps: Opportunity[] = [];
+    const seenContentUrls = new Set<string>();
 
+    const addContent = (o: Opportunity) => {
+      const key = o.urls[0] ?? o.opportunity_title;
+      if (!seenContentUrls.has(key)) { seenContentUrls.add(key); contentOpps.push(o); }
+    };
+
+    // ── PASS 1: GSC-driven opportunities ─────────────────────────────────
     if (gscAvailable && gscPageRows.length > 0) {
+      const allImps = gscPageRows.map((r: any) => r.impressions ?? 0);
+      const p75imp = percentile(allImps, 75);
+
       const highImpLowCtr = gscPageRows
-        .filter((r: any) => (r.impressions ?? 0) > medianImpressions && (r.ctr ?? 0) < siteAvgCtr * 0.75)
-        .sort((a: any, b: any) => {
-          const aWasted = (a.impressions ?? 0) * (siteAvgCtr - (a.ctr ?? 0));
-          const bWasted = (b.impressions ?? 0) * (siteAvgCtr - (b.ctr ?? 0));
-          return bWasted - aWasted;
-        })
+        .filter((r: any) => (r.impressions ?? 0) >= Math.max(p75imp, 50) && (r.ctr ?? 0) < siteAvgCtr * 0.8)
+        .sort((a: any, b: any) => ((b.impressions ?? 0) * (siteAvgCtr - (b.ctr ?? 0))) - ((a.impressions ?? 0) * (siteAvgCtr - (a.ctr ?? 0))))
         .slice(0, 6);
 
       for (const row of highImpLowCtr) {
         const page = row.keys?.[0] ?? "";
+        const pageNorm = normUrl(page);
         const pos = (row.position ?? 0).toFixed(1);
         const ctr = fmtPct(row.ctr ?? 0);
         const imp = fmtNum(row.impressions ?? 0);
         const clicks = fmtNum(row.clicks ?? 0);
-        const potentialClicks = Math.round((row.impressions ?? 0) * (siteAvgCtr - (row.ctr ?? 0)));
+        const potentialClicks = Math.round((row.impressions ?? 0) * Math.max(siteAvgCtr - (row.ctr ?? 0), 0));
         const prev = gscPrevPageMap.get(page);
         const ctrChange = prev ? fmtPctChange(row.ctr ?? 0, prev.ctr ?? 0) : "no prior data";
-
-        const isTop20ga4 = ga4LandingRows.slice(0, 20).some((l: any) => page.includes(l.page));
-        const priority: Opportunity["priority"] = (row.position ?? 100) <= 10 && (row.impressions ?? 0) > medianImpressions * 2 ? "P0" : (row.impressions ?? 0) > medianImpressions * 1.5 ? "P1" : "P2";
-        const impact: Opportunity["impact"] = isTop20ga4 || (row.impressions ?? 0) > medianImpressions * 3 ? "High" : (row.impressions ?? 0) > medianImpressions * 1.5 ? "Med" : "Low";
-
-        contentOpps.push({
+        const ga4Row = ga4ByNorm.get(pageNorm);
+        const sfRow = sfByNorm.get(pageNorm);
+        const isInGA4Top20 = ga4Row && ga4LandingRows.indexOf(ga4Row) < 20;
+        const priority: Opportunity["priority"] = (row.position ?? 100) <= 10 && (row.impressions ?? 0) > p75imp ? "P0" : (row.impressions ?? 0) >= p75imp ? "P1" : "P2";
+        const impact: Opportunity["impact"] = isInGA4Top20 || (row.impressions ?? 0) > p75imp * 1.5 ? "High" : "Med";
+        const sfNote = sfRow ? ` SF: ${sfRow[sfCol.wordCount] ? `${sfRow[sfCol.wordCount]} words,` : ""} ${sfRow[sfCol.title] ? `title="${String(sfRow[sfCol.title]).slice(0,60)}…"` : "no title data"}.` : "";
+        addContent({
           opportunity_title: `Low CTR vs Impressions: ${shortUrl(page)}`,
-          priority,
-          impact,
-          effort: "S",
-          kpi_affected: "CTR, Rankings",
+          priority, impact, effort: "S", kpi_affected: "CTR, Rankings",
           urls: [page],
-          evidence: `GSC (${pastWindowLabel}): ${imp} impressions, ${clicks} clicks, CTR ${ctr} (site avg ${fmtPct(siteAvgCtr)}), avg position ${pos}. CTR vs prior quarter: ${ctrChange}. Estimated ~${fmtNum(potentialClicks)} clicks lost vs site average CTR.`,
-          problem: `This page receives ${imp} impressions but converts at only ${ctr} CTR — well below the ${fmtPct(siteAvgCtr)} site average. The title/meta description is likely misaligned with search intent or not compelling enough to drive clicks at this impression volume.`,
-          opportunity: "Rewrite title tag and meta description to match dominant query intent for this page. Add FAQ schema or review snippets to enhance the SERP listing. Adjust H2 structure to signal content relevance to top queries.",
-          why_it_matters: `Closing the CTR gap to site average on this page alone could generate roughly ${fmtNum(potentialClicks)} additional organic clicks per quarter.`,
-          recommended_next_step: "Pull the top 10 queries driving impressions to this page via GSC. Rewrite the title with the primary query at the front. Update meta description to include a clear value proposition and call to action.",
+          evidence: `GSC (${pastWindowLabel}): ${imp} impressions, ${clicks} clicks, CTR ${ctr} (site avg ${fmtPct(siteAvgCtr)}), avg position ${pos}. CTR vs prior quarter: ${ctrChange}. ~${fmtNum(potentialClicks)} clicks lost vs site avg CTR.${sfNote}`,
+          problem: `This page receives ${imp} impressions but converts at only ${ctr} CTR — well below the ${fmtPct(siteAvgCtr)} site average. The title/meta description is likely misaligned with search intent.`,
+          opportunity: "Rewrite title tag and meta description to match dominant query intent. Add FAQ schema or review snippets to enhance the SERP listing. Adjust H2 structure to signal content relevance to top queries.",
+          why_it_matters: `Closing the CTR gap to site average could generate roughly ${fmtNum(potentialClicks)} additional organic clicks per quarter.`,
+          recommended_next_step: "Pull the top 10 queries driving impressions to this page via GSC. Rewrite the title with the primary query at the front. Update meta description to include a clear value proposition and CTA.",
         });
       }
 
       const strikingDistance = gscPageRows
-        .filter((r: any) => {
-          const pos = r.position ?? 100;
-          return pos >= 4 && pos <= 15 && (r.impressions ?? 0) > 100;
-        })
-        .sort((a: any, b: any) => {
-          const aScore = (a.impressions ?? 0) / (a.position ?? 10);
-          const bScore = (b.impressions ?? 0) / (b.position ?? 10);
-          return bScore - aScore;
-        })
+        .filter((r: any) => { const pos = r.position ?? 100; return pos >= 4 && pos <= 15 && (r.impressions ?? 0) > 50; })
+        .sort((a: any, b: any) => ((b.impressions ?? 0) / (b.position ?? 10)) - ((a.impressions ?? 0) / (a.position ?? 10)))
         .slice(0, 5);
 
       for (const row of strikingDistance) {
         const page = row.keys?.[0] ?? "";
+        const pageNorm = normUrl(page);
         const pos = (row.position ?? 0).toFixed(1);
         const imp = fmtNum(row.impressions ?? 0);
         const clicks = fmtNum(row.clicks ?? 0);
         const prev = gscPrevPageMap.get(page);
-        const posChange = prev ? ((prev.position ?? row.position) - row.position).toFixed(1) : "no prior data";
-        const posChangeNote = prev && Number(posChange) > 0 ? ` (↑${posChange} positions gained vs prior quarter)` : prev ? ` (↓${Math.abs(Number(posChange))} positions lost)` : "";
-
-        const priority: Opportunity["priority"] = (row.position ?? 100) <= 8 && (row.impressions ?? 0) > medianImpressions ? "P1" : "P2";
-        const impact: Opportunity["impact"] = (row.impressions ?? 0) > medianImpressions * 2 ? "High" : "Med";
-
-        contentOpps.push({
+        const posChange = prev ? ((prev.position ?? row.position) - row.position).toFixed(1) : null;
+        const posNote = posChange ? (Number(posChange) > 0 ? ` (↑${posChange} positions gained QoQ)` : ` (↓${Math.abs(Number(posChange))} positions lost QoQ)`) : "";
+        const sfRow = sfByNorm.get(pageNorm);
+        const wc = sfRow && sfCol.wordCount ? Number(sfRow[sfCol.wordCount] ?? 0) : 0;
+        const wcNote = wc > 0 ? ` SF word count: ${wc}.` : "";
+        addContent({
           opportunity_title: `Striking Distance Page: ${shortUrl(page)}`,
-          priority,
-          impact,
-          effort: "M",
-          kpi_affected: "Rankings, CTR, Calls/Forms",
+          priority: (row.position ?? 100) <= 8 ? "P1" : "P2",
+          impact: (row.impressions ?? 0) > percentile(allImps, 60) ? "High" : "Med",
+          effort: "M", kpi_affected: "Rankings, CTR, Calls/Forms",
           urls: [page],
-          evidence: `GSC (${pastWindowLabel}): avg position ${pos}${posChangeNote}, ${imp} impressions, ${clicks} clicks. This page is within reach of top 3 with targeted improvements.`,
-          problem: `Page is ranked position ${pos} — in striking distance of top 3 results but not there yet. High impression volume confirms Google sees this page as highly relevant for target queries, but it's leaving significant click share on the table.`,
-          opportunity: "Expand content depth and intent coverage, add semantically related subtopics, improve internal link equity flowing to this page from relevant hub pages and service pages, and refresh content with current statistics and examples.",
-          why_it_matters: "Moving from position 4–15 to top 3 typically yields 2–5x more clicks for the same impression count. For pages with this impression volume, that can mean dozens to hundreds of additional monthly organic visits.",
-          recommended_next_step: "Perform a content gap analysis against the top 3 ranking pages for this page's primary query cluster. Identify missing subtopics, add 3–5 targeted internal links from related service/blog pages, and add an authoritative FAQ section.",
+          evidence: `GSC (${pastWindowLabel}): avg position ${pos}${posNote}, ${imp} impressions, ${clicks} clicks.${wcNote}`,
+          problem: `Page is at position ${pos} — within reach of top 3 but leaving significant click share on the table.`,
+          opportunity: "Expand content depth, add internal link equity from hub/service pages, refresh with current statistics, and add schema/FAQ to improve SERP appearance.",
+          why_it_matters: "Moving from position 4–15 to top 3 typically yields 2–5x more clicks for the same impression count.",
+          recommended_next_step: "Run a content gap analysis against the top 3 ranking pages. Add 3–5 targeted internal links from related service/blog pages. Add authoritative FAQ section.",
         });
       }
 
       if (ga4Available && ga4LandingRows.length > 0 && siteCvr !== null) {
         const highTrafficLowCvr = ga4LandingRows
-          .filter((r: any) => r.sessions > 20 && pct(r.conversions, r.sessions) < siteCvr * 0.65)
+          .filter((r: any) => r.sessions > 15 && pct(r.conversions, r.sessions) < siteCvr * 0.65)
           .sort((a: any, b: any) => b.sessions - a.sessions)
           .slice(0, 4);
 
         for (const row of highTrafficLowCvr) {
+          const pageNorm = ga4PathToNorm(row.page, client.gscSiteUrl ?? "");
+          const fullUrl = pageNorm || row.page;
           const pageCvr = pct(row.conversions, row.sessions);
           const prev = ga4PrevMap.get(row.page);
           const sessionChange = prev ? fmtPctChange(row.sessions, prev.sessions) : "no prior data";
           const convChange = prev ? fmtPctChange(row.conversions, prev.conversions) : "no prior data";
           const isTop10 = ga4LandingRows.indexOf(row) < 10;
-          const priority: Opportunity["priority"] = isTop10 && row.sessions > 100 ? "P1" : "P2";
-          const impact: Opportunity["impact"] = isTop10 ? "High" : row.sessions > 50 ? "Med" : "Low";
-
-          const gscMatch = gscPageRows.find((g: any) => (g.keys?.[0] ?? "").includes(row.page.replace(/^https?:\/\/[^/]+/, "")));
-          const gscNote = gscMatch ? `GSC: avg position ${(gscMatch.position ?? 0).toFixed(1)}, ${fmtNum(gscMatch.impressions ?? 0)} impressions.` : "";
-
-          contentOpps.push({
-            opportunity_title: `High Traffic, Low CVR: ${shortUrl(row.page)}`,
-            priority,
-            impact,
-            effort: "M",
-            kpi_affected: "Forms, Calls",
-            urls: [row.page],
-            evidence: `GA4 (${pastWindowLabel}): ${fmtNum(row.sessions)} organic sessions, ${fmtNum(row.conversions)} conversions, CVR ${fmtPct(pageCvr)} vs site avg ${fmtPct(siteCvr)}. Sessions QoQ: ${sessionChange}, conversions QoQ: ${convChange}. Engagement rate: ${fmtPct(row.engagementRate)}. ${gscNote}`,
-            problem: `This page drives ${fmtNum(row.sessions)} organic sessions but converts at ${fmtPct(pageCvr)} — ${((1 - pageCvr / siteCvr) * 100).toFixed(0)}% below the site average of ${fmtPct(siteCvr)}. Visitors are arriving but not taking action.`,
-            opportunity: "Audit CTA placement, messaging, and form friction. Add trust signals (reviews, certifications, statistics) above the fold. Ensure the primary conversion path is visible without scrolling on both desktop and mobile. Consider A/B testing a simplified contact form or click-to-call button.",
-            why_it_matters: `Closing the CVR gap to site average on this page would produce approximately ${fmtNum(Math.round(row.sessions * (siteCvr - pageCvr)))} additional conversions per quarter from existing traffic — no additional SEO investment required.`,
-            recommended_next_step: "Install a heatmap tool (Hotjar or similar) on this page for 2 weeks. Identify where users drop off before converting. Rewrite CTA copy to be more specific to the visitor's intent (e.g., 'Get Your Free Insurance Verification' vs 'Contact Us').",
+          const gscRow = gscByNorm.get(pageNorm);
+          const gscNote = gscRow ? ` GSC: position ${(gscRow.position ?? 0).toFixed(1)}, ${fmtNum(gscRow.impressions ?? 0)} impressions.` : "";
+          addContent({
+            opportunity_title: `High Traffic, Low CVR: ${shortUrl(fullUrl)}`,
+            priority: isTop10 && row.sessions > 80 ? "P1" : "P2",
+            impact: isTop10 ? "High" : row.sessions > 50 ? "Med" : "Low",
+            effort: "M", kpi_affected: "Forms, Calls",
+            urls: [fullUrl],
+            evidence: `GA4 (${pastWindowLabel}): ${fmtNum(row.sessions)} organic sessions, ${fmtNum(row.conversions)} conversions, CVR ${fmtPct(pageCvr)} vs site avg ${fmtPct(siteCvr)}. Sessions QoQ: ${sessionChange}, conversions QoQ: ${convChange}. Engagement rate: ${fmtPct(row.engagementRate)}.${gscNote}`,
+            problem: `Page drives ${fmtNum(row.sessions)} organic sessions but converts at ${fmtPct(pageCvr)} — ${((1 - pageCvr / siteCvr) * 100).toFixed(0)}% below site average. Visitors are arriving but not taking action.`,
+            opportunity: "Audit CTA placement, messaging, and form friction. Add trust signals above the fold. Ensure primary conversion path is visible on mobile without scrolling.",
+            why_it_matters: `Closing the CVR gap to site average would produce ~${fmtNum(Math.round(row.sessions * Math.max(siteCvr - pageCvr, 0)))} additional conversions per quarter from existing traffic.`,
+            recommended_next_step: "Install heatmap (Hotjar/similar) for 2 weeks. Rewrite CTA copy to be intent-specific (e.g., 'Get Your Free Insurance Verification' vs 'Contact Us').",
           });
         }
-      }
 
-      if (ga4Available && ga4LandingRows.length > 0 && siteCvr !== null) {
         const droppingConv = ga4LandingRows
-          .filter((r: any) => r.sessions > 20)
+          .filter((r: any) => r.sessions > 15)
           .filter((r: any) => {
             const prev = ga4PrevMap.get(r.page);
-            if (!prev || prev.conversions === 0) return false;
+            if (!prev || prev.sessions < 5) return false;
             const currCvr = pct(r.conversions, r.sessions);
             const prevCvr = pct(prev.conversions, prev.sessions);
-            return prevCvr > 0 && (prevCvr - currCvr) / prevCvr > 0.25;
+            return prevCvr > 0.001 && (prevCvr - currCvr) / prevCvr > 0.25;
           })
           .sort((a: any, b: any) => {
             const prevA = ga4PrevMap.get(a.page);
@@ -603,42 +663,175 @@ export async function generateQbrPrep(input: QbrPrepInput): Promise<QbrPrepOutpu
 
         for (const row of droppingConv) {
           const prev = ga4PrevMap.get(row.page)!;
+          const pageNorm = ga4PathToNorm(row.page, client.gscSiteUrl ?? "");
+          const fullUrl = pageNorm || row.page;
           const currCvr = pct(row.conversions, row.sessions);
           const prevCvr = pct(prev.conversions, prev.sessions);
           const drop = ((prevCvr - currCvr) / prevCvr * 100).toFixed(0);
-
-          contentOpps.push({
-            opportunity_title: `Conversion Drop on ${shortUrl(row.page)}: CVR Down ${drop}% QoQ`,
+          addContent({
+            opportunity_title: `Conversion Drop on ${shortUrl(fullUrl)}: CVR Down ${drop}% QoQ`,
             priority: "P1",
-            impact: row.sessions > 100 ? "High" : "Med",
-            effort: "M",
-            kpi_affected: "Forms, Calls",
-            urls: [row.page],
-            evidence: `GA4 QoQ: CVR dropped from ${fmtPct(prevCvr)} to ${fmtPct(currCvr)} (−${drop}%). Sessions: ${fmtNum(row.sessions)} now vs ${fmtNum(prev.sessions)} prior quarter. Conversions: ${fmtNum(row.conversions)} vs ${fmtNum(prev.conversions)} prior quarter.`,
-            problem: `A significant conversion rate decline occurred on this page quarter-over-quarter despite stable or growing traffic. This pattern indicates a content, UX, or competitive change is hurting performance.`,
-            opportunity: "Audit the page for recent content changes, CTA modifications, or layout changes that may have reduced conversion friction. Check for SERP changes (do a fresh search for the primary query to see if competitors have changed). Review any A/B test results that may have landed on an underperforming variant.",
-            why_it_matters: "A −${drop}% CVR drop on a previously high-converting page represents a measurable, ongoing lead loss each week this goes unaddressed.",
-            recommended_next_step: "Review page change history (Google Search Console, CMS revision history). Restore high-converting CTA placements or test a new variant. Check Google's cached version of the page for any indexing anomalies.",
+            impact: row.sessions > 80 ? "High" : "Med",
+            effort: "M", kpi_affected: "Forms, Calls",
+            urls: [fullUrl],
+            evidence: `GA4 QoQ: CVR dropped from ${fmtPct(prevCvr)} to ${fmtPct(currCvr)} (−${drop}%). Sessions: ${fmtNum(row.sessions)} vs ${fmtNum(prev.sessions)} prior quarter. Conversions: ${fmtNum(row.conversions)} vs ${fmtNum(prev.conversions)}.`,
+            problem: `Significant CVR decline QoQ despite stable traffic. Indicates content, UX, or competitive change is suppressing performance.`,
+            opportunity: "Audit page for recent CMS changes, CTA modifications, or layout changes. Check SERP for competitor changes. Review A/B test results that may have landed on an underperforming variant.",
+            why_it_matters: `A −${drop}% CVR drop represents an ongoing lead loss each week this goes unaddressed.`,
+            recommended_next_step: "Review CMS revision history. Restore high-converting CTA placements or test new variant. Check GA4 DebugView to confirm form submission events fire correctly.",
+          });
+        }
+      }
+    }
+
+    // ── PASS 2: SF-only fallback when < 8 content opportunities ─────────
+    const CONTENT_MIN = 8;
+    if (contentOpps.length < CONTENT_MIN && sfAvailable && sfData.length > 0) {
+      console.log(`[QBR Prep] Content PASS 2: only ${contentOpps.length} opps, running SF-only fallback`);
+      const htmlRows = sfCol.contentType ? sfData.filter(r => String(r[sfCol.contentType] ?? "").toLowerCase().includes("html")) : sfData;
+      const indexableRows = sfCol.indexability ? htmlRows.filter(r => String(r[sfCol.indexability] ?? "").toLowerCase() === "indexable") : htmlRows;
+
+      // Thin content (service/location pages)
+      if (sfCol.wordCount && contentOpps.length < CONTENT_MIN) {
+        const thin = indexableRows
+          .filter(r => { const wc = Number(r[sfCol.wordCount] ?? 0); return wc > 0 && wc < 800; })
+          .sort((a, b) => Number(a[sfCol.wordCount] ?? 0) - Number(b[sfCol.wordCount] ?? 0))
+          .slice(0, 4);
+        for (const r of thin) {
+          if (contentOpps.length >= CONTENT_MIN) break;
+          const url = String(r[sfCol.url] ?? "");
+          const wc = Number(r[sfCol.wordCount] ?? 0);
+          addContent({
+            opportunity_title: `Thin Content: Expand ${shortUrl(url)} (${wc} words)`,
+            priority: wc < 300 ? "P1" : "P2", impact: "Med", effort: "M",
+            kpi_affected: "Rankings, CTR",
+            urls: [url],
+            evidence: `Screaming Frog: ${url} has only ${wc} words. Service/location pages under 800 words rarely rank for competitive queries in the recovery sector.`,
+            problem: `At ${wc} words, this page provides insufficient depth to compete for valuable treatment-related queries. Thin content on service pages is a top reason for poor rankings.`,
+            opportunity: "Expand to 900+ words covering: the specific service, who it's for, what to expect, insurance coverage, FAQs (5+), testimonial/proof block, and a clear CTA. Add schema markup (MedicalCondition, FAQPage).",
+            why_it_matters: "Recovery pages under 700 words are routinely outranked by competitors with comprehensive content. Expanding once provides lasting ranking improvement.",
+            recommended_next_step: "Prioritize by traffic potential (cross-reference with GSC). Write a brief for each thin page covering the 6 content blocks above. Target 900–1200 words for service pages.",
           });
         }
       }
 
-    } else if (!gscAvailable && !ga4Available) {
+      // Missing meta descriptions (content signal)
+      if (sfCol.metaDesc && contentOpps.length < CONTENT_MIN) {
+        const missingMeta = indexableRows.filter(r => !r[sfCol.metaDesc] || String(r[sfCol.metaDesc]).trim() === "").slice(0, 3);
+        for (const r of missingMeta) {
+          if (contentOpps.length >= CONTENT_MIN) break;
+          const url = String(r[sfCol.url] ?? "");
+          addContent({
+            opportunity_title: `Missing Meta Description: ${shortUrl(url)}`,
+            priority: "P2", impact: "Med", effort: "S",
+            kpi_affected: "CTR",
+            urls: [url],
+            evidence: `Screaming Frog: Page has no meta description. Google auto-generates snippets — often pulling irrelevant text from the page body.`,
+            problem: "Auto-generated meta descriptions are rarely compelling and don't include conversion-oriented language or keywords.",
+            opportunity: "Write a unique, compelling meta description (140–160 chars) incorporating the primary keyword, a key benefit, and an implicit CTA ('Verify insurance instantly', 'Start healing today').",
+            why_it_matters: "Well-written meta descriptions improve CTR by 2–5% even without ranking changes, generating more clicks from the same impression volume.",
+            recommended_next_step: "Write meta descriptions for the top 20 pages by GSC impressions first. Use format: [Primary Service] in [Location] — [Key Benefit]. [Implicit CTA].",
+          });
+        }
+      }
+
+      // AEO / FAQ gaps from SF title analysis
+      if (sfCol.title && contentOpps.length < CONTENT_MIN) {
+        const noFaqTitle = indexableRows
+          .filter(r => {
+            const t = String(r[sfCol.title] ?? "").toLowerCase();
+            const url = String(r[sfCol.url] ?? "").toLowerCase();
+            return (url.includes("/blog") || url.includes("/resources") || url.includes("/faq")) && !t.includes("faq") && !t.includes("question");
+          })
+          .slice(0, 2);
+        for (const r of noFaqTitle) {
+          if (contentOpps.length >= CONTENT_MIN) break;
+          const url = String(r[sfCol.url] ?? "");
+          addContent({
+            opportunity_title: `AEO Structure Gap: Add FAQ Section to ${shortUrl(url)}`,
+            priority: "P2", impact: "Med", effort: "M",
+            kpi_affected: "Rankings, CTR (Featured Snippets)",
+            urls: [url],
+            evidence: `Screaming Frog: Content page lacks FAQ/AEO structure signals in title. AI-generated search overviews increasingly favor pages with clear Q&A structure.`,
+            problem: "Pages without FAQ sections miss out on Featured Snippet and AI Overview inclusion. For treatment queries ('Does insurance cover rehab?', 'How long is detox?'), FAQ schema drives significantly higher CTR.",
+            opportunity: "Add 5–8 FAQ pairs targeting long-tail questions around this page's topic. Implement FAQPage schema markup. Structure questions around search intent: process, cost, insurance, and outcome queries.",
+            why_it_matters: "FAQ schema can trigger rich results in SERP, increasing CTR by 20–30%. AEO structure is increasingly important for AI-generated search responses.",
+            recommended_next_step: "Identify the top 8 questions users ask about this topic (use 'People Also Ask' in SERP). Write direct, concise answers (50–80 words each). Implement FAQPage schema via Yoast/RankMath or custom code.",
+          });
+        }
+      }
+
+      // Freshness opportunities from GSC (relaxed thresholds)
+      if (gscAvailable && gscPageRows.length > 0 && contentOpps.length < CONTENT_MIN) {
+        const freshnessCandidates = gscPageRows
+          .filter((r: any) => {
+            const imp = r.impressions ?? 0;
+            const prev = gscPrevPageMap.get(r.keys?.[0]);
+            const clickDrop = prev && (prev.clicks ?? 0) > 5 && (r.clicks ?? 0) < (prev.clicks ?? 0) * 0.75;
+            const stale = imp > 50 && (r.ctr ?? 0) < 0.012;
+            return clickDrop || stale;
+          })
+          .sort((a: any, b: any) => (b.impressions ?? 0) - (a.impressions ?? 0))
+          .slice(0, 3);
+        for (const row of freshnessCandidates) {
+          if (contentOpps.length >= CONTENT_MIN) break;
+          const page = row.keys?.[0] ?? "";
+          const prev = gscPrevPageMap.get(page);
+          const clickNote = prev ? ` Clicks: ${fmtNum(row.clicks ?? 0)} vs ${fmtNum(prev.clicks ?? 0)} prior quarter (${fmtPctChange(row.clicks ?? 0, prev.clicks ?? 0)}).` : "";
+          addContent({
+            opportunity_title: `Freshness Opportunity: Refresh ${shortUrl(page)}`,
+            priority: "P2", impact: "Med", effort: "M",
+            kpi_affected: "Rankings, CTR",
+            urls: [page],
+            evidence: `GSC (${pastWindowLabel}): ${fmtNum(row.impressions ?? 0)} impressions, ${fmtPct(row.ctr ?? 0)} CTR, avg position ${(row.position ?? 0).toFixed(1)}.${clickNote}`,
+            problem: "Declining click performance despite impression stability often indicates content freshness issues — competitors have updated their pages and are now outperforming this one in SERP.",
+            opportunity: "Update page with current year statistics, new research citations, refreshed treatment protocol descriptions, and recent testimonials. Update the page's publication/modified date in schema markup.",
+            why_it_matters: "Google's freshness signal rewards recently updated content, especially for 'evergreen' queries like treatment options, insurance coverage, and detox processes.",
+            recommended_next_step: "Review page content against top 3 current SERP competitors. Identify 3–5 sections with outdated information or missing content blocks. Update and republish.",
+          });
+        }
+      }
+
+      // Fallback: GSC relaxed-threshold impressions
+      if (gscAvailable && gscPageRows.length > 0 && contentOpps.length < CONTENT_MIN) {
+        const relaxed = gscPageRows
+          .filter((r: any) => !seenContentUrls.has(r.keys?.[0]) && (r.impressions ?? 0) > 50 && (r.ctr ?? 0) < 0.015)
+          .sort((a: any, b: any) => (b.impressions ?? 0) - (a.impressions ?? 0))
+          .slice(0, CONTENT_MIN - contentOpps.length);
+        for (const row of relaxed) {
+          if (contentOpps.length >= CONTENT_MIN) break;
+          const page = row.keys?.[0] ?? "";
+          const pos = (row.position ?? 0).toFixed(1);
+          addContent({
+            opportunity_title: `CTR Optimization Opportunity: ${shortUrl(page)}`,
+            priority: "P2", impact: "Low", effort: "S",
+            kpi_affected: "CTR, Rankings",
+            urls: [page],
+            evidence: `GSC (${pastWindowLabel}): ${fmtNum(row.impressions ?? 0)} impressions, ${fmtPct(row.ctr ?? 0)} CTR, avg position ${pos}. Below-average CTR for this impression volume.`,
+            problem: "Below-average CTR on a page with meaningful impression volume suggests title/meta description or rich result markup can be improved.",
+            opportunity: "Test a more compelling title tag and meta description. Add structured data (FAQ, Review, HowTo) where applicable to enhance the SERP listing with rich results.",
+            why_it_matters: "Improving CTR on pages with significant impression volume generates more organic visits without requiring any ranking improvement.",
+            recommended_next_step: "Check current SERP for this page's primary query. Identify which top-3 results earn the most clicks (look at title/description patterns). Rewrite to match high-performing patterns.",
+          });
+        }
+      }
+    }
+
+    // ── PASS 2: No GSC/GA4 — SF-only baseline content opps ──────────────
+    if (contentOpps.length < CONTENT_MIN && !gscAvailable && !ga4Available && sfAvailable && sfData.length > 0) {
       contentOpps.push({
-        opportunity_title: "Connect GSC and GA4 to Enable Content Analysis",
-        priority: "P0",
-        impact: "High",
-        effort: "S",
-        kpi_affected: "CTR, Rankings, Tracking Integrity",
-        urls: [],
-        evidence: "Not available — neither GSC nor GA4 are connected for this client.",
-        problem: "Without GSC and GA4 data, all content opportunity detection is blind. We cannot identify underperforming pages, striking distance rankings, or CTR issues.",
-        opportunity: "Connect Google Search Console and GA4 in Setup → Analytics & Search to unlock automated content opportunity detection.",
-        why_it_matters: "Content optimization is the highest-ROI SEO activity. Without data, content decisions are based on guesswork.",
+        opportunity_title: "Connect GSC + GA4 for Full Content Analysis",
+        priority: "P0", impact: "High", effort: "S",
+        kpi_affected: "CTR, Rankings, Tracking Integrity", urls: [],
+        evidence: "GSC and GA4 not connected — content opportunity scoring requires real traffic and ranking data.",
+        problem: "Without GSC impressions, CTR, and positioning data, content optimization is based on guesswork. We cannot identify which pages are close to page 1, which have poor CTR, or which are losing traffic.",
+        opportunity: "Connect Google Search Console and GA4 in Setup → Analytics & Search to unlock full automated content opportunity detection.",
+        why_it_matters: "Content optimization is the highest-ROI SEO activity. Real data allows precise identification of pages with the most upside.",
         recommended_next_step: "Connect GSC and GA4 credentials in Setup, then regenerate this report.",
       });
     }
 
+    console.log(`[QBR Prep] Content: ${contentOpps.length} opportunities (min target: ${CONTENT_MIN})`);
     allCategories.push({
       category_name: "Content Opportunities",
       opportunities: scoreOpps(contentOpps).slice(0, cap),
@@ -1158,22 +1351,107 @@ export async function generateQbrPrep(input: QbrPrepInput): Promise<QbrPrepOutpu
       }
     }
 
-    if (!ga4Available) {
+    // ── Always-on: high-intent URL pattern CRO opportunities ────────────
+    const HIGH_INTENT_PATTERNS = [
+      { pattern: /\/verify[-_]?insurance/i, label: "Verify Insurance", priority: "P0" as const, note: "Insurance verification is the #1 conversion trigger for treatment centers — visitors reaching this page have high admission intent." },
+      { pattern: /\/insurance/i, label: "Insurance Coverage", priority: "P0" as const, note: "Insurance acceptance pages drive high-intent traffic and should convert at the highest rate on the site." },
+      { pattern: /\/admissions/i, label: "Admissions", priority: "P0" as const, note: "Admissions pages are the direct conversion funnel entry — friction here directly reduces intake volume." },
+      { pattern: /\/contact/i, label: "Contact", priority: "P1" as const, note: "Contact pages are the last step before a lead is captured. Any friction here is costly." },
+      { pattern: /\/get[-_]?help/i, label: "Get Help", priority: "P0" as const, note: "High-intent pages for users in acute need. Mobile optimization is critical." },
+      { pattern: /\/detox/i, label: "Detox Program", priority: "P1" as const, note: "Detox pages rank for high commercial-intent queries and should drive clear intake CTAs." },
+      { pattern: /\/residential/i, label: "Residential Treatment", priority: "P1" as const, note: "Residential pages target decision-stage visitors comparing treatment options." },
+      { pattern: /\/programs/i, label: "Programs", priority: "P2" as const, note: "Program pages inform and qualify leads — conversion optimization here improves downstream intake rates." },
+    ];
+
+    const seenCroPatterns = new Set<string>();
+    const sourceUrls = sfData.length > 0
+      ? sfData.map(r => String(r[sfCol.url] ?? "")).filter(Boolean)
+      : (client.moneyPages ?? []).map((p: string) => p.startsWith("http") ? p : `${siteBase}${p}`);
+
+    for (const { pattern, label, priority, note } of HIGH_INTENT_PATTERNS) {
+      if (seenCroPatterns.has(label)) continue;
+      const matchingUrls = sourceUrls.filter(u => pattern.test(u)).slice(0, 3);
+      if (matchingUrls.length === 0) continue;
+
+      seenCroPatterns.add(label);
+      const ga4Matches = matchingUrls.map(u => ga4ByNorm.get(normUrl(u))).filter(Boolean);
+      const gscMatches = matchingUrls.map(u => gscByNorm.get(normUrl(u))).filter(Boolean);
+      const ga4Note = ga4Matches.length > 0
+        ? ` GA4: ${fmtNum(ga4Matches.reduce((s: number, r: any) => s + (r?.sessions ?? 0), 0))} organic sessions, ${fmtNum(ga4Matches.reduce((s: number, r: any) => s + (r?.conversions ?? 0), 0))} conversions.`
+        : " GA4: no data yet for this page.";
+      const gscNote = gscMatches.length > 0
+        ? ` GSC: avg position ${((gscMatches.reduce((s: number, r: any) => s + (r?.position ?? 0), 0) / gscMatches.length)).toFixed(1)}, ${fmtNum(gscMatches.reduce((s: number, r: any) => s + (r?.impressions ?? 0), 0))} impressions.`
+        : "";
+
+      const alreadyCovered = croOpps.some(o => matchingUrls.some(u => o.urls.includes(u)));
+      if (alreadyCovered) continue;
+
       croOpps.push({
-        opportunity_title: "Connect GA4 to Enable CRO Analysis",
-        priority: "P0",
-        impact: "High",
-        effort: "S",
-        kpi_affected: "Forms, Calls, Tracking Integrity",
-        urls: [],
-        evidence: "Not available — GA4 not connected.",
-        problem: "Without GA4, all landing page CVR, device split, and engagement analysis is impossible. CRO improvements cannot be identified, measured, or validated.",
-        opportunity: "Connect GA4 in Setup → Analytics & Search. Ensure conversion events are properly configured (form submissions, click-to-call, chat initiations).",
-        why_it_matters: "CRO improvements on high-traffic organic pages are the fastest way to increase lead volume without additional traffic investment.",
-        recommended_next_step: "Connect GA4 credentials in Setup. Configure lead events in the Client settings (form submit event names). Regenerate this QBR Prep report.",
+        opportunity_title: `CRO Audit: ${label} Page${matchingUrls.length > 1 ? "s" : ""} (${matchingUrls.map(shortUrl).join(", ")})`,
+        priority, impact: priority === "P0" ? "High" : "Med",
+        effort: "M", kpi_affected: "Forms, Calls, Admissions",
+        urls: matchingUrls,
+        evidence: `Identified as high-intent ${label} page via URL pattern.${ga4Note}${gscNote}`,
+        problem: `High-intent ${label} pages must convert at the highest rate on the site. Common issues: form too long (>5 fields), no mobile sticky CTA, weak trust signals above the fold, no phone number in hero, slow load time, or CTA buried below the fold.`,
+        opportunity: `Audit the ${label} page for: (1) above-fold CTA with click-to-call on mobile, (2) insurance/payment objection handling, (3) social proof (reviews, certs, accreditations), (4) form field count ≤3 on mobile, (5) sticky mobile call bar, (6) clear next-step messaging ('We'll call you within 10 minutes').`,
+        why_it_matters: note,
+        recommended_next_step: `Run the page through Google PageSpeed Insights (mobile). Audit CTA visibility on 375px screen. Add 'We Accept [Insurer]' trust badges if insurance page. Implement sticky call bar via CSS position:fixed on mobile. Track CTA clicks as a GA4 event.`,
       });
     }
 
+    // ── PASS 2: If still < 5 CRO opps, add generic fallbacks ───────────
+    const CRO_MIN = 5;
+    if (croOpps.length < CRO_MIN) {
+      if (!ga4Available) {
+        croOpps.push({
+          opportunity_title: "Connect GA4 to Unlock Data-Driven CRO Analysis",
+          priority: "P0", impact: "High", effort: "S",
+          kpi_affected: "Forms, Calls, Tracking Integrity", urls: [],
+          evidence: "GA4 not connected — CVR, device split, and engagement data unavailable.",
+          problem: "Without GA4, landing page CVR, device split, and engagement analysis are impossible. CRO improvements cannot be measured or validated.",
+          opportunity: "Connect GA4 in Setup → Analytics & Search. Configure conversion events (form submissions, click-to-call, chat). This unlocks automated per-page CRO identification.",
+          why_it_matters: "CRO improvements on high-traffic pages are the fastest way to increase lead volume without additional traffic investment.",
+          recommended_next_step: "Connect GA4 credentials in Setup. Configure lead events in Client settings. Regenerate this QBR Prep.",
+        });
+      }
+
+      const fallbackCros: Opportunity[] = [
+        {
+          opportunity_title: "Mobile Sticky Call Bar: Implement Sitewide",
+          priority: "P1", impact: "High", effort: "S", kpi_affected: "Calls",
+          urls: [], evidence: "Industry benchmark: recovery centers with sticky mobile call bars see 15–30% higher call conversion rates on mobile traffic.",
+          problem: "60–70% of recovery center organic traffic is mobile. If click-to-call requires scrolling to find, a significant portion of mobile visitors leave without calling.",
+          opportunity: "Implement a fixed-position bottom bar on mobile with: click-to-call number, 'Free & Confidential' label, and insurance verification CTA. Show on all pages, hide on desktop.",
+          why_it_matters: "A sticky call bar is the single highest-ROI mobile CRO improvement for treatment centers. Implementation takes <2 hours and impact is immediate.",
+          recommended_next_step: "Add CSS: .mobile-call-bar { position:fixed; bottom:0; width:100%; z-index:9999 }. A/B test with GA4 event tracking. Target: 20%+ increase in mobile call clicks.",
+        },
+        {
+          opportunity_title: "Form Friction Audit: Reduce Fields on All Lead Forms",
+          priority: "P1", impact: "High", effort: "S", kpi_affected: "Forms",
+          urls: [], evidence: "Data: Forms with >5 fields convert 50–60% worse than 3-field forms. Recovery forms often ask for name, email, phone, DOB, insurance, zip code, and message — 7+ fields.",
+          problem: "Overly long forms — especially on mobile — create significant friction at the most critical conversion point. Every additional field reduces form completion rate.",
+          opportunity: "Reduce all primary lead capture forms to 3 fields maximum: Name, Phone, and one optional field (email or insurance). Move additional qualification questions to a post-submission sequence.",
+          why_it_matters: "Reducing form friction is the fastest conversion improvement with zero SEO risk. A 3-field form vs 7-field form can double form submission rates.",
+          recommended_next_step: "Audit all forms on the site. Identify fields that can be collected post-submission. Implement 3-field version and track with GA4 form_submit event. A/B test over 2 weeks.",
+        },
+        {
+          opportunity_title: "Above-Fold Trust Signal Audit: Add Accreditations & Reviews",
+          priority: "P2", impact: "Med", effort: "M", kpi_affected: "Forms, Calls",
+          urls: [], evidence: "Trust signals (JCAHO, CARF, state licensing, Google stars, BBB) directly reduce anxiety for prospective patients evaluating unfamiliar treatment centers.",
+          problem: "Treatment center websites that don't prominently display accreditations, licensing, and social proof convert at lower rates because prospective clients evaluate safety before calling.",
+          opportunity: "Add above-fold trust badges on all service and admissions pages: accreditation logos (JCAHO/CARF), Google/Yelp star rating with review count, 'Licensed in [State]' badge, HIPAA compliance badge.",
+          why_it_matters: "Accreditation logos and review counts reduce perceived risk, especially for first-time help-seekers. This is especially important for pages targeting family members researching options.",
+          recommended_next_step: "Create a trust badge component. Add to homepage hero, admissions page header, insurance page header. A/B test with GA4 scroll + CTA click events to measure impact.",
+        },
+      ];
+
+      for (const fb of fallbackCros) {
+        if (croOpps.length >= CRO_MIN) break;
+        if (!croOpps.some(o => o.opportunity_title === fb.opportunity_title)) croOpps.push(fb);
+      }
+    }
+
+    console.log(`[QBR Prep] CRO: ${croOpps.length} opportunities (min target: ${CRO_MIN})`);
     allCategories.push({
       category_name: "CRO / Conversion Opportunities",
       opportunities: scoreOpps(croOpps).slice(0, cap),
@@ -1278,6 +1556,47 @@ export async function generateQbrPrep(input: QbrPrepInput): Promise<QbrPrepOutpu
       }
     }
 
+    // ── Always ensure minimum 3 tracking opportunities ───────────────────
+    const TRACKING_MIN = 3;
+    const trackingFallbacks: Opportunity[] = [
+      {
+        opportunity_title: "GA4 Conversion Event Audit: Verify All Lead Events Fire Correctly",
+        priority: "P1", impact: "High", effort: "S", kpi_affected: "Tracking Integrity, Forms",
+        urls: [],
+        evidence: `Recommended audit for ${pastWindowLabel}. GA4 conversion events should include: form_submit, click_to_call, chat_start, and insurance_verification_start.`,
+        problem: "GA4 conversion events frequently break due to CMS updates, form plugin changes, or GTM container errors. Broken events mean performance data is wrong — leading to misguided SEO decisions.",
+        opportunity: "Audit all GA4 conversion events using GA4 DebugView. Submit each form on the site in test mode and verify the corresponding event fires. Check that all events are marked as conversions in GA4 Admin → Events.",
+        why_it_matters: "Broken conversion tracking affects every optimization decision: content priority, CRO focus, reporting, and budget allocation. One unchecked change can break tracking sitewide for an entire quarter.",
+        recommended_next_step: "Enable GA4 DebugView (add ?debug_mode=1 to URL). Navigate to each key page. Submit each form and click each call button. Confirm corresponding events appear in DebugView within 30 seconds.",
+      },
+      {
+        opportunity_title: "Call Tracking Source Attribution Audit",
+        priority: "P1", impact: "High", effort: "M", kpi_affected: "Calls, Tracking Integrity",
+        urls: [],
+        evidence: `${callTrackingAvailable ? "Call tracking connected — verify source attribution is correct for organic, paid, and GBP channels." : "No call tracking connected — phone leads are currently untracked and unattributed."}`,
+        problem: `${callTrackingAvailable ? "Call tracking attribution can drift over time as tracking numbers change, DNI scripts fail, or new campaigns are added without corresponding tracking numbers." : "Without call tracking, the majority of organic leads (phone calls) are invisible. SEO ROI is systematically understated."}`,
+        opportunity: `${callTrackingAvailable ? "Audit all tracking numbers: verify organic website, GBP, and any paid campaign numbers are active, correctly sourced in CallRail/CTM, and routing to the right destination." : "Implement CallRail or CTM with dynamic number insertion (DNI). Create separate tracking pools for: organic website, GBP profile, and paid campaigns."}`,
+        why_it_matters: "For treatment centers, phone calls represent 60–80% of lead volume. Accurate call attribution is essential for understanding which channels and pages drive admissions.",
+        recommended_next_step: `${callTrackingAvailable ? "Audit call tracking dashboard: check all number pools are active, verify source attribution matches expected channels, and confirm whisper messages are enabled for staff context." : "Sign up for CallRail. Install DNI snippet. Create 3 tracking pools. Connect to SmartEO in Setup → Call Tracking."}`,
+      },
+      {
+        opportunity_title: "GSC Property Coverage Audit: Verify Sitemap & Index Status",
+        priority: "P2", impact: "Med", effort: "S", kpi_affected: "Indexation, Tracking Integrity",
+        urls: [],
+        evidence: `${gscAvailable ? `GSC connected: ${fmtNum(gscPageRows.length)} pages tracked. Verify sitemap submission and Coverage report for errors.` : "GSC not connected — indexation status and sitemap errors are not visible."}`,
+        problem: "GSC property configuration errors (wrong property type, unverified property, sitemap not submitted, or submitted sitemap returning 404) can cause significant gaps in data and indexation visibility.",
+        opportunity: `${gscAvailable ? "In GSC → Sitemaps, verify the sitemap is submitted and returning 'Success'. Check Coverage → Errors for new issues not captured in the Screaming Frog crawl. Review Index Coverage trend for any sudden drops." : "Connect Google Search Console in Setup → Analytics & Search. Verify property ownership via DNS or HTML tag. Submit XML sitemap."}`,
+        why_it_matters: "GSC is the primary diagnostic tool for indexation and visibility issues. Without a verified, correctly configured property, many technical problems go undetected until they cause ranking drops.",
+        recommended_next_step: `${gscAvailable ? "GSC → Coverage → Errors. Export all errors. Cross-reference with SF crawl. Pay special attention to 'Submitted URL not found (404)' and 'Server error (5xx)' entries." : "Connect GSC and submit sitemap. Set up weekly Coverage report review as a standard QBR input."}`,
+      },
+    ];
+
+    for (const fb of trackingFallbacks) {
+      if (trackingOpps.length >= TRACKING_MIN) break;
+      if (!trackingOpps.some(o => o.opportunity_title === fb.opportunity_title)) trackingOpps.push(fb);
+    }
+
+    console.log(`[QBR Prep] Tracking: ${trackingOpps.length} opportunities (min target: ${TRACKING_MIN})`);
     allCategories.push({
       category_name: "Tracking / Measurement Opportunities",
       opportunities: scoreOpps(trackingOpps).slice(0, cap),

@@ -1165,56 +1165,54 @@ export default function ReportsPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex flex-col border-b bg-background">
-        <div className="flex items-center gap-3 px-4 py-3 flex-wrap">
-          <Button
-            size="icon"
-            variant="ghost"
-            onClick={() => setPromptsPanelOpen(v => !v)}
-            className="shrink-0"
-            title={promptsPanelOpen ? "Hide prompts" : "Show prompts"}
-            data-testid="button-toggle-prompts"
-          >
-            {promptsPanelOpen ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeftOpen className="w-4 h-4" />}
-          </Button>
+      <div className="flex items-center gap-3 px-4 py-3 border-b bg-background">
+        <Button
+          size="icon"
+          variant="ghost"
+          onClick={() => setPromptsPanelOpen(v => !v)}
+          className="shrink-0"
+          title={promptsPanelOpen ? "Hide prompts" : "Show prompts"}
+          data-testid="button-toggle-prompts"
+        >
+          {promptsPanelOpen ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeftOpen className="w-4 h-4" />}
+        </Button>
 
-          <div className="w-52 shrink-0">
-            {clientsLoading ? (
-              <Skeleton className="h-9 w-full" />
-            ) : (
-              <Select value={selectedClientId} onValueChange={setSelectedClientId}>
-                <SelectTrigger data-testid="select-client">
-                  <SelectValue placeholder="Select client…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {clients.map(client => (
-                    <SelectItem key={client.id} value={String(client.id)} data-testid={`select-client-${client.id}`}>
-                      {client.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          </div>
-
-          <div className="w-40 shrink-0">
-            <Select value={reportType} onValueChange={v => setReportType(v as ReportType)}>
-              <SelectTrigger data-testid="select-report-type">
-                <SelectValue />
+        <div className="w-52 shrink-0">
+          {clientsLoading ? (
+            <Skeleton className="h-9 w-full" />
+          ) : (
+            <Select value={selectedClientId} onValueChange={setSelectedClientId}>
+              <SelectTrigger data-testid="select-client">
+                <SelectValue placeholder="Select client…" />
               </SelectTrigger>
               <SelectContent>
-                {(["biweekly", "monthly", "qbr"] as ReportType[]).map(type => (
-                  <SelectItem key={type} value={type} data-testid={`select-report-type-${type}`}>
-                    {REPORT_TYPE_LABELS[type]}
+                {clients.map(client => (
+                  <SelectItem key={client.id} value={String(client.id)} data-testid={`select-client-${client.id}`}>
+                    {client.name}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-          </div>
+          )}
+        </div>
+
+        <div className="w-40 shrink-0">
+          <Select value={reportType} onValueChange={v => setReportType(v as ReportType)}>
+            <SelectTrigger data-testid="select-report-type">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(["biweekly", "monthly", "qbr"] as ReportType[]).map(type => (
+                <SelectItem key={type} value={type} data-testid={`select-report-type-${type}`}>
+                  {REPORT_TYPE_LABELS[type]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         {selectedClientId && (
-          <div className="flex items-center gap-2 px-4 py-2 border-t bg-muted/20 flex-wrap">
+          <div className="flex items-center gap-2 ml-auto shrink-0">
             <Bug className="w-3.5 h-3.5 text-yellow-600 dark:text-yellow-500 shrink-0" />
             <span className="text-xs text-muted-foreground shrink-0">Compare</span>
 
@@ -1222,10 +1220,10 @@ export default function ReportsPage() {
               value={sfFromId ? String(sfFromId) : "__none__"}
               onValueChange={v => setSfFromId(v === "__none__" ? null : Number(v))}
             >
-              <SelectTrigger className="h-7 text-xs w-56" data-testid="select-sf-from">
+              <SelectTrigger className="h-7 text-xs w-48" data-testid="select-sf-from">
                 <SelectValue placeholder="Select crawl…" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent align="end">
                 <SelectItem value="__none__">No crawl selected</SelectItem>
                 {sfReports.map(r => (
                   <SelectItem key={r.id} value={String(r.id)} data-testid={`sf-from-option-${r.id}`}>
@@ -1252,10 +1250,10 @@ export default function ReportsPage() {
                 setSfToId(v === "__none__" ? null : Number(v));
               }}
             >
-              <SelectTrigger className="h-7 text-xs w-64" data-testid="select-sf-to">
-                <SelectValue placeholder="Select or upload crawl…" />
+              <SelectTrigger className="h-7 text-xs w-48" data-testid="select-sf-to">
+                <SelectValue placeholder="Select or upload…" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent align="end">
                 <SelectItem value="__none__">No crawl selected</SelectItem>
                 {sfReports.map(r => (
                   <SelectItem key={r.id} value={String(r.id)} data-testid={`sf-to-option-${r.id}`}>

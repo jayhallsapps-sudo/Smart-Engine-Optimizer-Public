@@ -128,6 +128,22 @@ async function testCTM(apiKey: string, apiSecret: string): Promise<TestResult> {
   }
 }
 
+async function testAirtable(pat: string): Promise<TestResult> {
+  try {
+    const resp = await fetch("https://api.airtable.com/v0/meta/whoami", {
+      headers: { Authorization: `Bearer ${pat}` },
+    });
+    const data = (await resp.json()) as any;
+    if (!resp.ok) {
+      throw new Error(data?.error?.message || data?.message || resp.statusText);
+    }
+    const email = data?.email ?? data?.id ?? "connected";
+    return { success: true, message: `Authenticated as ${email}` };
+  } catch (err: any) {
+    return { success: false, message: err.message };
+  }
+}
+
 export async function testCredential(credentialId: number): Promise<TestResult> {
   const all = await storage.getApiCredentials();
   const cred = all.find((c) => c.id === credentialId);
@@ -154,6 +170,10 @@ export async function testCredential(credentialId: number): Promise<TestResult> 
 
     if (cred.service === "semrush") {
       return testSEMrush(value);
+    }
+
+    if (cred.service === "airtable") {
+      return testAirtable(value);
     }
 
     if (cred.service === "call_tracking_metrics") {

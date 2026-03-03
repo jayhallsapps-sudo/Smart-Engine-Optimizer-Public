@@ -346,6 +346,14 @@ export async function registerRoutes(
       return res.status(400).json({ message: "Invalid SF report data", errors: parsed.error.issues });
     }
     const report = await storage.createSfReport(parsed.data);
+    const allReports = await storage.getSfReports(clientId);
+    const MAX_SF_REPORTS = 24;
+    if (allReports.length > MAX_SF_REPORTS) {
+      const toDelete = allReports.slice(MAX_SF_REPORTS);
+      for (const old of toDelete) {
+        await storage.deleteSfReport(old.id);
+      }
+    }
     res.status(201).json({ id: report.id, clientId: report.clientId, reportDate: report.reportDate, filename: report.filename, rowCount: report.rowCount, headers: report.headers, createdAt: report.createdAt });
   });
 

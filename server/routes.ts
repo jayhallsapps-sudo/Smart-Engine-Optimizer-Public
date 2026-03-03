@@ -12,6 +12,7 @@ import { testCredential } from "./connectionTest";
 import { insertSfReportSchema, insertCallTrackingReportSchema } from "@shared/schema";
 import { generateBiweeklyDocx, generatePptx } from "./reportGenerators";
 import type { SectionData } from "./reportGenerators";
+import { generateQbrPrep } from "./qbrPrepGenerator";
 import { queryGsc, handlesGscCommand } from "./gscClient";
 import { queryGa4, handlesGa4Command } from "./ga4Client";
 import { queryCallRail, handlesCallRailCommand } from "./callrailClient";
@@ -865,6 +866,89 @@ export async function registerRoutes(
     if (!result) result = generateMockResult(command as any, client.name, dateRange);
     return { result, liveSource, description: getCommandDescription(command as any), dateRangeLabel: getDateRangeLabel(dateRange) };
   }
+
+  app.post("/api/reports/qbr-prep/generate", async (req, res) => {
+    const {
+      clientId,
+      pastQuarter,
+      futureQuarter,
+      includeContent = true,
+      includeTechnical = true,
+      includeLocal = true,
+      includeCro = true,
+      includeAuthority = true,
+      includeTracking = true,
+      opportunityCapPerCategory = 10,
+      timezone = "America/Los_Angeles",
+    } = req.body;
+
+    if (!clientId || !pastQuarter || !futureQuarter) {
+      return res.status(400).json({ message: "clientId, pastQuarter, and futureQuarter are required" });
+    }
+
+    try {
+      const output = await generateQbrPrep({
+        clientId: Number(clientId),
+        pastQuarter,
+        futureQuarter,
+        includeContent: Boolean(includeContent),
+        includeTechnical: Boolean(includeTechnical),
+        includeLocal: Boolean(includeLocal),
+        includeCro: Boolean(includeCro),
+        includeAuthority: Boolean(includeAuthority),
+        includeTracking: Boolean(includeTracking),
+        opportunityCapPerCategory: Number(opportunityCapPerCategory),
+        timezone: String(timezone),
+      });
+      res.json(output);
+    } catch (err: any) {
+      console.error("QBR Prep generation error:", err);
+      res.status(500).json({ message: "Failed to generate QBR Prep: " + err.message });
+    }
+  });
+
+  app.post("/api/reports/qbr-prep/upload-to-drive", async (req, res) => {
+    const { markdown, reportTitle, clientId } = req.body;
+    if (!markdown) return res.status(400).json({ message: "markdown is required" });
+
+    try {
+      const { ReplitConnectors } = await import("@replit/connectors-sdk");
+      const connectors = new ReplitConnectors();
+
+      const filename = reportTitle ?? "QBR Prep Report";
+      const metadata = JSON.stringify({ name: filename, mimeType: "application/vnd.google-apps.document" });
+      const boundary = "-------smarteo_qbr_boundary";
+      const CRLF = "\r\n";
+
+      const metaBuf = Buffer.from(`--${boundary}${CRLF}Content-Type: application/json; charset=UTF-8${CRLF}${CRLF}${metadata}${CRLF}`, "utf8");
+      const filePrefixBuf = Buffer.from(`--${boundary}${CRLF}Content-Type: text/plain; charset=UTF-8${CRLF}${CRLF}`, "utf8");
+      const contentBuf = Buffer.from(markdown, "utf8");
+      const closeBuf = Buffer.from(`${CRLF}--${boundary}--`, "utf8");
+      const bodyBuffer = Buffer.concat([metaBuf, filePrefixBuf, contentBuf, closeBuf]);
+
+      const uploadRes = await connectors.proxy(
+        "google-drive",
+        "/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink",
+        {
+          method: "POST",
+          headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
+          body: bodyBuffer,
+        }
+      );
+
+      if (!uploadRes.ok) {
+        const errBody = await uploadRes.json().catch(() => ({})) as any;
+        const msg = errBody?.error?.message || uploadRes.statusText;
+        return res.status(uploadRes.status).json({ message: `Google Drive upload failed: ${msg}` });
+      }
+
+      const driveFile = await uploadRes.json() as { id: string; name: string; webViewLink: string };
+      res.json({ success: true, fileId: driveFile.id, fileName: driveFile.name, webViewLink: driveFile.webViewLink });
+    } catch (err: any) {
+      console.error("QBR Prep Drive upload error:", err);
+      res.status(500).json({ message: "Upload failed: " + err.message });
+    }
+  });
 
   app.get("/api/reports/auto-build", async (req, res) => {
     const clientId = Number(req.query.clientId);

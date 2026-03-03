@@ -11,11 +11,13 @@ import ReportsPage from "@/pages/reports";
 import ClientsPage from "@/pages/clients";
 import SetupPage from "@/pages/setup";
 import HistoryPage from "@/pages/history";
+import QbrPrepPage from "@/pages/qbr-prep";
 
 function Router() {
   return (
     <Switch>
       <Route path="/" component={ReportsPage} />
+      <Route path="/qbr-prep" component={QbrPrepPage} />
       <Route path="/clients" component={ClientsPage} />
       <Route path="/setup" component={SetupPage} />
       <Route path="/history" component={HistoryPage} />

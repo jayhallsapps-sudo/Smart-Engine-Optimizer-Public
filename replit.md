@@ -20,6 +20,7 @@ client/src/
     theme-toggle.tsx   - Theme switcher
   pages/
     reports.tsx        - Main Reports page (3-panel: selectors top, chat left, checklist right)
+    qbr-prep.tsx       - QBR Prep report generator (sidebar config + opportunity backlog viewer)
     clients.tsx        - Client CRUD management (tabbed form: Data Sources, SEO Tools, Config)
     setup.tsx          - Multi-account credential management for 7 services
     history.tsx        - Query log history
@@ -41,6 +42,7 @@ server/
   sfClient.ts          - Screaming Frog stored data reader (technical health, new pages diff)
   airtable.ts          - Live Airtable REST API for work log
   reportGenerators.ts  - .docx (biweekly) and .pptx (monthly/QBR) generators
+  qbrPrepGenerator.ts  - QBR Prep report engine: quarter window logic, multi-source data fetch (GSC/GA4/SF/CallRail), heuristic opportunity scoring, JSON+Markdown output
   googleAuth.ts        - Google OAuth flow (GSC, GA4, GBP, Sheets scopes)
   seed.ts              - Seeds 8 recovery centre clients
 shared/

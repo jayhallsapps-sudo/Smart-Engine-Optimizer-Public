@@ -1,4 +1,4 @@
-import { FileBarChart, Users, Settings, Zap, History } from "lucide-react";
+import { FileBarChart, Users, Settings, Zap, History, Sparkles } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import {
   Sidebar,
@@ -19,6 +19,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 
 const navItems = [
   { title: "Reports", url: "/", icon: FileBarChart },
+  { title: "QBR Prep", url: "/qbr-prep", icon: Sparkles },
   { title: "Clients", url: "/clients", icon: Users },
   { title: "History", url: "/history", icon: History },
   { title: "Setup", url: "/setup", icon: Settings },

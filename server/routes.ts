@@ -27,6 +27,30 @@ const AHREFS_COMMANDS = new Set([
   "ahrefs_competitor_visibility",
 ]);
 
+const SECTION_COMMANDS_AUTO: Record<string, Record<string, string[]>> = {
+  biweekly: {
+    bw_pulse: ["gsc_qoq_queries", "ga4_qoq_organic_funnel", "callrail_qoq_organic_calls", "ga4_session_movers"],
+    bw_progress: ["airtable_work_log"],
+  },
+  monthly: {
+    mo_qtd: ["ga4_qtd_totals"],
+    mo_conversion: ["ga4_landing_pages_by_conversions", "callrail_qoq_top_landing_pages"],
+    mo_gsc: ["gsc_qoq_queries", "gsc_top_queries"],
+    mo_keywords: ["semrush_keyword_distribution", "semrush_keyword_rankings"],
+    mo_initiatives: ["airtable_work_log"],
+    mo_audit: ["technical_health_summary"],
+    mo_content: ["content_output_summary", "new_pages_tracker"],
+  },
+  qbr: {
+    qbr_performance: ["gsc_qoq_queries", "ga4_qoq_organic_funnel", "callrail_qoq_organic_calls", "semrush_organic_overview"],
+    qbr_strategy: ["ga4_qoq_organic_landing_pages", "gsc_qoq_pages", "semrush_keyword_distribution"],
+  },
+};
+
+const COMMAND_DATE_OVERRIDES: Record<string, string> = {
+  ga4_qtd_totals: "qtd",
+};
+
 const AHREFS_BLOCKED_DOMAIN = "api.ahrefs.com";
 
 function guardAhrefsOutbound(url: string): void {
@@ -789,6 +813,111 @@ export async function registerRoutes(
       console.error("Drive upload error:", err);
       res.status(500).json({ message: "Upload failed: " + err.message });
     }
+  });
+
+  async function runCommand(
+    command: string,
+    client: any,
+    defaultDateRange: string
+  ): Promise<{ result: any; liveSource: string | null; description: string; dateRangeLabel: string } | null> {
+    if (AHREFS_COMMANDS.has(command as any)) return null;
+    const dateRange = COMMAND_DATE_OVERRIDES[command] ?? defaultDateRange;
+
+    if (command === "airtable_work_log") {
+      const { startDate, endDate } = dateRangeToActualDates(dateRange);
+      const airtableResult = await fetchAirtableWorkLog(client.id, startDate, endDate);
+      if (!airtableResult.success) return null;
+      const { data } = airtableResult;
+      const CREDIT_TYPE_LABELS: Record<string, string> = {
+        Scale: "New Content (Scale)",
+        Optimization: "Content Optimization",
+        "CRO Update": "CRO/UX Update",
+      };
+      const tables = Object.entries(data.byCreditType).map(([creditType, items]) => ({
+        title: CREDIT_TYPE_LABELS[creditType] ?? creditType,
+        headers: ["Task", "Status", "Due Date", "URL / Page"],
+        rows: (items as any[]).map(item => [item.task, item.status ?? "—", item.date, item.url ?? "—"]),
+      }));
+      const result = {
+        command: "airtable_work_log",
+        clientName: data.clientName,
+        dateRange: data.dateRange,
+        summary: [
+          { label: "Total Items", current: data.totalItems.toString(), previous: "—", delta: "—", deltaPercent: "—", isPositive: true },
+          { label: "Work Types", current: Object.keys(data.byCreditType).length.toString(), previous: "—", delta: "—", deltaPercent: "—", isPositive: true },
+        ],
+        tables,
+      };
+      return { result, liveSource: "airtable", description: getCommandDescription("airtable_work_log"), dateRangeLabel: data.dateRange };
+    }
+
+    let result: any = null;
+    let liveSource: string | null = null;
+    try {
+      if (handlesGscCommand(command as any)) { result = await queryGsc(command as any, client, dateRange); if (result) liveSource = "gsc"; }
+      if (!result && handlesGa4Command(command as any)) { result = await queryGa4(command as any, client, dateRange); if (result) liveSource = "ga4"; }
+      if (!result && handlesSfCommand(command as any)) { result = await querySfReport(command as any, client, dateRange); if (result) liveSource = "screaming_frog"; }
+      if (!result && handlesCallRailCommand(command as any)) { result = await queryCallRail(command as any, client, dateRange); if (result) liveSource = "callrail"; }
+      if (!result && handlesCtmCommand(command as any)) { result = await queryCtm(command as any, client, dateRange); if (result) liveSource = "ctm"; }
+      if (!result && handlesSemrushCommand(command as any)) { result = await querySemrush(command as any, client, dateRange); if (result) liveSource = "semrush"; }
+      if (!result && command === "gbp_local_summary") { result = await queryGbp(command as any, client, dateRange); if (result) liveSource = "gbp"; }
+    } catch { /* fall through to mock */ }
+    if (!result) result = generateMockResult(command as any, client.name, dateRange);
+    return { result, liveSource, description: getCommandDescription(command as any), dateRangeLabel: getDateRangeLabel(dateRange) };
+  }
+
+  app.get("/api/reports/auto-build", async (req, res) => {
+    const clientId = Number(req.query.clientId);
+    const reportType = String(req.query.reportType ?? "monthly");
+    const defaultDateRange = String(req.query.dateRange ?? "last_30_vs_prev_30");
+
+    const client = await storage.getClient(clientId);
+    if (!client) return res.status(404).json({ message: "Client not found" });
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders();
+
+    const send = (event: string, data: any) => {
+      if (!res.writableEnded) res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+
+    req.on("close", () => { if (!res.writableEnded) res.end(); });
+
+    const sectionCommandsForType = SECTION_COMMANDS_AUTO[reportType] ?? {};
+    const sectionIds = Object.keys(sectionCommandsForType);
+
+    send("init", { clientName: client.name, reportType, sectionIds });
+
+    await Promise.all(sectionIds.map(async (sectionId) => {
+      const commands = sectionCommandsForType[sectionId];
+      send("section_loading", { sectionId });
+
+      const committedItems: any[] = [];
+      await Promise.all(commands.map(async (command) => {
+        try {
+          const outcome = await runCommand(command, client, defaultDateRange);
+          if (!outcome) return;
+          committedItems.push({
+            sectionId,
+            response: {
+              success: true,
+              result: outcome.result,
+              commandDescription: outcome.description,
+              dateRangeLabel: outcome.dateRangeLabel,
+              liveSource: outcome.liveSource,
+            },
+            committedAt: new Date().toISOString(),
+          });
+        } catch { /* silent */ }
+      }));
+
+      send("section_done", { sectionId, items: committedItems });
+    }));
+
+    send("complete", { success: true });
+    res.end();
   });
 
   return httpServer;

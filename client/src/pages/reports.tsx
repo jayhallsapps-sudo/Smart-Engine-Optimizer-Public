@@ -58,6 +58,10 @@ import {
   Calendar,
   PanelLeftOpen,
   PanelLeftClose,
+  Zap,
+  Loader2,
+  Pencil,
+  Play,
 } from "lucide-react";
 import {
   Popover,
@@ -278,6 +282,23 @@ const REPORT_DATE_RANGES: Record<ReportType, string> = {
   monthly: "last_30_vs_prev_30",
   qbr: "last_90_vs_prev_90",
 };
+
+const AUTO_BUILD_PERIOD_LABEL: Record<ReportType, string> = {
+  biweekly: "Last 14 days vs previous 14 days",
+  monthly: "Last 30 days vs previous 30 days",
+  qbr: "Last 90 days vs previous 90 days",
+};
+
+const MANUAL_SECTIONS = new Set([
+  "bw_purpose", "bw_partnership",
+  "qbr_strategic_plan", "qbr_roadmap", "qbr_partnership",
+]);
+
+type BuildPhase = "idle" | "building" | "complete";
+interface SectionBuildStatus {
+  status: "waiting" | "loading" | "done" | "empty" | "manual";
+  itemCount: number;
+}
 
 function inferSection(command: string, reportType: ReportType): string {
   const map: Record<ReportType, Record<string, string>> = {
@@ -1291,6 +1312,122 @@ function PromptsPanel({
   );
 }
 
+function AutoBuildLivePanel({
+  reportType,
+  selectedClient,
+  buildPhase,
+  sectionStatuses,
+  onGenerateReport,
+  onBackToManual,
+}: {
+  reportType: ReportType;
+  selectedClient: Client | null;
+  buildPhase: BuildPhase;
+  sectionStatuses: Record<string, SectionBuildStatus>;
+  onGenerateReport: () => void;
+  onBackToManual: () => void;
+}) {
+  const sections = REPORT_SECTIONS[reportType];
+  const autoSections = sections.filter(s => !MANUAL_SECTIONS.has(s.id));
+  const doneCount = autoSections.filter(s => {
+    const st = sectionStatuses[s.id]?.status;
+    return st === "done" || st === "empty";
+  }).length;
+  const totalAuto = autoSections.length;
+  const progressPct = totalAuto > 0 ? Math.round((doneCount / totalAuto) * 100) : 0;
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="px-5 py-4 border-b bg-background">
+        <div className="flex items-center gap-3 mb-3">
+          {buildPhase === "building" ? (
+            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10">
+              <Loader2 className="w-4 h-4 text-primary animate-spin" />
+            </div>
+          ) : (
+            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/30">
+              <CheckCircle2 className="w-4 h-4 text-green-600 dark:text-green-400" />
+            </div>
+          )}
+          <div>
+            <p className="font-semibold text-sm">
+              {buildPhase === "building" ? "Building" : "Built"} {REPORT_TYPE_LABELS[reportType]} · {selectedClient?.name}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {buildPhase === "building"
+                ? `${doneCount} of ${totalAuto} data sections complete…`
+                : "All data fetched — ready to generate"}
+            </p>
+          </div>
+        </div>
+        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+          <div
+            className="h-full bg-primary rounded-full transition-all duration-700 ease-out"
+            style={{ width: `${progressPct}%` }}
+          />
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4 space-y-1.5">
+        {sections.map((section) => {
+          const st = sectionStatuses[section.id];
+          const isPurpose = section.id === "bw_purpose";
+          const isManual = MANUAL_SECTIONS.has(section.id);
+
+          let icon: React.ReactNode;
+          let label: string;
+          let rowCls = "border border-border/50";
+
+          if (isPurpose) {
+            icon = <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />;
+            label = "Auto-filled";
+            rowCls = "border border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/10";
+          } else if (isManual) {
+            icon = <Pencil className="w-4 h-4 text-muted-foreground shrink-0" />;
+            label = "Needs your input";
+          } else if (!st || st.status === "waiting") {
+            icon = <Circle className="w-4 h-4 text-muted-foreground/40 shrink-0" />;
+            label = "Waiting…";
+          } else if (st.status === "loading") {
+            icon = <Loader2 className="w-4 h-4 text-primary animate-spin shrink-0" />;
+            label = "Fetching…";
+            rowCls = "border border-primary/20 bg-primary/5";
+          } else if (st.status === "done") {
+            icon = <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />;
+            label = `${st.itemCount} data quer${st.itemCount === 1 ? "y" : "ies"} complete`;
+            rowCls = "border border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/10";
+          } else {
+            icon = <Minus className="w-4 h-4 text-muted-foreground/50 shrink-0" />;
+            label = "No live data · template defaults applied";
+          }
+
+          return (
+            <div key={section.id} className={`flex items-center gap-3 px-3 py-2.5 rounded-md ${rowCls}`}>
+              {icon}
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{section.title}</p>
+                <p className="text-[11px] text-muted-foreground">{label}</p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="px-4 py-3 border-t bg-background flex items-center gap-3">
+        {buildPhase === "complete" && (
+          <Button className="gap-1.5" onClick={onGenerateReport} data-testid="button-generate-from-build">
+            <Download className="w-3.5 h-3.5" />
+            Generate Report
+          </Button>
+        )}
+        <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={onBackToManual} data-testid="button-back-manual">
+          ← Back to Manual Mode
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export default function ReportsPage() {
   const [selectedClientId, setSelectedClientId] = useState<string>("");
   const [reportType, setReportType] = useState<ReportType>("qbr");
@@ -1304,6 +1441,8 @@ export default function ReportsPage() {
   const [sfToId, setSfToId] = useState<number | null>(null);
   const [sfUploading, setSfUploading] = useState(false);
   const [promptsPanelOpen, setPromptsPanelOpen] = useState(true);
+  const [buildPhase, setBuildPhase] = useState<BuildPhase>("idle");
+  const [sectionStatuses, setSectionStatuses] = useState<Record<string, SectionBuildStatus>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const sfFileInputRef = useRef<HTMLInputElement>(null);
@@ -1513,7 +1652,51 @@ export default function ReportsPage() {
   useEffect(() => {
     setCommittedSections({});
     setMessages([]);
+    setBuildPhase("idle");
+    setSectionStatuses({});
   }, [reportType, selectedClientId]);
+
+  const handleAutoBuild = () => {
+    if (!selectedClientId) {
+      toast({ title: "Select a client first", variant: "destructive" });
+      return;
+    }
+    setCommittedSections({});
+    setSectionStatuses({});
+    setBuildPhase("building");
+    setPromptsPanelOpen(false);
+
+    const dateRange = REPORT_DATE_RANGES[reportType];
+    const url = `/api/reports/auto-build?clientId=${selectedClientId}&reportType=${reportType}&dateRange=${dateRange}`;
+    const es = new EventSource(url);
+
+    es.addEventListener("section_loading", (e) => {
+      const { sectionId } = JSON.parse(e.data);
+      setSectionStatuses(prev => ({ ...prev, [sectionId]: { status: "loading", itemCount: 0 } }));
+    });
+
+    es.addEventListener("section_done", (e) => {
+      const { sectionId, items } = JSON.parse(e.data) as { sectionId: string; items: CommittedSection[] };
+      if (items.length > 0) {
+        setCommittedSections(prev => ({ ...prev, [sectionId]: items }));
+        setSectionStatuses(prev => ({ ...prev, [sectionId]: { status: "done", itemCount: items.length } }));
+      } else {
+        setSectionStatuses(prev => ({ ...prev, [sectionId]: { status: "empty", itemCount: 0 } }));
+      }
+    });
+
+    es.addEventListener("complete", () => {
+      setBuildPhase("complete");
+      es.close();
+      toast({ title: "Report built", description: "All data sections filled — ready to generate." });
+    });
+
+    es.onerror = () => {
+      es.close();
+      setBuildPhase("complete");
+      toast({ title: "Build finished", description: "Some sections may have used default data.", variant: "default" });
+    };
+  };
 
   const examples = EXAMPLE_QUERIES_BY_TYPE[reportType];
 
@@ -1564,6 +1747,31 @@ export default function ReportsPage() {
             </SelectContent>
           </Select>
         </div>
+
+        {selectedClientId && buildPhase === "idle" && (
+          <Button
+            size="sm"
+            className="shrink-0 gap-1.5 ml-2"
+            onClick={handleAutoBuild}
+            data-testid="button-auto-build"
+          >
+            <Zap className="w-3.5 h-3.5" />
+            Auto-Build
+          </Button>
+        )}
+
+        {selectedClientId && buildPhase !== "idle" && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="shrink-0 gap-1.5 ml-2"
+            onClick={handleAutoBuild}
+            data-testid="button-rebuild"
+          >
+            <Zap className="w-3.5 h-3.5" />
+            Rebuild
+          </Button>
+        )}
 
         {selectedClientId && (
           <div className="flex items-center gap-2 ml-auto shrink-0">
@@ -1624,7 +1832,7 @@ export default function ReportsPage() {
       </div>
 
       <div className="flex flex-1 overflow-hidden">
-        {promptsPanelOpen && (
+        {promptsPanelOpen && buildPhase === "idle" && (
           <PromptsPanel
             reportType={reportType}
             onSelectPrompt={(prompt) => {
@@ -1633,7 +1841,19 @@ export default function ReportsPage() {
             }}
           />
         )}
-        <div className="flex flex-col flex-1 min-w-0 min-h-0">
+        {buildPhase !== "idle" && (
+          <div className="flex flex-col flex-1 min-w-0 min-h-0 border-r">
+            <AutoBuildLivePanel
+              reportType={reportType}
+              selectedClient={selectedClient}
+              buildPhase={buildPhase}
+              sectionStatuses={sectionStatuses}
+              onGenerateReport={() => setGenerateDialogOpen(true)}
+              onBackToManual={() => { setBuildPhase("idle"); setPromptsPanelOpen(true); }}
+            />
+          </div>
+        )}
+        <div className={`flex flex-col flex-1 min-w-0 min-h-0 ${buildPhase !== "idle" ? "hidden" : ""}`}>
           <div className="flex-1 overflow-y-auto">
             {messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full p-6">

@@ -408,8 +408,15 @@ export default function SetupPage() {
     }
   };
 
-  const connectedCount = new Set(credentials.map(c => c.service)).size;
-  const totalServices = SERVICE_CONFIGS.filter(s => s.authType !== "desktop" && (s.authType as string) !== "mcp_only").length;
+  const connectableServiceIds = new Set(
+    SERVICE_CONFIGS
+      .filter(s => s.authType !== "desktop" && (s.authType as string) !== "mcp_only")
+      .map(s => s.id)
+  );
+  const connectedCount = new Set(
+    credentials.filter(c => connectableServiceIds.has(c.service as any)).map(c => c.service)
+  ).size;
+  const totalServices = connectableServiceIds.size;
 
   return (
     <div className="h-full overflow-y-auto">

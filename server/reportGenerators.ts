@@ -14,6 +14,7 @@ import {
   convertInchesToTwip,
   PageBreak,
 } from "docx";
+import type { QbrPrepJson, Opportunity } from "./qbrPrepGenerator";
 import PptxGenJSImport from "pptxgenjs";
 // tsx/ESM interop: pptxgenjs exports the constructor as module.exports in CJS.
 // moduleResolution:"bundler" may give us the namespace object instead of the fn.
@@ -569,4 +570,314 @@ export async function generatePptx(
 
   const buffer = await pptx.write({ outputType: "nodebuffer" }) as Buffer;
   return buffer;
+}
+
+const PRIORITY_COLORS: Record<string, string> = {
+  P0: "C0392B",
+  P1: "D68910",
+  P2: "1B3A6B",
+};
+
+const PRIORITY_LABELS: Record<string, string> = {
+  P0: "P0 — Critical",
+  P1: "P1 — High",
+  P2: "P2 — Standard",
+};
+
+const CATEGORY_LETTERS = ["A", "B", "C", "D", "E", "F", "G"];
+
+function oppHeaderRow(opp: Opportunity, idx: number): TableRow {
+  const prioColor = PRIORITY_COLORS[opp.priority] ?? WEBSERV_BLUE;
+  return new TableRow({
+    children: [
+      new TableCell({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        shading: { type: ShadingType.CLEAR, fill: prioColor },
+        borders: {
+          top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.NONE },
+          left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE },
+        },
+        children: [
+          new Paragraph({
+            spacing: { before: 60, after: 60 },
+            children: [
+              new TextRun({
+                text: `${idx}. ${opp.opportunity_title}`,
+                bold: true, size: 22, color: "FFFFFF",
+              }),
+            ],
+          }),
+        ],
+      }),
+    ],
+  });
+}
+
+function oppMetaRow(opp: Opportunity): TableRow {
+  const chips = [
+    `Priority: ${PRIORITY_LABELS[opp.priority] ?? opp.priority}`,
+    `Impact: ${opp.impact}`,
+    `Effort: ${opp.effort === "S" ? "S (Small)" : opp.effort === "M" ? "M (Medium)" : "L (Large)"}`,
+    `KPI: ${opp.kpi_affected}`,
+  ];
+  return new TableRow({
+    children: [
+      new TableCell({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        shading: { type: ShadingType.CLEAR, fill: "F3F4F6" },
+        borders: {
+          top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.SINGLE, size: 2, color: "E5E7EB" },
+          left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE },
+        },
+        children: [
+          new Paragraph({
+            spacing: { before: 60, after: 60 },
+            children: chips.map((c, i) => new TextRun({
+              text: (i > 0 ? "    |    " : "") + c,
+              bold: i === 0, size: 17, color: "374151",
+            })),
+          }),
+        ],
+      }),
+    ],
+  });
+}
+
+function oppBodyRows(opp: Opportunity): TableRow[] {
+  const fields: Array<[string, string]> = [];
+  if (opp.urls.length > 0) fields.push(["URL(s)", opp.urls.join("\n")]);
+  fields.push(["Evidence", opp.evidence]);
+  fields.push(["Problem", opp.problem]);
+  fields.push(["Opportunity", opp.opportunity]);
+  fields.push(["Why It Matters", opp.why_it_matters]);
+  fields.push(["Recommended Next Step", opp.recommended_next_step]);
+
+  return fields.map(([label, value]) =>
+    new TableRow({
+      children: [
+        new TableCell({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          borders: {
+            top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.SINGLE, size: 1, color: "E5E7EB" },
+            left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE },
+          },
+          children: [
+            new Paragraph({
+              spacing: { before: 80, after: 80 },
+              indent: { left: convertInchesToTwip(0.1) },
+              children: [
+                new TextRun({ text: `${label}: `, bold: true, size: 18, color: "374151" }),
+                new TextRun({ text: value, size: 18, color: "111827" }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    })
+  );
+}
+
+export async function generateQbrPrepDocx(json: QbrPrepJson): Promise<Buffer> {
+  const docChildren: any[] = [];
+
+  docChildren.push(
+    new Paragraph({
+      spacing: { before: 0, after: 160 },
+      shading: { type: ShadingType.CLEAR, fill: WEBSERV_BLUE },
+      children: [
+        new TextRun({ text: "QBR PREP", bold: true, size: 48, color: "FFFFFF" }),
+      ],
+    }),
+    new Paragraph({
+      spacing: { before: 80, after: 40 },
+      children: [
+        new TextRun({ text: json.client_name, bold: true, size: 32, color: WEBSERV_BLUE }),
+      ],
+    }),
+    new Paragraph({
+      spacing: { before: 0, after: 40 },
+      children: [
+        new TextRun({ text: `Analysis Window: `, bold: true, size: 20, color: "374151" }),
+        new TextRun({ text: `${json.past_window_label}  (${json.past_start} → ${json.past_end})`, size: 20, color: "374151" }),
+      ],
+    }),
+    new Paragraph({
+      spacing: { before: 0, after: 40 },
+      children: [
+        new TextRun({ text: `Planning Horizon: `, bold: true, size: 20, color: "374151" }),
+        new TextRun({ text: json.future_window_label, size: 20, color: "374151" }),
+      ],
+    }),
+    new Paragraph({
+      spacing: { before: 0, after: 200 },
+      children: [
+        new TextRun({ text: `Generated: `, bold: true, size: 18, color: WEBSERV_GRAY }),
+        new TextRun({ text: new Date(json.generated_at).toLocaleString("en-US", { dateStyle: "long", timeStyle: "short" }), size: 18, color: WEBSERV_GRAY }),
+      ],
+    }),
+
+    new Paragraph({
+      spacing: { before: 200, after: 120 },
+      children: [
+        new TextRun({ text: "Executive Summary", bold: true, size: 36, color: WEBSERV_BLUE }),
+      ],
+    }),
+
+    new Paragraph({
+      spacing: { before: 120, after: 80 },
+      children: [
+        new TextRun({ text: `Top Wins — ${json.past_window_label}`, bold: true, size: 24, color: "1B6B3A" }),
+      ],
+    }),
+  );
+
+  for (const win of json.executive_summary.wins) {
+    docChildren.push(
+      new Paragraph({
+        spacing: { before: 80, after: 20 },
+        bullet: { level: 0 },
+        children: [
+          new TextRun({ text: win.title, bold: true, size: 19, color: "111827" }),
+        ],
+      }),
+      new Paragraph({
+        spacing: { before: 0, after: 60 },
+        bullet: { level: 1 },
+        children: [
+          new TextRun({ text: `${win.source}: `, bold: true, size: 17, color: WEBSERV_GRAY }),
+          new TextRun({ text: win.evidence, size: 17, color: "374151" }),
+        ],
+      }),
+    );
+  }
+
+  docChildren.push(
+    new Paragraph({
+      spacing: { before: 160, after: 80 },
+      children: [
+        new TextRun({ text: `Top 5 Opportunities for ${json.future_window_label}`, bold: true, size: 24, color: WEBSERV_BLUE }),
+      ],
+    }),
+  );
+
+  const topOppTableRows = [
+    new TableRow({
+      tableHeader: true,
+      children: ["Priority", "Opportunity", "Category", "Impact", "KPI"].map(h =>
+        new TableCell({
+          shading: { type: ShadingType.CLEAR, fill: WEBSERV_BLUE },
+          borders: {
+            top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.NONE },
+            left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE },
+          },
+          children: [new Paragraph({
+            children: [new TextRun({ text: h, bold: true, size: 18, color: "FFFFFF" })],
+          })],
+        })
+      ),
+    }),
+    ...json.executive_summary.top_opportunities.map((opp, i) =>
+      new TableRow({
+        children: [
+          new TableCell({
+            shading: { type: ShadingType.CLEAR, fill: i % 2 === 0 ? WEBSERV_LIGHT : "FFFFFF" },
+            borders: { top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.SINGLE, size: 1, color: "E5E7EB" }, left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE } },
+            children: [new Paragraph({ children: [new TextRun({ text: opp.priority, bold: true, size: 18, color: PRIORITY_COLORS[opp.priority] ?? WEBSERV_BLUE })] })],
+          }),
+          new TableCell({
+            shading: { type: ShadingType.CLEAR, fill: i % 2 === 0 ? WEBSERV_LIGHT : "FFFFFF" },
+            width: { size: 50, type: WidthType.PERCENTAGE },
+            borders: { top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.SINGLE, size: 1, color: "E5E7EB" }, left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE } },
+            children: [new Paragraph({ children: [new TextRun({ text: opp.title, size: 17, color: "111827" })] })],
+          }),
+          new TableCell({
+            shading: { type: ShadingType.CLEAR, fill: i % 2 === 0 ? WEBSERV_LIGHT : "FFFFFF" },
+            borders: { top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.SINGLE, size: 1, color: "E5E7EB" }, left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE } },
+            children: [new Paragraph({ children: [new TextRun({ text: opp.category, size: 17, color: "374151" })] })],
+          }),
+          new TableCell({
+            shading: { type: ShadingType.CLEAR, fill: i % 2 === 0 ? WEBSERV_LIGHT : "FFFFFF" },
+            borders: { top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.SINGLE, size: 1, color: "E5E7EB" }, left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE } },
+            children: [new Paragraph({ children: [new TextRun({ text: opp.impact, size: 17, color: "374151" })] })],
+          }),
+          new TableCell({
+            shading: { type: ShadingType.CLEAR, fill: i % 2 === 0 ? WEBSERV_LIGHT : "FFFFFF" },
+            borders: { top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.SINGLE, size: 1, color: "E5E7EB" }, left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE } },
+            children: [new Paragraph({ children: [new TextRun({ text: opp.kpi, size: 17, color: "374151" })] })],
+          }),
+        ],
+      })
+    ),
+  ];
+
+  docChildren.push(
+    new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      rows: topOppTableRows,
+    }),
+    new Paragraph({
+      spacing: { before: 320, after: 160 },
+      children: [
+        new TextRun({ text: "Opportunity Backlog", bold: true, size: 36, color: WEBSERV_BLUE }),
+      ],
+    }),
+  );
+
+  for (let ci = 0; ci < json.opportunity_backlog.length; ci++) {
+    const cat = json.opportunity_backlog[ci];
+    const letter = CATEGORY_LETTERS[ci] ?? String(ci + 1);
+
+    docChildren.push(
+      new Paragraph({
+        spacing: { before: 200, after: 100 },
+        shading: { type: ShadingType.CLEAR, fill: "EFF6FF" },
+        children: [
+          new TextRun({ text: `${letter}. ${cat.category_name}`, bold: true, size: 28, color: WEBSERV_BLUE }),
+          new TextRun({ text: `  (${cat.opportunities.length} ${cat.opportunities.length === 1 ? "item" : "items"})`, size: 20, color: WEBSERV_GRAY }),
+        ],
+      }),
+    );
+
+    if (cat.opportunities.length === 0) {
+      docChildren.push(new Paragraph({
+        spacing: { before: 60, after: 60 },
+        children: [new TextRun({ text: "No opportunities identified for this category.", size: 18, color: WEBSERV_GRAY, italics: true })],
+      }));
+      continue;
+    }
+
+    for (let oi = 0; oi < cat.opportunities.length; oi++) {
+      const opp = cat.opportunities[oi];
+      docChildren.push(
+        new Paragraph({ spacing: { before: 100, after: 0 }, children: [] }),
+        new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          rows: [
+            oppHeaderRow(opp, oi + 1),
+            oppMetaRow(opp),
+            ...oppBodyRows(opp),
+          ],
+        }),
+        new Paragraph({ spacing: { before: 60, after: 0 }, children: [] }),
+      );
+    }
+  }
+
+  const doc = new Document({
+    sections: [{
+      properties: {
+        page: {
+          margin: {
+            top: convertInchesToTwip(0.75),
+            right: convertInchesToTwip(0.9),
+            bottom: convertInchesToTwip(0.75),
+            left: convertInchesToTwip(0.9),
+          },
+        },
+      },
+      children: docChildren,
+    }],
+  });
+
+  return await Packer.toBuffer(doc);
 }

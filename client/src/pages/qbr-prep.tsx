@@ -29,7 +29,6 @@ import {
   AlertTriangle,
   CheckCircle2,
   Loader2,
-  Copy,
   ExternalLink,
   BarChart3,
   Globe,
@@ -304,7 +303,7 @@ export default function QbrPrepPage() {
     mutationFn: async () => {
       if (!result) throw new Error("No report to upload");
       const res = await apiRequest("POST", "/api/reports/qbr-prep/upload-to-drive", {
-        markdown: result.markdown,
+        json: result.json,
         reportTitle: result.json.report_title,
         clientId: Number(clientId),
       });
@@ -315,7 +314,7 @@ export default function QbrPrepPage() {
         title: "Uploaded to Google Drive",
         description: (
           <a href={data.webViewLink} target="_blank" rel="noopener noreferrer" className="underline flex items-center gap-1">
-            Open in Google Docs <ExternalLink className="w-3 h-3" />
+            Open in Google Drive <ExternalLink className="w-3 h-3" />
           </a>
         ) as any,
       });
@@ -325,22 +324,35 @@ export default function QbrPrepPage() {
     },
   });
 
-  const downloadMarkdown = () => {
-    if (!result) return;
-    const blob = new Blob([result.markdown], { type: "text/markdown" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    const clientSlug = (selectedClient?.name ?? "client").toLowerCase().replace(/\s+/g, "_");
-    a.download = `${clientSlug}_qbr_prep_${pastQuarter.toLowerCase()}.md`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  const [docxDownloading, setDocxDownloading] = useState(false);
 
-  const copyJson = () => {
+  const downloadDocx = async () => {
     if (!result) return;
-    navigator.clipboard.writeText(JSON.stringify(result.json, null, 2));
-    toast({ title: "JSON copied to clipboard" });
+    setDocxDownloading(true);
+    try {
+      const res = await fetch("/api/reports/qbr-prep/docx", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ json: result.json }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: "Unknown error" }));
+        toast({ title: "Download failed", description: (err as any).message, variant: "destructive" });
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const clientSlug = (selectedClient?.name ?? "client").toLowerCase().replace(/\s+/g, "_");
+      a.download = `${clientSlug}_qbr_prep_${pastQuarter.toLowerCase()}.docx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      toast({ title: "Download failed", description: err.message, variant: "destructive" });
+    } finally {
+      setDocxDownloading(false);
+    }
   };
 
   const totalOpps = result
@@ -370,13 +382,19 @@ export default function QbrPrepPage() {
           </div>
           {result && (
             <div className="flex items-center gap-2 flex-wrap">
-              <Button variant="outline" size="sm" onClick={downloadMarkdown} data-testid="button-download-markdown">
-                <Download className="w-3.5 h-3.5 mr-1.5" />
-                Download .md
-              </Button>
-              <Button variant="outline" size="sm" onClick={copyJson} data-testid="button-copy-json">
-                <Copy className="w-3.5 h-3.5 mr-1.5" />
-                Copy JSON
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={downloadDocx}
+                disabled={docxDownloading}
+                data-testid="button-download-docx"
+              >
+                {docxDownloading ? (
+                  <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                ) : (
+                  <Download className="w-3.5 h-3.5 mr-1.5" />
+                )}
+                Download .docx
               </Button>
               <Button
                 size="sm"
@@ -633,13 +651,19 @@ export default function QbrPrepPage() {
               </div>
 
               <div className="flex items-center gap-2 pt-2 flex-wrap">
-                <Button variant="outline" size="sm" onClick={downloadMarkdown} data-testid="button-download-markdown-bottom">
-                  <Download className="w-3.5 h-3.5 mr-1.5" />
-                  Download Markdown
-                </Button>
-                <Button variant="outline" size="sm" onClick={copyJson} data-testid="button-copy-json-bottom">
-                  <Copy className="w-3.5 h-3.5 mr-1.5" />
-                  Copy JSON
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={downloadDocx}
+                  disabled={docxDownloading}
+                  data-testid="button-download-docx-bottom"
+                >
+                  {docxDownloading ? (
+                    <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                  ) : (
+                    <Download className="w-3.5 h-3.5 mr-1.5" />
+                  )}
+                  Download .docx
                 </Button>
                 <Button
                   size="sm"

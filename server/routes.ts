@@ -10,9 +10,10 @@ import { encrypt } from "./encryption";
 import { buildGoogleAuthUrl, exchangeCodeForToken, callbackHtml, isGoogleConfigured } from "./googleAuth";
 import { testCredential } from "./connectionTest";
 import { insertSfReportSchema, insertCallTrackingReportSchema } from "@shared/schema";
-import { generateBiweeklyDocx, generatePptx } from "./reportGenerators";
+import { generateBiweeklyDocx, generatePptx, generateQbrPrepDocx } from "./reportGenerators";
 import type { SectionData } from "./reportGenerators";
 import { generateQbrPrep } from "./qbrPrepGenerator";
+import type { QbrPrepJson } from "./qbrPrepGenerator";
 import { queryGsc, handlesGscCommand } from "./gscClient";
 import { queryGa4, handlesGa4Command } from "./ga4Client";
 import { queryCallRail, handlesCallRailCommand } from "./callrailClient";
@@ -907,24 +908,41 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/reports/qbr-prep/docx", async (req, res) => {
+    const { json } = req.body as { json: QbrPrepJson };
+    if (!json) return res.status(400).json({ message: "json is required" });
+    try {
+      const buffer = await generateQbrPrepDocx(json);
+      const slug = json.client_name.toLowerCase().replace(/\s+/g, "_");
+      const filename = `${slug}_qbr_prep_${json.past_window_label.replace(/\s+/g, "_")}.docx`;
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.send(buffer);
+    } catch (err: any) {
+      console.error("QBR Prep DOCX generation error:", err);
+      res.status(500).json({ message: "Failed to generate DOCX: " + err.message });
+    }
+  });
+
   app.post("/api/reports/qbr-prep/upload-to-drive", async (req, res) => {
-    const { markdown, reportTitle, clientId } = req.body;
-    if (!markdown) return res.status(400).json({ message: "markdown is required" });
+    const { json, reportTitle, clientId } = req.body as { json: QbrPrepJson; reportTitle?: string; clientId?: number };
+    if (!json) return res.status(400).json({ message: "json is required" });
 
     try {
+      const docxBuffer = await generateQbrPrepDocx(json);
+
       const { ReplitConnectors } = await import("@replit/connectors-sdk");
       const connectors = new ReplitConnectors();
 
-      const filename = reportTitle ?? "QBR Prep Report";
-      const metadata = JSON.stringify({ name: filename, mimeType: "application/vnd.google-apps.document" });
+      const filename = (reportTitle ?? "QBR Prep Report") + ".docx";
+      const metadata = JSON.stringify({ name: filename });
       const boundary = "-------smarteo_qbr_boundary";
       const CRLF = "\r\n";
 
       const metaBuf = Buffer.from(`--${boundary}${CRLF}Content-Type: application/json; charset=UTF-8${CRLF}${CRLF}${metadata}${CRLF}`, "utf8");
-      const filePrefixBuf = Buffer.from(`--${boundary}${CRLF}Content-Type: text/plain; charset=UTF-8${CRLF}${CRLF}`, "utf8");
-      const contentBuf = Buffer.from(markdown, "utf8");
+      const filePrefixBuf = Buffer.from(`--${boundary}${CRLF}Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document${CRLF}${CRLF}`, "utf8");
       const closeBuf = Buffer.from(`${CRLF}--${boundary}--`, "utf8");
-      const bodyBuffer = Buffer.concat([metaBuf, filePrefixBuf, contentBuf, closeBuf]);
+      const bodyBuffer = Buffer.concat([metaBuf, filePrefixBuf, docxBuffer, closeBuf]);
 
       const uploadRes = await connectors.proxy(
         "google-drive",

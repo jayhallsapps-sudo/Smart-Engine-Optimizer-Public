@@ -12,8 +12,10 @@ import {
   SidebarHeader,
   SidebarFooter,
   SidebarRail,
+  SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const navItems = [
   { title: "Reports", url: "/", icon: FileBarChart },
@@ -76,9 +78,15 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="p-4">
-        <div className="text-[10px] text-muted-foreground text-center group-data-[collapsible=icon]:hidden">
-          SmartEO v1.1
+      <SidebarFooter className="p-2">
+        <div className="flex items-center justify-between gap-1 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:justify-center">
+          <div className="text-[10px] text-muted-foreground group-data-[collapsible=icon]:hidden">
+            SmartEO v1.1
+          </div>
+          <div className="flex items-center gap-1 group-data-[collapsible=icon]:flex-col">
+            <ThemeToggle />
+            <SidebarTrigger data-testid="button-sidebar-toggle" />
+          </div>
         </div>
       </SidebarFooter>
       <SidebarRail />

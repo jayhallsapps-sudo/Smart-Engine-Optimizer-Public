@@ -19,6 +19,7 @@ import { queryCtm, handlesCtmCommand } from "./ctmClient";
 import { querySemrush, handlesSemrushCommand } from "./semrushClient";
 import { queryGbp } from "./gbpClient";
 import { querySfReport, handlesSfCommand } from "./sfClient";
+import { getGoogleAccessToken } from "./googleToken";
 
 const AHREFS_COMMANDS = new Set([
   "ahrefs_backlink_overview",
@@ -72,7 +73,20 @@ export async function registerRoutes(
       );
       const accountsData = await accountsResp.json() as any;
       if (!accountsResp.ok) {
-        return res.status(accountsResp.status).json({ message: accountsData.error?.message ?? "Failed to fetch GBP accounts" });
+        const rawMsg: string = accountsData.error?.message ?? "";
+        // Detect API not enabled error and provide actionable link
+        if (rawMsg.includes("has not been used") || rawMsg.includes("is disabled")) {
+          const projectMatch = rawMsg.match(/project (\d+)/);
+          const projectId = projectMatch?.[1] ?? "";
+          const enableUrl = projectId
+            ? `https://console.developers.google.com/apis/api/mybusinessaccountmanagement.googleapis.com/overview?project=${projectId}`
+            : "https://console.developers.google.com/apis/library/mybusinessaccountmanagement.googleapis.com";
+          return res.status(403).json({
+            message: "The Google My Business Account Management API is not enabled for your Google Cloud project. Enable it here, wait ~1 minute, then try again.",
+            enableUrl,
+          });
+        }
+        return res.status(accountsResp.status).json({ message: rawMsg || "Failed to fetch GBP accounts" });
       }
 
       const accounts: any[] = accountsData.accounts ?? [];

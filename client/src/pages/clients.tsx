@@ -186,15 +186,25 @@ function GbpLocationPicker({ value, onChange }: { value: string; onChange: (v: s
   const [loading, setLoading] = useState(false);
   const [fetched, setFetched] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [enableUrl, setEnableUrl] = useState<string | null>(null);
   const { toast } = useToast();
 
   const fetchLocations = async () => {
     setLoading(true);
     setError(null);
+    setEnableUrl(null);
     try {
       const res = await fetch("/api/gbp/locations");
       const data = await res.json() as any;
-      if (!res.ok) throw new Error(data.message || "Failed to fetch locations");
+      if (!res.ok) {
+        if (data.enableUrl) {
+          setEnableUrl(data.enableUrl);
+          setError(data.message);
+        } else {
+          throw new Error(data.message || "Failed to fetch locations");
+        }
+        return;
+      }
       setLocations(data.locations ?? []);
       setFetched(true);
       if ((data.locations ?? []).length === 0) {
@@ -251,7 +261,22 @@ function GbpLocationPicker({ value, onChange }: { value: string; onChange: (v: s
           <span className="ml-1.5">{fetched ? "Refresh" : "Fetch"}</span>
         </Button>
       </div>
-      {error && <p className="text-[11px] text-destructive">{error}</p>}
+      {error && (
+        <div className="space-y-1">
+          <p className="text-[11px] text-destructive">{error}</p>
+          {enableUrl && (
+            <a
+              href={enableUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[11px] text-primary underline hover:opacity-80"
+              data-testid="link-enable-gbp-api"
+            >
+              → Click here to enable the API in Google Cloud Console
+            </a>
+          )}
+        </div>
+      )}
       {!fetched && (
         <p className="text-[11px] text-muted-foreground">
           Click Fetch to load locations from your connected GBP account, then select one from the dropdown.

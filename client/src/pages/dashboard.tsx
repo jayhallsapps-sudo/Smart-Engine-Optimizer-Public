@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
@@ -12,12 +12,24 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Cell,
+  Legend,
+} from "recharts";
+import {
   RefreshCw,
   TrendingUp,
   TrendingDown,
   Minus,
   Users,
   LayoutDashboard,
+  BarChart2,
 } from "lucide-react";
 import type { Client } from "@shared/schema";
 
@@ -29,6 +41,17 @@ const PERIOD_OPTIONS = [
 ] as const;
 
 type PeriodValue = typeof PERIOD_OPTIONS[number]["value"];
+
+const CLIENT_PALETTE = [
+  "#6366f1",
+  "#f59e0b",
+  "#10b981",
+  "#ef4444",
+  "#8b5cf6",
+  "#06b6d4",
+  "#f97316",
+  "#ec4899",
+];
 
 interface DashboardMetric {
   label: string;
@@ -66,17 +89,38 @@ const GROUP_COLORS: Record<string, string> = {
   Calls: "text-green-600 dark:text-green-400",
 };
 
+function parseVal(v: string | number): number {
+  if (typeof v === "number") return v;
+  const cleaned = v.toString().replace(/,/g, "").replace(/%$/, "").trim();
+  const n = parseFloat(cleaned);
+  return isNaN(n) ? NaN : n;
+}
+
+function isChartable(metric: DashboardMetric): boolean {
+  const n = parseVal(metric.value);
+  return !isNaN(n);
+}
+
 function formatValue(value: string | number, unit?: string): string {
-  if (unit === "pos" || unit === "%") return String(value);
-  const num = typeof value === "string" ? parseFloat(value.replace(/,/g, "")) : value;
+  if (unit === "pos") return String(value);
+  const num = parseVal(value);
   if (isNaN(num)) return String(value);
-  if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
-  if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
+  if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`;
+  if (num >= 1_000) return `${(num / 1_000).toFixed(1)}K`;
+  if (unit === "%") return `${value}%`;
   return String(value);
 }
 
+function hexWithOpacity(hex: string, opacity: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${opacity})`;
+}
+
 function MetricTile({ metric }: { metric: DashboardMetric }) {
-  const isNeutral = metric.deltaPercent === "—" || metric.deltaPercent === "0%" || metric.delta === "—";
+  const isNeutral =
+    metric.deltaPercent === "—" || metric.deltaPercent === "0%" || metric.delta === "—";
   const TrendIcon = isNeutral ? Minus : metric.isPositive ? TrendingUp : TrendingDown;
   const trendColor = isNeutral
     ? "text-muted-foreground"
@@ -94,7 +138,6 @@ function MetricTile({ metric }: { metric: DashboardMetric }) {
       </p>
       <p className="text-xl font-bold tracking-tight leading-none">
         {formatValue(metric.value, metric.unit)}
-        {metric.unit === "%" && <span className="text-sm font-normal ml-0.5">%</span>}
       </p>
       <div className={`flex items-center gap-1 text-[11px] font-medium ${trendColor}`}>
         <TrendIcon className="w-3 h-3 shrink-0" />
@@ -118,7 +161,178 @@ function MetricSkeleton() {
   );
 }
 
-function ClientCard({ client, dateRange, onRefresh }: { client: Client; dateRange: string; onRefresh?: () => void }) {
+function shortName(name: string): string {
+  const words = name.trim().split(/\s+/);
+  return words.length <= 2 ? name : words.slice(0, 2).join(" ");
+}
+
+function DashboardChart({
+  clientData,
+  selectedIds,
+  chartMetric,
+  onMetricChange,
+  colorMap,
+  allMetricLabels,
+}: {
+  clientData: Map<number, ClientDashboardData>;
+  selectedIds: Set<number>;
+  chartMetric: string;
+  onMetricChange: (m: string) => void;
+  colorMap: Map<number, string>;
+  allMetricLabels: string[];
+}) {
+  const visibleIds =
+    selectedIds.size > 0
+      ? Array.from(selectedIds)
+      : Array.from(clientData.keys());
+
+  const chartData = visibleIds
+    .map(id => {
+      const d = clientData.get(id);
+      if (!d) return null;
+      const metric = d.metrics.find(m => m.label === chartMetric);
+      const current = metric ? parseVal(metric.value) : 0;
+      const previous = metric ? parseVal(metric.previous) : 0;
+      return {
+        clientId: id,
+        name: shortName(d.clientName),
+        color: colorMap.get(id) ?? "#888",
+        current: isNaN(current) ? 0 : current,
+        previous: isNaN(previous) ? 0 : previous,
+      };
+    })
+    .filter(Boolean) as { clientId: number; name: string; color: string; current: number; previous: number }[];
+
+  const isEmpty = chartData.length === 0 || chartData.every(d => d.current === 0 && d.previous === 0);
+
+  const formatTick = (v: number) => {
+    if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+    if (v >= 1_000) return `${(v / 1_000).toFixed(0)}K`;
+    return String(v);
+  };
+
+  return (
+    <div className="shrink-0 border-b bg-card">
+      <div className="flex items-center justify-between px-6 pt-4 pb-3">
+        <div className="flex items-center gap-2">
+          <BarChart2 className="w-4 h-4 text-muted-foreground" />
+          <span className="text-sm font-semibold">
+            {selectedIds.size > 0
+              ? `${selectedIds.size} client${selectedIds.size > 1 ? "s" : ""} selected`
+              : "All clients"}
+          </span>
+          {selectedIds.size > 0 && (
+            <span className="text-[11px] text-muted-foreground">— click a card to deselect</span>
+          )}
+        </div>
+        <Select value={chartMetric} onValueChange={onMetricChange}>
+          <SelectTrigger className="h-7 w-[170px] text-xs" data-testid="select-chart-metric">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {allMetricLabels.map(label => (
+              <SelectItem key={label} value={label}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="px-4 pb-4" style={{ height: 240 }}>
+        {isEmpty || clientData.size === 0 ? (
+          <div className="flex items-center justify-center h-full text-sm text-muted-foreground gap-2">
+            <BarChart2 className="w-4 h-4 opacity-40" />
+            <span>
+              {clientData.size === 0
+                ? "Loading data…"
+                : "No data for this metric"}
+            </span>
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart
+              data={chartData}
+              layout="vertical"
+              margin={{ top: 4, right: 24, bottom: 4, left: 8 }}
+              barCategoryGap="20%"
+              barGap={3}
+            >
+              <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="currentColor" strokeOpacity={0.08} />
+              <XAxis
+                type="number"
+                tickFormatter={formatTick}
+                tick={{ fontSize: 10, fill: "currentColor", opacity: 0.5 }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <YAxis
+                type="category"
+                dataKey="name"
+                width={100}
+                tick={{ fontSize: 11, fill: "currentColor", opacity: 0.8 }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <Tooltip
+                cursor={{ fill: "currentColor", fillOpacity: 0.04 }}
+                contentStyle={{
+                  fontSize: 12,
+                  borderRadius: 8,
+                  border: "1px solid rgba(128,128,128,0.2)",
+                  background: "var(--background, #fff)",
+                  color: "var(--foreground, #000)",
+                  padding: "6px 10px",
+                }}
+                formatter={(value: number, name: string) => [
+                  formatTick(value),
+                  name === "current" ? "Current" : "Prior period",
+                ]}
+                labelFormatter={(label) => label}
+              />
+              <Legend
+                verticalAlign="bottom"
+                height={24}
+                iconSize={10}
+                formatter={(value) => (
+                  <span style={{ fontSize: 10, opacity: 0.7 }}>
+                    {value === "current" ? "Current period" : "Prior period"}
+                  </span>
+                )}
+              />
+              <Bar dataKey="current" name="current" radius={[0, 3, 3, 0]} maxBarSize={18}>
+                {chartData.map(entry => (
+                  <Cell key={`cur-${entry.clientId}`} fill={entry.color} />
+                ))}
+              </Bar>
+              <Bar dataKey="previous" name="previous" radius={[0, 3, 3, 0]} maxBarSize={18}>
+                {chartData.map(entry => (
+                  <Cell key={`pre-${entry.clientId}`} fill={hexWithOpacity(entry.color, 0.28)} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ClientCard({
+  client,
+  color,
+  isSelected,
+  onSelect,
+  onDataLoaded,
+  dateRange,
+}: {
+  client: Client;
+  color: string;
+  isSelected: boolean;
+  onSelect: () => void;
+  onDataLoaded: (data: ClientDashboardData) => void;
+  dateRange: string;
+}) {
   const [data, setData] = useState<ClientDashboardData | null>(null);
 
   const mutation = useMutation<ClientDashboardData, Error, void>({
@@ -128,13 +342,13 @@ function ClientCard({ client, dateRange, onRefresh }: { client: Client; dateRang
     },
     onSuccess: (result) => {
       setData(result);
-      onRefresh?.();
+      onDataLoaded(result);
     },
   });
 
   const load = useCallback(() => {
     mutation.mutate();
-  }, [client.id]);
+  }, [client.id, dateRange]);
 
   useEffect(() => {
     load();
@@ -153,13 +367,30 @@ function ClientCard({ client, dateRange, onRefresh }: { client: Client; dateRang
 
   return (
     <div
-      className="rounded-xl border bg-card shadow-sm flex flex-col gap-0 overflow-hidden"
+      className={`rounded-xl border bg-card shadow-sm flex flex-col gap-0 overflow-hidden cursor-pointer transition-all duration-150 ${
+        isSelected
+          ? "ring-2 shadow-md"
+          : "hover:shadow-md hover:border-border/80"
+      }`}
+      style={
+        isSelected
+          ? { borderColor: color, ringColor: color, boxShadow: `0 0 0 2px ${hexWithOpacity(color, 0.5)}` }
+          : {}
+      }
+      onClick={onSelect}
       data-testid={`card-client-${client.id}`}
+      role="button"
+      aria-pressed={isSelected}
     >
-      <div className="flex items-start justify-between gap-3 px-4 pt-4 pb-3 border-b">
+      <div
+        className="h-1 w-full shrink-0"
+        style={{ background: color }}
+      />
+      <div className="flex items-start justify-between gap-3 px-4 pt-3 pb-3 border-b">
         <div className="min-w-0">
           <h3
             className="font-semibold text-sm leading-tight truncate"
+            style={{ color }}
             data-testid={`text-client-name-${client.id}`}
           >
             {client.name}
@@ -189,7 +420,7 @@ function ClientCard({ client, dateRange, onRefresh }: { client: Client; dateRang
           variant="ghost"
           size="icon"
           className="shrink-0 h-7 w-7"
-          onClick={load}
+          onClick={e => { e.stopPropagation(); load(); }}
           disabled={mutation.isPending}
           data-testid={`button-refresh-client-${client.id}`}
           title="Refresh this client"
@@ -228,48 +459,80 @@ function ClientCard({ client, dateRange, onRefresh }: { client: Client; dateRang
 
 export default function DashboardPage() {
   const [refreshKey, setRefreshKey] = useState(0);
-  const [globalRefreshing, setGlobalRefreshing] = useState(false);
-  const [lastGlobalRefresh, setLastGlobalRefresh] = useState<Date | null>(null);
   const [period, setPeriod] = useState<PeriodValue>("last_28_vs_prev_28");
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [clientData, setClientData] = useState<Map<number, ClientDashboardData>>(new Map());
+  const [chartMetric, setChartMetric] = useState("Total Clicks");
 
   const { data: clients, isLoading: clientsLoading } = useQuery<Client[]>({
     queryKey: ["/api/clients"],
   });
 
+  const colorMap = useMemo<Map<number, string>>(() => {
+    const map = new Map<number, string>();
+    (clients ?? []).forEach((c, i) => {
+      map.set(c.id, CLIENT_PALETTE[i % CLIENT_PALETTE.length]);
+    });
+    return map;
+  }, [clients]);
+
+  const handleDataLoaded = useCallback((data: ClientDashboardData) => {
+    setClientData(prev => {
+      const next = new Map(prev);
+      next.set(data.clientId, data);
+      return next;
+    });
+  }, []);
+
+  const handleToggleClient = useCallback((id: number) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
   const handleGlobalRefresh = useCallback(() => {
-    setGlobalRefreshing(true);
+    setClientData(new Map());
     setRefreshKey(k => k + 1);
-    setTimeout(() => {
-      setGlobalRefreshing(false);
-      setLastGlobalRefresh(new Date());
-    }, 1500);
   }, []);
 
   const handlePeriodChange = useCallback((val: string) => {
     setPeriod(val as PeriodValue);
+    setClientData(new Map());
     setRefreshKey(k => k + 1);
-    setLastGlobalRefresh(null);
+    setSelectedIds(new Set());
   }, []);
 
-  const lastRefreshLabel = lastGlobalRefresh
-    ? lastGlobalRefresh.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-    : null;
+  const allMetricLabels = useMemo(() => {
+    const seen = new Set<string>();
+    const labels: string[] = [];
+    for (const d of clientData.values()) {
+      for (const m of d.metrics) {
+        if (!seen.has(m.label) && isChartable(m)) {
+          seen.add(m.label);
+          labels.push(m.label);
+        }
+      }
+    }
+    return labels;
+  }, [clientData]);
+
+  useEffect(() => {
+    if (allMetricLabels.length > 0 && !allMetricLabels.includes(chartMetric)) {
+      setChartMetric(allMetricLabels[0]);
+    }
+  }, [allMetricLabels, chartMetric]);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <div className="shrink-0 border-b px-6 py-4 flex items-center justify-between gap-4">
+      <div className="shrink-0 border-b px-6 py-3 flex items-center justify-between gap-4">
         <div className="flex items-center gap-2">
           <LayoutDashboard className="w-5 h-5 text-primary" />
-          <div>
-            <h1 className="text-base font-semibold leading-tight" data-testid="text-page-title">
-              Dashboard
-            </h1>
-            {lastRefreshLabel && (
-              <p className="text-[10px] text-muted-foreground">
-                Last refreshed at {lastRefreshLabel}
-              </p>
-            )}
-          </div>
+          <h1 className="text-base font-semibold leading-tight" data-testid="text-page-title">
+            Dashboard
+          </h1>
         </div>
         <div className="flex items-center gap-2">
           <Select value={period} onValueChange={handlePeriodChange}>
@@ -286,17 +549,28 @@ export default function DashboardPage() {
           </Select>
           <Button
             onClick={handleGlobalRefresh}
-            disabled={globalRefreshing || clientsLoading}
+            disabled={clientsLoading}
             size="sm"
             variant="outline"
             className="gap-2 h-8"
             data-testid="button-refresh-all"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${globalRefreshing ? "animate-spin" : ""}`} />
+            <RefreshCw className="w-3.5 h-3.5" />
             Refresh All
           </Button>
         </div>
       </div>
+
+      {!clientsLoading && clients && clients.length > 0 && (
+        <DashboardChart
+          clientData={clientData}
+          selectedIds={selectedIds}
+          chartMetric={chartMetric}
+          onMetricChange={setChartMetric}
+          colorMap={colorMap}
+          allMetricLabels={allMetricLabels}
+        />
+      )}
 
       <div className="flex-1 overflow-y-auto p-6">
         {clientsLoading ? (
@@ -328,11 +602,35 @@ export default function DashboardPage() {
             </Link>
           </div>
         ) : (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-            {clients.map(client => (
-              <ClientCard key={`${client.id}-${period}-${refreshKey}`} client={client} dateRange={period} />
-            ))}
-          </div>
+          <>
+            {selectedIds.size > 0 && (
+              <div className="mb-4 flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">
+                  {selectedIds.size} client{selectedIds.size > 1 ? "s" : ""} highlighted in chart
+                </span>
+                <button
+                  className="text-xs text-primary hover:underline"
+                  onClick={() => setSelectedIds(new Set())}
+                  data-testid="button-clear-selection"
+                >
+                  Clear selection
+                </button>
+              </div>
+            )}
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+              {clients.map(client => (
+                <ClientCard
+                  key={`${client.id}-${period}-${refreshKey}`}
+                  client={client}
+                  color={colorMap.get(client.id) ?? "#888"}
+                  isSelected={selectedIds.has(client.id)}
+                  onSelect={() => handleToggleClient(client.id)}
+                  onDataLoaded={handleDataLoaded}
+                  dateRange={period}
+                />
+              ))}
+            </div>
+          </>
         )}
       </div>
     </div>

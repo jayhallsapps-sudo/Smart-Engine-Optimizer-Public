@@ -107,8 +107,10 @@ function ClientCard({ client, onRefresh }: { client: Client; onRefresh?: () => v
   const [data, setData] = useState<ClientDashboardData | null>(null);
 
   const mutation = useMutation<ClientDashboardData, Error, void>({
-    mutationFn: () =>
-      apiRequest("POST", `/api/dashboard/client/${client.id}`, { dateRange: "last_28_vs_prev_28" }),
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/dashboard/client/${client.id}`, { dateRange: "last_28_vs_prev_28" });
+      return res.json();
+    },
     onSuccess: (result) => {
       setData(result);
       onRefresh?.();

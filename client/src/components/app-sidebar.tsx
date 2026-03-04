@@ -1,4 +1,4 @@
-import { CalendarDays, BarChart3, TrendingUp, Sparkles, Users, Settings, Zap, History } from "lucide-react";
+import { CalendarDays, BarChart3, TrendingUp, Sparkles, Users, Settings, Zap, History, LayoutDashboard } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import {
   Sidebar,
@@ -16,6 +16,8 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { ThemeToggle } from "@/components/theme-toggle";
+
+const dashboardItem = { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard };
 
 const reportItems = [
   { title: "Bi-Weekly", url: "/biweekly", icon: CalendarDays },
@@ -36,7 +38,7 @@ function SidebarLogo() {
 
   return (
     <Link
-      href="/biweekly"
+      href="/dashboard"
       className="flex items-center gap-2 px-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
     >
       <div className="flex items-center justify-center w-8 h-8 rounded-md bg-primary shrink-0">
@@ -61,6 +63,26 @@ export function AppSidebar() {
         <SidebarLogo />
       </SidebarHeader>
       <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {[dashboardItem].map(item => {
+                const isActive = location === item.url;
+                return (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton asChild tooltip={item.title} isActive={isActive}>
+                      <Link href={item.url} data-testid="link-nav-dashboard">
+                        <item.icon className="w-4 h-4 shrink-0" />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
         <SidebarGroup>
           <SidebarGroupLabel>Reports</SidebarGroupLabel>
           <SidebarGroupContent>

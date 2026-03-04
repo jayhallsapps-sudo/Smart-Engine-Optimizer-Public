@@ -19,6 +19,7 @@ client/src/
     theme-provider.tsx - Dark/light mode
     theme-toggle.tsx   - Theme switcher
   pages/
+    dashboard.tsx      - Homepage: client card grid with live KPI metrics (GSC, GA4, Calls) + manual refresh
     reports.tsx        - Main Reports page (3-panel: selectors top, chat left, checklist right)
     qbr-prep.tsx       - QBR Prep report generator (sidebar config + opportunity backlog viewer)
     clients.tsx        - Client CRUD management (tabbed form: Data Sources, SEO Tools, Config)

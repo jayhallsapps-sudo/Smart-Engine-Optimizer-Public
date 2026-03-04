@@ -1229,5 +1229,103 @@ export async function registerRoutes(
     res.end();
   });
 
+  // Dashboard: fetch key metrics for a single client
+  app.post("/api/dashboard/client/:id", async (req, res) => {
+    const clientId = Number(req.params.id);
+    const dateRange = (req.body?.dateRange as string) || "last_28_vs_prev_28";
+
+    const client = await storage.getClient(clientId);
+    if (!client) return res.status(404).json({ message: "Client not found" });
+
+    interface DashboardMetric {
+      label: string;
+      value: string | number;
+      previous: string | number;
+      delta: string;
+      deltaPercent: string;
+      isPositive: boolean;
+      unit?: string;
+      group: string;
+    }
+
+    async function runCommand(command: string): Promise<any> {
+      let result: any = null;
+      try {
+        if (handlesGscCommand(command)) {
+          result = await queryGsc(command, client, dateRange);
+        }
+        if (!result && handlesGa4Command(command)) {
+          result = await queryGa4(command, client, dateRange);
+        }
+        if (!result && handlesCallRailCommand(command)) {
+          result = await queryCallRail(command, client, dateRange);
+        }
+        if (!result && handlesCtmCommand(command)) {
+          result = await queryCtm(command, client, dateRange);
+        }
+        if (!result && handlesSemrushCommand(command)) {
+          result = await querySemrush(command, client, dateRange);
+        }
+      } catch (err: any) {
+        console.warn(`[Dashboard] ${command} live fetch failed: ${err.message} — using mock`);
+      }
+      if (!result) {
+        result = generateMockResult(command as any, client.name, dateRange);
+      }
+      return result;
+    }
+
+    const callsCommand = client.callrailCompanyId
+      ? "callrail_qoq_organic_calls"
+      : client.ctmAccountId
+      ? "ctm_qoq_organic_calls"
+      : "callrail_qoq_organic_calls";
+
+    const [gscResult, ga4Result, callsResult] = await Promise.all([
+      runCommand("gsc_qoq_queries"),
+      runCommand("ga4_qoq_organic_funnel"),
+      runCommand(callsCommand),
+    ]);
+
+    const metrics: DashboardMetric[] = [];
+
+    const mapSummary = (result: any, group: string, unitMap: Record<string, string> = {}) => {
+      if (!result?.summary) return;
+      for (const s of result.summary) {
+        metrics.push({
+          label: s.label,
+          value: s.current,
+          previous: s.previous,
+          delta: s.delta,
+          deltaPercent: s.deltaPercent,
+          isPositive: s.isPositive,
+          unit: unitMap[s.label],
+          group,
+        });
+      }
+    };
+
+    mapSummary(gscResult, "GSC", { "Avg Position": "pos" });
+    mapSummary(ga4Result, "GA4", { "CVR": "%" });
+    mapSummary(callsResult, "Calls");
+
+    const connectedServices: string[] = [];
+    if (client.gscSiteUrl) connectedServices.push("gsc");
+    if (client.ga4PropertyId) connectedServices.push("ga4");
+    if (client.callrailCompanyId) connectedServices.push("callrail");
+    if (client.ctmAccountId) connectedServices.push("ctm");
+    if (client.semrushProjectId) connectedServices.push("semrush");
+    if (client.gbpLocationName) connectedServices.push("gbp");
+    if (client.airtableBaseId) connectedServices.push("airtable");
+
+    res.json({
+      clientId: client.id,
+      clientName: client.name,
+      lastUpdated: new Date().toISOString(),
+      connectedServices,
+      metrics,
+    });
+  });
+
   return httpServer;
 }

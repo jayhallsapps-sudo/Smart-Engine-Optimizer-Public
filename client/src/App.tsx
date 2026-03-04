@@ -15,10 +15,11 @@ import QbrPrepPage from "@/pages/qbr-prep";
 import BiweeklyPage from "@/pages/biweekly";
 import MonthlyPage from "@/pages/monthly";
 import QbrFullPage from "@/pages/qbr-full";
+import DashboardPage from "@/pages/dashboard";
 
 function RootRedirect() {
   const [, setLocation] = useLocation();
-  setLocation("/biweekly");
+  setLocation("/dashboard");
   return null;
 }
 
@@ -26,6 +27,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={RootRedirect} />
+      <Route path="/dashboard" component={DashboardPage} />
       <Route path="/biweekly" component={BiweeklyPage} />
       <Route path="/monthly" component={MonthlyPage} />
       <Route path="/qbr" component={QbrFullPage} />

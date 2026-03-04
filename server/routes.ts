@@ -359,6 +359,7 @@ export async function registerRoutes(
     const end = fmt(now);
     switch (dateRange) {
       case "last_14_vs_prev_14": return { startDate: fmt(sub(now, 14)), endDate: end };
+      case "last_28_vs_prev_28": return { startDate: fmt(sub(now, 28)), endDate: end };
       case "last_30_vs_prev_30": return { startDate: fmt(sub(now, 30)), endDate: end };
       case "last_365_vs_prev_365": return { startDate: fmt(sub(now, 365)), endDate: end };
       case "qtd": {

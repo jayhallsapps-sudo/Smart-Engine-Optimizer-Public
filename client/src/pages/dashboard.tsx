@@ -3,8 +3,14 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   RefreshCw,
   TrendingUp,
@@ -14,6 +20,15 @@ import {
   LayoutDashboard,
 } from "lucide-react";
 import type { Client } from "@shared/schema";
+
+const PERIOD_OPTIONS = [
+  { value: "last_28_vs_prev_28", label: "Last 28 days" },
+  { value: "last_90_vs_prev_90", label: "Last 90 days" },
+  { value: "last_365_vs_prev_365", label: "Last 365 days" },
+  { value: "qtd", label: "Quarter to date" },
+] as const;
+
+type PeriodValue = typeof PERIOD_OPTIONS[number]["value"];
 
 interface DashboardMetric {
   label: string;
@@ -103,12 +118,12 @@ function MetricSkeleton() {
   );
 }
 
-function ClientCard({ client, onRefresh }: { client: Client; onRefresh?: () => void }) {
+function ClientCard({ client, dateRange, onRefresh }: { client: Client; dateRange: string; onRefresh?: () => void }) {
   const [data, setData] = useState<ClientDashboardData | null>(null);
 
   const mutation = useMutation<ClientDashboardData, Error, void>({
     mutationFn: async () => {
-      const res = await apiRequest("POST", `/api/dashboard/client/${client.id}`, { dateRange: "last_28_vs_prev_28" });
+      const res = await apiRequest("POST", `/api/dashboard/client/${client.id}`, { dateRange });
       return res.json();
     },
     onSuccess: (result) => {
@@ -215,6 +230,7 @@ export default function DashboardPage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [globalRefreshing, setGlobalRefreshing] = useState(false);
   const [lastGlobalRefresh, setLastGlobalRefresh] = useState<Date | null>(null);
+  const [period, setPeriod] = useState<PeriodValue>("last_28_vs_prev_28");
 
   const { data: clients, isLoading: clientsLoading } = useQuery<Client[]>({
     queryKey: ["/api/clients"],
@@ -227,6 +243,12 @@ export default function DashboardPage() {
       setGlobalRefreshing(false);
       setLastGlobalRefresh(new Date());
     }, 1500);
+  }, []);
+
+  const handlePeriodChange = useCallback((val: string) => {
+    setPeriod(val as PeriodValue);
+    setRefreshKey(k => k + 1);
+    setLastGlobalRefresh(null);
   }, []);
 
   const lastRefreshLabel = lastGlobalRefresh
@@ -249,17 +271,31 @@ export default function DashboardPage() {
             )}
           </div>
         </div>
-        <Button
-          onClick={handleGlobalRefresh}
-          disabled={globalRefreshing || clientsLoading}
-          size="sm"
-          variant="outline"
-          className="gap-2"
-          data-testid="button-refresh-all"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${globalRefreshing ? "animate-spin" : ""}`} />
-          Refresh All
-        </Button>
+        <div className="flex items-center gap-2">
+          <Select value={period} onValueChange={handlePeriodChange}>
+            <SelectTrigger className="h-8 w-[150px] text-xs" data-testid="select-period">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PERIOD_OPTIONS.map(opt => (
+                <SelectItem key={opt.value} value={opt.value} data-testid={`option-period-${opt.value}`}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            onClick={handleGlobalRefresh}
+            disabled={globalRefreshing || clientsLoading}
+            size="sm"
+            variant="outline"
+            className="gap-2 h-8"
+            data-testid="button-refresh-all"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${globalRefreshing ? "animate-spin" : ""}`} />
+            Refresh All
+          </Button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-6">
@@ -294,7 +330,7 @@ export default function DashboardPage() {
         ) : (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
             {clients.map(client => (
-              <ClientCard key={`${client.id}-${refreshKey}`} client={client} />
+              <ClientCard key={`${client.id}-${period}-${refreshKey}`} client={client} dateRange={period} />
             ))}
           </div>
         )}

@@ -13,6 +13,10 @@ import {
   ShadingType,
   ImageRun,
   Header,
+  ExternalHyperlink,
+  TextWrappingType,
+  HorizontalPositionAlign,
+  VerticalPositionAlign,
   convertInchesToTwip,
   PageBreak,
 } from "docx";
@@ -49,6 +53,7 @@ export interface WorkLogRow {
   area: string;
   whatWeDid: string;
   whatsNext: string;
+  url?: string;
 }
 
 const WEBSERV_BLUE = "1B3A6B";
@@ -201,15 +206,33 @@ function buildBwWorkLogTable(rows: WorkLogRow[]): Table {
         ],
         tableHeader: true,
       }),
-      ...rows.map((row, ri) =>
-        new TableRow({
+      ...rows.map((row, ri) => {
+        const shade = ri % 2 === 1;
+        const didCell = new TableCell({
+          width: { size: WL_COL[1], type: WidthType.DXA },
+          shading: shade ? { type: ShadingType.SOLID, color: WEBSERV_LIGHT } : undefined,
+          borders: makeBorder(),
           children: [
-            bodyCell(row.area, ri % 2 === 1, WL_COL[0]),
-            bodyCell(row.whatWeDid, ri % 2 === 1, WL_COL[1]),
-            bodyCell(row.whatsNext, ri % 2 === 1, WL_COL[2]),
+            new Paragraph({
+              children: row.url
+                ? [
+                    new ExternalHyperlink({
+                      link: row.url,
+                      children: [new TextRun({ text: row.whatWeDid || "—", size: 18, style: "Hyperlink" })],
+                    }),
+                  ]
+                : [new TextRun({ text: row.whatWeDid || "—", size: 18 })],
+            }),
           ],
-        })
-      ),
+        });
+        return new TableRow({
+          children: [
+            bodyCell(row.area, shade, WL_COL[0]),
+            didCell,
+            bodyCell(row.whatsNext, shade, WL_COL[2]),
+          ],
+        });
+      }),
     ],
   });
 }
@@ -332,7 +355,13 @@ function buildDataTable(headers: string[], rows: (string | number)[][]): Table {
   });
 }
 
-function readBiweeklyConfig(): { purposeText: string; footerText: string } {
+interface BiweeklyRuntimeConfig {
+  purposeText: string;
+  footerText: string;
+  sectionTitles: Record<string, string>;
+}
+
+function readBiweeklyConfig(): BiweeklyRuntimeConfig {
   const configPath = path.join(process.cwd(), "server", "assets", "template_config.json");
   try {
     if (fs.existsSync(configPath)) {
@@ -341,10 +370,11 @@ function readBiweeklyConfig(): { purposeText: string; footerText: string } {
       return {
         purposeText: bw.purposeText ?? DEFAULT_PURPOSE_TEXT,
         footerText: bw.footerText ?? DEFAULT_FOOTER_TEXT,
+        sectionTitles: bw.sectionTitles ?? {},
       };
     }
   } catch {}
-  return { purposeText: DEFAULT_PURPOSE_TEXT, footerText: DEFAULT_FOOTER_TEXT };
+  return { purposeText: DEFAULT_PURPOSE_TEXT, footerText: DEFAULT_FOOTER_TEXT, sectionTitles: {} };
 }
 
 const DEFAULT_PURPOSE_TEXT =
@@ -361,18 +391,14 @@ export async function generateBiweeklyDocx(
   const children: (Paragraph | Table)[] = [];
   const bwCfg = readBiweeklyConfig();
 
-  // Header image — inline at text-area width (6" = 576 px @ 96 dpi).
-  // Inline placement is universally supported in Word, Pages, and Google Docs;
-  // it avoids the right-edge clipping that floating images produce in Apple Pages.
-  // transformation uses PIXELS (docx library multiplies by 9525 internally → EMU).
-  const HEADER_W_PX = 576;                                     // 6" × 96 dpi = text-area width
-  const HEADER_H_PX = Math.round((143 / 692) * HEADER_W_PX);  // ≈ 119 px  (preserve aspect ratio)
+  // Webserv header swoosh — full page width (8.5" = 816 px @ 96 dpi), bleeds to all edges.
+  // transformation uses PIXELS (docx library multiplies by 9525 internally to produce EMU).
+  const HEADER_W_PX = 816;                                     // 8.5" × 96 dpi
+  const HEADER_H_PX = Math.round((143 / 692) * HEADER_W_PX);  // ≈ 169 px
 
   const headerImagePath = path.join(process.cwd(), "server", "assets", "biweekly_header.png");
   const headerImageData = fs.readFileSync(headerImagePath);
 
-  // Place image in the recurring page header so it appears on every page.
-  // Inline (no floating) = renders correctly edge-to-edge within the text area.
   const docHeader = new Header({
     children: [
       new Paragraph({
@@ -382,6 +408,20 @@ export async function generateBiweeklyDocx(
             type: "png",
             data: headerImageData,
             transformation: { width: HEADER_W_PX, height: HEADER_H_PX },
+            floating: {
+              horizontalPosition: {
+                relative: "page",
+                align: HorizontalPositionAlign.LEFT,
+              },
+              verticalPosition: {
+                relative: "page",
+                align: VerticalPositionAlign.TOP,
+              },
+              wrap: { type: TextWrappingType.TOP_AND_BOTTOM },
+              margins: { top: 0, bottom: 0, left: 0, right: 0 },
+              allowOverlap: false,
+              lockAnchor: true,
+            },
           }),
         ],
       }),
@@ -450,7 +490,8 @@ export async function generateBiweeklyDocx(
       continue;
     }
 
-    children.push(bwSectionHeading(num, section.title));
+    const sectionTitle = bwCfg.sectionTitles[sectionId] || section.title;
+    children.push(bwSectionHeading(num, sectionTitle));
 
     if (section.items.length === 0) {
       children.push(emptyPlaceholder());
@@ -543,13 +584,12 @@ export async function generateBiweeklyDocx(
           // Lock to US Letter so the 8.5" header image never overflows on A4 viewers
           size: { width: 12240, height: 15840 },
           margin: {
-            // Inline header image is 119 px ≈ 1.24" tall; body starts 1.75" from page top
-            // giving a comfortable 0.51" gap between the image bottom and the first body line.
-            top: convertInchesToTwip(1.75),
+            // header bleeds from top edge; body starts after image height (≈1.76") + gap
+            top: convertInchesToTwip(2.0),
             bottom: convertInchesToTwip(1),
             left: convertInchesToTwip(1.25),
             right: convertInchesToTwip(1.25),
-            header: 0, // header section starts at the very top of the page
+            header: 0, // image anchors to the very top of the page
           },
         },
       },

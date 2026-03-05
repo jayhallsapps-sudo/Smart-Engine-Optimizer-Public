@@ -1,5 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import * as fs from "fs";
+import * as path from "path";
 import { storage } from "./storage";
 import { insertClientSchema } from "@shared/schema";
 import { parseNaturalQuery, getCommandDescription, getDateRangeLabel } from "./nlRouter";
@@ -1379,6 +1381,49 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("Sample QBR Prep error:", err);
       res.status(500).json({ message: "Failed to generate sample: " + err.message });
+    }
+  });
+
+  const TEMPLATE_CONFIG_PATH = path.join(process.cwd(), "server", "assets", "template_config.json");
+  const HEADER_IMAGE_PATH = path.join(process.cwd(), "server", "assets", "biweekly_header.png");
+
+  function readTemplateConfig() {
+    try {
+      if (fs.existsSync(TEMPLATE_CONFIG_PATH)) {
+        return JSON.parse(fs.readFileSync(TEMPLATE_CONFIG_PATH, "utf8"));
+      }
+    } catch {}
+    return { accentColor: "C0392B" };
+  }
+
+  app.get("/api/template/config", (_req, res) => {
+    const cfg = readTemplateConfig();
+    const headerImageExists = fs.existsSync(HEADER_IMAGE_PATH);
+    res.json({ ...cfg, headerImageExists });
+  });
+
+  app.get("/api/template/header", (_req, res) => {
+    if (!fs.existsSync(HEADER_IMAGE_PATH)) {
+      return res.status(404).json({ message: "No header image" });
+    }
+    res.setHeader("Content-Type", "image/png");
+    res.setHeader("Cache-Control", "no-cache");
+    res.send(fs.readFileSync(HEADER_IMAGE_PATH));
+  });
+
+  app.post("/api/template/save", (req, res) => {
+    try {
+      const { accentColor, imageBase64 } = req.body as { accentColor?: string; imageBase64?: string };
+      const cfg = readTemplateConfig();
+      if (accentColor) cfg.accentColor = accentColor.replace("#", "");
+      fs.writeFileSync(TEMPLATE_CONFIG_PATH, JSON.stringify(cfg, null, 2));
+      if (imageBase64) {
+        const imgBuf = Buffer.from(imageBase64, "base64");
+        fs.writeFileSync(HEADER_IMAGE_PATH, imgBuf);
+      }
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
     }
   });
 

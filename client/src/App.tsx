@@ -17,6 +17,7 @@ import MonthlyPage from "@/pages/monthly";
 import QbrFullPage from "@/pages/qbr-full";
 import DashboardPage from "@/pages/dashboard";
 import SampleReportsPage from "@/pages/sample-reports";
+import TemplateBuilderPage from "@/pages/template-builder";
 
 function RootRedirect() {
   const [, setLocation] = useLocation();
@@ -38,6 +39,7 @@ function Router() {
       <Route path="/setup" component={SetupPage} />
       <Route path="/history" component={HistoryPage} />
       <Route path="/sample-reports" component={SampleReportsPage} />
+      <Route path="/template-builder" component={TemplateBuilderPage} />
       <Route component={NotFound} />
     </Switch>
   );

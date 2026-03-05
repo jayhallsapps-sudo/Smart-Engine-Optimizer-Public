@@ -340,11 +340,12 @@ export async function generateBiweeklyDocx(
 ): Promise<Buffer> {
   const children: (Paragraph | Table)[] = [];
 
-  // Webserv header swoosh image — loaded once, placed in DOCX Header (repeats every page)
-  // transformation uses PIXELS (library multiplies by 9525 internally to get EMU)
-  // Original: 692×143 px → display at text-area width (6" @ 96 dpi = 576 px)
-  const HEADER_W_PX = 576;
-  const HEADER_H_PX = Math.round((143 / 692) * HEADER_W_PX); // ≈ 119 px
+  // Webserv header swoosh — full page width (8.5" = 816 px @ 96 dpi), bleeds to all edges
+  // transformation uses PIXELS (docx library multiplies by 9525 internally to produce EMU)
+  const HEADER_W_PX = 816;                                     // 8.5" × 96 dpi
+  const HEADER_H_PX = Math.round((143 / 692) * HEADER_W_PX);  // ≈ 169 px
+  // Push paragraph past the 1.25" page margins so the image bleeds edge-to-edge
+  const MARGIN_DXA = convertInchesToTwip(1.25);                // 1800 DXA
 
   const headerImagePath = path.join(process.cwd(), "server", "assets", "biweekly_header.png");
   const headerImageData = fs.readFileSync(headerImagePath);
@@ -352,7 +353,8 @@ export async function generateBiweeklyDocx(
   const docHeader = new Header({
     children: [
       new Paragraph({
-        spacing: { before: 0, after: 60 },
+        spacing: { before: 0, after: 0 },
+        indent: { left: -MARGIN_DXA, right: -MARGIN_DXA },
         children: [
           new ImageRun({
             type: "png",
@@ -372,7 +374,7 @@ export async function generateBiweeklyDocx(
           text: `SEO Bi-weekly Meeting: ${clientName}`,
           bold: true,
           size: 36,
-          color: WEBSERV_RED,
+          color: BLACK,
         }),
       ],
       spacing: { before: 80, after: 80 },
@@ -518,12 +520,12 @@ export async function generateBiweeklyDocx(
       properties: {
         page: {
           margin: {
-            // top = header image height (≈1.24") + 0.25" gap  ≈ 1.5"
-            top: convertInchesToTwip(1.5),
+            // header bleeds from top edge; body starts after image height (≈1.76") + gap
+            top: convertInchesToTwip(2.0),
             bottom: convertInchesToTwip(1),
             left: convertInchesToTwip(1.25),
             right: convertInchesToTwip(1.25),
-            header: convertInchesToTwip(0.1),
+            header: 0, // image anchors to the very top of the page
           },
         },
       },

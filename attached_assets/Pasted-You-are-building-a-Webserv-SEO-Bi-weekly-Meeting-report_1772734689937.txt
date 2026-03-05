@@ -1,0 +1,160 @@
+You are building a “Webserv SEO Bi-weekly Meeting” report generator that must recreate the attached PDF template with extreme accuracy, using the PDF as the single source of truth. No hallucination, no approximations, no “close enough.” If a detail can’t be extracted from the PDF programmatically, the code must fail loudly and tell me exactly what it couldn’t extract.
+
+SOURCE OF TRUTH
+- Use the attached PDF: “Bi-weekly Report - Iris Feb 11 - 27.pdf” as the exact visual template.
+- The output must match:
+  - Page size, margins, spacing, typography, colors, bullets, table styling, footer line + footer text, and the red header swoosh with logo.
+
+DELIVERABLE
+- A Python project (preferred) that generates:
+  1) A PDF that visually matches the template (pixel-level close when rendered at 200–300 DPI)
+  2) A structured JSON layout spec extracted from the template PDF (fonts, sizes, colors, coordinates, indents, table geometry)
+- CLI usage:
+  python generate_report.py --input data.json --output out.pdf
+
+ABSOLUTE REQUIREMENTS (NO GUESSWORK)
+1) Template extraction (programmatic)
+- Use PyMuPDF (fitz) to extract:
+  - Page size (should be Letter: 612 x 792 points)
+  - Embedded fonts (must detect Inter-Bold, Inter-Regular, Inter-Medium; ArialMT if present)
+  - Exact font sizes used per element (ex: title is Inter-Bold 20pt; section headings Inter-Bold 16pt; body Inter-Regular 11pt; footer Inter-Medium 11pt)
+  - Exact text colors from PDF spans (expect 3 main text colors: black, dark grey, accent red/orange)
+  - Exact bullet indentation levels from text bounding boxes:
+    - Level 1 bullets (“●”) left x ≈ 90pt
+    - Level 2 bullets (“○”) left x ≈ 126pt
+    - So sub-bullet indent delta ≈ 36pt
+  - Date highlight pill: detect the filled rounded rectangle behind the date:
+    - Fill color must be extracted (expected approx #E8EAED)
+    - Rectangle bbox should be extracted from PDF drawing objects
+  - Footer divider line: extract y position and stroke color/width from drawing objects
+
+2) Template background handling (zero design re-creation risk)
+- Do NOT attempt to redraw the top red swoosh and logo from scratch.
+- Extract and reuse the header graphic as-is:
+  - Detect the header image object(s) on each page and re-place them in output in the exact position and scale.
+  - Same for any other non-text decorative assets.
+- If the header is vector instead of image, render the page background layer by rasterizing ONLY the non-text elements at high resolution and place behind text (or copy the exact vector drawing objects forward). Choose the method that yields the closest visual match.
+
+3) Output rendering approach
+- Generate the final PDF by:
+  - Placing the extracted background (header swoosh + any decorative assets + any fixed lines) as an underlay
+  - Rendering text + bullets + table over it using the extracted layout spec
+- Use reportlab for drawing text/lines/rectangles OR write directly via PyMuPDF. Either is fine as long as accuracy is achieved.
+
+4) Table reproduction (Page 2)
+- Recreate the “Progress & Quick Wins” table exactly:
+  - Black header row background
+  - White bold header text
+  - Column headers: “Area”, “What We Did / Learned”, “What’s Next”
+  - Exact column widths and row heights extracted from the PDF
+  - Cell borders (color + thickness) extracted
+  - Body text font/size exactly as template
+  - Blue underlined links for the items that appear as links in the template
+- If the template’s links are just styled text (not actual PDF hyperlinks), still match the styling visually. If hyperlinks exist, preserve them.
+
+5) Content model
+- The generator must accept an input JSON with these fields:
+  {
+    "client_name": "Iris Healing",
+    "date": "Feb 26, 2026",
+    "attendees": "",
+    "purpose_paragraph": "To review recent SEO progress, share quick wins, and align on upcoming priorities that support your business goals.",
+    "section_1": {
+      "title": "1. Performance Pulse & Key Insights",
+      "bullets": [
+        {
+          "level": 1,
+          "text_runs": [
+            {"text":"Organic Sessions QTD:", "bold": true},
+            {"text":" 3,091 → Goal: 7,178 (43.06% of goal for the month)", "bold": false}
+          ],
+          "sub_bullets": [
+            {"level": 2, "text": "Pacing is behind, concentrated in a handful of landing pages (e.g., /blog/what-is-a-high-dose-of-klonopin)."},
+            {"level": 2, "text": "Also of note, ..."},
+            ...
+          ]
+        },
+        {
+          "level": 1,
+          "text_runs": [
+            {"text":"NSM Metric QTD:", "bold": true},
+            {"text":" 279 → Goal: 438 (63.70% of goal for the month)", "bold": false}
+          ],
+          "sub_bullets": [...]
+        }
+      ]
+    },
+    "section_2": {
+      "title": "2. Progress & Quick Wins",
+      "intro_bullet": "Review key updates and deliverables from the past two weeks.",
+      "table": [
+        {
+          "area": "New & Updated Content",
+          "what_we_did": [
+            {"type":"text","value":"Published 3 new pages:"},
+            {"type":"link","text":"How Long Does Paws Last","url":"..."},
+            {"type":"link","text":"Alcohol","url":"..."},
+            ...
+          ],
+          "whats_next": [
+            {"type":"text","value":"New Pages:"},
+            {"type":"text","value":"How to Help Alcohol Withdrawal"},
+            ...
+          ]
+        },
+        {
+          "area": "Technical Maintenance",
+          "what_we_did": [{"type":"text","value":"No data to go off of."}],
+          "whats_next": [{"type":"text","value":"Resolve canonicalised URLs."}, {"type":"text","value":"Fix 198 images (for size)."}]
+        }
+      ]
+    },
+    "section_3": {
+      "title": "3. Partnership & Alignment",
+      "bullets": [
+        "Open discussion: feedback, lead quality, new initiatives, or observations.",
+        "Confirm next steps, responsibilities, and upcoming deliverables."
+      ]
+    }
+  }
+
+6) Hard checks
+- Provide a “verify” mode:
+  python verify_match.py --template template.pdf --output out.pdf
+- It must:
+  - Render both PDFs to images at 200 DPI
+  - Compute pixel diff (SSIM or mean absolute error)
+  - Output a score and produce a diff image
+  - Fail if mismatch exceeds a tight threshold
+
+EXTRACTED DETAILS YOU MUST USE (ALREADY CONFIRMED FROM TEMPLATE PDF)
+- Page size: Letter (612 x 792 points)
+- Fonts embedded: Inter-Bold, Inter-Regular, Inter-Medium; ArialMT also appears
+- Key font sizes:
+  - Title: Inter-Bold 20pt (“SEO Bi-weekly Meeting: {Client Name}”)
+  - Section headings and “Purpose:” label: Inter-Bold 16pt, accent color
+  - Body text: Inter-Regular 11pt
+  - Footer: Inter-Medium 11pt, dark grey
+- Bullet indents (from bounding boxes):
+  - Level 1 bullet left edge x ≈ 90pt
+  - Level 2 bullet left edge x ≈ 126pt
+- Date highlight pill:
+  - Fill ≈ #E8EAED (extract exact from drawing fill)
+- Footer divider line:
+  - Stroke ≈ #888888 (extract exact), 1pt line
+
+OUTPUT MUST MATCH THE TEMPLATE VISUALLY
+- Spacing, line breaks, bullet glyphs (● and ○), arrow glyph (→), and punctuation must render exactly as in the template.
+- If a glyph differs due to font substitution, embed the exact font and fix it. Do not ship until it matches.
+
+IMPLEMENTATION NOTES
+- Prefer this architecture:
+  - extract_template.py -> produces template_spec.json + extracted_assets/
+  - generate_report.py -> reads template_spec.json + data.json -> outputs PDF
+  - verify_match.py -> compares rendered images -> outputs diff + score
+- Pin versions in requirements.txt.
+- If Inter fonts are not available by default, vendor them in the repo or download them once and cache them.
+
+First step in your work:
+- Extract full template spec from the attached PDF into JSON and print it (fonts, sizes, colors, coordinates, table geometry).
+- Only after extraction is complete, implement generation using that spec.

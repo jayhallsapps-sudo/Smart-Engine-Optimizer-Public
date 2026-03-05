@@ -13,6 +13,7 @@ import { buildGoogleAuthUrl, exchangeCodeForToken, callbackHtml, isGoogleConfigu
 import { testCredential } from "./connectionTest";
 import { insertSfReportSchema, insertCallTrackingReportSchema } from "@shared/schema";
 import { generateBiweeklyDocx, generatePptx, generateQbrPrepDocx } from "./reportGenerators";
+import { generateBiweeklyPdf } from "./pdfGenerator";
 import type { SectionData } from "./reportGenerators";
 import { getSampleBiweeklySections, getSampleMonthlySections, getSampleQbrSections, getSampleQbrPrepJson, SAMPLE_CLIENT_NAME, SAMPLE_ATTENDEES } from "./sampleData";
 import { generateQbrPrep } from "./qbrPrepGenerator";
@@ -1342,6 +1343,20 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("Sample Biweekly error:", err);
       res.status(500).json({ message: "Failed to generate sample: " + err.message });
+    }
+  });
+
+  app.get("/api/reports/biweekly/sample/pdf", async (_req, res) => {
+    try {
+      const sections = getSampleBiweeklySections();
+      const date = "March 5, 2026";
+      const buffer = await generateBiweeklyPdf(SAMPLE_CLIENT_NAME, SAMPLE_ATTENDEES, date, sections);
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="Sample_Biweekly_AcmePlumbing.pdf"`);
+      res.send(buffer);
+    } catch (err: any) {
+      console.error("Sample Biweekly PDF error:", err);
+      res.status(500).json({ message: "Failed to generate PDF: " + err.message });
     }
   });
 

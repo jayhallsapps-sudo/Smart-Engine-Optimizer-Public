@@ -321,3 +321,10 @@
     inset: -1px;
   }
 }
+
+/* Document preview: override OS selection highlight so it's never black */
+[data-testid="preview-document"] ::selection,
+[data-testid="preview-document"] *::selection {
+  background-color: #BFDBFE;
+  color: #111827;
+}

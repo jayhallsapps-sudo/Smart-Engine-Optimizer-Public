@@ -226,10 +226,15 @@ export default function TemplateBuilderPage() {
                 </div>
               </Card>
 
-              <div className="mt-auto">
-                <a href="/api/reports/biweekly/sample" download data-testid="link-download-sample">
+              <div className="mt-auto flex flex-col gap-2">
+                <a href="/api/reports/biweekly/sample" download data-testid="link-download-sample-docx">
                   <Button variant="outline" size="sm" className="w-full">
                     <Download className="w-4 h-4 mr-2" />Download Sample DOCX
+                  </Button>
+                </a>
+                <a href="/api/reports/biweekly/sample/pdf" download data-testid="link-download-sample-pdf">
+                  <Button variant="outline" size="sm" className="w-full">
+                    <Download className="w-4 h-4 mr-2" />Download Sample PDF
                   </Button>
                 </a>
               </div>
@@ -420,18 +425,11 @@ function BiweeklyPreview({
         </SectionBlock>
 
         <SectionBlock num={3} titleKey="title_partnership" accentHex={accentHex} edits={edits} onEdit={onEdit} getVal={getVal}>
-          {getVal("partnership_text").split("\n").filter(l => l.trim()).map((line, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: "6px", marginBottom: "4px", fontSize: "12px" }}>
-              <span>●</span>
-              <span>{line}</span>
-            </div>
-          ))}
-          <div style={{ marginTop: "6px" }}>
-            <EditableSection editKey="partnership_text" value={DEFAULT_EDITS.partnership_text} edits={edits} onEdit={onEdit} multiline as="div"
-              style={{ fontSize: "11px", color: "#6B7280", fontStyle: "italic" }}
-            />
-            <div style={{ fontSize: "10px", color: "#9CA3AF", marginTop: "2px" }}>↑ Click to edit all partnership bullets</div>
-          </div>
+          <EditablePartnershipBullets
+            value={getVal("partnership_text")}
+            defaultValue={DEFAULT_EDITS.partnership_text}
+            onSave={(v) => onEdit("partnership_text", v)}
+          />
         </SectionBlock>
 
         <div style={{ borderTop: "1px solid #9CA3AF", marginTop: "24px", paddingTop: "8px", textAlign: "center", fontSize: "10px", color: "#6B7280" }}>
@@ -467,6 +465,83 @@ function SectionBlock({
         />
       </div>
       {children}
+    </div>
+  );
+}
+
+function EditablePartnershipBullets({
+  value,
+  defaultValue,
+  onSave,
+}: {
+  value: string;
+  defaultValue: string;
+  onSave: (v: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const text = value || defaultValue;
+  const lines = text.split("\n").filter((l) => l.trim());
+
+  function startEdit() {
+    setDraft(text);
+    setEditing(true);
+  }
+  function commit() {
+    onSave(draft);
+    setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <div>
+        <textarea
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          style={{
+            width: "100%",
+            minHeight: "100px",
+            border: "1px solid #D1D5DB",
+            borderRadius: "3px",
+            padding: "6px 8px",
+            fontSize: "12px",
+            fontFamily: "inherit",
+            resize: "vertical",
+          }}
+          placeholder="One point per line"
+        />
+        <div style={{ display: "flex", gap: "6px", marginTop: "4px" }}>
+          <button
+            onClick={commit}
+            style={{ fontSize: "11px", padding: "3px 10px", background: "#16A34A", color: "white", border: "none", borderRadius: "3px", cursor: "pointer" }}
+          >
+            Save
+          </button>
+          <button
+            onClick={() => setEditing(false)}
+            style={{ fontSize: "11px", padding: "3px 10px", background: "#9CA3AF", color: "white", border: "none", borderRadius: "3px", cursor: "pointer" }}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      onClick={startEdit}
+      title="Click to edit"
+      style={{ cursor: "pointer", borderRadius: "3px" }}
+      className="hover:bg-muted hover:outline hover:outline-1 hover:outline-border"
+    >
+      {lines.map((line, i) => (
+        <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: "6px", marginBottom: "5px", fontSize: "12px", color: "#374151" }}>
+          <span style={{ flexShrink: 0 }}>●</span>
+          <span>{line}</span>
+        </div>
+      ))}
     </div>
   );
 }

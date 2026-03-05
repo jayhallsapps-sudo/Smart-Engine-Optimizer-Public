@@ -1,4 +1,4 @@
-import { CalendarDays, BarChart3, TrendingUp, Sparkles, Users, Settings, Zap, History, LayoutDashboard } from "lucide-react";
+import { CalendarDays, BarChart3, TrendingUp, Sparkles, Users, Settings, Zap, History, LayoutDashboard, FlaskConical } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import {
   Sidebar,
@@ -29,6 +29,7 @@ const reportItems = [
 const utilItems = [
   { title: "Clients", url: "/clients", icon: Users },
   { title: "History", url: "/history", icon: History },
+  { title: "Sample Exports", url: "/sample-reports", icon: FlaskConical },
   { title: "Setup", url: "/setup", icon: Settings },
 ];
 

@@ -12,6 +12,7 @@ import { testCredential } from "./connectionTest";
 import { insertSfReportSchema, insertCallTrackingReportSchema } from "@shared/schema";
 import { generateBiweeklyDocx, generatePptx, generateQbrPrepDocx } from "./reportGenerators";
 import type { SectionData } from "./reportGenerators";
+import { getSampleBiweeklySections, getSampleMonthlySections, getSampleQbrSections, getSampleQbrPrepJson, SAMPLE_CLIENT_NAME, SAMPLE_ATTENDEES } from "./sampleData";
 import { generateQbrPrep } from "./qbrPrepGenerator";
 import type { QbrPrepJson } from "./qbrPrepGenerator";
 import { generateBiweekly } from "./biweeklyGenerator";
@@ -1326,6 +1327,59 @@ export async function registerRoutes(
       connectedServices,
       metrics,
     });
+  });
+
+  app.get("/api/reports/biweekly/sample", async (_req, res) => {
+    try {
+      const sections = getSampleBiweeklySections();
+      const date = "March 5, 2026";
+      const buffer = await generateBiweeklyDocx(SAMPLE_CLIENT_NAME, SAMPLE_ATTENDEES, date, sections);
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+      res.setHeader("Content-Disposition", `attachment; filename="Sample_Biweekly_AcmePlumbing.docx"`);
+      res.send(buffer);
+    } catch (err: any) {
+      console.error("Sample Biweekly error:", err);
+      res.status(500).json({ message: "Failed to generate sample: " + err.message });
+    }
+  });
+
+  app.get("/api/reports/monthly/sample", async (_req, res) => {
+    try {
+      const sections = getSampleMonthlySections();
+      const buffer = await generatePptx(SAMPLE_CLIENT_NAME, "Monthly SEO Report", "March 2026", sections);
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
+      res.setHeader("Content-Disposition", `attachment; filename="Sample_Monthly_AcmePlumbing.pptx"`);
+      res.send(buffer);
+    } catch (err: any) {
+      console.error("Sample Monthly error:", err);
+      res.status(500).json({ message: "Failed to generate sample: " + err.message });
+    }
+  });
+
+  app.get("/api/reports/qbr/sample", async (_req, res) => {
+    try {
+      const sections = getSampleQbrSections();
+      const buffer = await generatePptx(SAMPLE_CLIENT_NAME, "Quarterly Business Review", "Q1 2025", sections);
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
+      res.setHeader("Content-Disposition", `attachment; filename="Sample_QBR_AcmePlumbing.pptx"`);
+      res.send(buffer);
+    } catch (err: any) {
+      console.error("Sample QBR error:", err);
+      res.status(500).json({ message: "Failed to generate sample: " + err.message });
+    }
+  });
+
+  app.get("/api/reports/qbr-prep/sample", async (_req, res) => {
+    try {
+      const json = getSampleQbrPrepJson();
+      const buffer = await generateQbrPrepDocx(json);
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+      res.setHeader("Content-Disposition", `attachment; filename="Sample_QBRPrep_AcmePlumbing.docx"`);
+      res.send(buffer);
+    } catch (err: any) {
+      console.error("Sample QBR Prep error:", err);
+      res.status(500).json({ message: "Failed to generate sample: " + err.message });
+    }
   });
 
   return httpServer;

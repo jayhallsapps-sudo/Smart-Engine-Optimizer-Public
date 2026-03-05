@@ -13,9 +13,6 @@ import {
   ShadingType,
   ImageRun,
   Header,
-  TextWrappingType,
-  HorizontalPositionAlign,
-  VerticalPositionAlign,
   convertInchesToTwip,
   PageBreak,
 } from "docx";
@@ -351,33 +348,54 @@ export async function generateBiweeklyDocx(
   const headerImagePath = path.join(process.cwd(), "server", "assets", "biweekly_header.png");
   const headerImageData = fs.readFileSync(headerImagePath);
 
+  // Use an INLINE image inside a table with negative left-indent so that the
+  // table starts at the page edge (not the text-area edge).  This avoids the
+  // floating-image bugs in Apple Pages where relativeFrom="page" is ignored.
+  //
+  // Left margin = 1.25" = 1800 DXA.  Shift the table -1800 DXA so its left
+  // edge aligns with the physical page edge.  Table width = 12240 DXA = 8.5".
+  const PAGE_W_DXA = 12240;
+  const LEFT_MARGIN_DXA = 1800; // 1.25" × 1440
+
   const docHeader = new Header({
     children: [
-      new Paragraph({
-        spacing: { before: 0, after: 0 },
-        children: [
-          new ImageRun({
-            type: "png",
-            data: headerImageData,
-            transformation: { width: HEADER_W_PX, height: HEADER_H_PX },
-            floating: {
-              // Pin the image to the page's top-left corner using Word's native
-              // alignment — more reliable than offset: 0 across all viewers.
-              horizontalPosition: {
-                relative: "page",
-                align: HorizontalPositionAlign.LEFT,
-              },
-              verticalPosition: {
-                relative: "page",
-                align: VerticalPositionAlign.TOP,
-              },
-              wrap: {
-                type: TextWrappingType.TOP_AND_BOTTOM,
-              },
-              margins: { top: 0, bottom: 0, left: 0, right: 0 },
-              allowOverlap: false,
-              lockAnchor: true,
-            },
+      new Table({
+        width: { size: PAGE_W_DXA, type: WidthType.DXA },
+        indent: { size: -LEFT_MARGIN_DXA, type: WidthType.DXA },
+        borders: {
+          top:    { style: BorderStyle.NONE, size: 0, color: WHITE },
+          bottom: { style: BorderStyle.NONE, size: 0, color: WHITE },
+          left:   { style: BorderStyle.NONE, size: 0, color: WHITE },
+          right:  { style: BorderStyle.NONE, size: 0, color: WHITE },
+          insideHorizontal: { style: BorderStyle.NONE, size: 0, color: WHITE },
+          insideVertical:   { style: BorderStyle.NONE, size: 0, color: WHITE },
+        },
+        rows: [
+          new TableRow({
+            children: [
+              new TableCell({
+                width: { size: PAGE_W_DXA, type: WidthType.DXA },
+                borders: {
+                  top:    { style: BorderStyle.NONE, size: 0, color: WHITE },
+                  bottom: { style: BorderStyle.NONE, size: 0, color: WHITE },
+                  left:   { style: BorderStyle.NONE, size: 0, color: WHITE },
+                  right:  { style: BorderStyle.NONE, size: 0, color: WHITE },
+                },
+                margins: { top: 0, bottom: 0, left: 0, right: 0 },
+                children: [
+                  new Paragraph({
+                    spacing: { before: 0, after: 0 },
+                    children: [
+                      new ImageRun({
+                        type: "png",
+                        data: headerImageData,
+                        transformation: { width: HEADER_W_PX, height: HEADER_H_PX },
+                      }),
+                    ],
+                  }),
+                ],
+              }),
+            ],
           }),
         ],
       }),

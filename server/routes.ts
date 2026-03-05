@@ -1413,11 +1413,23 @@ export async function registerRoutes(
 
   app.post("/api/template/save", (req, res) => {
     try {
-      const { accentColor, imageBase64 } = req.body as { accentColor?: string; imageBase64?: string };
+      const { templateType, accentColor, purposeText, footerText, imageBase64 } = req.body as {
+        templateType?: "biweekly" | "monthly" | "qbr";
+        accentColor?: string;
+        purposeText?: string;
+        footerText?: string;
+        imageBase64?: string;
+      };
       const cfg = readTemplateConfig();
-      if (accentColor) cfg.accentColor = accentColor.replace("#", "");
+      const type = templateType ?? "biweekly";
+      if (!cfg[type]) cfg[type] = {};
+      if (accentColor !== undefined) cfg[type].accentColor = accentColor.replace("#", "");
+      if (purposeText !== undefined) cfg[type].purposeText = purposeText;
+      if (footerText !== undefined) cfg[type].footerText = footerText;
+      // Top-level accentColor kept for backward compat
+      if (type === "biweekly" && accentColor !== undefined) cfg.accentColor = accentColor.replace("#", "");
       fs.writeFileSync(TEMPLATE_CONFIG_PATH, JSON.stringify(cfg, null, 2));
-      if (imageBase64) {
+      if (imageBase64 && type === "biweekly") {
         const imgBuf = Buffer.from(imageBase64, "base64");
         fs.writeFileSync(HEADER_IMAGE_PATH, imgBuf);
       }

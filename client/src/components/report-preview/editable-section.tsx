@@ -54,7 +54,7 @@ export function EditableSection({
             ref={ref as React.RefObject<HTMLTextAreaElement>}
             value={draft}
             onChange={e => setDraft(e.target.value)}
-            className="w-full border-2 border-blue-400 rounded px-2 py-1 text-sm font-inherit bg-blue-50 resize-y min-h-[60px] outline-none"
+            className="w-full border-2 border-border rounded px-2 py-1 text-sm font-inherit bg-background resize-y min-h-[60px] outline-none focus:border-primary"
             data-testid={`input-edit-${editKey}`}
           />
         ) : (
@@ -62,7 +62,7 @@ export function EditableSection({
             ref={ref as React.RefObject<HTMLInputElement>}
             value={draft}
             onChange={e => setDraft(e.target.value)}
-            className="w-full border-2 border-blue-400 rounded px-2 py-1 text-sm font-inherit bg-blue-50 outline-none"
+            className="w-full border-2 border-border rounded px-2 py-1 text-sm font-inherit bg-background outline-none focus:border-primary"
             data-testid={`input-edit-${editKey}`}
           />
         )}
@@ -88,14 +88,14 @@ export function EditableSection({
 
   return (
     <Tag
-      className={`group relative cursor-pointer hover:bg-blue-50 hover:outline hover:outline-1 hover:outline-blue-300 rounded transition-all ${className}`}
+      className={`group relative cursor-pointer hover:bg-muted hover:outline hover:outline-1 hover:outline-border rounded transition-all ${className}`}
       style={style}
       onClick={startEdit}
       title="Click to edit"
       data-testid={`editable-${editKey}`}
     >
       {current}
-      <Pencil className="w-3 h-3 text-blue-400 opacity-0 group-hover:opacity-100 absolute top-0.5 right-0.5 pointer-events-none" />
+      <Pencil className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 absolute top-0.5 right-0.5 pointer-events-none" />
     </Tag>
   );
 }

@@ -1,0 +1,15 @@
+{
+  "biweekly": {
+    "accentColor": "C0392B",
+    "purposeText": "To review recent SEO progress, share quick wins, and align on upcoming priorities that support your business goals.",
+    "footerText": "Webserv  |  32 Discovery Suite 130, Irvine, CA 92618  |  webserv.io"
+  },
+  "monthly": {
+    "accentColor": "1B3A6B",
+    "highlightColor": "E8F0FE"
+  },
+  "qbr": {
+    "accentColor": "1B3A6B",
+    "highlightColor": "E8F0FE"
+  }
+}

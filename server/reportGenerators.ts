@@ -13,9 +13,6 @@ import {
   ShadingType,
   ImageRun,
   Header,
-  TextWrappingType,
-  HorizontalPositionAlign,
-  VerticalPositionAlign,
   convertInchesToTwip,
   PageBreak,
 } from "docx";
@@ -335,6 +332,26 @@ function buildDataTable(headers: string[], rows: (string | number)[][]): Table {
   });
 }
 
+function readBiweeklyConfig(): { purposeText: string; footerText: string } {
+  const configPath = path.join(process.cwd(), "server", "assets", "template_config.json");
+  try {
+    if (fs.existsSync(configPath)) {
+      const full = JSON.parse(fs.readFileSync(configPath, "utf8"));
+      const bw = full.biweekly ?? full;
+      return {
+        purposeText: bw.purposeText ?? DEFAULT_PURPOSE_TEXT,
+        footerText: bw.footerText ?? DEFAULT_FOOTER_TEXT,
+      };
+    }
+  } catch {}
+  return { purposeText: DEFAULT_PURPOSE_TEXT, footerText: DEFAULT_FOOTER_TEXT };
+}
+
+const DEFAULT_PURPOSE_TEXT =
+  "To review recent SEO progress, share quick wins, and align on upcoming priorities that support your business goals.";
+const DEFAULT_FOOTER_TEXT =
+  "Webserv  |  32 Discovery Suite 130, Irvine, CA 92618  |  webserv.io";
+
 export async function generateBiweeklyDocx(
   clientName: string,
   attendees: string,
@@ -342,15 +359,20 @@ export async function generateBiweeklyDocx(
   sections: SectionData[]
 ): Promise<Buffer> {
   const children: (Paragraph | Table)[] = [];
+  const bwCfg = readBiweeklyConfig();
 
-  // Webserv header swoosh — full page width (8.5" = 816 px @ 96 dpi), bleeds to all edges
-  // transformation uses PIXELS (docx library multiplies by 9525 internally to produce EMU)
-  const HEADER_W_PX = 816;                                     // 8.5" × 96 dpi
-  const HEADER_H_PX = Math.round((143 / 692) * HEADER_W_PX);  // ≈ 169 px
+  // Header image — inline at text-area width (6" = 576 px @ 96 dpi).
+  // Inline placement is universally supported in Word, Pages, and Google Docs;
+  // it avoids the right-edge clipping that floating images produce in Apple Pages.
+  // transformation uses PIXELS (docx library multiplies by 9525 internally → EMU).
+  const HEADER_W_PX = 576;                                     // 6" × 96 dpi = text-area width
+  const HEADER_H_PX = Math.round((143 / 692) * HEADER_W_PX);  // ≈ 119 px  (preserve aspect ratio)
 
   const headerImagePath = path.join(process.cwd(), "server", "assets", "biweekly_header.png");
   const headerImageData = fs.readFileSync(headerImagePath);
 
+  // Place image in the recurring page header so it appears on every page.
+  // Inline (no floating) = renders correctly edge-to-edge within the text area.
   const docHeader = new Header({
     children: [
       new Paragraph({
@@ -360,20 +382,6 @@ export async function generateBiweeklyDocx(
             type: "png",
             data: headerImageData,
             transformation: { width: HEADER_W_PX, height: HEADER_H_PX },
-            floating: {
-              horizontalPosition: {
-                relative: "page",
-                align: HorizontalPositionAlign.LEFT,
-              },
-              verticalPosition: {
-                relative: "page",
-                align: VerticalPositionAlign.TOP,
-              },
-              wrap: { type: TextWrappingType.TOP_AND_BOTTOM },
-              margins: { top: 0, bottom: 0, left: 0, right: 0 },
-              allowOverlap: false,
-              lockAnchor: true,
-            },
           }),
         ],
       }),
@@ -418,8 +426,7 @@ export async function generateBiweeklyDocx(
     bw_partnership: 3,
   };
 
-  const PURPOSE_TEXT =
-    "To review recent SEO progress, share quick wins, and align on upcoming priorities that support your business goals.";
+  const PURPOSE_TEXT = bwCfg.purposeText;
 
   for (const sectionId of SECTION_ORDER) {
     const section = sections.find(s => s.sectionId === sectionId);
@@ -519,7 +526,7 @@ export async function generateBiweeklyDocx(
     new Paragraph({
       border: { top: { style: BorderStyle.SINGLE, size: 1, color: "888888" } },
       children: [
-        new TextRun({ text: "Webserv  |  32 Discovery Suite 130, Irvine, CA 92618  |  webserv.io", size: 16, color: WEBSERV_GRAY }),
+        new TextRun({ text: bwCfg.footerText, size: 16, color: WEBSERV_GRAY }),
       ],
       alignment: AlignmentType.CENTER,
       spacing: { before: 280, after: 0 },
@@ -536,12 +543,13 @@ export async function generateBiweeklyDocx(
           // Lock to US Letter so the 8.5" header image never overflows on A4 viewers
           size: { width: 12240, height: 15840 },
           margin: {
-            // header bleeds from top edge; body starts after image height (≈1.76") + gap
-            top: convertInchesToTwip(2.0),
+            // Inline header image is 119 px ≈ 1.24" tall; body starts 1.75" from page top
+            // giving a comfortable 0.51" gap between the image bottom and the first body line.
+            top: convertInchesToTwip(1.75),
             bottom: convertInchesToTwip(1),
             left: convertInchesToTwip(1.25),
             right: convertInchesToTwip(1.25),
-            header: 0, // image anchors to the very top of the page
+            header: 0, // header section starts at the very top of the page
           },
         },
       },

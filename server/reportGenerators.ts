@@ -12,6 +12,7 @@ import {
   HeadingLevel,
   ShadingType,
   ImageRun,
+  Header,
   convertInchesToTwip,
   PageBreak,
 } from "docx";
@@ -339,27 +340,32 @@ export async function generateBiweeklyDocx(
 ): Promise<Buffer> {
   const children: (Paragraph | Table)[] = [];
 
-  // Webserv header swoosh image — spans full page width via negative indent
-  // Image original pixels: 692 × 143. Displayed at 8.5" wide → EMU: 8.5 × 914400
-  const HEADER_W_EMU = Math.round(8.5 * 914400);
-  const HEADER_H_EMU = Math.round((143 / 692) * HEADER_W_EMU);
-  const MARGIN_DXA = convertInchesToTwip(1.25); // 1800 DXA per side
+  // Webserv header swoosh image — loaded once, placed in DOCX Header (repeats every page)
+  // transformation uses PIXELS (library multiplies by 9525 internally to get EMU)
+  // Original: 692×143 px → display at text-area width (6" @ 96 dpi = 576 px)
+  const HEADER_W_PX = 576;
+  const HEADER_H_PX = Math.round((143 / 692) * HEADER_W_PX); // ≈ 119 px
 
   const headerImagePath = path.join(process.cwd(), "server", "assets", "biweekly_header.png");
   const headerImageData = fs.readFileSync(headerImagePath);
 
+  const docHeader = new Header({
+    children: [
+      new Paragraph({
+        spacing: { before: 0, after: 60 },
+        children: [
+          new ImageRun({
+            type: "png",
+            data: headerImageData,
+            transformation: { width: HEADER_W_PX, height: HEADER_H_PX },
+          }),
+        ],
+      }),
+    ],
+  });
+
+  // Body starts with title + meta — header image is above via section header
   children.push(
-    new Paragraph({
-      spacing: { before: 0, after: 0 },
-      indent: { left: -MARGIN_DXA, right: -MARGIN_DXA },
-      children: [
-        new ImageRun({
-          data: headerImageData,
-          transformation: { width: HEADER_W_EMU, height: HEADER_H_EMU },
-          type: "png",
-        }),
-      ],
-    }),
     new Paragraph({
       children: [
         new TextRun({
@@ -369,7 +375,7 @@ export async function generateBiweeklyDocx(
           color: WEBSERV_RED,
         }),
       ],
-      spacing: { before: 120, after: 80 },
+      spacing: { before: 80, after: 80 },
     }),
     new Paragraph({
       children: [
@@ -506,13 +512,18 @@ export async function generateBiweeklyDocx(
 
   const doc = new Document({
     sections: [{
+      headers: {
+        default: docHeader,
+      },
       properties: {
         page: {
           margin: {
-            top: 0,
+            // top = header image height (≈1.24") + 0.25" gap  ≈ 1.5"
+            top: convertInchesToTwip(1.5),
             bottom: convertInchesToTwip(1),
             left: convertInchesToTwip(1.25),
             right: convertInchesToTwip(1.25),
+            header: convertInchesToTwip(0.1),
           },
         },
       },

@@ -14,6 +14,8 @@ import {
   ImageRun,
   Header,
   TextWrappingType,
+  HorizontalPositionAlign,
+  VerticalPositionAlign,
   convertInchesToTwip,
   PageBreak,
 } from "docx";
@@ -359,14 +361,15 @@ export async function generateBiweeklyDocx(
             data: headerImageData,
             transformation: { width: HEADER_W_PX, height: HEADER_H_PX },
             floating: {
-              // Anchor to the PAGE corner at (0, 0) — bypasses all margin constraints
+              // Pin the image to the page's top-left corner using Word's native
+              // alignment — more reliable than offset: 0 across all viewers.
               horizontalPosition: {
                 relative: "page",
-                offset: 0,
+                align: HorizontalPositionAlign.LEFT,
               },
               verticalPosition: {
                 relative: "page",
-                offset: 0,
+                align: VerticalPositionAlign.TOP,
               },
               wrap: {
                 type: TextWrappingType.TOP_AND_BOTTOM,
@@ -534,6 +537,8 @@ export async function generateBiweeklyDocx(
       },
       properties: {
         page: {
+          // Lock to US Letter so the 8.5" header image never overflows on A4 viewers
+          size: { width: 12240, height: 15840 },
           margin: {
             // header bleeds from top edge; body starts after image height (≈1.76") + gap
             top: convertInchesToTwip(2.0),

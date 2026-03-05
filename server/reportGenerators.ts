@@ -11,9 +11,12 @@ import {
   AlignmentType,
   HeadingLevel,
   ShadingType,
+  ImageRun,
   convertInchesToTwip,
   PageBreak,
 } from "docx";
+import * as fs from "fs";
+import * as path from "path";
 import type { QbrPrepJson, Opportunity } from "./qbrPrepGenerator";
 import PptxGenJSImport from "pptxgenjs";
 // tsx/ESM interop: pptxgenjs exports the constructor as module.exports in CJS.
@@ -336,51 +339,38 @@ export async function generateBiweeklyDocx(
 ): Promise<Buffer> {
   const children: (Paragraph | Table)[] = [];
 
-  // Red banner header — full text-area width, explicit DXA to prevent column collapse
-  const BANNER_NONE = { style: BorderStyle.NONE, size: 0, color: WHITE };
+  // Webserv header swoosh image — spans full page width via negative indent
+  // Image original pixels: 692 × 143. Displayed at 8.5" wide → EMU: 8.5 × 914400
+  const HEADER_W_EMU = Math.round(8.5 * 914400);
+  const HEADER_H_EMU = Math.round((143 / 692) * HEADER_W_EMU);
+  const MARGIN_DXA = convertInchesToTwip(1.25); // 1800 DXA per side
+
+  const headerImagePath = path.join(process.cwd(), "server", "assets", "biweekly_header.png");
+  const headerImageData = fs.readFileSync(headerImagePath);
+
   children.push(
-    new Table({
-      width: { size: TEXT_AREA_DXA, type: WidthType.DXA },
-      columnWidths: [TEXT_AREA_DXA],
-      borders: {
-        top: BANNER_NONE,
-        bottom: BANNER_NONE,
-        left: BANNER_NONE,
-        right: BANNER_NONE,
-        insideH: BANNER_NONE,
-        insideV: BANNER_NONE,
-      },
-      rows: [
-        new TableRow({
-          children: [
-            new TableCell({
-              width: { size: TEXT_AREA_DXA, type: WidthType.DXA },
-              shading: { type: ShadingType.SOLID, color: WEBSERV_RED },
-              borders: {
-                top: BANNER_NONE,
-                bottom: BANNER_NONE,
-                left: BANNER_NONE,
-                right: BANNER_NONE,
-              },
-              margins: { top: 160, bottom: 160, left: 200, right: 200 },
-              children: [
-                new Paragraph({
-                  children: [
-                    new TextRun({
-                      text: `SEO Bi-weekly Meeting: ${clientName}`,
-                      bold: true,
-                      size: 40,
-                      color: WHITE,
-                    }),
-                  ],
-                }),
-              ],
-            }),
-          ],
+    new Paragraph({
+      spacing: { before: 0, after: 0 },
+      indent: { left: -MARGIN_DXA, right: -MARGIN_DXA },
+      children: [
+        new ImageRun({
+          data: headerImageData,
+          transformation: { width: HEADER_W_EMU, height: HEADER_H_EMU },
+          type: "png",
         }),
       ],
     }),
-    new Paragraph({ children: [], spacing: { after: 120 } }),
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: `SEO Bi-weekly Meeting: ${clientName}`,
+          bold: true,
+          size: 36,
+          color: WEBSERV_RED,
+        }),
+      ],
+      spacing: { before: 120, after: 80 },
+    }),
     new Paragraph({
       children: [
         new TextRun({ text: "Attendees: ", bold: true, size: 20 }),
@@ -519,7 +509,7 @@ export async function generateBiweeklyDocx(
       properties: {
         page: {
           margin: {
-            top: convertInchesToTwip(0.75),
+            top: 0,
             bottom: convertInchesToTwip(1),
             left: convertInchesToTwip(1.25),
             right: convertInchesToTwip(1.25),

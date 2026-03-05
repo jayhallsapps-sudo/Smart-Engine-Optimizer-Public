@@ -56,6 +56,9 @@ const DATE_PILL_BG = "E8EAED";
 const WHITE = "FFFFFF";
 const BLACK = "000000";
 
+// Text-area width in DXA (twips): 8.5" page − 2 × 1.25" margins = 6" × 1440 twips/inch
+const TEXT_AREA_DXA = 8640;
+
 function makeBorder() {
   return {
     top: { style: BorderStyle.SINGLE, size: 1, color: "D1D5DB" },
@@ -65,8 +68,9 @@ function makeBorder() {
   };
 }
 
-function headerCell(text: string) {
+function headerCell(text: string, widthDxa?: number) {
   return new TableCell({
+    width: widthDxa ? { size: widthDxa, type: WidthType.DXA } : undefined,
     shading: { type: ShadingType.SOLID, color: WEBSERV_BLUE },
     borders: makeBorder(),
     children: [
@@ -77,8 +81,9 @@ function headerCell(text: string) {
   });
 }
 
-function bodyCell(text: string, shade = false) {
+function bodyCell(text: string, shade = false, widthDxa?: number) {
   return new TableCell({
+    width: widthDxa ? { size: widthDxa, type: WidthType.DXA } : undefined,
     shading: shade ? { type: ShadingType.SOLID, color: WEBSERV_LIGHT } : undefined,
     borders: makeBorder(),
     children: [
@@ -146,8 +151,9 @@ function makeNoBorder() {
   };
 }
 
-function bwHeaderCell(text: string) {
+function bwHeaderCell(text: string, widthDxa?: number) {
   return new TableCell({
+    width: widthDxa ? { size: widthDxa, type: WidthType.DXA } : undefined,
     shading: { type: ShadingType.SOLID, color: BLACK },
     borders: makeBorder(),
     children: [
@@ -175,24 +181,28 @@ function bwSectionHeading(num: number, title: string) {
   });
 }
 
+// Work-log column widths: Area 1" | What We Did 3" | What's Next 2"  (total = 6")
+const WL_COL = [1440, 4320, 2880] as const;
+
 function buildBwWorkLogTable(rows: WorkLogRow[]): Table {
   return new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
+    width: { size: TEXT_AREA_DXA, type: WidthType.DXA },
+    columnWidths: [...WL_COL],
     rows: [
       new TableRow({
         children: [
-          bwHeaderCell("Area"),
-          bwHeaderCell("What We Did / Learned"),
-          bwHeaderCell("What's Next"),
+          bwHeaderCell("Area", WL_COL[0]),
+          bwHeaderCell("What We Did / Learned", WL_COL[1]),
+          bwHeaderCell("What's Next", WL_COL[2]),
         ],
         tableHeader: true,
       }),
       ...rows.map((row, ri) =>
         new TableRow({
           children: [
-            bodyCell(row.area, ri % 2 === 1),
-            bodyCell(row.whatWeDid, ri % 2 === 1),
-            bodyCell(row.whatsNext, ri % 2 === 1),
+            bodyCell(row.area, ri % 2 === 1, WL_COL[0]),
+            bodyCell(row.whatWeDid, ri % 2 === 1, WL_COL[1]),
+            bodyCell(row.whatsNext, ri % 2 === 1, WL_COL[2]),
           ],
         })
       ),
@@ -270,22 +280,23 @@ function renderItemContent(item: CommittedItem, isBwProgress = false): Paragraph
 
 function buildWorkLogTable(rows: WorkLogRow[]): Table {
   return new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
+    width: { size: TEXT_AREA_DXA, type: WidthType.DXA },
+    columnWidths: [...WL_COL],
     rows: [
       new TableRow({
         children: [
-          headerCell("Area"),
-          headerCell("What We Did / Learned"),
-          headerCell("What's Next"),
+          headerCell("Area", WL_COL[0]),
+          headerCell("What We Did / Learned", WL_COL[1]),
+          headerCell("What's Next", WL_COL[2]),
         ],
         tableHeader: true,
       }),
       ...rows.map((row, ri) =>
         new TableRow({
           children: [
-            bodyCell(row.area, ri % 2 === 1),
-            bodyCell(row.whatWeDid, ri % 2 === 1),
-            bodyCell(row.whatsNext, ri % 2 === 1),
+            bodyCell(row.area, ri % 2 === 1, WL_COL[0]),
+            bodyCell(row.whatWeDid, ri % 2 === 1, WL_COL[1]),
+            bodyCell(row.whatsNext, ri % 2 === 1, WL_COL[2]),
           ],
         })
       ),
@@ -294,16 +305,23 @@ function buildWorkLogTable(rows: WorkLogRow[]): Table {
 }
 
 function buildDataTable(headers: string[], rows: (string | number)[][]): Table {
+  const n = headers.length;
+  const colW = Math.floor(TEXT_AREA_DXA / n);
+  // Last column absorbs any rounding remainder
+  const widths = headers.map((_, i) =>
+    i < n - 1 ? colW : TEXT_AREA_DXA - colW * (n - 1)
+  );
   return new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
+    width: { size: TEXT_AREA_DXA, type: WidthType.DXA },
+    columnWidths: widths,
     rows: [
       new TableRow({
-        children: headers.map(h => headerCell(h)),
+        children: headers.map((h, i) => headerCell(h, widths[i])),
         tableHeader: true,
       }),
       ...rows.slice(0, 25).map((row, ri) =>
         new TableRow({
-          children: row.map(cell => bodyCell(String(cell), ri % 2 === 1)),
+          children: row.map((cell, i) => bodyCell(String(cell), ri % 2 === 1, widths[i])),
         })
       ),
     ],
@@ -318,28 +336,31 @@ export async function generateBiweeklyDocx(
 ): Promise<Buffer> {
   const children: (Paragraph | Table)[] = [];
 
-  // Red banner header — approximates the Webserv swoosh
+  // Red banner header — full text-area width, explicit DXA to prevent column collapse
+  const BANNER_NONE = { style: BorderStyle.NONE, size: 0, color: WHITE };
   children.push(
     new Table({
-      width: { size: 100, type: WidthType.PERCENTAGE },
+      width: { size: TEXT_AREA_DXA, type: WidthType.DXA },
+      columnWidths: [TEXT_AREA_DXA],
       borders: {
-        top: { style: BorderStyle.NONE, size: 0, color: WHITE },
-        bottom: { style: BorderStyle.NONE, size: 0, color: WHITE },
-        left: { style: BorderStyle.NONE, size: 0, color: WHITE },
-        right: { style: BorderStyle.NONE, size: 0, color: WHITE },
-        insideH: { style: BorderStyle.NONE, size: 0, color: WHITE },
-        insideV: { style: BorderStyle.NONE, size: 0, color: WHITE },
+        top: BANNER_NONE,
+        bottom: BANNER_NONE,
+        left: BANNER_NONE,
+        right: BANNER_NONE,
+        insideH: BANNER_NONE,
+        insideV: BANNER_NONE,
       },
       rows: [
         new TableRow({
           children: [
             new TableCell({
+              width: { size: TEXT_AREA_DXA, type: WidthType.DXA },
               shading: { type: ShadingType.SOLID, color: WEBSERV_RED },
               borders: {
-                top: { style: BorderStyle.NONE, size: 0, color: WHITE },
-                bottom: { style: BorderStyle.NONE, size: 0, color: WHITE },
-                left: { style: BorderStyle.NONE, size: 0, color: WHITE },
-                right: { style: BorderStyle.NONE, size: 0, color: WHITE },
+                top: BANNER_NONE,
+                bottom: BANNER_NONE,
+                left: BANNER_NONE,
+                right: BANNER_NONE,
               },
               margins: { top: 160, bottom: 160, left: 200, right: 200 },
               children: [

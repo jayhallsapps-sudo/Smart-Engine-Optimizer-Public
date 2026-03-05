@@ -1,0 +1,55 @@
+You produced a broken PDF: the header graphic is compressed into a thin vertical strip and the table columns are near-zero width causing text to wrap one character per line. Fix the approach. Do not “recreate” the design. Use the provided template PDF as a locked background and only overlay variable text.
+
+HARD REQUIREMENTS
+1) TEMPLATE BACKGROUND (NO DESIGN REDRAW)
+- Open the attached template PDF.
+- For each page, render the FULL page to a background image at 200 DPI (or 300 DPI if needed).
+- Create a new PDF with the same page size.
+- Place the rendered background image to fill the page exactly.
+- Under no circumstances should the header/logo/swoosh be re-drawn or re-scaled independently. The entire page background is one placed asset.
+
+2) COORDINATE SYSTEM SANITY
+- Use PDF points (72 points per inch) as the coordinate system for ALL placements.
+- When placing the background image, compute its display size using page_width_points and page_height_points; do not assume pixels.
+- Add a debug mode that prints:
+  - template page size in points
+  - rendered image pixel dimensions
+  - computed scaling factors
+If scale_x and scale_y differ by more than 1%, fail with an error (“non-uniform scaling detected”).
+
+3) VARIABLE TEXT OVERLAY ONLY
+- Overlay these dynamic fields:
+  - Attendees line
+  - Date line
+  - Purpose paragraph
+  - Section headings
+  - Bullet lists
+  - Table contents
+Everything else remains part of the template background.
+
+4) TABLE RENDERING MUST BE FIXED-WIDTH
+- Do NOT rely on auto-layout tables.
+- Define explicit column widths in POINTS (not %), e.g. [140, 250, 160] or extracted from the template.
+- Disable per-character wrapping by ensuring each column width is realistic (min 120pt).
+- If any computed column width < 80pt, throw an error and stop.
+
+5) VALIDATION
+- Implement verify_match.py:
+  - Render template and output PDFs to images at 200 DPI
+  - Compute SSIM (or mean absolute pixel diff)
+  - Output a diff image and a numeric score
+  - Fail if SSIM < 0.98
+
+DELIVERABLES
+- extract_spec.py: prints page size, font info, and all overlay coordinates you will use
+- generate_report.py --input data.json --output out.pdf
+- verify_match.py --template template.pdf --output out.pdf --diff diff.png
+
+FIRST ACTION
+- Do not generate final PDFs yet.
+- First, implement extract_spec.py and print:
+  - template page size (points)
+  - background render dimensions (pixels)
+  - calculated scale factors
+  - proposed overlay coordinates for each dynamic text block
+Only after this prints correctly, implement generate_report.py.

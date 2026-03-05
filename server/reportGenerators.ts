@@ -26,6 +26,11 @@ export interface SectionData {
   items: CommittedItem[];
 }
 
+export interface RichBullet {
+  textRuns: { text: string; bold: boolean }[];
+  subBullets?: string[];
+}
+
 export interface CommittedItem {
   manualText?: string;
   tableRows?: WorkLogRow[];
@@ -33,6 +38,7 @@ export interface CommittedItem {
   tables?: { title: string; headers: string[]; rows: (string | number)[][] }[];
   commandDescription?: string;
   dateRangeLabel?: string;
+  richBullets?: RichBullet[];
 }
 
 export interface WorkLogRow {
@@ -42,9 +48,13 @@ export interface WorkLogRow {
 }
 
 const WEBSERV_BLUE = "1B3A6B";
+const WEBSERV_RED = "C0392B";
 const WEBSERV_LIGHT = "F0F4FA";
+const WEBSERV_LIGHT_RED = "FDECEA";
 const WEBSERV_GRAY = "6B7280";
+const DATE_PILL_BG = "E8EAED";
 const WHITE = "FFFFFF";
+const BLACK = "000000";
 
 function makeBorder() {
   return {
@@ -127,11 +137,110 @@ function emptyPlaceholder() {
   });
 }
 
+function makeNoBorder() {
+  return {
+    top: { style: BorderStyle.NONE, size: 0, color: WHITE },
+    bottom: { style: BorderStyle.NONE, size: 0, color: WHITE },
+    left: { style: BorderStyle.NONE, size: 0, color: WHITE },
+    right: { style: BorderStyle.NONE, size: 0, color: WHITE },
+  };
+}
+
+function bwHeaderCell(text: string) {
+  return new TableCell({
+    shading: { type: ShadingType.SOLID, color: BLACK },
+    borders: makeBorder(),
+    children: [
+      new Paragraph({
+        children: [new TextRun({ text, bold: true, color: WHITE, size: 18 })],
+      }),
+    ],
+  });
+}
+
+function bwSectionHeading(num: number, title: string) {
+  return new Paragraph({
+    children: [
+      new TextRun({
+        text: `${num}. ${title}`,
+        bold: true,
+        size: 26,
+        color: WEBSERV_RED,
+      }),
+    ],
+    spacing: { before: 280, after: 120 },
+    border: {
+      bottom: { style: BorderStyle.SINGLE, size: 2, color: WEBSERV_RED },
+    },
+  });
+}
+
+function buildBwWorkLogTable(rows: WorkLogRow[]): Table {
+  return new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    rows: [
+      new TableRow({
+        children: [
+          bwHeaderCell("Area"),
+          bwHeaderCell("What We Did / Learned"),
+          bwHeaderCell("What's Next"),
+        ],
+        tableHeader: true,
+      }),
+      ...rows.map((row, ri) =>
+        new TableRow({
+          children: [
+            bodyCell(row.area, ri % 2 === 1),
+            bodyCell(row.whatWeDid, ri % 2 === 1),
+            bodyCell(row.whatsNext, ri % 2 === 1),
+          ],
+        })
+      ),
+    ],
+  });
+}
+
+function richBulletParagraphs(bullet: RichBullet): Paragraph[] {
+  const result: Paragraph[] = [];
+  result.push(
+    new Paragraph({
+      bullet: { level: 0 },
+      children: bullet.textRuns.map(run =>
+        new TextRun({
+          text: run.text,
+          bold: run.bold,
+          size: 20,
+          color: run.bold ? WEBSERV_RED : "111827",
+        })
+      ),
+      spacing: { after: 40 },
+    })
+  );
+  for (const sub of bullet.subBullets ?? []) {
+    result.push(
+      new Paragraph({
+        bullet: { level: 1 },
+        children: [new TextRun({ text: sub, size: 18, color: "374151" })],
+        spacing: { after: 40 },
+        indent: { left: convertInchesToTwip(0.25) },
+      })
+    );
+  }
+  return result;
+}
+
 function renderItemContent(item: CommittedItem, isBwProgress = false): Paragraph[] {
   const paragraphs: Paragraph[] = [];
 
   if (isBwProgress && item.tableRows && item.tableRows.length > 0) {
     return [];
+  }
+
+  if (item.richBullets && item.richBullets.length > 0) {
+    for (const rb of item.richBullets) {
+      paragraphs.push(...richBulletParagraphs(rb));
+    }
+    return paragraphs;
   }
 
   if (item.manualText) {
@@ -209,18 +318,48 @@ export async function generateBiweeklyDocx(
 ): Promise<Buffer> {
   const children: (Paragraph | Table)[] = [];
 
+  // Red banner header — approximates the Webserv swoosh
   children.push(
-    new Paragraph({
-      children: [
-        new TextRun({
-          text: `SEO Bi-weekly Meeting: ${clientName}`,
-          bold: true,
-          size: 36,
-          color: WEBSERV_BLUE,
+    new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      borders: {
+        top: { style: BorderStyle.NONE, size: 0, color: WHITE },
+        bottom: { style: BorderStyle.NONE, size: 0, color: WHITE },
+        left: { style: BorderStyle.NONE, size: 0, color: WHITE },
+        right: { style: BorderStyle.NONE, size: 0, color: WHITE },
+        insideH: { style: BorderStyle.NONE, size: 0, color: WHITE },
+        insideV: { style: BorderStyle.NONE, size: 0, color: WHITE },
+      },
+      rows: [
+        new TableRow({
+          children: [
+            new TableCell({
+              shading: { type: ShadingType.SOLID, color: WEBSERV_RED },
+              borders: {
+                top: { style: BorderStyle.NONE, size: 0, color: WHITE },
+                bottom: { style: BorderStyle.NONE, size: 0, color: WHITE },
+                left: { style: BorderStyle.NONE, size: 0, color: WHITE },
+                right: { style: BorderStyle.NONE, size: 0, color: WHITE },
+              },
+              margins: { top: 160, bottom: 160, left: 200, right: 200 },
+              children: [
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: `SEO Bi-weekly Meeting: ${clientName}`,
+                      bold: true,
+                      size: 40,
+                      color: WHITE,
+                    }),
+                  ],
+                }),
+              ],
+            }),
+          ],
         }),
       ],
-      spacing: { after: 120 },
     }),
+    new Paragraph({ children: [], spacing: { after: 120 } }),
     new Paragraph({
       children: [
         new TextRun({ text: "Attendees: ", bold: true, size: 20 }),
@@ -229,17 +368,11 @@ export async function generateBiweeklyDocx(
       spacing: { after: 60 },
     }),
     new Paragraph({
+      shading: { type: ShadingType.SOLID, color: DATE_PILL_BG },
       children: [
         new TextRun({ text: "Date: ", bold: true, size: 20 }),
         new TextRun({ text: date, size: 20 }),
       ],
-      spacing: { after: 280 },
-    }),
-    new Paragraph({
-      border: {
-        bottom: { style: BorderStyle.SINGLE, size: 2, color: WEBSERV_BLUE },
-      },
-      children: [],
       spacing: { after: 280 },
     })
   );
@@ -265,7 +398,7 @@ export async function generateBiweeklyDocx(
       children.push(
         new Paragraph({
           children: [
-            new TextRun({ text: "Purpose:", bold: true, size: 24, color: WEBSERV_BLUE }),
+            new TextRun({ text: "Purpose:", bold: true, size: 24, color: WEBSERV_RED }),
           ],
           spacing: { before: 160, after: 80 },
         }),
@@ -277,7 +410,7 @@ export async function generateBiweeklyDocx(
       continue;
     }
 
-    children.push(sectionHeading(num, section.title));
+    children.push(bwSectionHeading(num, section.title));
 
     if (section.items.length === 0) {
       children.push(emptyPlaceholder());
@@ -313,7 +446,7 @@ export async function generateBiweeklyDocx(
       if (allRows.length > 0) {
         children.push(
           new Paragraph({ children: [], spacing: { before: 80 } }),
-          buildWorkLogTable(allRows),
+          buildBwWorkLogTable(allRows),
           new Paragraph({ children: [], spacing: { after: 160 } })
         );
       }
@@ -351,7 +484,7 @@ export async function generateBiweeklyDocx(
 
   children.push(
     new Paragraph({
-      border: { top: { style: BorderStyle.SINGLE, size: 2, color: WEBSERV_BLUE } },
+      border: { top: { style: BorderStyle.SINGLE, size: 1, color: "888888" } },
       children: [
         new TextRun({ text: "Webserv  |  32 Discovery Suite 130, Irvine, CA 92618  |  webserv.io", size: 16, color: WEBSERV_GRAY }),
       ],
@@ -365,7 +498,7 @@ export async function generateBiweeklyDocx(
       properties: {
         page: {
           margin: {
-            top: convertInchesToTwip(1),
+            top: convertInchesToTwip(0.75),
             bottom: convertInchesToTwip(1),
             left: convertInchesToTwip(1.25),
             right: convertInchesToTwip(1.25),

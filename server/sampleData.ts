@@ -16,24 +16,40 @@ export function getSampleBiweeklySections(): SectionData[] {
       title: "Performance Pulse & Key Insights",
       items: [
         {
-          summary: [
-            { label: "Organic Clicks", current: "3,412", previous: "2,987", deltaPercent: "+14.2%", isPositive: true },
-            { label: "Impressions", current: "48,310", previous: "44,120", deltaPercent: "+9.5%", isPositive: true },
-            { label: "Avg Position", current: "11.4", previous: "13.1", deltaPercent: "+1.7 pos", isPositive: true },
-            { label: "CTR", current: "7.06%", previous: "6.77%", deltaPercent: "+0.29%", isPositive: true },
-          ],
-        },
-        {
-          summary: [
-            { label: "Organic Sessions", current: "2,804", previous: "2,391", deltaPercent: "+17.3%", isPositive: true },
-            { label: "Goal Completions", current: "112", previous: "94", deltaPercent: "+19.1%", isPositive: true },
-            { label: "CVR", current: "3.99%", previous: "3.93%", deltaPercent: "+0.06%", isPositive: true },
-          ],
-        },
-        {
-          summary: [
-            { label: "Organic Calls", current: "67", previous: "54", deltaPercent: "+24.1%", isPositive: true },
-            { label: "Total Leads", current: "179", previous: "148", deltaPercent: "+20.9%", isPositive: true },
+          richBullets: [
+            {
+              textRuns: [
+                { text: "Organic Sessions QTD:", bold: true },
+                { text: " 2,804 → Goal: 6,500 (43.1% of goal for the month)", bold: false },
+              ],
+              subBullets: [
+                "Pacing is slightly behind, concentrated in a handful of landing pages (e.g., /services/water-heater-repair and /emergency-plumbing).",
+                "Growth has been driven by the emergency plumbing cluster — up +41% vs. prior period after a content refresh in late February.",
+                "Performance for drain cleaning pages has softened (-6% sessions). Optimization sprint planned for next period.",
+                "Next sprint: optimize underperformers and track lift in GSC (clicks, impressions, CTR, position).",
+              ],
+            },
+            {
+              textRuns: [
+                { text: "NSM Metric QTD (Total Leads):", bold: true },
+                { text: " 179 → Goal: 280 (63.9% of goal for the month)", bold: false },
+              ],
+              subBullets: [
+                "Performance is pacing ahead of the leads target relative to where sessions are tracking.",
+                "CVR holding strong at 3.99% vs. 3.93% prior period — the emergency plumbing and water heater pages are converting exceptionally well.",
+                "We'll continue monitoring to ensure momentum holds through month-end.",
+              ],
+            },
+            {
+              textRuns: [
+                { text: "Organic Calls:", bold: true },
+                { text: " 67 (vs. 54 prior period — +24.1%)", bold: false },
+              ],
+              subBullets: [
+                "Call volume tracking above target for the period.",
+                "Top call-driving page: /emergency-plumbing (54 calls attributed this period).",
+              ],
+            },
           ],
         },
         {

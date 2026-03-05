@@ -13,6 +13,7 @@ import {
   ShadingType,
   ImageRun,
   Header,
+  TextWrappingType,
   convertInchesToTwip,
   PageBreak,
 } from "docx";
@@ -344,8 +345,6 @@ export async function generateBiweeklyDocx(
   // transformation uses PIXELS (docx library multiplies by 9525 internally to produce EMU)
   const HEADER_W_PX = 816;                                     // 8.5" × 96 dpi
   const HEADER_H_PX = Math.round((143 / 692) * HEADER_W_PX);  // ≈ 169 px
-  // Push paragraph past the 1.25" page margins so the image bleeds edge-to-edge
-  const MARGIN_DXA = convertInchesToTwip(1.25);                // 1800 DXA
 
   const headerImagePath = path.join(process.cwd(), "server", "assets", "biweekly_header.png");
   const headerImageData = fs.readFileSync(headerImagePath);
@@ -354,12 +353,28 @@ export async function generateBiweeklyDocx(
     children: [
       new Paragraph({
         spacing: { before: 0, after: 0 },
-        indent: { left: -MARGIN_DXA, right: -MARGIN_DXA },
         children: [
           new ImageRun({
             type: "png",
             data: headerImageData,
             transformation: { width: HEADER_W_PX, height: HEADER_H_PX },
+            floating: {
+              // Anchor to the PAGE corner at (0, 0) — bypasses all margin constraints
+              horizontalPosition: {
+                relative: "page",
+                offset: 0,
+              },
+              verticalPosition: {
+                relative: "page",
+                offset: 0,
+              },
+              wrap: {
+                type: TextWrappingType.TOP_AND_BOTTOM,
+              },
+              margins: { top: 0, bottom: 0, left: 0, right: 0 },
+              allowOverlap: false,
+              lockAnchor: true,
+            },
           }),
         ],
       }),

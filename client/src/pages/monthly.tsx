@@ -76,24 +76,11 @@ export default function MonthlyPage() {
     },
   });
 
-  const downloadPdfMut = useMutation({
-    mutationFn: async () => {
-      if (!report) throw new Error("Generate report first");
-      const res = await apiRequest("POST", "/api/reports/monthly/pdf", { json: report, edits });
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      const cd = res.headers.get("content-disposition") ?? "";
-      const match = cd.match(/filename="([^"]+)"/);
-      a.download = match?.[1] ?? "monthly_report.pdf";
-      a.click();
-      URL.revokeObjectURL(url);
-    },
-    onError: (err: any) => {
-      toast({ title: "Download failed", description: err.message, variant: "destructive" });
-    },
-  });
+  function downloadPdf() {
+    if (!report) return;
+    sessionStorage.setItem("monthly_print_data", JSON.stringify({ report, edits }));
+    window.open("/monthly/print", "_blank");
+  }
 
   async function uploadToDrive() {
     if (!report) return;
@@ -208,18 +195,18 @@ export default function MonthlyPage() {
           <div className="p-4 border-t space-y-2">
             <Button
               className="w-full text-xs"
-              onClick={() => downloadPdfMut.mutate()}
-              disabled={downloadPdfMut.isPending || downloadMut.isPending}
+              onClick={downloadPdf}
+              disabled={downloadMut.isPending}
               data-testid="button-download-pdf"
             >
-              {downloadPdfMut.isPending ? <Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> : <Download className="w-3 h-3 mr-1.5" />}
+              <Download className="w-3 h-3 mr-1.5" />
               Download PDF
             </Button>
             <Button
               variant="outline"
               className="w-full text-xs"
               onClick={() => downloadMut.mutate()}
-              disabled={downloadMut.isPending || downloadPdfMut.isPending}
+              disabled={downloadMut.isPending}
               data-testid="button-download-pptx"
             >
               {downloadMut.isPending ? <Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> : <Download className="w-3 h-3 mr-1.5" />}

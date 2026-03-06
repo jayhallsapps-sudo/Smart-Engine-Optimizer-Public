@@ -126,7 +126,7 @@ function SlideFooter() {
   );
 }
 
-function SlideRenderer({ slide, edits, onEdit }: { slide: Slide; edits: Record<string, string>; onEdit: (k: string, v: string) => void }) {
+export function SlideRenderer({ slide, edits, onEdit }: { slide: Slide; edits: Record<string, string>; onEdit: (k: string, v: string) => void }) {
   if (slide.loading) {
     return (
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 animate-pulse p-8">

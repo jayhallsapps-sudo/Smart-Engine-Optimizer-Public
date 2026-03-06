@@ -13,7 +13,9 @@ import SetupPage from "@/pages/setup";
 import HistoryPage from "@/pages/history";
 import QbrPrepPage from "@/pages/qbr-prep";
 import BiweeklyPage from "@/pages/biweekly";
+import BiweeklyPrintPage from "@/pages/biweekly-print";
 import MonthlyPage from "@/pages/monthly";
+import MonthlyPrintPage from "@/pages/monthly-print";
 import QbrFullPage from "@/pages/qbr-full";
 import DashboardPage from "@/pages/dashboard";
 import SampleReportsPage from "@/pages/sample-reports";
@@ -24,6 +26,8 @@ function RootRedirect() {
   setLocation("/dashboard");
   return null;
 }
+
+const PRINT_ROUTES = ["/biweekly/print", "/monthly/print"];
 
 function Router() {
   return (
@@ -51,6 +55,20 @@ const sidebarStyle = {
 };
 
 export default function App() {
+  const [location] = useLocation();
+  const isPrintPage = PRINT_ROUTES.includes(location);
+
+  if (isPrintPage) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <Switch>
+          <Route path="/biweekly/print" component={BiweeklyPrintPage} />
+          <Route path="/monthly/print" component={MonthlyPrintPage} />
+        </Switch>
+      </QueryClientProvider>
+    );
+  }
+
   return (
     <ThemeProvider>
       <QueryClientProvider client={queryClient}>

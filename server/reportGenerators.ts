@@ -502,13 +502,12 @@ export async function generateBiweeklyDocx(
     })
   );
 
-  const SECTION_ORDER = ["bw_purpose", "bw_pulse", "bw_progress", "bw_technical", "bw_partnership"];
+  const SECTION_ORDER = ["bw_purpose", "bw_pulse", "bw_progress", "bw_partnership"];
   const SECTION_NUMS: Record<string, number> = {
     bw_purpose: 0,
     bw_pulse: 1,
     bw_progress: 2,
-    bw_technical: 3,
-    bw_partnership: 4,
+    bw_partnership: 3,
   };
 
   const PURPOSE_TEXT = bwCfg.purposeText;

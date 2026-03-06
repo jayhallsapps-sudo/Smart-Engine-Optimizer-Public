@@ -164,6 +164,13 @@ const EFFORT_LABELS: Record<string, string> = {
   L: "L (Large)",
 };
 
+const BW_SECTION_NUMS: Record<string, number> = {
+  bw_pulse: 0,
+  bw_progress: 1,
+  bw_technical: 2,
+  bw_partnership: 2,
+};
+
 export function DocxPreview({
   clientName,
   reportTitle,
@@ -177,6 +184,102 @@ export function DocxPreview({
   bwTheme = false,
 }: DocxPreviewProps) {
   const accentColor = bwTheme ? "#C0392B" : "#1B3A6B";
+  const [headerImgUrl, setHeaderImgUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!bwTheme) return;
+    fetch("/api/template/header")
+      .then(r => r.ok ? r.blob() : Promise.reject())
+      .then(blob => setHeaderImgUrl(URL.createObjectURL(blob)))
+      .catch(() => setHeaderImgUrl(null));
+  }, [bwTheme]);
+
+  if (bwTheme) {
+    const purposeSection = sections.find(s => s.id === "bw_purpose");
+    const otherSections = sections.filter(s => s.id !== "bw_purpose");
+
+    return (
+      <div className="bg-gray-200 dark:bg-gray-700 min-h-full p-4 overflow-y-auto">
+        <div
+          className="bg-white shadow-lg mx-auto overflow-hidden"
+          style={{
+            width: "794px",
+            minHeight: "1123px",
+            fontFamily: "'Calibri', 'Segoe UI', Arial, sans-serif",
+            fontSize: "11pt",
+            color: "#111827",
+          }}
+          data-testid="docx-preview-page"
+        >
+          {headerImgUrl ? (
+            <img src={headerImgUrl} alt="Header" style={{ width: "100%", display: "block" }} />
+          ) : (
+            <div style={{ width: "100%", height: "120px", background: `linear-gradient(135deg, #C0392B 60%, #a02820)`, display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: "32px" }}>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: "26px", fontWeight: 700, color: "white", letterSpacing: "3px", lineHeight: 1 }}>W</div>
+                <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.8)", letterSpacing: "4px" }}>WEBSERV</div>
+              </div>
+            </div>
+          )}
+
+          <div style={{ padding: "24px 56px 40px" }}>
+            <div style={{ marginBottom: "6px", fontSize: "20px", fontWeight: 700 }}>
+              <EditableSection editKey="report_title" value={reportTitle} edits={edits} onEdit={onEdit} as="span" />
+              {": "}
+              <EditableSection editKey="client_name" value={clientName} edits={edits} onEdit={onEdit} as="span" />
+            </div>
+            {preparedBy !== undefined && (
+              <div style={{ fontSize: "12px", marginBottom: "4px" }}>
+                <strong>Prepared by: </strong>
+                <EditableSection editKey="preparedBy" value={preparedBy} edits={edits} onEdit={onEdit} as="span" />
+              </div>
+            )}
+            {attendees !== undefined && (
+              <div style={{ fontSize: "12px", marginBottom: "4px" }}>
+                <strong>Attendees: </strong>
+                <EditableSection editKey="attendees" value={attendees} edits={edits} onEdit={onEdit} as="span" />
+              </div>
+            )}
+            <div style={{ fontSize: "12px", display: "inline-block", backgroundColor: "#E8EAED", padding: "2px 8px", borderRadius: "3px", marginBottom: "20px" }}>
+              <strong>Date: </strong>
+              <EditableSection editKey="report_date" value={date} edits={edits} onEdit={onEdit} as="span" />
+            </div>
+
+            {purposeSection && (
+              <div style={{ marginBottom: "20px" }}>
+                <div style={{ fontSize: "13px", fontWeight: 700, color: accentColor, marginBottom: "4px" }}>Purpose:</div>
+                <div style={{ fontSize: "12px", color: "#374151" }}>
+                  <EditableSection
+                    editKey="bw_purpose_bullet_0"
+                    value={purposeSection.bullets?.[0] ?? ""}
+                    edits={edits}
+                    onEdit={onEdit}
+                    as="div"
+                    multiline
+                  />
+                </div>
+              </div>
+            )}
+
+            {otherSections.map(section => (
+              <DocxSectionBlock
+                key={section.id}
+                section={section}
+                sectionIndex={BW_SECTION_NUMS[section.id] ?? 0}
+                edits={edits}
+                onEdit={onEdit}
+                bwTheme={bwTheme}
+              />
+            ))}
+
+            <div style={{ borderTop: "1px solid #9CA3AF", marginTop: "24px", paddingTop: "8px", textAlign: "center", fontSize: "10px", color: "#6B7280" }}>
+              {footerText}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-gray-200 dark:bg-gray-700 min-h-full p-4 overflow-y-auto">
@@ -214,36 +317,18 @@ export function DocxPreview({
           {preparedBy !== undefined && (
             <div className="text-sm mt-1 text-gray-600">
               <span className="font-semibold">Prepared by: </span>
-              <EditableSection
-                editKey="preparedBy"
-                value={preparedBy}
-                edits={edits}
-                onEdit={onEdit}
-                as="span"
-              />
+              <EditableSection editKey="preparedBy" value={preparedBy} edits={edits} onEdit={onEdit} as="span" />
             </div>
           )}
           {attendees !== undefined && (
             <div className="text-sm mt-1 text-gray-600">
               <span className="font-semibold">Attendees: </span>
-              <EditableSection
-                editKey="attendees"
-                value={attendees}
-                edits={edits}
-                onEdit={onEdit}
-                as="span"
-              />
+              <EditableSection editKey="attendees" value={attendees} edits={edits} onEdit={onEdit} as="span" />
             </div>
           )}
           <div className="text-sm text-gray-500 mt-0.5">
             <span className="font-semibold">Date: </span>
-            <EditableSection
-              editKey="report_date"
-              value={date}
-              edits={edits}
-              onEdit={onEdit}
-              as="span"
-            />
+            <EditableSection editKey="report_date" value={date} edits={edits} onEdit={onEdit} as="span" />
           </div>
         </div>
 
@@ -313,7 +398,49 @@ function DocxSectionBlock({
         </div>
       )}
 
-      {section.type === "pulse" && section.metrics && (
+      {section.type === "pulse" && section.metrics && bwTheme && (() => {
+        const metrics = section.metrics!;
+        const nsmSessions = metrics.find(m => m.label === "NSM Sessions Goal")?.current ?? "—";
+        const nsmCalls = metrics.find(m => m.label === "NSM Calls Goal")?.current ?? "—";
+        const mainMetrics = metrics.filter(m => !m.label.startsWith("NSM"));
+        return (
+          <div className="space-y-2 text-[12px]">
+            {mainMetrics.map((m, mi) => {
+              const isSession = /session/i.test(m.label);
+              const isCall = /call/i.test(m.label);
+              const goal = isSession ? nsmSessions : isCall ? nsmCalls : null;
+              const insightKey = `bw_pulse_insight_${mi}`;
+              return (
+                <div key={mi}>
+                  <div className="flex items-start gap-1.5">
+                    <span style={{ color: accentColor }} className="font-bold mt-0.5 shrink-0">●</span>
+                    <div>
+                      <span className="font-bold" style={{ color: accentColor }}>{m.label}: </span>
+                      <span>{m.current}</span>
+                      {goal && <span> → Goal: {goal}</span>}
+                    </div>
+                  </div>
+                  {(isSession || isCall) && (
+                    <div className="flex items-start gap-1.5 pl-5 mt-0.5 text-[11px] text-gray-500">
+                      <span className="shrink-0 mt-0.5">○</span>
+                      <EditableSection
+                        editKey={insightKey}
+                        value={edits[insightKey] ?? ""}
+                        edits={edits}
+                        onEdit={onEdit}
+                        as="span"
+                        className="italic flex-1"
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
+
+      {section.type === "pulse" && section.metrics && !bwTheme && (
         <div>
           <div className="grid grid-cols-2 gap-2 mb-3">
             {section.metrics.map((m, mi) => (

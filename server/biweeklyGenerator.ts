@@ -326,30 +326,8 @@ export async function generateBiweekly(input: {
     workLog,
   });
 
-  const technicalRows: string[][] = [];
-  if (hasSf && sfCounts) {
-    if (sfCounts.canonical > 0) technicalRows.push(["Canonical Mismatches", String(sfCounts.canonical)]);
-    if (sfCounts.images > 0) technicalRows.push(["Oversized Images (>150 KB)", String(sfCounts.images)]);
-    if (sfCounts.errors404 > 0) technicalRows.push(["404 Errors", String(sfCounts.errors404)]);
-    if (sfCounts.missingMeta > 0) technicalRows.push(["Missing Meta Descriptions", String(sfCounts.missingMeta)]);
-    if (technicalRows.length === 0) technicalRows.push(["No issues detected across crawls", "—"]);
-    technicalRows.push([`Crawls analyzed`, String(allSfReports.length)]);
-  } else {
-    technicalRows.push([
-      "Status",
-      "No Screaming Frog reports uploaded — upload crawl CSV files in the sidebar.",
-    ]);
-  }
-
-  sections.push({
-    id: "bw_technical",
-    type: "technical",
-    title: "Technical Maintenance",
-    technicalTable: {
-      headers: ["Issue Type", "Count / Detail"],
-      rows: technicalRows,
-    },
-  });
+  // SF technical data already feeds into the Technical SEO row's nextItems (sfPriorities above).
+  // No separate Technical Maintenance section — matches the 3-section template structure.
 
   sections.push({
     id: "bw_partnership",

@@ -193,8 +193,8 @@ export async function generateBiweekly(input: {
         }
         return null;
       })(),
-      (async () => fetchAirtableWorkLog(clientId, startDate, endDate, "Published"))(),
-      (async () => fetchAirtableWorkLog(clientId, startDate, endDate, "Production"))(),
+      (async () => fetchAirtableWorkLog(clientId, startDate, endDate, "published"))(),
+      (async () => fetchAirtableWorkLog(clientId, startDate, endDate, "production"))(),
       (async () => storage.getSfReports(clientId))(),
       (async () => fetchNsmGoals(client.name))(),
     ]);

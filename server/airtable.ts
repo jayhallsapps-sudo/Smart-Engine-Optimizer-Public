@@ -8,6 +8,7 @@ export interface WorkLogItem {
   date: string;
   url?: string;
   status?: string;
+  statusLabel?: string;
 }
 
 export interface WorkLogResult {
@@ -32,11 +33,38 @@ export function getCreditTypeLabel(raw: string): string {
   return CREDIT_TYPE_LABELS[raw] ?? raw;
 }
 
+const IGNORED_STATUSES = new Set(["3. Load", "3.5 Published as Draft", "4. Live"]);
+
+export const STATUS_LABELS: Record<string, string> = {
+  "2.5 Ready for Edit": "New Content",
+  "2.75 With Client for Re...": "With Client for Review",
+  "5. Update Featured Im...": "Update Featured Image",
+  "6. Content Refresh": "Content Refresh",
+  "7. Cannibal Review": "Canonical Review",
+  "8. Remove & Redirect": "Remove & Redirect",
+};
+
+export function getStatusLabel(raw: string): string {
+  if (!raw) return raw;
+  for (const [key, label] of Object.entries(STATUS_LABELS)) {
+    if (raw.startsWith(key.replace("...", "").trim()) || raw === key) return label;
+  }
+  return raw;
+}
+
+export function isIgnoredStatus(raw: string): boolean {
+  if (!raw) return false;
+  for (const ignored of IGNORED_STATUSES) {
+    if (raw === ignored || raw.startsWith(ignored.replace("...", "").trim())) return true;
+  }
+  return false;
+}
+
 export async function fetchAirtableWorkLog(
   clientId: number,
   startDate: string,
   endDate: string,
-  viewNameOverride?: string
+  viewIntent?: "published" | "production"
 ): Promise<{ success: true; data: WorkLogResult } | { success: false; error: string; setupRequired?: boolean }> {
   const client = await storage.getClient(clientId);
   if (!client) {
@@ -45,7 +73,13 @@ export async function fetchAirtableWorkLog(
 
   const airtableBaseId = (client as any).airtableBaseId as string | null;
   const airtableTableName = (client as any).airtableTableName as string | null;
-  const airtableViewName = viewNameOverride ?? ((client as any).airtableViewName as string | null) ?? "Published";
+
+  const resolvedViewName: string | null =
+    viewIntent === "production"
+      ? ((client as any).airtableProductionView as string | null)
+      : viewIntent === "published"
+      ? ((client as any).airtablePublishedView as string | null)
+      : ((client as any).airtablePublishedView as string | null);
 
   if (!airtableBaseId || !airtableTableName) {
     return {
@@ -71,7 +105,7 @@ export async function fetchAirtableWorkLog(
     sort: JSON.stringify([{ field: "Due", direction: "desc" }]),
     maxRecords: "200",
   });
-  if (airtableViewName) params.set("view", airtableViewName);
+  if (resolvedViewName) params.set("view", resolvedViewName);
 
   const url = `https://api.airtable.com/v0/${airtableBaseId}/${encodeURIComponent(airtableTableName)}?${params}`;
 
@@ -101,7 +135,7 @@ export async function fetchAirtableWorkLog(
       return {
         success: false,
         setupRequired: true,
-        error: `Airtable table/view not found. Check the Base ID (${airtableBaseId}), Table Name (${airtableTableName}), and View Name (${airtableViewName}) in the client settings.`,
+        error: `Airtable table/view not found. Check the Base ID (${airtableBaseId}), Table Name (${airtableTableName}), and View Name (${resolvedViewName ?? "not set"}) in the client settings.`,
       };
     }
     return { success: false, error: `Airtable API error (${resp.status}): ${msg}` };
@@ -110,19 +144,23 @@ export async function fetchAirtableWorkLog(
   const data = await resp.json() as any;
   const records: any[] = data.records ?? [];
 
-  const items: WorkLogItem[] = records.map((r: any) => {
-    const f = r.fields ?? {};
-    const rawCreditType = String(f["Credit Type"] ?? "Other").trim();
-    const creditType = CREDIT_TYPE_ORDER.includes(rawCreditType) ? rawCreditType : "Other";
-    return {
-      id: r.id,
-      task: String(f["Name"] ?? f["Task"] ?? f["Description"] ?? "Untitled").trim(),
-      creditType,
-      date: String(f["Due"] ?? f["Date"] ?? "").trim(),
-      url: f["Final URL"] ?? f["URL"] ?? f["Page URL"] ?? undefined,
-      status: f["Status"] ?? undefined,
-    };
-  });
+  const items: WorkLogItem[] = records
+    .map((r: any) => {
+      const f = r.fields ?? {};
+      const rawCreditType = String(f["Credit Type"] ?? "Other").trim();
+      const creditType = CREDIT_TYPE_ORDER.includes(rawCreditType) ? rawCreditType : "Other";
+      const rawStatus = f["Status"] ? String(f["Status"]).trim() : undefined;
+      return {
+        id: r.id,
+        task: String(f["Name"] ?? f["Task"] ?? f["Description"] ?? "Untitled").trim(),
+        creditType,
+        date: String(f["Due"] ?? f["Date"] ?? "").trim(),
+        url: f["Final URL"] ?? f["URL"] ?? f["Page URL"] ?? undefined,
+        status: rawStatus,
+        statusLabel: rawStatus ? getStatusLabel(rawStatus) : undefined,
+      };
+    })
+    .filter(item => !item.status || !isIgnoredStatus(item.status));
 
   const byCreditType: Record<string, WorkLogItem[]> = {};
   for (const item of items) {
@@ -145,7 +183,7 @@ export async function fetchAirtableWorkLog(
       dateRange: `${startDate} → ${endDate}`,
       baseId: airtableBaseId,
       tableName: airtableTableName,
-      viewName: airtableViewName,
+      viewName: resolvedViewName ?? "",
       totalItems: items.length,
       byCreditType: ordered,
     },

@@ -147,7 +147,8 @@ interface ClientFormData {
   nimbataAccountId: string;
   airtableBaseId: string;
   airtableTableName: string;
-  airtableViewName: string;
+  airtableProductionView: string;
+  airtablePublishedView: string;
   gbpLocationName: string;
   gbpProfileUrl: string;
   brandTerms: string[];
@@ -170,7 +171,8 @@ const emptyForm: ClientFormData = {
   nimbataAccountId: "",
   airtableBaseId: "",
   airtableTableName: "",
-  airtableViewName: "Published",
+  airtableProductionView: "",
+  airtablePublishedView: "",
   gbpLocationName: "",
   gbpProfileUrl: "",
   brandTerms: [],
@@ -524,8 +526,12 @@ function ClientForm({ initial, onSubmit, isPending }: { initial: ClientFormData;
               <Input id="airtableTable" value={form.airtableTableName} onChange={e => update("airtableTableName", e.target.value)} placeholder="e.g., Anchored Tides" data-testid="input-airtable-table-name" />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="airtableView" className="flex items-center gap-1.5"><Database className="w-3 h-3" /> Airtable View Name</Label>
-              <Input id="airtableView" value={form.airtableViewName} onChange={e => update("airtableViewName", e.target.value)} placeholder="Published" data-testid="input-airtable-view-name" />
+              <Label htmlFor="airtableProductionView" className="flex items-center gap-1.5"><Database className="w-3 h-3" /> Production View Name</Label>
+              <Input id="airtableProductionView" value={form.airtableProductionView} onChange={e => update("airtableProductionView", e.target.value)} placeholder="e.g., Anchored Tides Production View" data-testid="input-airtable-production-view" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="airtablePublishedView" className="flex items-center gap-1.5"><Database className="w-3 h-3" /> Published View Name</Label>
+              <Input id="airtablePublishedView" value={form.airtablePublishedView} onChange={e => update("airtablePublishedView", e.target.value)} placeholder="e.g., Anchored Tides Published View" data-testid="input-airtable-published-view" />
             </div>
             <div className="md:col-span-2">
               <GbpLocationPicker value={form.gbpLocationName} onChange={v => update("gbpLocationName", v)} clientName={form.name} />
@@ -1269,7 +1275,8 @@ export default function ClientsPage() {
                 nimbataAccountId: (editingClient as any).nimbataAccountId || "",
                 airtableBaseId: (editingClient as any).airtableBaseId || "",
                 airtableTableName: (editingClient as any).airtableTableName || "",
-                airtableViewName: (editingClient as any).airtableViewName || "Published",
+                airtableProductionView: (editingClient as any).airtableProductionView || "",
+                airtablePublishedView: (editingClient as any).airtablePublishedView || "",
                 gbpLocationName: (editingClient as any).gbpLocationName || "",
                 gbpProfileUrl: (editingClient as any).gbpProfileUrl || "",
                 brandTerms: editingClient.brandTerms || [],

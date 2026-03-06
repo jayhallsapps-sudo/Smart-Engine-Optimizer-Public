@@ -14,6 +14,10 @@ const PAGE_W = 612;
 const MARGIN_L = 72;
 const BODY_W = PAGE_W - MARGIN_L - MARGIN_L;
 
+// WinAnsi-safe bullet characters (Helvetica built-in font encoding)
+const BULLET = "\u2022"; // • U+2022  (WinAnsi 0x95) — safe
+const SUB_BULLET = "-";  // plain hyphen — always safe
+
 function readBwConfig(): { purposeText: string; footerText: string } {
   const configPath = path.join(process.cwd(), "server", "assets", "template_config.json");
   try {
@@ -48,8 +52,8 @@ export async function generateBiweeklyPdf(
     const headerImgData = hasHeader ? fs.readFileSync(headerImagePath) : null;
     const headerImgH = headerImgData ? Math.round((143 / 692) * PAGE_W) : 0;
 
-    const PAGE_H = 792; // LETTER height in points
-    const FOOTER_TOP = PAGE_H - 36; // footer separator Y position
+    const PAGE_H = 792;
+    const FOOTER_TOP = PAGE_H - 36;
 
     function drawFooter() {
       doc.moveTo(MARGIN_L, FOOTER_TOP).lineTo(MARGIN_L + BODY_W, FOOTER_TOP)
@@ -101,9 +105,9 @@ export async function generateBiweeklyPdf(
       "To review recent SEO progress, share quick wins, and align on upcoming priorities that support your business goals.";
 
     doc.font("Helvetica-Bold").fontSize(11).fillColor(WEBSERV_RED)
-      .text("Purpose:  ", MARGIN_L, y, { continued: true });
+      .text("Purpose:  ", MARGIN_L, y, { width: BODY_W, continued: true });
     doc.font("Helvetica").fontSize(10).fillColor(DARK_GRAY)
-      .text(purposeText, { width: BODY_W });
+      .text(purposeText, { continued: false });
     y = doc.y + 14;
 
     // ── Sections ─────────────────────────────────────────────
@@ -128,19 +132,25 @@ export async function generateBiweeklyPdf(
         if ((item as any).summary && (item as any).summary.length > 0) {
           for (const s of (item as any).summary) {
             pageBreakIfNeeded(20);
-            const arrow = s.isPositive ? "▲" : "▼";
+
+            const hasDelta = s.previous && s.previous !== "\u2014";
+            // Use WinAnsi-safe "+"/"-" for delta direction instead of ▲/▼
+            const dir = s.isPositive ? "+" : "-";
             const dColor = s.isPositive ? "#16A34A" : "#DC2626";
+
+            // Anchor with width so PDFKit knows the wrapping boundary
             doc.font("Helvetica-Bold").fontSize(10).fillColor(BLACK)
-              .text("● ", MARGIN_L, y, { continued: true });
+              .text(`${BULLET}  `, MARGIN_L, y, { width: BODY_W, continued: true });
             doc.font("Helvetica-Bold").fontSize(10).fillColor(BLACK)
               .text(`${s.label}: `, { continued: true });
             doc.font("Helvetica").fontSize(10).fillColor(DARK_GRAY)
-              .text(s.current, { continued: true });
-            if (s.previous && s.previous !== "—") {
+              .text(s.current, { continued: hasDelta });
+
+            if (hasDelta) {
               doc.font("Helvetica").fontSize(10).fillColor(LIGHT_GRAY)
                 .text(`  (vs ${s.previous}  `, { continued: true });
               doc.font("Helvetica-Bold").fontSize(10).fillColor(dColor)
-                .text(`${arrow} ${s.deltaPercent}`, { continued: true });
+                .text(`${dir}${s.deltaPercent}`, { continued: true });
               doc.font("Helvetica").fontSize(10).fillColor(LIGHT_GRAY)
                 .text(")", { continued: false });
             } else {
@@ -148,6 +158,7 @@ export async function generateBiweeklyPdf(
             }
             y = doc.y + 3;
           }
+          y += 4;
         }
 
         // ── Rich bullets ──────────────────────────────────────
@@ -158,21 +169,24 @@ export async function generateBiweeklyPdf(
             const bulletX = MARGIN_L;
             const textX = MARGIN_L + 14;
             const textW = BODY_W - 14;
-
-            doc.font("Helvetica").fontSize(10).fillColor(BLACK)
-              .text("●", bulletX, y, { continued: false });
-
             const startY = y;
+
+            // Bullet dot rendered at same y as first text run
+            doc.font("Helvetica").fontSize(10).fillColor(WEBSERV_RED)
+              .text(BULLET, bulletX, startY, { lineBreak: false });
+
+            // Render text runs: anchor first run with explicit x,y and width
             let firstRun = true;
             for (const run of rb.textRuns) {
-              doc.font(run.bold ? "Helvetica-Bold" : "Helvetica")
-                .fontSize(10)
-                .fillColor(run.bold ? WEBSERV_RED : DARK_GRAY);
+              const font = run.bold ? "Helvetica-Bold" : "Helvetica";
+              const color = run.bold ? WEBSERV_RED : DARK_GRAY;
               if (firstRun) {
-                doc.text(run.text, textX, startY, { continued: true, width: textW });
+                doc.font(font).fontSize(10).fillColor(color)
+                  .text(run.text, textX, startY, { width: textW, continued: true });
                 firstRun = false;
               } else {
-                doc.text(run.text, { continued: true, width: textW });
+                doc.font(font).fontSize(10).fillColor(color)
+                  .text(run.text, { continued: true });
               }
             }
             doc.text("", { continued: false });
@@ -182,7 +196,7 @@ export async function generateBiweeklyPdf(
               for (const sub of rb.subBullets) {
                 pageBreakIfNeeded(16);
                 doc.font("Helvetica").fontSize(9).fillColor(LIGHT_GRAY)
-                  .text(`○  ${sub}`, MARGIN_L + 22, y, { width: BODY_W - 22 });
+                  .text(`${SUB_BULLET}  ${sub}`, MARGIN_L + 22, y, { width: BODY_W - 22 });
                 y = doc.y + 2;
               }
             }
@@ -195,29 +209,29 @@ export async function generateBiweeklyPdf(
           for (const tbl of item.tables) {
             pageBreakIfNeeded(44);
 
-            doc.font("Helvetica-Bold").fontSize(9).fillColor(DARK_GRAY)
-              .text(tbl.title, MARGIN_L, y, { width: BODY_W });
-            y = doc.y + 4;
+            if (tbl.title) {
+              doc.font("Helvetica-Bold").fontSize(9).fillColor(DARK_GRAY)
+                .text(tbl.title, MARGIN_L, y, { width: BODY_W });
+              y = doc.y + 4;
+            }
 
             const colCount = tbl.headers.length;
-            const colW = BODY_W / colCount;
+            const colW = Math.floor(BODY_W / colCount);
 
-            // Header
             doc.rect(MARGIN_L, y, BODY_W, 16).fill(BLACK);
             tbl.headers.forEach((h, hi) => {
               doc.font("Helvetica-Bold").fontSize(8).fillColor("#FFFFFF")
-                .text(h, MARGIN_L + hi * colW + 4, y + 4, { width: colW - 8, lineBreak: false });
+                .text(String(h), MARGIN_L + hi * colW + 4, y + 4, { width: colW - 8, lineBreak: false });
             });
             y += 16;
 
-            // Rows
             for (let ri = 0; ri < tbl.rows.length; ri++) {
               const row = tbl.rows[ri];
               pageBreakIfNeeded(14);
               if (ri % 2 === 1) doc.rect(MARGIN_L, y, BODY_W, 14).fill(STRIPE_BG);
               row.forEach((cell, ci) => {
                 doc.font("Helvetica").fontSize(8).fillColor(DARK_GRAY)
-                  .text(cell, MARGIN_L + ci * colW + 4, y + 3, { width: colW - 8, lineBreak: false });
+                  .text(String(cell), MARGIN_L + ci * colW + 4, y + 3, { width: colW - 8, lineBreak: false });
               });
               y += 14;
             }
@@ -235,7 +249,6 @@ export async function generateBiweeklyPdf(
           const COL = [COL_AREA, COL_DID, COL_NEXT];
           const hdrs = ["Area", "What We Did / Learned", "What's Next"];
 
-          // Header
           doc.rect(MARGIN_L, y, BODY_W, 16).fill(BLACK);
           let cx = MARGIN_L;
           hdrs.forEach((h, hi) => {
@@ -245,19 +258,27 @@ export async function generateBiweeklyPdf(
           });
           y += 16;
 
+          const fnt = { font: "Helvetica", size: 8 };
           for (let ri = 0; ri < item.tableRows.length; ri++) {
             const row = item.tableRows[ri];
-            const h0 = doc.heightOfString(row.area, { width: COL[0] - 8 });
-            const h1 = doc.heightOfString(row.whatWeDid, { width: COL[1] - 8 });
-            const h2 = doc.heightOfString(row.whatsNext, { width: COL[2] - 8 });
+
+            // Measure next-items text
+            const nextText = Array.isArray((row as any).nextItemsRich)
+              ? (row as any).nextItemsRich.map((n: any) => (typeof n === "string" ? n : n.text ?? "")).join("\n")
+              : row.whatsNext;
+
+            const h0 = doc.heightOfString(row.area, { width: COL[0] - 8, font: fnt.font, size: fnt.size });
+            const h1 = doc.heightOfString(row.whatWeDid, { width: COL[1] - 8, font: fnt.font, size: fnt.size });
+            const h2 = doc.heightOfString(nextText, { width: COL[2] - 8, font: fnt.font, size: fnt.size });
             const rowH = Math.max(h0, h1, h2, 14) + 8;
-            pageBreakIfNeeded(rowH);
+            pageBreakIfNeeded(rowH + 4);
 
             if (ri % 2 === 1) doc.rect(MARGIN_L, y, BODY_W, rowH).fill(STRIPE_BG);
+
             doc.font("Helvetica").fontSize(8).fillColor(DARK_GRAY);
             doc.text(row.area, MARGIN_L + 4, y + 4, { width: COL[0] - 8 });
             doc.text(row.whatWeDid, MARGIN_L + COL[0] + 4, y + 4, { width: COL[1] - 8 });
-            doc.text(row.whatsNext, MARGIN_L + COL[0] + COL[1] + 4, y + 4, { width: COL[2] - 8 });
+            doc.text(nextText, MARGIN_L + COL[0] + COL[1] + 4, y + 4, { width: COL[2] - 8 });
             y += rowH;
           }
           y += 10;
@@ -268,9 +289,9 @@ export async function generateBiweeklyPdf(
           const lines = item.manualText.split("\n").filter((l) => l.trim());
           for (const line of lines) {
             pageBreakIfNeeded(20);
+            // Render bullet and text on same line using a single call with indent
             doc.font("Helvetica").fontSize(10).fillColor(DARK_GRAY)
-              .text("●", MARGIN_L, y, { continued: false });
-            doc.text(line, MARGIN_L + 14, y, { width: BODY_W - 14 });
+              .text(`${BULLET}  ${line}`, MARGIN_L, y, { width: BODY_W });
             y = doc.y + 4;
           }
           y += 4;
@@ -342,34 +363,45 @@ export async function generateMonthlyPdf(
       y = headingBottom + 10;
 
       for (const item of section.items) {
-        // Metric summary
+        // ── Metric cards ─────────────────────────────────────
         if ((item as any).summary && (item as any).summary.length > 0) {
           const mets: any[] = (item as any).summary;
-          const cardW = Math.floor(BODY_W / Math.min(4, mets.length));
-          const cardH = 44;
+          const cardsPerRow = Math.min(4, mets.length);
+          const cardW = Math.floor(BODY_W / cardsPerRow);
+          const cardH = 50;
           let cx = MARGIN_L;
+          let rowStartY = y;
           pageBreakIfNeeded(cardH + 10);
-          for (const m of mets) {
-            doc.rect(cx, y, cardW - 4, cardH).fill(BLUE_LIGHT);
+
+          for (let mi = 0; mi < mets.length; mi++) {
+            const m = mets[mi];
+            if (mi > 0 && mi % cardsPerRow === 0) {
+              cx = MARGIN_L;
+              rowStartY += cardH + 6;
+              pageBreakIfNeeded(cardH + 10);
+            }
+
+            doc.rect(cx, rowStartY, cardW - 4, cardH).fill(BLUE_LIGHT);
             doc.font("Helvetica").fontSize(7).fillColor(LIGHT_GRAY)
-              .text(m.label.toUpperCase(), cx + 4, y + 4, { width: cardW - 12, lineBreak: false });
+              .text(m.label.toUpperCase(), cx + 6, rowStartY + 5, { width: cardW - 14, lineBreak: false });
             doc.font("Helvetica-Bold").fontSize(14).fillColor(DARK_GRAY)
-              .text(m.current, cx + 4, y + 14, { width: cardW - 12, lineBreak: false });
-            if (m.previous && m.previous !== "—") {
-              const arrow = m.isPositive ? "▲" : "▼";
+              .text(m.current, cx + 6, rowStartY + 16, { width: cardW - 14, lineBreak: false });
+
+            if (m.previous && m.previous !== "\u2014") {
+              const dir = m.isPositive ? "+" : "-";
               const col = m.isPositive ? "#16A34A" : "#DC2626";
+              // Anchor with width to prevent text overflow
               doc.font("Helvetica").fontSize(7).fillColor(LIGHT_GRAY)
-                .text(`vs ${m.previous}  `, cx + 4, y + 32, { continued: true, width: cardW - 12 });
+                .text(`vs ${m.previous}  `, cx + 6, rowStartY + 36, { width: cardW - 14, continued: true });
               doc.font("Helvetica-Bold").fontSize(7).fillColor(col)
-                .text(`${arrow} ${m.deltaPercent}`, { continued: false });
+                .text(`${dir}${m.deltaPercent}`, { continued: false });
             }
             cx += cardW;
-            if (cx + cardW > MARGIN_L + BODY_W) { cx = MARGIN_L; y += cardH + 6; pageBreakIfNeeded(cardH + 10); }
           }
-          y += cardH + 10;
+          y = rowStartY + cardH + 10;
         }
 
-        // Data tables
+        // ── Data tables ───────────────────────────────────────
         if (item.tables && item.tables.length > 0) {
           for (const tbl of item.tables) {
             pageBreakIfNeeded(44);
@@ -386,7 +418,7 @@ export async function generateMonthlyPdf(
                 .text(String(h), MARGIN_L + hi * colW + 4, y + 4, { width: colW - 8, lineBreak: false });
             });
             y += 16;
-            for (let ri = 0; ri < Math.min(tbl.rows.length, 15); ri++) {
+            for (let ri = 0; ri < Math.min(tbl.rows.length, 20); ri++) {
               const row = tbl.rows[ri];
               pageBreakIfNeeded(14);
               if (ri % 2 === 1) doc.rect(MARGIN_L, y, BODY_W, 14).fill(BLUE_LIGHT);
@@ -400,14 +432,13 @@ export async function generateMonthlyPdf(
           }
         }
 
-        // Bullet text
+        // ── Bullet text ───────────────────────────────────────
         if (item.manualText) {
-          const lines = item.manualText.split("\n").filter(l => l.trim());
+          const lines = item.manualText.split("\n").filter((l) => l.trim());
           for (const line of lines) {
             pageBreakIfNeeded(20);
             doc.font("Helvetica").fontSize(10).fillColor(DARK_GRAY)
-              .text("●", MARGIN_L, y, { continued: false });
-            doc.text(line, MARGIN_L + 14, y, { width: BODY_W - 14 });
+              .text(`${BULLET}  ${line}`, MARGIN_L, y, { width: BODY_W });
             y = doc.y + 4;
           }
           y += 4;

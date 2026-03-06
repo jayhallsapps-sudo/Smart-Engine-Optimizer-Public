@@ -328,3 +328,10 @@
   background-color: #BFDBFE;
   color: #111827;
 }
+
+/* Document preview: all inputs/textareas are always on a white document background */
+[data-testid="preview-document"] input,
+[data-testid="preview-document"] textarea {
+  background-color: #ffffff !important;
+  color: #111827 !important;
+}

@@ -33,15 +33,6 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
 import {
   Plus,
   Globe,
@@ -196,7 +187,7 @@ function SearchableSelect({
   value,
   onChange,
   options,
-  placeholder = "Search...",
+  placeholder = "— Select —",
   testId,
 }: {
   value: string;
@@ -206,43 +197,59 @@ function SearchableSelect({
   testId?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const selected = options.find(o => o.value === value);
+  const filtered = query
+    ? options.filter(o => o.label.toLowerCase().includes(query.toLowerCase()))
+    : options;
 
   return (
-    <Popover open={open} onOpenChange={setOpen} modal={false}>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          role="combobox"
-          aria-expanded={open}
-          className="w-full justify-between font-normal text-sm"
-          data-testid={testId}
-        >
-          <span className="truncate max-w-[calc(100%-1.5rem)]">{selected ? selected.label : <span className="text-muted-foreground">{placeholder}</span>}</span>
-          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="p-0" style={{ width: "var(--radix-popover-trigger-width)" }} align="start">
-        <Command>
-          <CommandInput placeholder="Search..." />
-          <CommandList>
-            <CommandEmpty>No results found.</CommandEmpty>
-            <CommandGroup>
-              {options.map(opt => (
-                <CommandItem
+    <div className="relative w-full">
+      <Button
+        type="button"
+        variant="outline"
+        className="w-full justify-between font-normal text-sm"
+        data-testid={testId}
+        onClick={() => { setOpen(o => !o); setQuery(""); }}
+      >
+        <span className="truncate">
+          {selected ? selected.label : <span className="text-muted-foreground">{placeholder}</span>}
+        </span>
+        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+      </Button>
+      {open && (
+        <div className="absolute z-[200] mt-1 w-full rounded-md border bg-popover shadow-md">
+          <div className="p-1 border-b">
+            <input
+              autoFocus
+              type="text"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="Search..."
+              className="w-full px-2 py-1 text-sm bg-transparent outline-none placeholder:text-muted-foreground"
+              onKeyDown={e => { if (e.key === "Escape") { setOpen(false); e.stopPropagation(); } }}
+            />
+          </div>
+          <div className="max-h-52 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <div className="px-3 py-2 text-sm text-muted-foreground">No results found.</div>
+            ) : (
+              filtered.map(opt => (
+                <button
                   key={opt.value}
-                  value={opt.label}
-                  onSelect={() => { onChange(opt.value); setOpen(false); }}
+                  type="button"
+                  className={`flex w-full items-center gap-2 px-3 py-1.5 text-sm text-left hover:bg-accent hover:text-accent-foreground ${value === opt.value ? "bg-accent/50" : ""}`}
+                  onClick={() => { onChange(opt.value); setOpen(false); setQuery(""); }}
                 >
-                  <Check className={`mr-2 h-4 w-4 shrink-0 ${value === opt.value ? "opacity-100" : "opacity-0"}`} />
+                  <Check className={`h-3.5 w-3.5 shrink-0 ${value === opt.value ? "opacity-100" : "opacity-0"}`} />
                   <span className="truncate">{opt.label}</span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

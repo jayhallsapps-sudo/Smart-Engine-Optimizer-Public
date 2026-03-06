@@ -534,7 +534,7 @@ function EditablePartnershipBullets({
       onClick={startEdit}
       title="Click to edit"
       style={{ cursor: "pointer", borderRadius: "3px" }}
-      className="hover:bg-muted hover:outline hover:outline-1 hover:outline-border"
+      className="hover:outline hover:outline-1 hover:outline-border"
     >
       {lines.map((line, i) => (
         <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: "6px", marginBottom: "5px", fontSize: "12px", color: "#374151" }}>
@@ -571,7 +571,7 @@ function WorkLogCell({ value, onChange, multiline }: { value: string; onChange: 
       onClick={start}
       title="Click to edit"
       style={{ display: "block", cursor: "pointer", borderRadius: "2px" }}
-      className="hover:bg-muted hover:outline hover:outline-1 hover:outline-border"
+      className="hover:outline hover:outline-1 hover:outline-border"
     >
       {value || <span style={{ color: "#9CA3AF" }}>—</span>}
     </span>

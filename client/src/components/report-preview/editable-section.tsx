@@ -88,7 +88,7 @@ export function EditableSection({
 
   return (
     <Tag
-      className={`group relative cursor-pointer hover:bg-muted hover:outline hover:outline-1 hover:outline-border rounded transition-all ${className}`}
+      className={`group relative cursor-pointer hover:outline hover:outline-1 hover:outline-border rounded transition-all ${className}`}
       style={style}
       onClick={startEdit}
       title="Click to edit"

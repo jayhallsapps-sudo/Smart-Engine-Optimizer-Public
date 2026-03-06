@@ -13,7 +13,7 @@ import { buildGoogleAuthUrl, exchangeCodeForToken, callbackHtml, isGoogleConfigu
 import { testCredential } from "./connectionTest";
 import { insertSfReportSchema, insertCallTrackingReportSchema } from "@shared/schema";
 import { generateBiweeklyDocx, generatePptx, generateQbrPrepDocx } from "./reportGenerators";
-import { generateBiweeklyPdf } from "./pdfGenerator";
+import { generateBiweeklyPdf, generateMonthlyPdf } from "./pdfGenerator";
 import type { SectionData } from "./reportGenerators";
 import { getSampleBiweeklySections, getSampleMonthlySections, getSampleQbrSections, getSampleQbrPrepJson, SAMPLE_CLIENT_NAME, SAMPLE_ATTENDEES } from "./sampleData";
 import { generateQbrPrep } from "./qbrPrepGenerator";
@@ -1258,20 +1258,23 @@ export async function registerRoutes(
       const sections: SectionData[] = (json.sections ?? []).map((s: any) => {
         const items: any[] = [];
         if (s.metrics?.length) items.push({ summary: s.metrics.map((m: any) => ({ label: m.label, current: m.current, previous: m.previous ?? "—", deltaPercent: m.delta ?? "—", isPositive: m.isPositive ?? true })) });
-        if (s.bullets?.length) items.push({ manualText: (s.bullets as string[]).join("\n") });
-        if (s.workLog?.length) items.push({ tableRows: s.workLog });
+        if (s.bullets?.length) items.push({ manualText: (s.bullets as string[]).map((b, bi) => edits?.[`${s.id}_bullet_${bi}`] ?? b).filter(Boolean).join("\n") });
+        if (s.workLog?.length) items.push({ tableRows: (s.workLog as any[]).map((r: any, ri: number) => { const editedDid = edits?.[`${s.id}_worklog_${ri}_did`]; const editedNext = edits?.[`${s.id}_worklog_${ri}_next`]; return { area: r.area, whatWeDid: editedDid ?? r.whatWeDid, whatsNext: editedNext ?? r.whatsNext, items: editedDid !== undefined ? undefined : r.items, nextItems: editedNext !== undefined ? undefined : (r.nextItemsRich ?? r.nextItems) }; }) });
         if (s.table) items.push({ tables: [{ title: s.title, headers: s.table.headers, rows: s.table.rows }] });
         return { sectionId: s.id, title: s.title ?? "", items };
       });
-      const buffer = await generateBiweeklyDocx(edits?.["client_name"] ?? json.client_name, edits?.["preparedBy"] ?? json.preparedBy ?? edits?.["attendees"] ?? json.attendees ?? "", edits?.["report_date"] ?? json.date, sections);
+      const clientName = edits?.["client_name"] ?? json.client_name;
+      const date = edits?.["report_date"] ?? json.date;
+      const preparedBy = edits?.["preparedBy"] ?? json.preparedBy ?? "";
+      const buffer = await generateBiweeklyPdf(clientName, preparedBy, date, sections);
       const { ReplitConnectors } = await import("@replit/connectors-sdk");
       const connectors = new ReplitConnectors();
-      const filename = `${json.client_name} Biweekly SEO ${json.date}.docx`;
+      const filename = `${clientName} Biweekly SEO ${date}.pdf`;
       const metadata = JSON.stringify({ name: filename });
       const boundary = "-------smarteo_bw_boundary";
       const CRLF = "\r\n";
       const metaBuf = Buffer.from(`--${boundary}${CRLF}Content-Type: application/json; charset=UTF-8${CRLF}${CRLF}${metadata}${CRLF}`, "utf8");
-      const filePrefixBuf = Buffer.from(`--${boundary}${CRLF}Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document${CRLF}${CRLF}`, "utf8");
+      const filePrefixBuf = Buffer.from(`--${boundary}${CRLF}Content-Type: application/pdf${CRLF}${CRLF}`, "utf8");
       const closeBuf = Buffer.from(`${CRLF}--${boundary}--`, "utf8");
       const bodyBuffer = Buffer.concat([metaBuf, filePrefixBuf, buffer, closeBuf]);
       const uploadRes = await connectors.proxy("google-drive", "/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink", { method: "POST", headers: { "Content-Type": `multipart/related; boundary=${boundary}` }, body: bodyBuffer });
@@ -1280,6 +1283,32 @@ export async function registerRoutes(
       res.json({ success: true, fileId: driveFile.id, fileName: driveFile.name, webViewLink: driveFile.webViewLink });
     } catch (err: any) {
       res.status(500).json({ message: "Upload failed: " + err.message });
+    }
+  });
+
+  app.post("/api/reports/biweekly/pdf", async (req, res) => {
+    const { json, edits } = req.body as { json: any; edits?: Record<string, string> };
+    if (!json) return res.status(400).json({ message: "json is required" });
+    try {
+      const sections: SectionData[] = (json.sections ?? []).map((s: any) => {
+        const items: any[] = [];
+        if (s.metrics?.length) items.push({ summary: s.metrics.map((m: any) => ({ label: m.label, current: m.current, previous: m.previous ?? "—", deltaPercent: m.delta ?? "—", isPositive: m.isPositive ?? true })) });
+        if (s.bullets?.length) items.push({ manualText: (s.bullets as string[]).map((b, bi) => edits?.[`${s.id}_bullet_${bi}`] ?? b).filter(Boolean).join("\n") });
+        if (s.workLog?.length) items.push({ tableRows: (s.workLog as any[]).map((r: any, ri: number) => { const editedDid = edits?.[`${s.id}_worklog_${ri}_did`]; const editedNext = edits?.[`${s.id}_worklog_${ri}_next`]; return { area: r.area, whatWeDid: editedDid ?? r.whatWeDid, whatsNext: editedNext ?? r.whatsNext, items: editedDid !== undefined ? undefined : r.items, nextItems: editedNext !== undefined ? undefined : (r.nextItemsRich ?? r.nextItems) }; }) });
+        if (s.table) items.push({ tables: [{ title: s.title, headers: s.table.headers, rows: s.table.rows }] });
+        return { sectionId: s.id, title: s.title ?? "", items };
+      });
+      const clientName = edits?.["client_name"] ?? json.client_name;
+      const date = edits?.["report_date"] ?? json.date;
+      const preparedBy = edits?.["preparedBy"] ?? json.preparedBy ?? "";
+      const buffer = await generateBiweeklyPdf(clientName, preparedBy, date, sections);
+      const slug = clientName.toLowerCase().replace(/\s+/g, "_");
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="${slug}_biweekly_${date.replace(/[\s,]/g, "_")}.pdf"`);
+      res.send(buffer);
+    } catch (err: any) {
+      console.error("Biweekly PDF error:", err);
+      res.status(500).json({ message: "Failed to generate PDF: " + err.message });
     }
   });
 
@@ -1346,6 +1375,30 @@ export async function registerRoutes(
       res.json({ success: true, fileId: driveFile.id, fileName: driveFile.name, webViewLink: driveFile.webViewLink });
     } catch (err: any) {
       res.status(500).json({ message: "Upload failed: " + err.message });
+    }
+  });
+
+  app.post("/api/reports/monthly/pdf", async (req, res) => {
+    const { json, edits } = req.body as { json: any; edits?: Record<string, string> };
+    if (!json) return res.status(400).json({ message: "json is required" });
+    try {
+      const sections: SectionData[] = (json.slides ?? []).filter((s: any) => s.type !== "title" && s.type !== "chart-bar" && s.type !== "chart-line").map((s: any, idx: number) => {
+        const items: any[] = [];
+        if (s.metrics?.length) items.push({ summary: s.metrics.map((m: any) => ({ label: m.label, current: m.current, previous: m.previous ?? "—", deltaPercent: m.delta ?? "—", isPositive: m.isPositive ?? true })) });
+        if (s.table) items.push({ tables: [{ title: s.subtitle ?? "", headers: s.table.headers, rows: s.table.rows }] });
+        if (s.bullets) items.push({ manualText: (s.bullets as string[]).join("\n") });
+        return { sectionId: `slide_${idx}`, title: edits?.[`${s.id}_title`] ?? s.title ?? "", items };
+      });
+      const clientName = edits?.["title_client"] ?? json.client_name;
+      const monthLabel = json.month_label ?? "";
+      const buffer = await generateMonthlyPdf(clientName, monthLabel, sections);
+      const slug = clientName.toLowerCase().replace(/\s+/g, "_");
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="${slug}_monthly_${monthLabel.replace(/\s/g, "_")}.pdf"`);
+      res.send(buffer);
+    } catch (err: any) {
+      console.error("Monthly PDF error:", err);
+      res.status(500).json({ message: "Failed to generate PDF: " + err.message });
     }
   });
 

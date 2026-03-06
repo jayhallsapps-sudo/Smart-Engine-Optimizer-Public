@@ -124,6 +124,32 @@ export async function generateBiweeklyPdf(
       y = headingBottom + 10;
 
       for (const item of section.items) {
+        // ── Metric summary bullets ────────────────────────────
+        if ((item as any).summary && (item as any).summary.length > 0) {
+          for (const s of (item as any).summary) {
+            pageBreakIfNeeded(20);
+            const arrow = s.isPositive ? "▲" : "▼";
+            const dColor = s.isPositive ? "#16A34A" : "#DC2626";
+            doc.font("Helvetica-Bold").fontSize(10).fillColor(BLACK)
+              .text("● ", MARGIN_L, y, { continued: true });
+            doc.font("Helvetica-Bold").fontSize(10).fillColor(BLACK)
+              .text(`${s.label}: `, { continued: true });
+            doc.font("Helvetica").fontSize(10).fillColor(DARK_GRAY)
+              .text(s.current, { continued: true });
+            if (s.previous && s.previous !== "—") {
+              doc.font("Helvetica").fontSize(10).fillColor(LIGHT_GRAY)
+                .text(`  (vs ${s.previous}  `, { continued: true });
+              doc.font("Helvetica-Bold").fontSize(10).fillColor(dColor)
+                .text(`${arrow} ${s.deltaPercent}`, { continued: true });
+              doc.font("Helvetica").fontSize(10).fillColor(LIGHT_GRAY)
+                .text(")", { continued: false });
+            } else {
+              doc.text("", { continued: false });
+            }
+            y = doc.y + 3;
+          }
+        }
+
         // ── Rich bullets ──────────────────────────────────────
         if (item.richBullets && item.richBullets.length > 0) {
           for (const rb of item.richBullets) {
@@ -255,6 +281,142 @@ export async function generateBiweeklyPdf(
     }
 
     drawFooter();
+    doc.end();
+  });
+}
+
+const WEBSERV_BLUE = "#1B3A6B";
+const BLUE_LIGHT = "#E8F0FE";
+
+export async function generateMonthlyPdf(
+  clientName: string,
+  monthLabel: string,
+  sections: SectionData[]
+): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: "LETTER", margin: 0, autoFirstPage: true });
+    const chunks: Buffer[] = [];
+    doc.on("data", (c: Buffer) => chunks.push(c));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+
+    const PAGE_H = 792;
+    const FOOTER_TOP = PAGE_H - 36;
+
+    function drawMonthlyFooter() {
+      doc.moveTo(MARGIN_L, FOOTER_TOP).lineTo(MARGIN_L + BODY_W, FOOTER_TOP)
+        .lineWidth(0.5).strokeColor(LIGHT_GRAY).stroke();
+      doc.font("Helvetica").fontSize(8).fillColor(LIGHT_GRAY)
+        .text("Webserv  |  32 Discovery Suite 130, Irvine, CA 92618  |  webserv.io", MARGIN_L, FOOTER_TOP + 6, { width: BODY_W, align: "center", lineBreak: false });
+    }
+
+    let y = 56;
+
+    function pageBreakIfNeeded(needed = 60) {
+      if (y + needed > FOOTER_TOP - 10) {
+        drawMonthlyFooter();
+        doc.addPage();
+        y = 56;
+      }
+    }
+
+    // Title block
+    doc.rect(0, 0, PAGE_W, 52).fill(WEBSERV_BLUE);
+    doc.font("Helvetica-Bold").fontSize(16).fillColor("#FFFFFF")
+      .text(`SEO Monthly Report: ${clientName}`, MARGIN_L, 14, { width: BODY_W });
+    doc.font("Helvetica").fontSize(10).fillColor("#BFD7FF")
+      .text(monthLabel, MARGIN_L, 34, { width: BODY_W });
+    y = 68;
+
+    let sectionNum = 0;
+    for (const section of sections) {
+      sectionNum++;
+      pageBreakIfNeeded(50);
+
+      // Blue underlined heading
+      doc.font("Helvetica-Bold").fontSize(13).fillColor(WEBSERV_BLUE)
+        .text(`${sectionNum}.  ${section.title}`, MARGIN_L, y, { width: BODY_W });
+      const headingBottom = doc.y;
+      doc.moveTo(MARGIN_L, headingBottom + 2).lineTo(MARGIN_L + BODY_W, headingBottom + 2)
+        .lineWidth(1.5).strokeColor(WEBSERV_BLUE).stroke();
+      y = headingBottom + 10;
+
+      for (const item of section.items) {
+        // Metric summary
+        if ((item as any).summary && (item as any).summary.length > 0) {
+          const mets: any[] = (item as any).summary;
+          const cardW = Math.floor(BODY_W / Math.min(4, mets.length));
+          const cardH = 44;
+          let cx = MARGIN_L;
+          pageBreakIfNeeded(cardH + 10);
+          for (const m of mets) {
+            doc.rect(cx, y, cardW - 4, cardH).fill(BLUE_LIGHT);
+            doc.font("Helvetica").fontSize(7).fillColor(LIGHT_GRAY)
+              .text(m.label.toUpperCase(), cx + 4, y + 4, { width: cardW - 12, lineBreak: false });
+            doc.font("Helvetica-Bold").fontSize(14).fillColor(DARK_GRAY)
+              .text(m.current, cx + 4, y + 14, { width: cardW - 12, lineBreak: false });
+            if (m.previous && m.previous !== "—") {
+              const arrow = m.isPositive ? "▲" : "▼";
+              const col = m.isPositive ? "#16A34A" : "#DC2626";
+              doc.font("Helvetica").fontSize(7).fillColor(LIGHT_GRAY)
+                .text(`vs ${m.previous}  `, cx + 4, y + 32, { continued: true, width: cardW - 12 });
+              doc.font("Helvetica-Bold").fontSize(7).fillColor(col)
+                .text(`${arrow} ${m.deltaPercent}`, { continued: false });
+            }
+            cx += cardW;
+            if (cx + cardW > MARGIN_L + BODY_W) { cx = MARGIN_L; y += cardH + 6; pageBreakIfNeeded(cardH + 10); }
+          }
+          y += cardH + 10;
+        }
+
+        // Data tables
+        if (item.tables && item.tables.length > 0) {
+          for (const tbl of item.tables) {
+            pageBreakIfNeeded(44);
+            if (tbl.title) {
+              doc.font("Helvetica-Bold").fontSize(9).fillColor(DARK_GRAY)
+                .text(tbl.title, MARGIN_L, y, { width: BODY_W });
+              y = doc.y + 4;
+            }
+            const colCount = tbl.headers.length;
+            const colW = Math.floor(BODY_W / colCount);
+            doc.rect(MARGIN_L, y, BODY_W, 16).fill(WEBSERV_BLUE);
+            tbl.headers.forEach((h, hi) => {
+              doc.font("Helvetica-Bold").fontSize(8).fillColor("#FFFFFF")
+                .text(String(h), MARGIN_L + hi * colW + 4, y + 4, { width: colW - 8, lineBreak: false });
+            });
+            y += 16;
+            for (let ri = 0; ri < Math.min(tbl.rows.length, 15); ri++) {
+              const row = tbl.rows[ri];
+              pageBreakIfNeeded(14);
+              if (ri % 2 === 1) doc.rect(MARGIN_L, y, BODY_W, 14).fill(BLUE_LIGHT);
+              row.forEach((cell, ci) => {
+                doc.font("Helvetica").fontSize(8).fillColor(DARK_GRAY)
+                  .text(String(cell), MARGIN_L + ci * colW + 4, y + 3, { width: colW - 8, lineBreak: false });
+              });
+              y += 14;
+            }
+            y += 10;
+          }
+        }
+
+        // Bullet text
+        if (item.manualText) {
+          const lines = item.manualText.split("\n").filter(l => l.trim());
+          for (const line of lines) {
+            pageBreakIfNeeded(20);
+            doc.font("Helvetica").fontSize(10).fillColor(DARK_GRAY)
+              .text("●", MARGIN_L, y, { continued: false });
+            doc.text(line, MARGIN_L + 14, y, { width: BODY_W - 14 });
+            y = doc.y + 4;
+          }
+          y += 4;
+        }
+      }
+      y += 12;
+    }
+
+    drawMonthlyFooter();
     doc.end();
   });
 }

@@ -161,6 +161,25 @@ export default function BiweeklyPage() {
     },
   });
 
+  const downloadPdfMut = useMutation({
+    mutationFn: async () => {
+      if (!report) throw new Error("Generate report first");
+      const res = await apiRequest("POST", "/api/reports/biweekly/pdf", { json: report, edits });
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const cd = res.headers.get("content-disposition") ?? "";
+      const match = cd.match(/filename="([^"]+)"/);
+      a.download = match?.[1] ?? "biweekly_report.pdf";
+      a.click();
+      URL.revokeObjectURL(url);
+    },
+    onError: (err: any) => {
+      toast({ title: "Download failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   async function uploadToDrive() {
     if (!report) return;
     setIsUploading(true);
@@ -442,10 +461,19 @@ export default function BiweeklyPage() {
         {report && (
           <div className="p-4 border-t space-y-2">
             <Button
+              className="w-full text-xs"
+              onClick={() => downloadPdfMut.mutate()}
+              disabled={downloadPdfMut.isPending || downloadDocxMut.isPending}
+              data-testid="button-download-pdf"
+            >
+              {downloadPdfMut.isPending ? <Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> : <Download className="w-3 h-3 mr-1.5" />}
+              Download PDF
+            </Button>
+            <Button
               variant="outline"
               className="w-full text-xs"
               onClick={() => downloadDocxMut.mutate()}
-              disabled={downloadDocxMut.isPending}
+              disabled={downloadDocxMut.isPending || downloadPdfMut.isPending}
               data-testid="button-download-docx"
             >
               {downloadDocxMut.isPending ? <Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> : <Download className="w-3 h-3 mr-1.5" />}
@@ -459,7 +487,7 @@ export default function BiweeklyPage() {
               data-testid="button-save-drive"
             >
               {isUploading ? <Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> : <CloudUpload className="w-3 h-3 mr-1.5" />}
-              Save to Drive
+              Save to Drive (PDF)
             </Button>
           </div>
         )}

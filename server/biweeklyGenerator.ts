@@ -247,11 +247,20 @@ export async function generateBiweekly(input: {
     );
   }
 
-  const nsmGoals = nsmResult.status === "fulfilled" ? nsmResult.value : { sessionsGoal: "—", callsGoal: "—" };
-  pulseMetrics.push(
-    { label: "NSM Sessions Goal", current: nsmGoals.sessionsGoal },
-    { label: "NSM Calls Goal", current: nsmGoals.callsGoal }
-  );
+  const nsmGoals = nsmResult.status === "fulfilled" ? nsmResult.value : null;
+  if (nsmGoals) {
+    pulseMetrics.push(
+      { label: "NSM Quarter",          current: nsmGoals.quarter },
+      { label: "NSM Sessions Goal",     current: nsmGoals.sessionsGoal },
+      { label: "NSM Sessions Actual",   current: nsmGoals.sessionsActual },
+      { label: "NSM Sessions %",        current: nsmGoals.sessionsPercent },
+      { label: "NSM Sessions On Track", current: nsmGoals.sessionsOnTrack },
+      { label: `NSM MVP (${nsmGoals.mvpType}) Goal`,    current: nsmGoals.mvpGoal },
+      { label: `NSM MVP (${nsmGoals.mvpType}) Actual`,  current: nsmGoals.mvpActual },
+      { label: `NSM MVP (${nsmGoals.mvpType}) %`,       current: nsmGoals.mvpPercent },
+      { label: `NSM MVP (${nsmGoals.mvpType}) On Track`,current: nsmGoals.mvpOnTrack },
+    );
+  }
 
   sections.push({
     id: "bw_pulse",

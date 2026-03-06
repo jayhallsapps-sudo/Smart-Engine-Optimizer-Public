@@ -404,15 +404,23 @@ function DocxSectionBlock({
 
       {section.type === "pulse" && section.metrics && bwTheme && (() => {
         const metrics = section.metrics!;
-        const nsmSessions = metrics.find(m => m.label === "NSM Sessions Goal")?.current ?? "—";
-        const nsmCalls = metrics.find(m => m.label === "NSM Calls Goal")?.current ?? "—";
-        const mainMetrics = metrics.filter(m => !m.label.startsWith("NSM"));
+        const get = (label: string) => metrics.find(m => m.label === label)?.current ?? "—";
+        const nsmQuarter      = get("NSM Quarter");
+        const nsmSessGoal     = get("NSM Sessions Goal");
+        const nsmSessActual   = get("NSM Sessions Actual");
+        const nsmSessPct      = get("NSM Sessions %");
+        const nsmSessTrack    = get("NSM Sessions On Track");
+        const mvpMetric       = metrics.find(m => /NSM MVP .* Goal/.test(m.label));
+        const mvpLabel        = mvpMetric?.label.replace(" Goal", "") ?? "NSM MVP";
+        const nsmMvpGoal      = mvpMetric?.current ?? "—";
+        const nsmMvpActual    = get(mvpLabel + " Actual");
+        const nsmMvpPct       = get(mvpLabel + " %");
+        const nsmMvpTrack     = get(mvpLabel + " On Track");
+        const mainMetrics     = metrics.filter(m => !m.label.startsWith("NSM"));
+        const hasNsm          = nsmQuarter !== "—";
         return (
           <div className="space-y-2 text-[12px]">
             {mainMetrics.map((m, mi) => {
-              const isSession = /session/i.test(m.label);
-              const isCall = /call/i.test(m.label);
-              const goal = isSession ? nsmSessions : isCall ? nsmCalls : null;
               const insightKey = `bw_pulse_insight_${mi}`;
               return (
                 <div key={mi}>
@@ -421,25 +429,56 @@ function DocxSectionBlock({
                     <div>
                       <span className="font-bold" style={{ color: accentColor }}>{m.label}: </span>
                       <span>{m.current}</span>
-                      {goal && <span> → Goal: {goal}</span>}
                     </div>
                   </div>
-                  {(isSession || isCall) && (
-                    <div className="flex items-start gap-1.5 pl-5 mt-0.5 text-[11px] text-gray-500">
-                      <span className="shrink-0 mt-0.5">○</span>
-                      <EditableSection
-                        editKey={insightKey}
-                        value={edits[insightKey] ?? ""}
-                        edits={edits}
-                        onEdit={onEdit}
-                        as="span"
-                        className="italic flex-1"
-                      />
-                    </div>
-                  )}
+                  <div className="flex items-start gap-1.5 pl-5 mt-0.5 text-[11px] text-gray-500">
+                    <span className="shrink-0 mt-0.5">○</span>
+                    <EditableSection
+                      editKey={insightKey}
+                      value={edits[insightKey] ?? ""}
+                      edits={edits}
+                      onEdit={onEdit}
+                      as="span"
+                      className="italic flex-1"
+                    />
+                  </div>
                 </div>
               );
             })}
+            {hasNsm && (
+              <div className="mt-3 border rounded-md overflow-hidden text-[11px]" style={{ borderColor: accentColor + "40" }}>
+                <div className="px-3 py-1.5 font-semibold" style={{ backgroundColor: accentColor + "18", color: accentColor }}>
+                  NSM Goals — {nsmQuarter}
+                </div>
+                <table className="w-full">
+                  <thead>
+                    <tr className="text-[10px] text-gray-500 border-b">
+                      <th className="text-left px-3 py-1 font-medium">Metric</th>
+                      <th className="text-right px-2 py-1 font-medium">Goal</th>
+                      <th className="text-right px-2 py-1 font-medium">Actual</th>
+                      <th className="text-right px-2 py-1 font-medium">%</th>
+                      <th className="text-right px-3 py-1 font-medium">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="border-b border-gray-100">
+                      <td className="px-3 py-1.5 font-medium">Organic Sessions</td>
+                      <td className="text-right px-2 py-1.5">{nsmSessGoal}</td>
+                      <td className="text-right px-2 py-1.5">{nsmSessActual}</td>
+                      <td className="text-right px-2 py-1.5">{nsmSessPct}</td>
+                      <td className="text-right px-3 py-1.5">{nsmSessTrack}</td>
+                    </tr>
+                    <tr>
+                      <td className="px-3 py-1.5 font-medium">{mvpLabel.replace("NSM MVP ", "").replace("(", "").replace(")", "")}</td>
+                      <td className="text-right px-2 py-1.5">{nsmMvpGoal}</td>
+                      <td className="text-right px-2 py-1.5">{nsmMvpActual}</td>
+                      <td className="text-right px-2 py-1.5">{nsmMvpPct}</td>
+                      <td className="text-right px-3 py-1.5">{nsmMvpTrack}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         );
       })()}

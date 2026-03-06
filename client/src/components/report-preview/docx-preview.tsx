@@ -568,6 +568,9 @@ function DocxSectionBlock({
 
       {section.type === "progress" && section.workLog && section.workLog.length > 0 && (
         <div className="border rounded-md overflow-hidden text-[11px]" style={{ borderColor: accentColor + "40" }}>
+          <div className="px-3 py-1.5 font-semibold text-[11px]" style={{ backgroundColor: "#FDF2F0", color: accentColor }}>
+            Progress &amp; Quick Wins
+          </div>
           <table className="w-full text-xs border-collapse">
             <thead>
               <tr style={{ backgroundColor: "#F9FAFB" }}>
@@ -575,7 +578,7 @@ function DocxSectionBlock({
                   <th
                     key={h}
                     className="text-left px-3 py-1.5 text-[10px] font-medium border-b"
-                    style={{ color: accentColor, borderColor: accentColor + "30" }}
+                    style={{ color: "#6B7280", borderColor: "#E5E7EB" }}
                   >
                     {h}
                   </th>

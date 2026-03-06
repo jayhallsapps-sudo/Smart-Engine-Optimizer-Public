@@ -8,6 +8,9 @@ const DARK_GRAY = "#374151";
 const GRAY = "#6B7280";
 const STRIPE = "#F9FAFB";
 const DATE_PILL_BG = "#E8EAED";
+const BORDER_LIGHT = "#E5E7EB";
+const ROW_SEP = "#F3F4F6";
+const TINT_BG = "#FDF2F0";
 
 const PAGE_W = 612;
 const PAGE_H = 792;
@@ -17,13 +20,13 @@ const FOOTER_Y = PAGE_H - 34;
 const FOOTER_TEXT = "Webserv  |  32 Discovery Suite 130, Irvine, CA 92618  |  webserv.io";
 
 const SOURCE_COLORS: Record<string, { bg: string; text: string }> = {
-  Airtable:        { bg: "#FFF3D6", text: "#B45309" },
-  Asana:           { bg: "#FDEAEA", text: "#C0392B" },
+  Airtable:         { bg: "#FFF3D6", text: "#B45309" },
+  Asana:            { bg: "#FDEAEA", text: "#C0392B" },
   "Screaming Frog": { bg: "#E6F4EA", text: "#1E7E34" },
-  GA4:             { bg: "#E8F0FE", text: "#1967D2" },
-  GSC:             { bg: "#E6F4EA", text: "#137333" },
-  CallRail:        { bg: "#F3E8FF", text: "#6D28D9" },
-  NSM:             { bg: "#EEF2FF", text: "#4338CA" },
+  GA4:              { bg: "#E8F0FE", text: "#1967D2" },
+  GSC:              { bg: "#E6F4EA", text: "#137333" },
+  CallRail:         { bg: "#F3E8FF", text: "#6D28D9" },
+  NSM:              { bg: "#EEF2FF", text: "#4338CA" },
 };
 
 function san(text: string | undefined | null): string {
@@ -37,13 +40,13 @@ function san(text: string | undefined | null): string {
 
 function drawBadge(doc: any, source: string, x: number, y: number): number {
   const sc = SOURCE_COLORS[source] ?? { bg: "#F3F4F6", text: "#6B7280" };
-  doc.font("Helvetica").fontSize(5.5);
+  doc.font("Helvetica").fontSize(6.5);
   const tw = doc.widthOfString(source);
-  const bw = tw + 7;
-  const bh = 8;
+  const bw = tw + 8;
+  const bh = 10;
   doc.save();
   doc.roundedRect(x, y, bw, bh, 2).fill(sc.bg);
-  doc.fillColor(sc.text).text(source, x + 3.5, y + 1.2, { lineBreak: false });
+  doc.fillColor(sc.text).text(source, x + 4, y + 1.5, { lineBreak: false });
   doc.restore();
   return bw;
 }
@@ -57,12 +60,12 @@ function renderBulletItems(
   for (const item of items) {
     const txt = san(item.text);
     if (!txt) continue;
-    doc.font("Helvetica").fontSize(7.5).fillColor(DARK_GRAY)
+    doc.font("Helvetica").fontSize(8.5).fillColor(DARK_GRAY)
       .text("\u2022  " + txt, x, cy, { width });
     cy = doc.y + 1;
     if (item.source) {
       drawBadge(doc, item.source, x + 8, cy);
-      cy += 10;
+      cy += 12;
     }
   }
   return cy;
@@ -72,14 +75,22 @@ function measureBulletItems(
   doc: any, items: BulletItem[], width: number
 ): number {
   let h = 0;
-  doc.font("Helvetica").fontSize(7.5);
+  doc.font("Helvetica").fontSize(8.5);
   for (const item of items) {
     const txt = san(item.text);
     if (!txt) continue;
     h += doc.heightOfString("\u2022  " + txt, { width }) + 1;
-    if (item.source) h += 10;
+    if (item.source) h += 12;
   }
-  return Math.max(h, 12);
+  return Math.max(h, 14);
+}
+
+function drawTableBorder(doc: any, x: number, y: number, w: number, h: number) {
+  doc.save();
+  doc.roundedRect(x, y, w, h, 4)
+    .lineWidth(1).strokeOpacity(0.35).strokeColor(ACCENT).stroke();
+  doc.strokeOpacity(1);
+  doc.restore();
 }
 
 export async function generateBiweeklyPreviewPdf(
@@ -119,7 +130,7 @@ export async function generateBiweeklyPreviewPdf(
     function drawFooter() {
       doc.moveTo(MARGIN, FOOTER_Y).lineTo(MARGIN + BODY_W, FOOTER_Y)
         .lineWidth(0.5).strokeColor(GRAY).stroke();
-      doc.font("Helvetica").fontSize(7).fillColor(GRAY)
+      doc.font("Helvetica").fontSize(8).fillColor(GRAY)
         .text(FOOTER_TEXT, MARGIN, FOOTER_Y + 5, { width: BODY_W, align: "center", lineBreak: false });
     }
 
@@ -142,31 +153,31 @@ export async function generateBiweeklyPreviewPdf(
     const preparedBy = get("preparedBy", report.preparedBy);
     const reportingWindow = san(report.reportingWindow || "");
 
-    doc.font("Helvetica-Bold").fontSize(14).fillColor(TEXT_COLOR)
+    doc.font("Helvetica-Bold").fontSize(16).fillColor(TEXT_COLOR)
       .text(`${reportTitle}: ${clientName}`, MARGIN, y, { width: BODY_W });
-    y = doc.y + 3;
+    y = doc.y + 4;
 
     if (reportingWindow) {
-      doc.font("Helvetica").fontSize(9).fillColor(GRAY)
+      doc.font("Helvetica").fontSize(10).fillColor(GRAY)
         .text(`Reporting Period: ${reportingWindow}`, MARGIN, y, { width: BODY_W });
-      y = doc.y + 3;
+      y = doc.y + 4;
     }
 
     if (preparedBy) {
-      doc.font("Helvetica-Bold").fontSize(9).fillColor(TEXT_COLOR)
+      doc.font("Helvetica-Bold").fontSize(10).fillColor(TEXT_COLOR)
         .text("Prepared by: ", MARGIN, y, { width: BODY_W, continued: true });
       doc.font("Helvetica").fillColor(TEXT_COLOR).text(preparedBy);
-      y = doc.y + 3;
+      y = doc.y + 4;
     }
 
-    const pillW = 170;
-    const pillH = 14;
+    const pillW = 180;
+    const pillH = 16;
     doc.roundedRect(MARGIN, y, pillW, pillH, 3).fill(DATE_PILL_BG);
-    doc.font("Helvetica-Bold").fontSize(8).fillColor(DARK_GRAY)
-      .text("Reporting Date: ", MARGIN + 7, y + 3.5, { continued: true, lineBreak: false });
-    doc.font("Helvetica").fontSize(8).fillColor(DARK_GRAY)
+    doc.font("Helvetica-Bold").fontSize(9).fillColor(DARK_GRAY)
+      .text("Reporting Date: ", MARGIN + 8, y + 3.5, { continued: true, lineBreak: false });
+    doc.font("Helvetica").fontSize(9).fillColor(DARK_GRAY)
       .text(date, { lineBreak: false });
-    y += pillH + 18;
+    y += pillH + 20;
 
     const sections = report.sections || [];
     let secNum = 0;
@@ -174,21 +185,26 @@ export async function generateBiweeklyPreviewPdf(
     function drawHeading(title: string) {
       checkPage(36);
       secNum++;
-      doc.font("Helvetica-Bold").fontSize(12).fillColor(ACCENT)
+      doc.font("Helvetica-Bold").fontSize(13).fillColor(ACCENT)
         .text(`${secNum}. ${san(title)}`, MARGIN, y, { width: BODY_W });
       const bottom = doc.y + 2;
       doc.moveTo(MARGIN, bottom).lineTo(MARGIN + BODY_W, bottom)
         .lineWidth(1.5).strokeColor(ACCENT).stroke();
-      y = bottom + 8;
+      y = bottom + 10;
     }
+
+    const SUB_H = 22;
+    const TH_H = 18;
+    const DATA_ROW_H = 22;
+    const NOTE_H = 22;
 
     for (const section of sections) {
       if (section.id === "bw_purpose") {
         drawHeading(section.title || "Purpose");
         const text = get("bw_purpose_bullet_0", section.bullets?.[0] || "");
-        doc.font("Helvetica").fontSize(9).fillColor(DARK_GRAY)
+        doc.font("Helvetica").fontSize(10).fillColor(DARK_GRAY)
           .text(text, MARGIN, y, { width: BODY_W });
-        y = doc.y + 16;
+        y = doc.y + 18;
         continue;
       }
 
@@ -213,66 +229,60 @@ export async function generateBiweeklyPreviewPdf(
 
         const hasNsm = quarter !== "\u2014";
         if (hasNsm) {
-          checkPage(100);
+          const totalH = SUB_H + TH_H + DATA_ROW_H * 2 + NOTE_H;
+          checkPage(totalH + 10);
 
           const bx = MARGIN;
           const bw = BODY_W;
+          const boxTopY = y;
 
-          const subH = 20;
-          const thH = 16;
-          const rowH = 20;
-          const noteH = 20;
-          const totalH = subH + thH + rowH * 2 + noteH;
+          doc.rect(bx + 0.5, y + 0.5, bw - 1, SUB_H).fill(TINT_BG);
+          doc.font("Helvetica-Bold").fontSize(9.5).fillColor(ACCENT)
+            .text(`NSM Goals \u2014 ${quarter}`, bx + 12, y + 5, { lineBreak: false });
+          y += SUB_H;
 
-          doc.save();
-          doc.roundedRect(bx, y, bw, totalH, 4).lineWidth(1).strokeOpacity(0.4).strokeColor(ACCENT).stroke();
-          doc.strokeOpacity(1);
-          doc.restore();
-
-          doc.rect(bx + 0.5, y + 0.5, bw - 1, subH).fill("#FDF2F0");
-          doc.font("Helvetica-Bold").fontSize(8.5).fillColor(ACCENT)
-            .text(`NSM Goals \u2014 ${quarter}`, bx + 10, y + 5.5, { lineBreak: false });
-          y += subH;
-
-          doc.rect(bx, y, bw, thH).fill(STRIPE);
-          doc.moveTo(bx, y + thH).lineTo(bx + bw, y + thH).lineWidth(0.5).strokeColor("#E5E7EB").stroke();
+          doc.rect(bx, y, bw, TH_H).fill(STRIPE);
+          doc.moveTo(bx, y + TH_H).lineTo(bx + bw, y + TH_H).lineWidth(0.5).strokeColor(BORDER_LIGHT).stroke();
 
           const cols = [bw * 0.40, bw * 0.15, bw * 0.15, bw * 0.12, bw * 0.18];
           const hdrs = ["Metric", "Goal", "Actual", "%", "Status"];
           let cx = bx;
           hdrs.forEach((h, i) => {
-            doc.font("Helvetica-Bold").fontSize(7).fillColor(GRAY)
-              .text(h, cx + 6, y + 4.5, { width: cols[i] - 12, align: i === 0 ? "left" : "right", lineBreak: false });
+            doc.font("Helvetica-Bold").fontSize(8).fillColor(GRAY)
+              .text(h, cx + 8, y + 5, { width: cols[i] - 14, align: i === 0 ? "left" : "right", lineBreak: false });
             cx += cols[i];
           });
-          y += thH;
+          y += TH_H;
 
           function nsmRow(label: string, goal: string, actual: string, pct: string, status: string, last: boolean) {
-            doc.rect(bx, y, bw, rowH).fill("white");
+            doc.rect(bx, y, bw, DATA_ROW_H).fill("white");
             if (!last) {
-              doc.moveTo(bx, y + rowH).lineTo(bx + bw, y + rowH).lineWidth(0.5).strokeColor("#F3F4F6").stroke();
+              doc.moveTo(bx, y + DATA_ROW_H).lineTo(bx + bw, y + DATA_ROW_H).lineWidth(0.5).strokeColor(ROW_SEP).stroke();
             }
             let cx = bx;
-            doc.font("Helvetica-Bold").fontSize(8).fillColor(TEXT_COLOR)
-              .text(label, cx + 8, y + 5.5, { width: cols[0] - 14, lineBreak: false });
+            doc.font("Helvetica-Bold").fontSize(9).fillColor(TEXT_COLOR)
+              .text(label, cx + 10, y + 6, { width: cols[0] - 16, lineBreak: false });
             cx += cols[0];
             [goal, actual, pct, status].forEach((v, i) => {
-              doc.font("Helvetica").fontSize(8).fillColor(DARK_GRAY)
-                .text(v, cx + 4, y + 5.5, { width: cols[i + 1] - 10, align: "right", lineBreak: false });
+              doc.font("Helvetica").fontSize(9).fillColor(DARK_GRAY)
+                .text(v, cx + 4, y + 6, { width: cols[i + 1] - 12, align: "right", lineBreak: false });
               cx += cols[i + 1];
             });
-            y += rowH;
+            y += DATA_ROW_H;
           }
 
           nsmRow("Organic Sessions", sessGoal, sessActual, sessPct, sessTrack, false);
           nsmRow(mvpShort, mvpGoal, mvpActual, mvpPct, mvpTrack, true);
 
-          doc.rect(bx, y, bw, noteH).fill("white");
-          doc.moveTo(bx, y).lineTo(bx + bw, y).lineWidth(0.5).strokeColor("#F3F4F6").stroke();
+          doc.rect(bx, y, bw, NOTE_H).fill("white");
+          doc.moveTo(bx, y).lineTo(bx + bw, y).lineWidth(0.5).strokeColor(ROW_SEP).stroke();
           const notes = get("bw_nsm_notes", "Add notes on NSM progress...");
-          doc.font("Helvetica-Oblique").fontSize(7.5).fillColor("#9CA3AF")
-            .text(notes, bx + 10, y + 5, { width: bw - 20, lineBreak: false });
-          y += noteH + 16;
+          doc.font("Helvetica-Oblique").fontSize(8.5).fillColor("#9CA3AF")
+            .text(notes, bx + 12, y + 6, { width: bw - 24, lineBreak: false });
+          y += NOTE_H;
+
+          drawTableBorder(doc, bx, boxTopY, bw, y - boxTopY);
+          y += 18;
         }
         continue;
       }
@@ -289,22 +299,28 @@ export async function generateBiweeklyPreviewPdf(
         const COLS = [COL_AREA, COL_DID, COL_NEXT];
         const HDRS = ["Area", "What We Did / Learned", "What\u2019s Next"];
 
-        const tableStartY = y;
+        checkPage(60);
 
-        checkPage(40);
-        doc.rect(MARGIN, y, BODY_W, 16).fill(STRIPE);
-        doc.moveTo(MARGIN, y + 16).lineTo(MARGIN + BODY_W, y + 16).lineWidth(0.5).strokeColor("#E5E7EB").stroke();
+        const tableTopY = y;
+
+        doc.rect(MARGIN + 0.5, y + 0.5, BODY_W - 1, SUB_H).fill(TINT_BG);
+        doc.font("Helvetica-Bold").fontSize(9.5).fillColor(ACCENT)
+          .text("Progress & Quick Wins", MARGIN + 12, y + 5, { lineBreak: false });
+        y += SUB_H;
+
+        doc.rect(MARGIN, y, BODY_W, TH_H).fill(STRIPE);
+        doc.moveTo(MARGIN, y + TH_H).lineTo(MARGIN + BODY_W, y + TH_H).lineWidth(0.5).strokeColor(BORDER_LIGHT).stroke();
 
         let hx = MARGIN;
         HDRS.forEach((h, i) => {
           if (i > 0) {
-            doc.moveTo(hx, y).lineTo(hx, y + 16).lineWidth(0.5).strokeColor("#E5E7EB").stroke();
+            doc.moveTo(hx, y).lineTo(hx, y + TH_H).lineWidth(0.5).strokeColor(BORDER_LIGHT).stroke();
           }
-          doc.font("Helvetica-Bold").fontSize(7.5).fillColor(ACCENT)
-            .text(h, hx + 6, y + 4, { width: COLS[i] - 12, lineBreak: false });
+          doc.font("Helvetica-Bold").fontSize(8).fillColor(GRAY)
+            .text(h, hx + 8, y + 5, { width: COLS[i] - 14, lineBreak: false });
           hx += COLS[i];
         });
-        y += 16;
+        y += TH_H;
 
         for (let ri = 0; ri < workLog.length; ri++) {
           const row = workLog[ri];
@@ -319,45 +335,41 @@ export async function generateBiweeklyPreviewPdf(
             ? editedNext.split("\n").filter(Boolean).map(t => ({ text: t.trim() }))
             : (row.nextItemsRich || row.nextItems?.map((t: any) => (typeof t === "string" ? { text: t } : t)) || row.whatsNext?.split("\n").filter(Boolean).map((t: string) => ({ text: t.trim() })) || []);
 
-          const cellW_did = COLS[1] - 14;
-          const cellW_next = COLS[2] - 14;
+          const cellW_did = COLS[1] - 16;
+          const cellW_next = COLS[2] - 16;
 
-          const hArea = (() => { doc.font("Helvetica-Bold").fontSize(7.5); return doc.heightOfString(row.area || "\u2014", { width: COLS[0] - 12 }); })();
+          const hArea = (() => { doc.font("Helvetica-Bold").fontSize(8.5); return doc.heightOfString(row.area || "\u2014", { width: COLS[0] - 14 }); })();
           const hDid = measureBulletItems(doc, didItems, cellW_did);
           const hNext = measureBulletItems(doc, nextItems, cellW_next);
 
-          const rowH = Math.max(hArea, hDid, hNext) + 8;
+          const rowH = Math.max(hArea, hDid, hNext) + 10;
 
-          checkPage(rowH + 2);
+          checkPage(rowH + 4);
 
           if (ri % 2 === 1) {
             doc.rect(MARGIN, y, BODY_W, rowH).fill(STRIPE);
           }
 
-          doc.moveTo(MARGIN, y + rowH).lineTo(MARGIN + BODY_W, y + rowH).lineWidth(0.5).strokeColor("#F3F4F6").stroke();
+          doc.moveTo(MARGIN, y + rowH).lineTo(MARGIN + BODY_W, y + rowH).lineWidth(0.5).strokeColor(ROW_SEP).stroke();
 
           let cx = MARGIN;
           for (let ci = 1; ci < 3; ci++) {
             cx += COLS[ci - 1];
-            doc.moveTo(cx, y).lineTo(cx, y + rowH).lineWidth(0.5).strokeColor("#E5E7EB").stroke();
+            doc.moveTo(cx, y).lineTo(cx, y + rowH).lineWidth(0.5).strokeColor(BORDER_LIGHT).stroke();
           }
 
-          doc.font("Helvetica-Bold").fontSize(7.5).fillColor(TEXT_COLOR)
-            .text(row.area || "\u2014", MARGIN + 6, y + 4, { width: COLS[0] - 12 });
+          doc.font("Helvetica-Bold").fontSize(8.5).fillColor(TEXT_COLOR)
+            .text(row.area || "\u2014", MARGIN + 8, y + 5, { width: COLS[0] - 14 });
 
-          renderBulletItems(doc, didItems, MARGIN + COLS[0] + 6, y + 4, cellW_did);
-          renderBulletItems(doc, nextItems, MARGIN + COLS[0] + COLS[1] + 6, y + 4, cellW_next);
+          renderBulletItems(doc, didItems, MARGIN + COLS[0] + 8, y + 5, cellW_did);
+          renderBulletItems(doc, nextItems, MARGIN + COLS[0] + COLS[1] + 8, y + 5, cellW_next);
 
           y += rowH;
         }
 
-        doc.save();
-        doc.roundedRect(MARGIN, tableStartY, BODY_W, y - tableStartY, 4)
-          .lineWidth(1).strokeOpacity(0.25).strokeColor(ACCENT).stroke();
-        doc.strokeOpacity(1);
-        doc.restore();
+        drawTableBorder(doc, MARGIN, tableTopY, BODY_W, y - tableTopY);
 
-        y += 16;
+        y += 18;
         continue;
       }
 
@@ -367,11 +379,11 @@ export async function generateBiweeklyPreviewPdf(
         for (let bi = 0; bi < section.bullets.length; bi++) {
           checkPage(24);
           const text = get(`${section.id}_bullet_${bi}`, section.bullets[bi]);
-          doc.font("Helvetica").fontSize(9).fillColor(ACCENT)
+          doc.font("Helvetica").fontSize(10).fillColor(ACCENT)
             .text("\u2022  ", MARGIN, y, { width: BODY_W, continued: true });
-          doc.font("Helvetica").fontSize(9).fillColor(DARK_GRAY)
+          doc.font("Helvetica").fontSize(10).fillColor(DARK_GRAY)
             .text(text);
-          y = doc.y + 4;
+          y = doc.y + 5;
         }
         y += 10;
       }
@@ -382,22 +394,22 @@ export async function generateBiweeklyPreviewPdf(
         const colCount = tbl.headers.length;
         const colW = Math.floor(BODY_W / colCount);
 
-        doc.rect(MARGIN, y, BODY_W, 16).fill(TEXT_COLOR);
+        doc.rect(MARGIN, y, BODY_W, 18).fill(TEXT_COLOR);
         tbl.headers.forEach((h: string, hi: number) => {
-          doc.font("Helvetica-Bold").fontSize(7.5).fillColor("#FFFFFF")
-            .text(san(h), MARGIN + hi * colW + 4, y + 4, { width: colW - 8, lineBreak: false });
+          doc.font("Helvetica-Bold").fontSize(8).fillColor("#FFFFFF")
+            .text(san(h), MARGIN + hi * colW + 6, y + 4.5, { width: colW - 12, lineBreak: false });
         });
-        y += 16;
+        y += 18;
 
         for (let ri = 0; ri < tbl.rows.length; ri++) {
           checkPage(16);
-          if (ri % 2 === 1) doc.rect(MARGIN, y, BODY_W, 14).fill("#F0F4FA");
+          if (ri % 2 === 1) doc.rect(MARGIN, y, BODY_W, 16).fill("#F0F4FA");
           tbl.rows[ri].forEach((cell: string, ci: number) => {
             const val = get(`${section.id}_tech_${ri}_${ci}`, cell);
-            doc.font("Helvetica").fontSize(7.5).fillColor(DARK_GRAY)
-              .text(val, MARGIN + ci * colW + 4, y + 3, { width: colW - 8, lineBreak: false });
+            doc.font("Helvetica").fontSize(8).fillColor(DARK_GRAY)
+              .text(val, MARGIN + ci * colW + 6, y + 3.5, { width: colW - 12, lineBreak: false });
           });
-          y += 14;
+          y += 16;
         }
         y += 12;
       }
@@ -408,21 +420,21 @@ export async function generateBiweeklyPreviewPdf(
         const colCount = tbl.headers.length;
         const colW = Math.floor(BODY_W / colCount);
 
-        doc.rect(MARGIN, y, BODY_W, 16).fill(TEXT_COLOR);
+        doc.rect(MARGIN, y, BODY_W, 18).fill(TEXT_COLOR);
         tbl.headers.forEach((h: string, hi: number) => {
-          doc.font("Helvetica-Bold").fontSize(7.5).fillColor("#FFFFFF")
-            .text(san(h), MARGIN + hi * colW + 4, y + 4, { width: colW - 8, lineBreak: false });
+          doc.font("Helvetica-Bold").fontSize(8).fillColor("#FFFFFF")
+            .text(san(h), MARGIN + hi * colW + 6, y + 4.5, { width: colW - 12, lineBreak: false });
         });
-        y += 16;
+        y += 18;
 
         for (let ri = 0; ri < tbl.rows.length; ri++) {
           checkPage(16);
-          if (ri % 2 === 1) doc.rect(MARGIN, y, BODY_W, 14).fill("#F0F4FA");
+          if (ri % 2 === 1) doc.rect(MARGIN, y, BODY_W, 16).fill("#F0F4FA");
           tbl.rows[ri].forEach((cell: any, ci: number) => {
-            doc.font("Helvetica").fontSize(7.5).fillColor(DARK_GRAY)
-              .text(String(cell), MARGIN + ci * colW + 4, y + 3, { width: colW - 8, lineBreak: false });
+            doc.font("Helvetica").fontSize(8).fillColor(DARK_GRAY)
+              .text(String(cell), MARGIN + ci * colW + 6, y + 3.5, { width: colW - 12, lineBreak: false });
           });
-          y += 14;
+          y += 16;
         }
         y += 12;
       }

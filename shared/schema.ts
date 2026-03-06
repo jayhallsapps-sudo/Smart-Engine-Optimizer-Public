@@ -9,6 +9,7 @@ export const clients = pgTable("clients", {
   gscSiteUrl: text("gsc_site_url"),
   ga4PropertyId: text("ga4_property_id"),
   callrailCompanyId: text("callrail_company_id"),
+  callrailAccountId: text("callrail_account_id"),
   ctmAccountId: text("ctm_account_id"),
   ahrefsProjectUrl: text("ahrefs_project_url"),
   semrushProjectId: text("semrush_project_id"),

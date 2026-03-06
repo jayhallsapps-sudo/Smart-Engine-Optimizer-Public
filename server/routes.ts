@@ -86,6 +86,17 @@ interface AhrefsUsageEntry {
 
 const ahrefsUsageLog: AhrefsUsageEntry[] = [];
 
+// Simple in-memory cache for expensive Google API calls
+const apiCache: Record<string, { data: any; expiresAt: number }> = {};
+function getCached(key: string) {
+  const entry = apiCache[key];
+  if (entry && entry.expiresAt > Date.now()) return entry.data;
+  return null;
+}
+function setCache(key: string, data: any, ttlMs: number) {
+  apiCache[key] = { data, expiresAt: Date.now() + ttlMs };
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -94,6 +105,8 @@ export async function registerRoutes(
 
   // Fetch GBP accounts + locations using stored OAuth token
   app.get("/api/gbp/locations", async (_req, res) => {
+    const cached = getCached("gbp_locations");
+    if (cached) return res.json(cached);
     try {
       const accessToken = await getGoogleAccessToken("google_business_profile");
       if (!accessToken) {
@@ -107,13 +120,27 @@ export async function registerRoutes(
       const accountsData = await accountsResp.json() as any;
       if (!accountsResp.ok) {
         const rawMsg: string = accountsData.error?.message ?? "";
-        // Detect API not enabled error and provide actionable link
-        if (rawMsg.toLowerCase().includes("quota") || rawMsg.toLowerCase().includes("rate limit")) {
-          return res.status(429).json({ message: "Google API rate limit hit — wait 60 seconds and try again." });
+        const rawStatus = accountsResp.status;
+        const rawReason = accountsData.error?.status ?? accountsData.error?.code ?? "";
+        console.error(`[GBP] accounts API error ${rawStatus}: msg="${rawMsg}" status="${rawReason}" full=${JSON.stringify(accountsData.error)}`);
+        const projectMatch = rawMsg.match(/project[_ ](?:number:)?(\d+)/);
+        const projectId = projectMatch?.[1] ?? "";
+        // Check if quota is literally 0 — needs quota increase request, not just enabling
+        const details = accountsData.error?.details ?? [];
+        const quotaDetail = details.find((d: any) => d["@type"]?.includes("ErrorInfo") && d.reason === "RATE_LIMIT_EXCEEDED");
+        const quotaLimitValue = quotaDetail?.metadata?.quota_limit_value;
+        if (rawStatus === 429 && quotaLimitValue === "0") {
+          const quotaUrl = projectId
+            ? `https://console.cloud.google.com/iam-admin/quotas?service=mybusinessaccountmanagement.googleapis.com&project=${projectId}`
+            : "https://console.cloud.google.com/iam-admin/quotas?service=mybusinessaccountmanagement.googleapis.com";
+          return res.status(429).json({
+            message: "The My Business Account Management API has a quota of 0 on your Google Cloud project. You need to request a quota increase before it can be used.",
+            enableUrl: quotaUrl,
+            linkLabel: "Click here to request a quota increase in Google Cloud Console",
+          });
         }
-        if (rawMsg.includes("has not been used") || rawMsg.includes("is disabled")) {
-          const projectMatch = rawMsg.match(/project (\d+)/);
-          const projectId = projectMatch?.[1] ?? "";
+        // Detect API not enabled error
+        if (rawMsg.includes("has not been used") || rawMsg.includes("is disabled") || rawReason === "API_NOT_ACTIVATED") {
           const enableUrl = projectId
             ? `https://console.developers.google.com/apis/api/mybusinessaccountmanagement.googleapis.com/overview?project=${projectId}`
             : "https://console.developers.google.com/apis/library/mybusinessaccountmanagement.googleapis.com";
@@ -159,7 +186,9 @@ export async function registerRoutes(
         })
       );
 
-      res.json({ locations: allLocations });
+      const payload = { locations: allLocations };
+      setCache("gbp_locations", payload, 10 * 60 * 1000); // cache 10 minutes
+      res.json(payload);
     } catch (err: any) {
       console.error("[GBP] /api/gbp/locations error:", err.message);
       res.status(500).json({ message: "Failed to fetch GBP locations: " + err.message });

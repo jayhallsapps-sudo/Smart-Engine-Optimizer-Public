@@ -139,6 +139,7 @@ interface ClientFormData {
   gscSiteUrl: string;
   ga4PropertyId: string;
   callrailCompanyId: string;
+  callrailAccountId: string;
   ctmAccountId: string;
   ahrefsProjectUrl: string;
   semrushProjectId: string;
@@ -160,6 +161,7 @@ const emptyForm: ClientFormData = {
   gscSiteUrl: "",
   ga4PropertyId: "",
   callrailCompanyId: "",
+  callrailAccountId: "",
   ctmAccountId: "",
   ahrefsProjectUrl: "",
   semrushProjectId: "",
@@ -259,18 +261,21 @@ function GbpLocationPicker({ value, onChange }: { value: string; onChange: (v: s
   const [fetched, setFetched] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [enableUrl, setEnableUrl] = useState<string | null>(null);
+  const [linkLabel, setLinkLabel] = useState<string | null>(null);
   const { toast } = useToast();
 
   const fetchLocations = async () => {
     setLoading(true);
     setError(null);
     setEnableUrl(null);
+    setLinkLabel(null);
     try {
       const res = await fetch("/api/gbp/locations");
       const data = await res.json() as any;
       if (!res.ok) {
         if (data.enableUrl) {
           setEnableUrl(data.enableUrl);
+          setLinkLabel(data.linkLabel ?? null);
           setError(data.message);
         } else {
           throw new Error(data.message || "Failed to fetch locations");
@@ -340,7 +345,7 @@ function GbpLocationPicker({ value, onChange }: { value: string; onChange: (v: s
               className="text-[11px] text-primary underline hover:opacity-80"
               data-testid="link-enable-gbp-api"
             >
-              → Click here to enable the API in Google Cloud Console
+              → {linkLabel ?? "Click here to enable the API in Google Cloud Console"}
             </a>
           )}
         </div>
@@ -496,8 +501,8 @@ function GscSitePicker({ value, onChange }: { value: string; onChange: (v: strin
   );
 }
 
-function CallRailCompanyPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const [companies, setCompanies] = useState<{ companyId: string; name: string; accountName: string }[]>([]);
+function CallRailCompanyPicker({ value, onChange, onAccountIdChange }: { value: string; onChange: (v: string) => void; onAccountIdChange?: (accountId: string) => void }) {
+  const [companies, setCompanies] = useState<{ companyId: string; name: string; accountId: string; accountName: string }[]>([]);
   const [loading, setLoading] = useState(false);
   const [fetched, setFetched] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -523,6 +528,14 @@ function CallRailCompanyPicker({ value, onChange }: { value: string; onChange: (
     }
   };
 
+  const handleSelect = (companyId: string) => {
+    onChange(companyId);
+    if (onAccountIdChange) {
+      const match = companies.find(c => c.companyId === companyId);
+      onAccountIdChange(match?.accountId ?? "");
+    }
+  };
+
   return (
     <div className="space-y-2">
       <Label className="flex items-center gap-1.5"><Phone className="w-3 h-3" /> CallRail Company</Label>
@@ -531,7 +544,7 @@ function CallRailCompanyPicker({ value, onChange }: { value: string; onChange: (
           <div className="flex-1">
             <SearchableSelect
               value={value}
-              onChange={onChange}
+              onChange={handleSelect}
               options={companies.map(c => ({ value: c.companyId, label: c.accountName ? `${c.name} (${c.accountName})` : c.name }))}
               placeholder="— Select a company —"
               testId="select-callrail-company"
@@ -583,7 +596,7 @@ function ClientForm({ initial, onSubmit, isPending }: { initial: ClientFormData;
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <GscSitePicker value={form.gscSiteUrl} onChange={v => update("gscSiteUrl", v)} />
             <Ga4PropertyPicker value={form.ga4PropertyId} onChange={v => update("ga4PropertyId", v)} />
-            <CallRailCompanyPicker value={form.callrailCompanyId} onChange={v => update("callrailCompanyId", v)} />
+            <CallRailCompanyPicker value={form.callrailCompanyId} onChange={v => update("callrailCompanyId", v)} onAccountIdChange={v => update("callrailAccountId", v)} />
             <div className="space-y-2">
               <Label htmlFor="ctm" className="flex items-center gap-1.5"><Phone className="w-3 h-3" /> CTM Account ID</Label>
               <Input id="ctm" value={form.ctmAccountId} onChange={e => update("ctmAccountId", e.target.value)} placeholder="CTM-ABC123" data-testid="input-ctm-id" />
@@ -1284,6 +1297,7 @@ export default function ClientsPage() {
                 gscSiteUrl: editingClient.gscSiteUrl || "",
                 ga4PropertyId: editingClient.ga4PropertyId || "",
                 callrailCompanyId: editingClient.callrailCompanyId || "",
+                callrailAccountId: (editingClient as any).callrailAccountId || "",
                 ctmAccountId: editingClient.ctmAccountId || "",
                 ahrefsProjectUrl: editingClient.ahrefsProjectUrl || "",
                 semrushProjectId: editingClient.semrushProjectId || "",

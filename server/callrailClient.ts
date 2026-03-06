@@ -16,8 +16,36 @@ async function callRailGet(apiKey: string, path: string, params: Record<string, 
     headers: { Authorization: `Token token=${apiKey}`, "Content-Type": "application/json" },
   });
   const data = await resp.json() as any;
-  if (!resp.ok) throw new Error(data.message || `CallRail API error ${resp.status}`);
+  if (!resp.ok) {
+    const errMsg = data.message || data.error || JSON.stringify(data);
+    console.error(`[CallRail] API error ${resp.status} for ${url}: ${errMsg}`);
+    throw new Error(data.message || `CallRail API error ${resp.status}`);
+  }
   return data;
+}
+
+// Cache: companyId -> accountId
+const companyAccountCache: Record<string, string> = {};
+
+async function resolveAccountId(apiKey: string, companyId: string): Promise<string> {
+  if (companyAccountCache[companyId]) return companyAccountCache[companyId];
+  // Fetch all accounts and find which contains this company
+  let page = 1;
+  while (true) {
+    const d = await callRailGet(apiKey, `a.json`, { per_page: "100", page: String(page) });
+    const accounts: any[] = d.accounts ?? [];
+    for (const acc of accounts) {
+      const coData = await callRailGet(apiKey, `a/${acc.id}/companies.json`, { per_page: "100" });
+      const match = (coData.companies ?? []).find((c: any) => c.id === companyId);
+      if (match) {
+        companyAccountCache[companyId] = String(acc.id);
+        return String(acc.id);
+      }
+    }
+    if (accounts.length === 0 || accounts.length >= (d.total_records ?? accounts.length)) break;
+    page++;
+  }
+  throw new Error(`Could not resolve account ID for CallRail company ${companyId}`);
 }
 
 function fmtN(n: number): string {
@@ -37,22 +65,28 @@ export async function queryCallRail(
   const companyId = client.callrailCompanyId;
   const organicSources = client.callrailOrganicSourceTerms ?? [];
 
+  // Resolve the numeric account ID — use stored value or look it up
+  const storedAccountId = (client as any).callrailAccountId as string | undefined;
+  const accountId = storedAccountId || await resolveAccountId(apiKey, companyId);
+  // Build a helper that always scopes to this company
+  const callsPath = `a/${accountId}/calls.json`;
+  const companyFilter = { company_id: companyId };
+
   try {
     if (command === "callrail_summary" || command === "callrail_qoq_organic_calls") {
       const [currData, prevData] = await Promise.all([
-        callRailGet(apiKey, `a/${companyId}/calls.json`, {
-          date_range: "custom",
+        callRailGet(apiKey, callsPath, {
+          ...companyFilter,
           start_date: startDate,
           end_date: endDate,
-          per_page: "1",
-          fields: "total_calls,answered,first_call,good_lead_call_count",
+          per_page: "250",
+          fields: "total_calls,answered,first_call,source_name",
         }),
-        callRailGet(apiKey, `a/${companyId}/calls.json`, {
-          date_range: "custom",
+        callRailGet(apiKey, callsPath, {
+          ...companyFilter,
           start_date: prevStartDate,
           end_date: prevEndDate,
           per_page: "1",
-          fields: "total_calls",
         }),
       ]);
 
@@ -64,8 +98,8 @@ export async function queryCallRail(
       ];
 
       if (command === "callrail_summary") {
-        const answeredData = await callRailGet(apiKey, `a/${companyId}/calls.json`, {
-          date_range: "custom",
+        const answeredData = await callRailGet(apiKey, callsPath, {
+          ...companyFilter,
           start_date: startDate,
           end_date: endDate,
           answered: "true",
@@ -94,8 +128,8 @@ export async function queryCallRail(
     }
 
     if (command === "callrail_qoq_top_landing_pages") {
-      const data = await callRailGet(apiKey, `a/${companyId}/calls.json`, {
-        date_range: "custom",
+      const data = await callRailGet(apiKey, callsPath, {
+        ...companyFilter,
         start_date: startDate,
         end_date: endDate,
         per_page: "250",

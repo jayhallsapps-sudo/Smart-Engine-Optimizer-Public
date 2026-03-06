@@ -33,6 +33,15 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import {
   Plus,
   Globe,
@@ -61,6 +70,8 @@ import {
   MapPin,
   Loader2,
   RefreshCw,
+  ChevronsUpDown,
+  Check,
 } from "lucide-react";
 import type { Client } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
@@ -181,6 +192,60 @@ interface GbpLocation {
   resourceName: string;
 }
 
+function SearchableSelect({
+  value,
+  onChange,
+  options,
+  placeholder = "Search...",
+  testId,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+  placeholder?: string;
+  testId?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = options.find(o => o.value === value);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="w-full justify-between font-normal text-sm truncate"
+          data-testid={testId}
+        >
+          <span className="truncate">{selected ? selected.label : <span className="text-muted-foreground">{placeholder}</span>}</span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+        <Command>
+          <CommandInput placeholder="Search..." />
+          <CommandList>
+            <CommandEmpty>No results found.</CommandEmpty>
+            <CommandGroup>
+              {options.map(opt => (
+                <CommandItem
+                  key={opt.value}
+                  value={opt.label}
+                  onSelect={() => { onChange(opt.value); setOpen(false); }}
+                >
+                  <Check className={`mr-2 h-4 w-4 ${value === opt.value ? "opacity-100" : "opacity-0"}`} />
+                  <span className="truncate">{opt.label}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function GbpLocationPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const [locations, setLocations] = useState<GbpLocation[]>([]);
   const [loading, setLoading] = useState(false);
@@ -225,19 +290,15 @@ function GbpLocationPicker({ value, onChange }: { value: string; onChange: (v: s
       </Label>
       <div className="flex gap-2">
         {fetched && locations.length > 0 ? (
-          <select
-            value={value}
-            onChange={e => onChange(e.target.value)}
-            className="flex-1 text-sm rounded-md border bg-background px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring"
-            data-testid="select-gbp-location"
-          >
-            <option value="">— Select a location —</option>
-            {locations.map(loc => (
-              <option key={loc.resourceName} value={loc.resourceName}>
-                {loc.displayName}{loc.address ? ` · ${loc.address}` : ""}
-              </option>
-            ))}
-          </select>
+          <div className="flex-1">
+            <SearchableSelect
+              value={value}
+              onChange={onChange}
+              options={locations.map(loc => ({ value: loc.resourceName, label: `${loc.displayName}${loc.address ? ` · ${loc.address}` : ""}` }))}
+              placeholder="— Select a location —"
+              testId="select-gbp-location"
+            />
+          </div>
         ) : (
           <Input
             id="gbpLocation"
@@ -327,19 +388,15 @@ function Ga4PropertyPicker({ value, onChange }: { value: string; onChange: (v: s
       <Label className="flex items-center gap-1.5"><BarChart3 className="w-3 h-3" /> GA4 Property</Label>
       <div className="flex gap-2">
         {fetched && properties.length > 0 ? (
-          <select
-            value={value}
-            onChange={e => onChange(e.target.value)}
-            className="flex-1 text-sm rounded-md border bg-background px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring"
-            data-testid="select-ga4-property"
-          >
-            <option value="">— Select a property —</option>
-            {properties.map(p => (
-              <option key={p.propertyId} value={p.propertyId}>
-                {p.displayName} · {p.accountName}
-              </option>
-            ))}
-          </select>
+          <div className="flex-1">
+            <SearchableSelect
+              value={value}
+              onChange={onChange}
+              options={properties.map(p => ({ value: p.propertyId, label: `${p.displayName} · ${p.accountName}` }))}
+              placeholder="— Select a property —"
+              testId="select-ga4-property"
+            />
+          </div>
         ) : (
           <Input
             value={value}
@@ -402,19 +459,15 @@ function GscSitePicker({ value, onChange }: { value: string; onChange: (v: strin
       <Label className="flex items-center gap-1.5"><Globe className="w-3 h-3" /> GSC Site</Label>
       <div className="flex gap-2">
         {fetched && sites.length > 0 ? (
-          <select
-            value={value}
-            onChange={e => onChange(e.target.value)}
-            className="flex-1 text-sm rounded-md border bg-background px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring"
-            data-testid="select-gsc-site"
-          >
-            <option value="">— Select a site —</option>
-            {sites.map(s => (
-              <option key={s.siteUrl} value={s.siteUrl}>
-                {s.siteUrl.replace(/^https?:\/\//, "").replace(/\/$/, "")} ({s.permissionLevel})
-              </option>
-            ))}
-          </select>
+          <div className="flex-1">
+            <SearchableSelect
+              value={value}
+              onChange={onChange}
+              options={sites.map(s => ({ value: s.siteUrl, label: `${s.siteUrl.replace(/^https?:\/\//, "").replace(/\/$/, "")} (${s.permissionLevel})` }))}
+              placeholder="— Select a site —"
+              testId="select-gsc-site"
+            />
+          </div>
         ) : (
           <Input
             value={value}
@@ -468,19 +521,15 @@ function CallRailCompanyPicker({ value, onChange }: { value: string; onChange: (
       <Label className="flex items-center gap-1.5"><Phone className="w-3 h-3" /> CallRail Company</Label>
       <div className="flex gap-2">
         {fetched && companies.length > 0 ? (
-          <select
-            value={value}
-            onChange={e => onChange(e.target.value)}
-            className="flex-1 text-sm rounded-md border bg-background px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring"
-            data-testid="select-callrail-company"
-          >
-            <option value="">— Select a company —</option>
-            {companies.map(c => (
-              <option key={c.companyId} value={c.companyId}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+          <div className="flex-1">
+            <SearchableSelect
+              value={value}
+              onChange={onChange}
+              options={companies.map(c => ({ value: c.companyId, label: c.name }))}
+              placeholder="— Select a company —"
+              testId="select-callrail-company"
+            />
+          </div>
         ) : (
           <Input
             value={value}

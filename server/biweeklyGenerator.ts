@@ -94,7 +94,7 @@ function getSfTopPriorities(counts: SfIssueCounts): string[] {
     issues.push({ count: counts.errors404, label: `Fix ${counts.errors404} broken link${counts.errors404 !== 1 ? "s" : ""} returning 404 errors` });
   }
   if (counts.missingMeta > 0) {
-    issues.push({ count: counts.missingMeta, label: `Write meta descriptions for ${counts.missingMeta} page${counts.missingMeta !== 1 ? "s" : ""} missing them` });
+    issues.push({ count: counts.missingMeta, label: `Prioritize meta descriptions for top-traffic pages (${counts.missingMeta} pages flagged — focus on highest-value first)` });
   }
 
   issues.sort((a, b) => b.count - a.count);
@@ -225,17 +225,23 @@ export async function generateBiweekly(input: {
     }
   }
 
+  const EXCLUDED_PULSE_LABELS = new Set(["Total Clicks", "Total Calls"]);
+
   if (gscResult.status === "fulfilled" && gscResult.value) {
     const summary = (gscResult.value as any).summary ?? [];
     for (const s of summary.slice(0, 3)) {
-      pulseMetrics.push({ label: s.label, current: s.current });
+      if (!EXCLUDED_PULSE_LABELS.has(s.label)) {
+        pulseMetrics.push({ label: s.label, current: s.current });
+      }
     }
   }
 
   if (callTrackingResult.status === "fulfilled" && callTrackingResult.value) {
     const summary = (callTrackingResult.value as any).summary ?? [];
     for (const s of summary.slice(0, 2)) {
-      pulseMetrics.push({ label: s.label, current: s.current });
+      if (!EXCLUDED_PULSE_LABELS.has(s.label)) {
+        pulseMetrics.push({ label: s.label, current: s.current });
+      }
     }
   }
 
@@ -342,7 +348,10 @@ export async function generateBiweekly(input: {
     id: "bw_partnership",
     type: "bullets",
     title: "Partnership & Alignment",
-    bullets: ["", "", ""],
+    bullets: [
+      "Open discussion: feedback, lead quality, new initiatives, or observations.",
+      "Confirm next steps, responsibilities, and upcoming deliverables.",
+    ],
   });
 
   return {

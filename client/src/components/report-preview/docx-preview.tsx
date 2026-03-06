@@ -452,7 +452,7 @@ function DocxSectionBlock({
                 </div>
                 <table className="w-full">
                   <thead>
-                    <tr className="text-[10px] text-gray-500 border-b">
+                    <tr className="text-[10px] text-gray-500 border-b" style={{ backgroundColor: "#F9FAFB" }}>
                       <th className="text-left px-3 py-1 font-medium">Metric</th>
                       <th className="text-right px-2 py-1 font-medium">Goal</th>
                       <th className="text-right px-2 py-1 font-medium">Actual</th>
@@ -477,6 +477,16 @@ function DocxSectionBlock({
                     </tr>
                   </tbody>
                 </table>
+                <div className="px-3 py-2 border-t border-gray-100 text-[11px]">
+                  <EditableSection
+                    editKey="bw_nsm_notes"
+                    value={edits["bw_nsm_notes"] ?? "Add notes on NSM progress..."}
+                    edits={edits}
+                    onEdit={onEdit}
+                    as="span"
+                    className="italic text-gray-400"
+                  />
+                </div>
               </div>
             )}
           </div>
@@ -508,46 +518,48 @@ function DocxSectionBlock({
       ))}
 
       {section.type === "progress" && section.workLog && section.workLog.length > 0 && (
-        <table className="w-full text-xs border-collapse mt-1">
-          <thead>
-            <tr>
-              {["Area", "What We Did / Learned", "What's Next"].map(h => (
-                <th
-                  key={h}
-                  className="text-left px-2 py-1.5 text-white text-[10px]"
-                  style={{ background: tableHeaderBg }}
-                >
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {section.workLog.map((row, ri) => (
-              <tr key={ri} style={{ background: ri % 2 === 1 ? "#F0F4FA" : "white" }}>
-                <td className="px-2 py-1.5 border border-[#D1D5DB] text-[10px] align-top font-medium">{row.area || "—"}</td>
-                <td className="px-2 py-1.5 border border-[#D1D5DB] text-[10px] align-top">
-                  <WorkLogBulletCell
-                    editKey={`${section.id}_worklog_${ri}_did`}
-                    rawValue={row.whatWeDid}
-                    items={row.items}
-                    edits={edits}
-                    onEdit={onEdit}
-                  />
-                </td>
-                <td className="px-2 py-1.5 border border-[#D1D5DB] text-[10px] align-top">
-                  <WorkLogBulletCell
-                    editKey={`${section.id}_worklog_${ri}_next`}
-                    rawValue={row.whatsNext}
-                    items={row.nextItems?.map(t => ({ text: t }))}
-                    edits={edits}
-                    onEdit={onEdit}
-                  />
-                </td>
+        <div className="border rounded-md overflow-hidden text-[11px]" style={{ borderColor: accentColor + "40" }}>
+          <table className="w-full text-xs border-collapse">
+            <thead>
+              <tr style={{ backgroundColor: "#F9FAFB" }}>
+                {["Area", "What We Did / Learned", "What's Next"].map(h => (
+                  <th
+                    key={h}
+                    className="text-left px-3 py-1.5 text-[10px] font-medium border-b"
+                    style={{ color: accentColor, borderColor: accentColor + "30" }}
+                  >
+                    {h}
+                  </th>
+                ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {section.workLog.map((row, ri) => (
+                <tr key={ri} style={{ background: ri % 2 === 1 ? "#F9FAFB" : "white" }}>
+                  <td className="px-3 py-1.5 border-b border-gray-100 text-[10px] align-top font-medium w-28">{row.area || "—"}</td>
+                  <td className="px-3 py-1.5 border-b border-gray-100 border-l text-[10px] align-top" style={{ borderLeftColor: "#E5E7EB" }}>
+                    <WorkLogBulletCell
+                      editKey={`${section.id}_worklog_${ri}_did`}
+                      rawValue={row.whatWeDid}
+                      items={row.items}
+                      edits={edits}
+                      onEdit={onEdit}
+                    />
+                  </td>
+                  <td className="px-3 py-1.5 border-b border-gray-100 border-l text-[10px] align-top" style={{ borderLeftColor: "#E5E7EB" }}>
+                    <WorkLogBulletCell
+                      editKey={`${section.id}_worklog_${ri}_next`}
+                      rawValue={row.whatsNext}
+                      items={row.nextItems?.map(t => ({ text: t }))}
+                      edits={edits}
+                      onEdit={onEdit}
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {section.type === "technical" && section.technicalTable && (

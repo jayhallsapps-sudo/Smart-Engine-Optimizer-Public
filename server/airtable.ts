@@ -100,12 +100,7 @@ export async function fetchAirtableWorkLog(
 
   const pat = decrypt(creds[0].encryptedValue);
 
-  const params = new URLSearchParams({
-    filterByFormula: buildFilterFormula(startDate, endDate),
-    maxRecords: "200",
-  });
-  params.append("sort[0][field]", "Due");
-  params.append("sort[0][direction]", "desc");
+  const params = new URLSearchParams({ maxRecords: "200" });
   if (resolvedViewName) params.set("view", resolvedViewName);
 
   const url = `https://api.airtable.com/v0/${airtableBaseId}/${encodeURIComponent(airtableTableName)}?${params}`;
@@ -161,7 +156,15 @@ export async function fetchAirtableWorkLog(
         statusLabel: rawStatus ? getStatusLabel(rawStatus) : undefined,
       };
     })
-    .filter(item => !item.status || !isIgnoredStatus(item.status));
+    .filter(item => {
+      if (!item.status) return true;
+      if (viewIntent !== "production") {
+        return !["3. Load", "3.5 Published as Draft"].some(ig =>
+          item.status === ig || item.status!.startsWith(ig.replace("...", "").trim())
+        );
+      }
+      return !isIgnoredStatus(item.status);
+    });
 
   const byCreditType: Record<string, WorkLogItem[]> = {};
   for (const item of items) {

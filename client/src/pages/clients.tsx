@@ -180,12 +180,6 @@ const emptyForm: ClientFormData = {
   ctmOrganicSourceTerms: ["google / organic"],
 };
 
-interface GbpLocation {
-  name: string;
-  displayName: string;
-  address: string;
-  resourceName: string;
-}
 
 function SearchableSelect({
   value,
@@ -257,171 +251,23 @@ function SearchableSelect({
   );
 }
 
-function GbpLocationPicker({ value, onChange, clientName }: { value: string; onChange: (v: string) => void; clientName?: string }) {
-  const [locations, setLocations] = useState<GbpLocation[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [detecting, setDetecting] = useState(false);
-  const [fetched, setFetched] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [enableUrl, setEnableUrl] = useState<string | null>(null);
-  const [linkLabel, setLinkLabel] = useState<string | null>(null);
-  const [detectResults, setDetectResults] = useState<{ resourceName: string; displayName: string; address: string }[]>([]);
-  const { toast } = useToast();
-
-  const fetchLocations = async () => {
-    setLoading(true);
-    setError(null);
-    setEnableUrl(null);
-    setLinkLabel(null);
-    try {
-      const res = await fetch("/api/gbp/locations");
-      const data = await res.json() as any;
-      if (!res.ok) {
-        if (data.enableUrl) {
-          setEnableUrl(data.enableUrl);
-          setLinkLabel(data.linkLabel ?? null);
-          setError(data.message);
-        } else {
-          throw new Error(data.message || "Failed to fetch locations");
-        }
-        return;
-      }
-      setLocations(data.locations ?? []);
-      setFetched(true);
-      if ((data.locations ?? []).length === 0) {
-        toast({ title: "No GBP locations found", description: "Make sure GBP is connected in Setup → Analytics & Search.", variant: "destructive" });
-      }
-    } catch (err: any) {
-      setError(err.message);
-      toast({ title: "Could not fetch GBP locations", description: err.message, variant: "destructive" });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const detectLocation = async () => {
-    if (!clientName) return;
-    setDetecting(true);
-    setDetectResults([]);
-    try {
-      const res = await fetch(`/api/gbp/detect-location?q=${encodeURIComponent(clientName)}`);
-      const data = await res.json() as any;
-      if (!res.ok) throw new Error(data.message || "Detection failed");
-      const results = data.locations ?? [];
-      if (results.length === 0) {
-        toast({ title: "No matches found", description: `Could not find a GBP listing for "${clientName}". Try fetching or entering the resource name manually.`, variant: "destructive" });
-      } else if (results.length === 1) {
-        onChange(results[0].resourceName);
-        toast({ title: "GBP location detected", description: results[0].displayName });
-      } else {
-        setDetectResults(results);
-      }
-    } catch (err: any) {
-      toast({ title: "Auto-detect failed", description: err.message, variant: "destructive" });
-    } finally {
-      setDetecting(false);
-    }
-  };
-
+function GbpLocationPicker({ value, onChange }: { value: string; onChange: (v: string) => void; clientName?: string }) {
   return (
     <div className="space-y-2">
       <Label htmlFor="gbpLocation" className="flex items-center gap-1.5">
-        <MapPin className="w-3 h-3" /> Google Business Profile Location
+        <MapPin className="w-3 h-3" /> GBP Location Resource Name
       </Label>
-      <div className="flex gap-2">
-        {fetched && locations.length > 0 ? (
-          <div className="flex-1">
-            <SearchableSelect
-              value={value}
-              onChange={onChange}
-              options={locations.map(loc => ({ value: loc.resourceName, label: `${loc.displayName}${loc.address ? ` · ${loc.address}` : ""}` }))}
-              placeholder="— Select a location —"
-              testId="select-gbp-location"
-            />
-          </div>
-        ) : (
-          <Input
-            id="gbpLocation"
-            value={value}
-            onChange={e => onChange(e.target.value)}
-            placeholder="e.g., accounts/123456789/locations/987654321"
-            data-testid="input-gbp-location"
-            className="flex-1 font-mono text-xs"
-          />
-        )}
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={fetchLocations}
-          disabled={loading || detecting}
-          data-testid="button-fetch-gbp-locations"
-          className="shrink-0"
-        >
-          {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-          <span className="ml-1.5">{fetched ? "Refresh" : "Fetch"}</span>
-        </Button>
-        {clientName && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={detectLocation}
-            disabled={loading || detecting}
-            data-testid="button-detect-gbp-location"
-            className="shrink-0"
-          >
-            {detecting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MapPin className="w-3.5 h-3.5" />}
-            <span className="ml-1.5">Detect</span>
-          </Button>
-        )}
-      </div>
-
-      {detectResults.length > 1 && (
-        <div className="rounded-md border border-border bg-muted/30 divide-y divide-border overflow-hidden">
-          <p className="px-2.5 py-1.5 text-[11px] text-muted-foreground font-medium">Multiple matches — select the correct one:</p>
-          {detectResults.map(r => (
-            <button
-              key={r.resourceName}
-              type="button"
-              className="w-full text-left px-2.5 py-1.5 text-xs hover:bg-accent hover:text-accent-foreground transition-colors"
-              onClick={() => { onChange(r.resourceName); setDetectResults([]); toast({ title: "Location selected", description: r.displayName }); }}
-              data-testid={`button-select-detect-result-${r.resourceName}`}
-            >
-              <span className="font-medium">{r.displayName}</span>
-              {r.address && <span className="text-muted-foreground ml-1">· {r.address}</span>}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {error && (
-        <div className="space-y-1">
-          <p className="text-[11px] text-destructive">{error}</p>
-          {enableUrl && (
-            <a
-              href={enableUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-[11px] text-primary underline hover:opacity-80"
-              data-testid="link-enable-gbp-api"
-            >
-              → {linkLabel ?? "Click here in Google Cloud Console"}
-            </a>
-          )}
-        </div>
-      )}
-      {!fetched && !value && (
-        <p className="text-[11px] text-muted-foreground">
-          Use <strong>Fetch</strong> to load locations, <strong>Detect</strong> to search by business name, or paste the resource name directly.
-        </p>
-      )}
-      {fetched && value && (
-        <p className="text-[11px] text-muted-foreground font-mono truncate">{value}</p>
-      )}
-      {!fetched && value && (
-        <p className="text-[11px] text-muted-foreground font-mono truncate">{value}</p>
-      )}
+      <Input
+        id="gbpLocation"
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder="accounts/123456789/locations/987654321"
+        data-testid="input-gbp-location"
+        className="font-mono text-xs"
+      />
+      <p className="text-[11px] text-muted-foreground">
+        Paste the resource name from your GBP dashboard URL. Auto-populate will be available once Google approves the API quota increase.
+      </p>
     </div>
   );
 }

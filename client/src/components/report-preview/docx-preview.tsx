@@ -3,12 +3,13 @@ import { MetricCard } from "./report-chart";
 
 export interface DocxSection {
   id: string;
-  type: "header" | "pulse" | "progress" | "partnership" | "qbr-exec" | "qbr-category" | "bullets";
+  type: "header" | "pulse" | "progress" | "partnership" | "qbr-exec" | "qbr-category" | "bullets" | "technical";
   title?: string;
   metrics?: Array<{ label: string; current: string; previous?: string; delta?: string; isPositive?: boolean }>;
   bullets?: string[];
   workLog?: Array<{ area: string; whatWeDid: string; whatsNext: string }>;
   table?: { headers: string[]; rows: (string | number)[][] };
+  technicalTable?: { headers: string[]; rows: string[][] };
   wins?: Array<{ title: string; evidence: string; source: string }>;
   topOpps?: Array<{ priority: string; title: string; category: string; impact: string; kpi: string }>;
   opportunities?: Array<{
@@ -35,7 +36,9 @@ interface DocxPreviewProps {
   edits: Record<string, string>;
   onEdit: (key: string, value: string) => void;
   attendees?: string;
+  preparedBy?: string;
   footerText?: string;
+  bwTheme?: boolean;
 }
 
 const PRIO_COLORS: Record<string, string> = {
@@ -64,8 +67,12 @@ export function DocxPreview({
   edits,
   onEdit,
   attendees,
+  preparedBy,
   footerText = "Webserv  |  32 Discovery Suite 130, Irvine, CA 92618  |  webserv.io",
+  bwTheme = false,
 }: DocxPreviewProps) {
+  const accentColor = bwTheme ? "#C0392B" : "#1B3A6B";
+
   return (
     <div className="bg-gray-200 dark:bg-gray-700 min-h-full p-4 overflow-y-auto">
       <div
@@ -80,7 +87,7 @@ export function DocxPreview({
         }}
         data-testid="docx-preview-page"
       >
-        <div style={{ borderBottom: "3px solid #1B3A6B", paddingBottom: 12, marginBottom: 20 }}>
+        <div style={{ borderBottom: `3px solid ${accentColor}`, paddingBottom: 12, marginBottom: 20 }}>
           <EditableSection
             editKey="report_title"
             value={reportTitle}
@@ -88,7 +95,7 @@ export function DocxPreview({
             onEdit={onEdit}
             as="div"
             className="text-3xl font-bold"
-            style={{ color: "#1B3A6B" } as any}
+            style={{ color: accentColor } as any}
           />
           <EditableSection
             editKey="client_name"
@@ -99,6 +106,18 @@ export function DocxPreview({
             className="text-xl font-semibold mt-1"
             style={{ color: "#374151" } as any}
           />
+          {preparedBy !== undefined && (
+            <div className="text-sm mt-1 text-gray-600">
+              <span className="font-semibold">Prepared by: </span>
+              <EditableSection
+                editKey="preparedBy"
+                value={preparedBy}
+                edits={edits}
+                onEdit={onEdit}
+                as="span"
+              />
+            </div>
+          )}
           {attendees !== undefined && (
             <div className="text-sm mt-1 text-gray-600">
               <span className="font-semibold">Attendees: </span>
@@ -112,17 +131,31 @@ export function DocxPreview({
             </div>
           )}
           <div className="text-sm text-gray-500 mt-0.5">
-            <span className="font-semibold">Date: </span>{date}
+            <span className="font-semibold">Date: </span>
+            <EditableSection
+              editKey="report_date"
+              value={date}
+              edits={edits}
+              onEdit={onEdit}
+              as="span"
+            />
           </div>
         </div>
 
         {sections.map((section, si) => (
-          <DocxSectionBlock key={section.id} section={section} sectionIndex={si} edits={edits} onEdit={onEdit} />
+          <DocxSectionBlock
+            key={section.id}
+            section={section}
+            sectionIndex={si}
+            edits={edits}
+            onEdit={onEdit}
+            bwTheme={bwTheme}
+          />
         ))}
 
         <div
           className="text-xs text-center text-gray-400 mt-8"
-          style={{ borderTop: "2px solid #1B3A6B", paddingTop: 8 }}
+          style={{ borderTop: `2px solid ${accentColor}`, paddingTop: 8 }}
         >
           {footerText}
         </div>
@@ -136,11 +169,13 @@ function DocxSectionBlock({
   sectionIndex,
   edits,
   onEdit,
+  bwTheme,
 }: {
   section: DocxSection;
   sectionIndex: number;
   edits: Record<string, string>;
   onEdit: (key: string, value: string) => void;
+  bwTheme: boolean;
 }) {
   if (section.loading) {
     return (
@@ -153,6 +188,8 @@ function DocxSectionBlock({
     );
   }
 
+  const accentColor = bwTheme ? "#C0392B" : "#1B3A6B";
+  const tableHeaderBg = bwTheme ? "#111827" : "#1B3A6B";
   const num = sectionIndex + 1;
 
   return (
@@ -161,8 +198,8 @@ function DocxSectionBlock({
         <div
           className="text-base font-bold mb-2"
           style={{
-            color: "#1B3A6B",
-            borderBottom: "2px solid #1B3A6B",
+            color: accentColor,
+            borderBottom: `2px solid ${accentColor}`,
             paddingBottom: 4,
             marginBottom: 8,
           }}
@@ -183,7 +220,7 @@ function DocxSectionBlock({
 
       {section.bullets && section.bullets.map((b, bi) => (
         <div key={bi} className="flex gap-2 text-sm mb-1">
-          <span className="text-[#1B3A6B] font-bold mt-0.5">•</span>
+          <span className="font-bold mt-0.5" style={{ color: accentColor }}>•</span>
           <EditableSection
             editKey={`${section.id}_bullet_${bi}`}
             value={b}
@@ -200,7 +237,11 @@ function DocxSectionBlock({
           <thead>
             <tr>
               {["Area", "What We Did / Learned", "What's Next"].map(h => (
-                <th key={h} className="text-left px-2 py-1.5 text-white text-[10px]" style={{ background: "#1B3A6B" }}>
+                <th
+                  key={h}
+                  className="text-left px-2 py-1.5 text-white text-[10px]"
+                  style={{ background: tableHeaderBg }}
+                >
                   {h}
                 </th>
               ))}
@@ -236,12 +277,48 @@ function DocxSectionBlock({
         </table>
       )}
 
+      {section.type === "technical" && section.technicalTable && (
+        <table className="w-full text-xs border-collapse mt-1">
+          <thead>
+            <tr>
+              {section.technicalTable.headers.map(h => (
+                <th
+                  key={h}
+                  className="text-left px-2 py-1.5 text-white text-[10px]"
+                  style={{ background: tableHeaderBg }}
+                >
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {section.technicalTable.rows.map((row, ri) => (
+              <tr key={ri} style={{ background: ri % 2 === 1 ? "#F0F4FA" : "white" }}>
+                {row.map((cell, ci) => (
+                  <td key={ci} className="px-2 py-1.5 border border-[#D1D5DB] text-[10px] align-top">
+                    <EditableSection
+                      editKey={`${section.id}_tech_${ri}_${ci}`}
+                      value={cell}
+                      edits={edits}
+                      onEdit={onEdit}
+                      as="span"
+                      multiline
+                    />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
       {section.table && (
         <table className="w-full text-xs border-collapse mt-1">
           <thead>
             <tr>
               {section.table.headers.map(h => (
-                <th key={h} className="text-left px-2 py-1.5 text-white text-[10px]" style={{ background: "#1B3A6B" }}>
+                <th key={h} className="text-left px-2 py-1.5 text-white text-[10px]" style={{ background: tableHeaderBg }}>
                   {h}
                 </th>
               ))}

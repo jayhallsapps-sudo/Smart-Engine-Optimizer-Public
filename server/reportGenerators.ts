@@ -384,7 +384,7 @@ const DEFAULT_FOOTER_TEXT =
 
 export async function generateBiweeklyDocx(
   clientName: string,
-  attendees: string,
+  preparedBy: string,
   date: string,
   sections: SectionData[]
 ): Promise<Buffer> {
@@ -443,8 +443,8 @@ export async function generateBiweeklyDocx(
     }),
     new Paragraph({
       children: [
-        new TextRun({ text: "Attendees: ", bold: true, size: 20 }),
-        new TextRun({ text: attendees || "", size: 20 }),
+        new TextRun({ text: "Prepared by: ", bold: true, size: 20 }),
+        new TextRun({ text: preparedBy || "", size: 20 }),
       ],
       spacing: { after: 60 },
     }),
@@ -458,12 +458,13 @@ export async function generateBiweeklyDocx(
     })
   );
 
-  const SECTION_ORDER = ["bw_purpose", "bw_pulse", "bw_progress", "bw_partnership"];
+  const SECTION_ORDER = ["bw_purpose", "bw_pulse", "bw_progress", "bw_technical", "bw_partnership"];
   const SECTION_NUMS: Record<string, number> = {
     bw_purpose: 0,
     bw_pulse: 1,
     bw_progress: 2,
-    bw_partnership: 3,
+    bw_technical: 3,
+    bw_partnership: 4,
   };
 
   const PURPOSE_TEXT = bwCfg.purposeText;

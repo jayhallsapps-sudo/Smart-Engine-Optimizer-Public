@@ -51,6 +51,16 @@ export function dateRangeToGoogleDates(dateRange: string): {
 
   const endDate = fmt(now);
 
+  if (dateRange.startsWith("custom:")) {
+    const parts = dateRange.split(":");
+    const startDate = parts[1] ?? fmt(sub(now, 14));
+    const customEnd = parts[2] ?? endDate;
+    const days = Math.round((new Date(customEnd).getTime() - new Date(startDate).getTime()) / 86400000);
+    const prevEndDate = fmt(sub(new Date(startDate), 1));
+    const prevStartDate = fmt(sub(new Date(startDate), days));
+    return { startDate, endDate: customEnd, prevStartDate, prevEndDate };
+  }
+
   if (dateRange === "last_14_vs_prev_14") {
     const startDate = fmt(sub(now, 14));
     const prevEndDate = fmt(sub(now, 15));

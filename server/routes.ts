@@ -979,10 +979,20 @@ export async function registerRoutes(
   });
 
   app.post("/api/reports/biweekly/generate", async (req, res) => {
-    const { clientId, timezone } = req.body;
+    const { clientId, startDate, endDate, preparedBy } = req.body;
     if (!clientId) return res.status(400).json({ message: "clientId is required" });
+    const fmt = (d: Date) => d.toISOString().slice(0, 10);
+    const sub = (d: Date, n: number) => { const r = new Date(d); r.setDate(r.getDate() - n); return r; };
+    const now = new Date();
+    const resolvedEnd = endDate ?? fmt(sub(now, 1));
+    const resolvedStart = startDate ?? fmt(sub(now, 14));
     try {
-      const output = await generateBiweekly({ clientId: Number(clientId), timezone: timezone ?? "America/Los_Angeles" });
+      const output = await generateBiweekly({
+        clientId: Number(clientId),
+        startDate: resolvedStart,
+        endDate: resolvedEnd,
+        preparedBy: preparedBy ?? "JAY HALL",
+      });
       res.json(output);
     } catch (err: any) {
       console.error("Biweekly generation error:", err);
@@ -997,16 +1007,24 @@ export async function registerRoutes(
       const sections: SectionData[] = (json.sections ?? []).map((s: any) => {
         const items: any[] = [];
         if (s.metrics?.length) items.push({ summary: s.metrics.map((m: any) => ({ label: m.label, current: m.current, previous: m.previous ?? "—", deltaPercent: m.delta ?? "—", isPositive: m.isPositive ?? true })) });
-        if (s.bullets?.length) items.push({ manualText: (s.bullets as string[]).map((b, bi) => edits?.[`${s.id}_bullet_${bi}`] ?? b).join("\n") });
+        if (s.bullets?.length) items.push({ manualText: (s.bullets as string[]).map((b, bi) => edits?.[`${s.id}_bullet_${bi}`] ?? b).filter(Boolean).join("\n") });
         if (s.workLog?.length) items.push({ tableRows: (s.workLog as any[]).map((r: any, ri: number) => ({ area: r.area, whatWeDid: edits?.[`${s.id}_worklog_${ri}_did`] ?? r.whatWeDid, whatsNext: edits?.[`${s.id}_worklog_${ri}_next`] ?? r.whatsNext })) });
         if (s.table) items.push({ tables: [{ title: s.title, headers: s.table.headers, rows: s.table.rows }] });
+        if (s.technicalTable) {
+          const tbl = s.technicalTable as { headers: string[]; rows: string[][] };
+          const resolvedRows = (tbl.rows ?? []).map((row: string[], ri: number) =>
+            row.map((cell: string, ci: number) => edits?.[`${s.id}_tech_${ri}_${ci}`] ?? cell)
+          );
+          items.push({ tables: [{ title: s.title ?? "", headers: tbl.headers, rows: resolvedRows }] });
+        }
         return { sectionId: s.id, title: s.title ?? "", items };
       });
       const clientName = edits?.["client_name"] ?? json.client_name;
-      const attendees = edits?.["attendees"] ?? json.attendees ?? "";
-      const buffer = await generateBiweeklyDocx(clientName, attendees, json.date, sections);
+      const preparedBy = edits?.["preparedBy"] ?? json.preparedBy ?? edits?.["attendees"] ?? json.attendees ?? "";
+      const date = edits?.["report_date"] ?? json.date;
+      const buffer = await generateBiweeklyDocx(clientName, preparedBy, date, sections);
       const slug = clientName.toLowerCase().replace(/\s+/g, "_");
-      const filename = `${slug}_biweekly_${json.date.replace(/[\s,]/g, "_")}.docx`;
+      const filename = `${slug}_biweekly_${date.replace(/[\s,]/g, "_")}.docx`;
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
       res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
       res.send(buffer);
@@ -1028,7 +1046,7 @@ export async function registerRoutes(
         if (s.table) items.push({ tables: [{ title: s.title, headers: s.table.headers, rows: s.table.rows }] });
         return { sectionId: s.id, title: s.title ?? "", items };
       });
-      const buffer = await generateBiweeklyDocx(edits?.["client_name"] ?? json.client_name, edits?.["attendees"] ?? json.attendees ?? "", json.date, sections);
+      const buffer = await generateBiweeklyDocx(edits?.["client_name"] ?? json.client_name, edits?.["preparedBy"] ?? json.preparedBy ?? edits?.["attendees"] ?? json.attendees ?? "", edits?.["report_date"] ?? json.date, sections);
       const { ReplitConnectors } = await import("@replit/connectors-sdk");
       const connectors = new ReplitConnectors();
       const filename = `${json.client_name} Biweekly SEO ${json.date}.docx`;

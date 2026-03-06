@@ -14,6 +14,7 @@ import { testCredential } from "./connectionTest";
 import { insertSfReportSchema, insertCallTrackingReportSchema } from "@shared/schema";
 import { generateBiweeklyDocx, generatePptx, generateQbrPrepDocx } from "./reportGenerators";
 import { generateBiweeklyPdf, generateMonthlyPdf } from "./pdfGenerator";
+import { generateBiweeklyPreviewPdf } from "./previewPdfGenerator";
 import type { SectionData } from "./reportGenerators";
 import { getSampleBiweeklySections, getSampleMonthlySections, getSampleQbrSections, getSampleQbrPrepJson, SAMPLE_CLIENT_NAME, SAMPLE_ATTENDEES } from "./sampleData";
 import { generateQbrPrep } from "./qbrPrepGenerator";
@@ -1301,6 +1302,23 @@ export async function registerRoutes(
       res.json({ success: true, fileId: driveFile.id, fileName: driveFile.name, webViewLink: driveFile.webViewLink });
     } catch (err: any) {
       res.status(500).json({ message: "Upload failed: " + err.message });
+    }
+  });
+
+  app.post("/api/reports/biweekly/preview-pdf", async (req, res) => {
+    const { report, edits } = req.body as { report: any; edits?: Record<string, string> };
+    if (!report) return res.status(400).json({ message: "report is required" });
+    try {
+      const buffer = await generateBiweeklyPreviewPdf(report, edits ?? {});
+      const clientName = edits?.["client_name"] ?? report.client_name ?? "report";
+      const slug = clientName.toLowerCase().replace(/\s+/g, "_");
+      const dateSlug = (edits?.["report_date"] ?? report.date ?? "").replace(/[\s,]/g, "_");
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="${slug}_biweekly_${dateSlug}.pdf"`);
+      res.send(buffer);
+    } catch (err: any) {
+      console.error("Preview PDF error:", err);
+      res.status(500).json({ message: "Failed to generate PDF: " + err.message });
     }
   });
 

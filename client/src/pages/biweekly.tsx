@@ -163,13 +163,23 @@ export default function BiweeklyPage() {
 
   async function downloadPdf() {
     if (!report) return;
-    const res = await fetch("/api/print-cache", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ report, edits }),
-    });
-    const { id } = await res.json();
-    window.open(`/biweekly/print?token=${id}`, "_blank");
+    try {
+      const res = await fetch("/api/reports/biweekly/preview-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ report, edits }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${report.client_name ?? "report"} - Biweekly Report.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      toast({ title: "PDF download failed", description: err.message, variant: "destructive" });
+    }
   }
 
   async function uploadToDrive() {

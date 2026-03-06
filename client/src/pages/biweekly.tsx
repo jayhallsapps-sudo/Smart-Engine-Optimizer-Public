@@ -492,6 +492,7 @@ export default function BiweeklyPage() {
             clientName={edits["client_name"] ?? report.client_name}
             reportTitle={edits["report_title"] ?? report.report_title}
             date={edits["report_date"] ?? report.date}
+            reportingWindow={report.reportingWindow}
             preparedBy={edits["preparedBy"] ?? report.preparedBy}
             sections={report.sections ?? []}
             edits={edits}

@@ -137,6 +137,7 @@ interface DocxPreviewProps {
   clientName: string;
   reportTitle: string;
   date: string;
+  reportingWindow?: string;
   sections: DocxSection[];
   edits: Record<string, string>;
   onEdit: (key: string, value: string) => void;
@@ -175,6 +176,7 @@ export function DocxPreview({
   clientName,
   reportTitle,
   date,
+  reportingWindow,
   sections,
   edits,
   onEdit,
@@ -226,11 +228,16 @@ export function DocxPreview({
 
           <div style={{ padding: "24px 56px 0", flex: 1, display: "flex", flexDirection: "column" }}>
             <div style={{ flex: 1 }}>
-              <div style={{ marginBottom: "6px", fontSize: "20px", fontWeight: 700 }}>
+              <div style={{ marginBottom: "4px", fontSize: "20px", fontWeight: 700 }}>
                 <EditableSection editKey="report_title" value={reportTitle} edits={edits} onEdit={onEdit} as="span" />
                 {": "}
                 <EditableSection editKey="client_name" value={clientName} edits={edits} onEdit={onEdit} as="span" />
               </div>
+              {reportingWindow && (
+                <div style={{ fontSize: "12px", color: "#6B7280", marginBottom: "6px" }}>
+                  Reporting Period: {reportingWindow}
+                </div>
+              )}
               {preparedBy !== undefined && (
                 <div style={{ fontSize: "12px", marginBottom: "4px" }}>
                   <strong>Prepared by: </strong>
@@ -244,13 +251,17 @@ export function DocxPreview({
                 </div>
               )}
               <div style={{ fontSize: "12px", display: "inline-block", backgroundColor: "#E8EAED", padding: "2px 8px", borderRadius: "3px", marginBottom: "20px" }}>
-                <strong>Date: </strong>
+                <strong>Reporting Date: </strong>
                 <EditableSection editKey="report_date" value={date} edits={edits} onEdit={onEdit} as="span" />
               </div>
 
               {purposeSection && (
                 <div style={{ marginBottom: "20px" }}>
-                  <div style={{ fontSize: "13px", fontWeight: 700, color: accentColor, marginBottom: "4px" }}>Purpose:</div>
+                  <div style={{ borderBottom: `2px solid ${accentColor}`, paddingBottom: "4px", marginBottom: "6px" }}>
+                    <span style={{ fontSize: "14px", fontWeight: 700, color: accentColor, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                      Purpose
+                    </span>
+                  </div>
                   <div style={{ fontSize: "12px", color: "#374151" }}>
                     <EditableSection
                       editKey="bw_purpose_bullet_0"
@@ -504,7 +515,7 @@ function DocxSectionBlock({
       )}
 
       {section.bullets && section.bullets.map((b, bi) => (
-        <div key={bi} className="flex gap-2 text-sm mb-1">
+        <div key={bi} className="flex gap-2 text-[12px] mb-1">
           <span className="font-bold mt-0.5" style={{ color: accentColor }}>•</span>
           <EditableSection
             editKey={`${section.id}_bullet_${bi}`}

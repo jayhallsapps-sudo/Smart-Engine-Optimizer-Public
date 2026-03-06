@@ -12,6 +12,7 @@ export interface BiweeklyReportJson {
   report_title: string;
   client_name: string;
   date: string;
+  reportingWindow: string;
   preparedBy: string;
   generated_at: string;
   sections: DocxSection[];
@@ -145,8 +146,8 @@ function makeRow(
   didPlaceholder: string,
   nextPlaceholder: string
 ): WorkLogRow {
-  const actualDid = didItems.length > 0 ? didItems : [{ text: didPlaceholder }];
-  const actualNext = nextItems.length > 0 ? nextItems : [nextPlaceholder];
+  const actualDid = didItems.length > 0 ? didItems : didPlaceholder ? [{ text: didPlaceholder }] : [];
+  const actualNext = nextItems.length > 0 ? nextItems : nextPlaceholder ? [nextPlaceholder] : [];
   return {
     area,
     whatWeDid: actualDid.map(i => i.text).join("\n"),
@@ -194,7 +195,12 @@ export async function generateBiweekly(input: {
         return null;
       })(),
       (async () => fetchAirtableWorkLog(clientId, startDate, endDate, "published"))(),
-      (async () => fetchAirtableWorkLog(clientId, startDate, endDate, "production"))(),
+      (async () => {
+        const prodStart = endDate;
+        const prodEndDate = new Date(parseDateStr(endDate).getTime() + 14 * 24 * 60 * 60 * 1000);
+        const prodEnd = `${prodEndDate.getFullYear()}-${String(prodEndDate.getMonth() + 1).padStart(2, "0")}-${String(prodEndDate.getDate()).padStart(2, "0")}`;
+        return fetchAirtableWorkLog(clientId, prodStart, prodEnd, "production");
+      })(),
       (async () => storage.getSfReports(clientId))(),
       (async () => fetchNsmGoals(client.name))(),
     ]);
@@ -245,14 +251,6 @@ export async function generateBiweekly(input: {
     }
   }
 
-  if (pulseMetrics.length === 0) {
-    pulseMetrics.push(
-      { label: "Organic Sessions", current: "—" },
-      { label: "Organic Clicks", current: "—" },
-      { label: "Organic Calls", current: "—" }
-    );
-  }
-
   const nsmGoals = nsmResult.status === "fulfilled" ? nsmResult.value : null;
   if (nsmGoals) {
     pulseMetrics.push(
@@ -271,13 +269,16 @@ export async function generateBiweekly(input: {
   sections.push({
     id: "bw_pulse",
     type: "pulse",
-    title: `Performance Pulse — ${windowLabel}`,
+    title: "Performance Pulse",
     metrics: pulseMetrics,
   });
 
   const publishedItems = allAirtableItems(publishedResult);
   const productionItems = allAirtableItems(productionResult);
-  const noAirtable = publishedItems.length === 0 && productionItems.length === 0;
+  const airtableNotConfigured =
+    (publishedResult.status === "fulfilled" && (publishedResult.value as any)?.setupRequired === true) ||
+    publishedResult.status === "rejected";
+  const noAirtable = airtableNotConfigured;
 
   const publishedContent = publishedItems.filter(i => !isOptimizationItem(i));
   const publishedOptimization = publishedItems.filter(i => isOptimizationItem(i));
@@ -295,6 +296,26 @@ export async function generateBiweekly(input: {
         "Review internal link structure for crawl efficiency",
       ];
 
+  const snapshotKey = `sf_snapshot_${clientId}`;
+  const prevSnapshotRaw = await storage.getSetting(snapshotKey);
+  const prevSnapshot: SfIssueCounts & { date?: string } | null = prevSnapshotRaw
+    ? JSON.parse(prevSnapshotRaw)
+    : null;
+
+  const sfDidItems: BulletItem[] = [];
+  if (sfCounts && prevSnapshot) {
+    const resolved = {
+      canonical: Math.max(0, prevSnapshot.canonical - sfCounts.canonical),
+      images: Math.max(0, prevSnapshot.images - sfCounts.images),
+      errors404: Math.max(0, prevSnapshot.errors404 - sfCounts.errors404),
+      missingMeta: Math.max(0, prevSnapshot.missingMeta - sfCounts.missingMeta),
+    };
+    if (resolved.canonical > 0) sfDidItems.push({ text: `Resolved ${resolved.canonical} canonical mismatches` });
+    if (resolved.errors404 > 0) sfDidItems.push({ text: `Fixed ${resolved.errors404} broken links (404s)` });
+    if (resolved.images > 0) sfDidItems.push({ text: `Optimized ${resolved.images} oversized images` });
+    if (resolved.missingMeta > 0) sfDidItems.push({ text: `Added meta descriptions to ${resolved.missingMeta} priority pages` });
+  }
+
   const newContentDid: BulletItem[] = publishedContent.map(i => ({ text: i.task, url: i.url ?? undefined }));
   const newContentNext: string[] = productionContent.map(i => i.task);
   const optDid: BulletItem[] = publishedOptimization.map(i => ({ text: i.task, url: i.url ?? undefined }));
@@ -306,18 +327,18 @@ export async function generateBiweekly(input: {
       noAirtable ? [] : newContentDid,
       noAirtable ? [] : newContentNext,
       "Connect Airtable in Setup to pull live published content.",
-      "Review Production board for upcoming content."
+      noAirtable ? "Connect Airtable in Setup to pull upcoming content." : ""
     ),
     makeRow(
       "Optimization",
       noAirtable ? [] : optDid,
       noAirtable ? [] : optNext,
       "Connect Airtable in Setup to pull live optimization work.",
-      "Review Production board for upcoming optimization tasks."
+      noAirtable ? "Connect Airtable in Setup to pull upcoming optimization tasks." : ""
     ),
     makeRow(
       "Technical SEO",
-      [],
+      sfDidItems,
       sfPriorities,
       "Enter technical SEO tasks completed this period.",
       sfPriorities[0]
@@ -354,10 +375,15 @@ export async function generateBiweekly(input: {
     ],
   });
 
+  if (sfCounts) {
+    await storage.setSetting(snapshotKey, JSON.stringify({ ...sfCounts, date: now.toISOString() }));
+  }
+
   return {
     report_title: "SEO Bi-weekly Meeting",
     client_name: client.name,
     date: fmtDate(now),
+    reportingWindow: windowLabel,
     preparedBy: preparedBy || "JAY HALL",
     generated_at: now.toISOString(),
     sections,

@@ -103,6 +103,14 @@ export async function fetchAirtableWorkLog(
   const params = new URLSearchParams({ maxRecords: "200" });
   if (resolvedViewName) params.set("view", resolvedViewName);
 
+  if (startDate && endDate) {
+    const formula =
+      viewIntent === "production"
+        ? `AND(IS_AFTER({Due}, "${startDate}"), IS_BEFORE({Due}, "${endDate}"))`
+        : `AND(IS_AFTER({Published Date}, "${startDate}"), IS_BEFORE({Published Date}, "${endDate}"))`;
+    params.set("filterByFormula", formula);
+  }
+
   const url = `https://api.airtable.com/v0/${airtableBaseId}/${encodeURIComponent(airtableTableName)}?${params}`;
 
   let resp: Response;

@@ -206,18 +206,20 @@ export default function BiweeklyPage() {
           });
           successCount++;
         } catch (err: any) {
-          errors.push(`${file.name}: ${err.message}`);
+          const msg = err?.message || "Unknown error";
+          const hint = file.size > 40 * 1024 * 1024 ? " (file may be too large)" : "";
+          errors.push(`${file.name}: ${msg}${hint}`);
         }
       }
       await refetchSf();
       if (successCount > 0) {
         toast({
           title: successCount === 1 ? "Crawl uploaded" : `${successCount} crawls uploaded`,
-          description: errors.length > 0 ? `${errors.length} file(s) failed.` : undefined,
+          description: errors.length > 0 ? `${errors.length} file(s) failed: ${errors.join("; ")}` : undefined,
         });
       }
       if (errors.length > 0 && successCount === 0) {
-        toast({ title: "Upload failed", description: errors[0], variant: "destructive" });
+        toast({ title: "Upload failed", description: errors.join(" | "), variant: "destructive" });
       }
     } finally {
       setSfUploading(false);

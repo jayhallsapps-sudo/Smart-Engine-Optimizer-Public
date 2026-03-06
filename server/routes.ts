@@ -103,6 +103,68 @@ export async function registerRoutes(
 ): Promise<Server> {
   await seedDatabase();
 
+  // Helper: fetch all locations using v1 Account Management API
+  async function fetchGbpLocationsV1(accessToken: string) {
+    const accountsResp = await fetch(
+      "https://mybusinessaccountmanagement.googleapis.com/v1/accounts",
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    const accountsData = await accountsResp.json() as any;
+    if (!accountsResp.ok) return { ok: false, status: accountsResp.status, data: accountsData };
+
+    const accounts: any[] = accountsData.accounts ?? [];
+    const allLocations: { displayName: string; address: string; resourceName: string }[] = [];
+    await Promise.all(accounts.map(async (account: any) => {
+      try {
+        const locResp = await fetch(
+          `https://mybusinessbusinessinformation.googleapis.com/v1/${account.name}/locations?readMask=name,title,storefrontAddress&pageSize=100`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        const locData = await locResp.json() as any;
+        for (const loc of (locData.locations ?? [])) {
+          const addr = loc.storefrontAddress;
+          allLocations.push({
+            displayName: loc.title ?? loc.name,
+            address: addr ? [addr.locality, addr.administrativeArea].filter(Boolean).join(", ") : "",
+            resourceName: `${account.name}/${loc.name}`,
+          });
+        }
+      } catch { /* skip */ }
+    }));
+    return { ok: true, locations: allLocations };
+  }
+
+  // Helper: fetch locations using legacy v4 API (separate quota from v1)
+  async function fetchGbpLocationsV4(accessToken: string) {
+    const accountsResp = await fetch(
+      "https://mybusiness.googleapis.com/v4/accounts",
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    if (!accountsResp.ok) return { ok: false };
+    const accountsData = await accountsResp.json() as any;
+    const accounts: any[] = accountsData.accounts ?? [];
+    const allLocations: { displayName: string; address: string; resourceName: string }[] = [];
+    await Promise.all(accounts.map(async (account: any) => {
+      try {
+        const locResp = await fetch(
+          `https://mybusiness.googleapis.com/v4/${account.name}/locations?readMask=name,locationName,address&pageSize=100`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        if (!locResp.ok) return;
+        const locData = await locResp.json() as any;
+        for (const loc of (locData.locations ?? [])) {
+          const addr = loc.address;
+          allLocations.push({
+            displayName: loc.locationName ?? loc.name,
+            address: addr ? [addr.locality, addr.administrativeArea].filter(Boolean).join(", ") : "",
+            resourceName: loc.name,
+          });
+        }
+      } catch { /* skip */ }
+    }));
+    return { ok: true, locations: allLocations };
+  }
+
   // Fetch GBP accounts + locations using stored OAuth token
   app.get("/api/gbp/locations", async (_req, res) => {
     const cached = getCached("gbp_locations");
@@ -113,85 +175,100 @@ export async function registerRoutes(
         return res.status(401).json({ message: "Google Business Profile not connected. Connect it in Setup → Analytics & Search." });
       }
 
-      const accountsResp = await fetch(
-        "https://mybusinessaccountmanagement.googleapis.com/v1/accounts",
-        { headers: { Authorization: `Bearer ${accessToken}` } }
-      );
-      const accountsData = await accountsResp.json() as any;
-      if (!accountsResp.ok) {
-        const rawMsg: string = accountsData.error?.message ?? "";
-        const rawStatus = accountsResp.status;
-        const rawReason = accountsData.error?.status ?? accountsData.error?.code ?? "";
-        console.error(`[GBP] accounts API error ${rawStatus}: msg="${rawMsg}" status="${rawReason}" full=${JSON.stringify(accountsData.error)}`);
+      const v1Result = await fetchGbpLocationsV1(accessToken);
+      if (v1Result.ok) {
+        const payload = { locations: v1Result.locations };
+        setCache("gbp_locations", payload, 10 * 60 * 1000);
+        return res.json(payload);
+      }
+
+      // v1 failed — inspect the error
+      const rawMsg: string = v1Result.data?.error?.message ?? "";
+      const rawStatus = v1Result.status as number;
+      const rawReason = v1Result.data?.error?.status ?? v1Result.data?.error?.code ?? "";
+      console.error(`[GBP] v1 accounts API error ${rawStatus}: msg="${rawMsg}" status="${rawReason}"`);
+
+      const details = v1Result.data?.error?.details ?? [];
+      const quotaDetail = details.find((d: any) => d["@type"]?.includes("ErrorInfo") && d.reason === "RATE_LIMIT_EXCEEDED");
+      const isQuotaZero = rawStatus === 429 && quotaDetail?.metadata?.quota_limit_value === "0";
+
+      if (isQuotaZero) {
+        // Try legacy v4 API as fallback — separate quota
+        console.log("[GBP] v1 quota=0, trying legacy v4 API...");
+        const v4Result = await fetchGbpLocationsV4(accessToken);
+        if (v4Result.ok && v4Result.locations) {
+          console.log(`[GBP] v4 fallback succeeded, found ${v4Result.locations.length} locations`);
+          const payload = { locations: v4Result.locations, source: "v4_fallback" };
+          setCache("gbp_locations", payload, 10 * 60 * 1000);
+          return res.json(payload);
+        }
+        // Both failed — return actionable error
         const projectMatch = rawMsg.match(/project[_ ](?:number:)?(\d+)/);
         const projectId = projectMatch?.[1] ?? "";
-        // Check if quota is literally 0 — needs quota increase request, not just enabling
-        const details = accountsData.error?.details ?? [];
-        const quotaDetail = details.find((d: any) => d["@type"]?.includes("ErrorInfo") && d.reason === "RATE_LIMIT_EXCEEDED");
-        const quotaLimitValue = quotaDetail?.metadata?.quota_limit_value;
-        if (rawStatus === 429 && quotaLimitValue === "0") {
-          const quotaUrl = projectId
-            ? `https://console.cloud.google.com/iam-admin/quotas?service=mybusinessaccountmanagement.googleapis.com&project=${projectId}`
-            : "https://console.cloud.google.com/iam-admin/quotas?service=mybusinessaccountmanagement.googleapis.com";
-          return res.status(429).json({
-            message: "The My Business Account Management API has a quota of 0 on your Google Cloud project. You need to request a quota increase before it can be used.",
-            enableUrl: quotaUrl,
-            linkLabel: "Click here to request a quota increase in Google Cloud Console",
-          });
-        }
-        // Detect API not enabled error
-        if (rawMsg.includes("has not been used") || rawMsg.includes("is disabled") || rawReason === "API_NOT_ACTIVATED") {
-          const enableUrl = projectId
-            ? `https://console.developers.google.com/apis/api/mybusinessaccountmanagement.googleapis.com/overview?project=${projectId}`
-            : "https://console.developers.google.com/apis/library/mybusinessaccountmanagement.googleapis.com";
-          return res.status(403).json({
-            message: "The Google My Business Account Management API is not enabled for your Google Cloud project. Enable it here, wait ~1 minute, then try again.",
-            enableUrl,
-          });
-        }
-        return res.status(accountsResp.status).json({ message: rawMsg || "Failed to fetch GBP accounts" });
+        const quotaUrl = projectId
+          ? `https://console.cloud.google.com/iam-admin/quotas?service=mybusinessaccountmanagement.googleapis.com&project=${projectId}`
+          : "https://console.cloud.google.com/iam-admin/quotas?service=mybusinessaccountmanagement.googleapis.com";
+        return res.status(429).json({
+          message: "The My Business Account Management API quota is 0. A quota increase has been requested — once approved, this will auto-populate. In the meantime, paste your location resource name (accounts/XXX/locations/YYY) directly in the field below.",
+          enableUrl: quotaUrl,
+          linkLabel: "Check quota increase status in Google Cloud Console",
+        });
       }
 
-      const accounts: any[] = accountsData.accounts ?? [];
-      if (!accounts.length) {
-        return res.json({ locations: [] });
+      if (rawMsg.includes("has not been used") || rawMsg.includes("is disabled") || rawReason === "API_NOT_ACTIVATED") {
+        const projectMatch = rawMsg.match(/project[_ ](?:number:)?(\d+)/);
+        const projectId = projectMatch?.[1] ?? "";
+        const enableUrl = projectId
+          ? `https://console.developers.google.com/apis/api/mybusinessaccountmanagement.googleapis.com/overview?project=${projectId}`
+          : "https://console.developers.google.com/apis/library/mybusinessaccountmanagement.googleapis.com";
+        return res.status(403).json({
+          message: "The Google My Business Account Management API is not enabled. Enable it, wait ~1 minute, then try again.",
+          enableUrl,
+        });
       }
 
-      const allLocations: { name: string; displayName: string; address: string; resourceName: string }[] = [];
-
-      await Promise.all(
-        accounts.map(async (account: any) => {
-          try {
-            const locResp = await fetch(
-              `https://mybusinessbusinessinformation.googleapis.com/v1/${account.name}/locations?readMask=name,title,storefrontAddress&pageSize=100`,
-              { headers: { Authorization: `Bearer ${accessToken}` } }
-            );
-            const locData = await locResp.json() as any;
-            const locs: any[] = locData.locations ?? [];
-            for (const loc of locs) {
-              const addr = loc.storefrontAddress;
-              const addressLine = addr
-                ? [addr.locality, addr.administrativeArea].filter(Boolean).join(", ")
-                : "";
-              allLocations.push({
-                name: loc.title ?? loc.name,
-                displayName: loc.title ?? loc.name,
-                address: addressLine,
-                resourceName: `${account.name}/${loc.name}`,
-              });
-            }
-          } catch {
-            // skip accounts with no location access
-          }
-        })
-      );
-
-      const payload = { locations: allLocations };
-      setCache("gbp_locations", payload, 10 * 60 * 1000); // cache 10 minutes
-      res.json(payload);
+      return res.status(rawStatus || 500).json({ message: rawMsg || "Failed to fetch GBP accounts" });
     } catch (err: any) {
       console.error("[GBP] /api/gbp/locations error:", err.message);
       res.status(500).json({ message: "Failed to fetch GBP locations: " + err.message });
+    }
+  });
+
+  // Search for a GBP location by business name (uses Business Information API — separate quota)
+  app.get("/api/gbp/detect-location", async (req, res) => {
+    const q = ((req.query.q as string) ?? "").trim();
+    if (!q) return res.status(400).json({ message: "Query required" });
+    try {
+      const accessToken = await getGoogleAccessToken("google_business_profile");
+      if (!accessToken) return res.status(401).json({ message: "Google Business Profile not connected." });
+
+      const searchResp = await fetch(
+        "https://mybusinessbusinessinformation.googleapis.com/v1/googleLocations:search",
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ query: q, pageSize: 5 }),
+        }
+      );
+      const searchData = await searchResp.json() as any;
+      if (!searchResp.ok) {
+        return res.status(searchResp.status).json({ message: searchData.error?.message || "Search failed" });
+      }
+
+      const results = (searchData.googleLocations ?? []).map((loc: any) => ({
+        resourceName: loc.name,
+        displayName: loc.location?.title ?? loc.name,
+        address: [
+          loc.location?.address?.addressLines?.[0],
+          loc.location?.address?.locality,
+          loc.location?.address?.administrativeArea,
+        ].filter(Boolean).join(", "),
+        requestAdminRightsUrl: loc.requestAdminRightsUrl ?? null,
+      }));
+
+      res.json({ locations: results });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
     }
   });
 

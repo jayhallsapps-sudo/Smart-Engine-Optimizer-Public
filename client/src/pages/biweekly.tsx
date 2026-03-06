@@ -161,10 +161,15 @@ export default function BiweeklyPage() {
     },
   });
 
-  function downloadPdf() {
+  async function downloadPdf() {
     if (!report) return;
-    localStorage.setItem("bw_print_data", JSON.stringify({ report, edits }));
-    window.open("/biweekly/print", "_blank");
+    const res = await fetch("/api/print-cache", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ report, edits }),
+    });
+    const { id } = await res.json();
+    window.open(`/biweekly/print?token=${id}`, "_blank");
   }
 
   async function uploadToDrive() {

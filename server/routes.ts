@@ -97,11 +97,29 @@ function setCache(key: string, data: any, ttlMs: number) {
   apiCache[key] = { data, expiresAt: Date.now() + ttlMs };
 }
 
+const printCache = new Map<string, { data: any; ts: number }>();
+setInterval(() => {
+  const cutoff = Date.now() - 15 * 60 * 1000;
+  for (const [k, v] of printCache) if (v.ts < cutoff) printCache.delete(k);
+}, 60_000);
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
   await seedDatabase();
+
+  app.post("/api/print-cache", (req, res) => {
+    const id = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    printCache.set(id, { data: req.body, ts: Date.now() });
+    res.json({ id });
+  });
+
+  app.get("/api/print-cache/:id", (req, res) => {
+    const entry = printCache.get(req.params.id);
+    if (!entry) return res.status(404).json({ message: "Not found or expired" });
+    res.json(entry.data);
+  });
 
   // Helper: fetch all locations using v1 Account Management API
   async function fetchGbpLocationsV1(accessToken: string) {

@@ -7,12 +7,18 @@ const SLIDE_H = 405;
 
 export default function MonthlyPrint() {
   const [data, setData] = useState<{ report: any; edits: Record<string, string> } | null>(null);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const raw = localStorage.getItem("monthly_print_data");
-    if (!raw) { setError(true); return; }
-    try { setData(JSON.parse(raw)); } catch { setError(true); }
+    const token = new URLSearchParams(window.location.search).get("token");
+    if (!token) { setError("No token in URL."); return; }
+    fetch(`/api/print-cache/${token}`)
+      .then((r) => {
+        if (!r.ok) throw new Error(`Server returned ${r.status}`);
+        return r.json();
+      })
+      .then((d) => setData(d))
+      .catch((e) => setError(e.message));
   }, []);
 
   useEffect(() => {
@@ -24,11 +30,11 @@ export default function MonthlyPrint() {
   if (error) {
     return (
       <div style={{ padding: 32, fontFamily: "sans-serif" }}>
-        No report data found. Close this window and use "Download PDF" from the report page.
+        Could not load report data: {error}. Close this window and try "Download PDF" again.
       </div>
     );
   }
-  if (!data) return null;
+  if (!data) return <div style={{ padding: 32, fontFamily: "sans-serif" }}>Loading…</div>;
 
   const { report, edits } = data;
   const slides: Slide[] = report.slides ?? [];
@@ -53,7 +59,7 @@ export default function MonthlyPrint() {
         <span style={{ opacity: 0.8 }}>— The print dialog will open automatically. Choose <strong>"Save as PDF"</strong> as the destination. Set page size to <strong>Custom (720×405)</strong> for best results.</span>
       </div>
       <div style={{ background: "white" }}>
-        {slides.map((slide, i) => (
+        {slides.map((slide) => (
           <div
             key={slide.id}
             className="slide-wrapper"

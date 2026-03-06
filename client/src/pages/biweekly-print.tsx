@@ -3,12 +3,18 @@ import { DocxPreview } from "@/components/report-preview/docx-preview";
 
 export default function BiweeklyPrint() {
   const [data, setData] = useState<{ report: any; edits: Record<string, string> } | null>(null);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const raw = localStorage.getItem("bw_print_data");
-    if (!raw) { setError(true); return; }
-    try { setData(JSON.parse(raw)); } catch { setError(true); }
+    const token = new URLSearchParams(window.location.search).get("token");
+    if (!token) { setError("No token in URL."); return; }
+    fetch(`/api/print-cache/${token}`)
+      .then((r) => {
+        if (!r.ok) throw new Error(`Server returned ${r.status}`);
+        return r.json();
+      })
+      .then((d) => setData(d))
+      .catch((e) => setError(e.message));
   }, []);
 
   useEffect(() => {
@@ -20,11 +26,11 @@ export default function BiweeklyPrint() {
   if (error) {
     return (
       <div style={{ padding: 32, fontFamily: "sans-serif" }}>
-        No report data found. Close this window and use "Download PDF" from the report page.
+        Could not load report data: {error}. Close this window and try "Download PDF" again.
       </div>
     );
   }
-  if (!data) return null;
+  if (!data) return <div style={{ padding: 32, fontFamily: "sans-serif" }}>Loading…</div>;
 
   const { report, edits } = data;
 
@@ -43,7 +49,6 @@ export default function BiweeklyPrint() {
             min-height: unset !important;
           }
         }
-        /* Strip the gray outer wrapper for the screen view too */
         .bw-print-root > div:first-child {
           background: white !important;
           padding: 0 !important;

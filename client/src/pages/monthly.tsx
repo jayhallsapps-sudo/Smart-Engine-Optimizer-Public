@@ -76,10 +76,15 @@ export default function MonthlyPage() {
     },
   });
 
-  function downloadPdf() {
+  async function downloadPdf() {
     if (!report) return;
-    localStorage.setItem("monthly_print_data", JSON.stringify({ report, edits }));
-    window.open("/monthly/print", "_blank");
+    const res = await fetch("/api/print-cache", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ report, edits }),
+    });
+    const { id } = await res.json();
+    window.open(`/monthly/print?token=${id}`, "_blank");
   }
 
   async function uploadToDrive() {

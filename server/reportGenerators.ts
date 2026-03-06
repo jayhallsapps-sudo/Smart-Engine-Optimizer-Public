@@ -197,32 +197,46 @@ const WL_COL = [1440, 4320, 2880] as const;
 
 function buildBwWorkLogTable(rows: WorkLogRow[]): Table {
   function makeItemParagraphs(
-    items: Array<{ text: string; url?: string }>,
+    items: Array<{ text: string; url?: string }> | undefined,
     fallbackText: string
   ): Paragraph[] {
-    if (!items || items.length === 0) {
-      return [new Paragraph({ children: [new TextRun({ text: fallbackText || "—", size: 18 })] })];
+    if (items && items.length > 0) {
+      return items.map(item =>
+        new Paragraph({
+          bullet: { level: 0 },
+          spacing: { after: 40 },
+          children: item.url
+            ? [new ExternalHyperlink({ link: item.url, children: [new TextRun({ text: item.text, size: 18, style: "Hyperlink" })] })]
+            : [new TextRun({ text: item.text, size: 18 })],
+        })
+      );
     }
-    return items.map(item =>
+    const lines = (fallbackText || "—").split("\n").map(l => l.trim()).filter(Boolean);
+    return lines.map(line =>
       new Paragraph({
         bullet: { level: 0 },
         spacing: { after: 40 },
-        children: item.url
-          ? [new ExternalHyperlink({ link: item.url, children: [new TextRun({ text: item.text, size: 18, style: "Hyperlink" })] })]
-          : [new TextRun({ text: item.text, size: 18 })],
+        children: [new TextRun({ text: line, size: 18 })],
       })
     );
   }
 
-  function makeNextParagraphs(nextItems: string[], fallbackText: string): Paragraph[] {
-    if (!nextItems || nextItems.length === 0) {
-      return [new Paragraph({ children: [new TextRun({ text: fallbackText || "—", size: 18 })] })];
+  function makeNextParagraphs(nextItems: string[] | undefined, fallbackText: string): Paragraph[] {
+    if (nextItems && nextItems.length > 0) {
+      return nextItems.map(item =>
+        new Paragraph({
+          bullet: { level: 0 },
+          spacing: { after: 40 },
+          children: [new TextRun({ text: item, size: 18 })],
+        })
+      );
     }
-    return nextItems.map(item =>
+    const lines = (fallbackText || "—").split("\n").map(l => l.trim()).filter(Boolean);
+    return lines.map(line =>
       new Paragraph({
         bullet: { level: 0 },
         spacing: { after: 40 },
-        children: [new TextRun({ text: item, size: 18 })],
+        children: [new TextRun({ text: line, size: 18 })],
       })
     );
   }

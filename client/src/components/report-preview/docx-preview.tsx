@@ -1,5 +1,104 @@
+import { useState, useRef, useEffect } from "react";
+import { Pencil, Check, X } from "lucide-react";
 import { EditableSection } from "./editable-section";
 import { MetricCard } from "./report-chart";
+
+interface BulletItem { text: string; url?: string }
+
+function WorkLogBulletCell({
+  editKey,
+  rawValue,
+  items,
+  edits,
+  onEdit,
+}: {
+  editKey: string;
+  rawValue: string;
+  items?: BulletItem[];
+  edits: Record<string, string>;
+  onEdit: (k: string, v: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const ref = useRef<HTMLTextAreaElement>(null);
+
+  const current = edits[editKey] ?? rawValue;
+  const wasEdited = editKey in edits;
+
+  const displayItems: BulletItem[] =
+    !wasEdited && items && items.length > 0
+      ? items
+      : current.split("\n").filter(Boolean).map(t => ({ text: t.trim() }));
+
+  useEffect(() => {
+    if (editing && ref.current) ref.current.focus();
+  }, [editing]);
+
+  function startEdit() {
+    setDraft(current);
+    setEditing(true);
+  }
+
+  function commit() {
+    onEdit(editKey, draft);
+    setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <span className="relative inline-block w-full">
+        <textarea
+          ref={ref}
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          className="w-full border-2 border-border rounded px-2 py-1 text-[10px] font-inherit bg-background resize-y min-h-[60px] outline-none focus:border-primary"
+        />
+        <span className="flex gap-1 mt-1">
+          <button onClick={commit} className="flex items-center gap-1 text-[10px] px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700">
+            <Check className="w-2.5 h-2.5" /> Save
+          </button>
+          <button onClick={() => setEditing(false)} className="flex items-center gap-1 text-[10px] px-2 py-1 bg-gray-400 text-white rounded hover:bg-gray-500">
+            <X className="w-2.5 h-2.5" /> Cancel
+          </button>
+        </span>
+      </span>
+    );
+  }
+
+  return (
+    <div
+      className="group relative cursor-pointer hover:outline hover:outline-1 hover:outline-border rounded transition-all min-h-[20px]"
+      onClick={startEdit}
+      title="Click to edit"
+    >
+      <ul className="space-y-0.5 list-none p-0 m-0">
+        {displayItems.length === 0 ? (
+          <li className="text-muted-foreground italic">—</li>
+        ) : (
+          displayItems.map((item, ii) => (
+            <li key={ii} className="flex items-start gap-1">
+              <span className="text-gray-400 mt-px shrink-0">•</span>
+              {item.url && !wasEdited ? (
+                <a
+                  href={item.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 underline break-all"
+                  onClick={e => e.stopPropagation()}
+                >
+                  {item.text}
+                </a>
+              ) : (
+                <span>{item.text}</span>
+              )}
+            </li>
+          ))
+        )}
+      </ul>
+      <Pencil className="w-2.5 h-2.5 text-muted-foreground opacity-0 group-hover:opacity-100 absolute top-0.5 right-0.5 pointer-events-none" />
+    </div>
+  );
+}
 
 export interface DocxSection {
   id: string;
@@ -258,50 +357,22 @@ function DocxSectionBlock({
               <tr key={ri} style={{ background: ri % 2 === 1 ? "#F0F4FA" : "white" }}>
                 <td className="px-2 py-1.5 border border-[#D1D5DB] text-[10px] align-top font-medium">{row.area || "—"}</td>
                 <td className="px-2 py-1.5 border border-[#D1D5DB] text-[10px] align-top">
-                  {row.items && row.items.length > 0 ? (
-                    <ul className="space-y-0.5 list-none p-0 m-0">
-                      {row.items.map((item, ii) => (
-                        <li key={ii} className="flex items-start gap-1">
-                          <span className="text-gray-400 mt-px">•</span>
-                          {item.url ? (
-                            <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline break-all">{item.text}</a>
-                          ) : (
-                            <span>{item.text}</span>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <EditableSection
-                      editKey={`${section.id}_worklog_${ri}_did`}
-                      value={row.whatWeDid}
-                      edits={edits}
-                      onEdit={onEdit}
-                      as="span"
-                      multiline
-                    />
-                  )}
+                  <WorkLogBulletCell
+                    editKey={`${section.id}_worklog_${ri}_did`}
+                    rawValue={row.whatWeDid}
+                    items={row.items}
+                    edits={edits}
+                    onEdit={onEdit}
+                  />
                 </td>
                 <td className="px-2 py-1.5 border border-[#D1D5DB] text-[10px] align-top">
-                  {row.nextItems && row.nextItems.length > 0 ? (
-                    <ul className="space-y-0.5 list-none p-0 m-0">
-                      {row.nextItems.map((item, ii) => (
-                        <li key={ii} className="flex items-start gap-1">
-                          <span className="text-gray-400 mt-px">•</span>
-                          <span>{item}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <EditableSection
-                      editKey={`${section.id}_worklog_${ri}_next`}
-                      value={row.whatsNext}
-                      edits={edits}
-                      onEdit={onEdit}
-                      as="span"
-                      multiline
-                    />
-                  )}
+                  <WorkLogBulletCell
+                    editKey={`${section.id}_worklog_${ri}_next`}
+                    rawValue={row.whatsNext}
+                    items={row.nextItems?.map(t => ({ text: t }))}
+                    edits={edits}
+                    onEdit={onEdit}
+                  />
                 </td>
               </tr>
             ))}

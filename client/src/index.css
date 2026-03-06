@@ -324,14 +324,18 @@
 
 /* Document preview: override OS selection highlight so it's never black */
 [data-testid="preview-document"] ::selection,
-[data-testid="preview-document"] *::selection {
+[data-testid="preview-document"] *::selection,
+[data-testid="docx-preview-page"] ::selection,
+[data-testid="docx-preview-page"] *::selection {
   background-color: #BFDBFE;
   color: #111827;
 }
 
 /* Document preview: all inputs/textareas are always on a white document background */
 [data-testid="preview-document"] input,
-[data-testid="preview-document"] textarea {
+[data-testid="preview-document"] textarea,
+[data-testid="docx-preview-page"] input,
+[data-testid="docx-preview-page"] textarea {
   background-color: #ffffff !important;
   color: #111827 !important;
 }

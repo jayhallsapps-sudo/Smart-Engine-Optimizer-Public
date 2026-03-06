@@ -60,6 +60,34 @@ export function isIgnoredStatus(raw: string): boolean {
   return false;
 }
 
+const viewIdCache = new Map<string, string>();
+
+async function resolveViewId(
+  baseId: string,
+  tableName: string,
+  viewName: string,
+  pat: string
+): Promise<string | null> {
+  const cacheKey = `${baseId}::${tableName}::${viewName.trim().toLowerCase()}`;
+  if (viewIdCache.has(cacheKey)) return viewIdCache.get(cacheKey)!;
+
+  try {
+    const resp = await fetch(`https://api.airtable.com/v0/meta/bases/${baseId}/tables`, {
+      headers: { Authorization: `Bearer ${pat}` },
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json() as any;
+    const table = data.tables?.find((t: any) => t.name?.trim().toLowerCase() === tableName.trim().toLowerCase());
+    if (!table) return null;
+    const view = table.views?.find((v: any) => v.name?.trim().toLowerCase() === viewName.trim().toLowerCase());
+    if (!view) return null;
+    viewIdCache.set(cacheKey, view.id);
+    return view.id as string;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchAirtableWorkLog(
   clientId: number,
   startDate: string,
@@ -74,7 +102,7 @@ export async function fetchAirtableWorkLog(
   const airtableBaseId = (client as any).airtableBaseId as string | null;
   const airtableTableName = (client as any).airtableTableName as string | null;
 
-  const resolvedViewName: string | null =
+  const configuredViewName: string | null =
     viewIntent === "production"
       ? ((client as any).airtableProductionView as string | null)
       : viewIntent === "published"
@@ -100,8 +128,18 @@ export async function fetchAirtableWorkLog(
 
   const pat = decrypt(creds[0].encryptedValue);
 
+  let resolvedViewParam: string | null = configuredViewName;
+  if (configuredViewName) {
+    const viewId = await resolveViewId(airtableBaseId, airtableTableName, configuredViewName, pat);
+    if (viewId) {
+      resolvedViewParam = viewId;
+    } else {
+      console.warn(`[Airtable] Could not resolve view "${configuredViewName}" to an ID — using name as-is`);
+    }
+  }
+
   const params = new URLSearchParams({ maxRecords: "200" });
-  if (resolvedViewName) params.set("view", resolvedViewName);
+  if (resolvedViewParam) params.set("view", resolvedViewParam);
 
   if (startDate && endDate && viewIntent !== "production") {
     const formula = `AND(IS_AFTER({Published Date}, "${startDate}"), IS_BEFORE({Published Date}, "${endDate}"))`;
@@ -109,7 +147,6 @@ export async function fetchAirtableWorkLog(
   }
 
   const url = `https://api.airtable.com/v0/${airtableBaseId}/${encodeURIComponent(airtableTableName)}?${params}`;
-
   let resp: Response;
   try {
     resp = await fetch(url, {
@@ -136,7 +173,7 @@ export async function fetchAirtableWorkLog(
       return {
         success: false,
         setupRequired: true,
-        error: `Airtable table/view not found. Check the Base ID (${airtableBaseId}), Table Name (${airtableTableName}), and View Name (${resolvedViewName ?? "not set"}) in the client settings.`,
+        error: `Airtable table/view not found. Check the Base ID (${airtableBaseId}), Table Name (${airtableTableName}), and View Name (${configuredViewName ?? "not set"}) in the client settings.`,
       };
     }
     return { success: false, error: `Airtable API error (${resp.status}): ${msg}` };
@@ -163,12 +200,12 @@ export async function fetchAirtableWorkLog(
     })
     .filter(item => {
       if (!item.status) return true;
-      if (viewIntent !== "production") {
-        return !["3. Load", "3.5 Published as Draft"].some(ig =>
-          item.status === ig || item.status!.startsWith(ig.replace("...", "").trim())
-        );
+      if (viewIntent === "production") {
+        return item.status !== "4. Live";
       }
-      return !isIgnoredStatus(item.status);
+      return !["3. Load", "3.5 Published as Draft"].some(ig =>
+        item.status === ig || item.status!.startsWith(ig.replace("...", "").trim())
+      );
     });
 
   const byCreditType: Record<string, WorkLogItem[]> = {};
@@ -192,7 +229,7 @@ export async function fetchAirtableWorkLog(
       dateRange: `${startDate} → ${endDate}`,
       baseId: airtableBaseId,
       tableName: airtableTableName,
-      viewName: resolvedViewName ?? "",
+      viewName: configuredViewName ?? "",
       totalItems: items.length,
       byCreditType: ordered,
     },

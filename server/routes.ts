@@ -8,7 +8,7 @@ import { parseNaturalQuery, getCommandDescription, getDateRangeLabel } from "./n
 import { generateMockResult } from "./mockData";
 import { fetchAirtableWorkLog } from "./airtable";
 import { seedDatabase } from "./seed";
-import { encrypt } from "./encryption";
+import { encrypt, decrypt } from "./encryption";
 import { buildGoogleAuthUrl, exchangeCodeForToken, callbackHtml, isGoogleConfigured } from "./googleAuth";
 import { testCredential } from "./connectionTest";
 import { insertSfReportSchema, insertCallTrackingReportSchema } from "@shared/schema";
@@ -163,6 +163,100 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("[GBP] /api/gbp/locations error:", err.message);
       res.status(500).json({ message: "Failed to fetch GBP locations: " + err.message });
+    }
+  });
+
+  app.get("/api/ga4/properties", async (_req, res) => {
+    try {
+      const accessToken = await getGoogleAccessToken("google_analytics_4");
+      if (!accessToken) {
+        return res.status(401).json({ message: "GA4 is not connected. Connect it in Setup → Analytics & Search." });
+      }
+      const resp = await fetch("https://analyticsadmin.googleapis.com/v1beta/accountSummaries", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const data = await resp.json() as any;
+      if (!resp.ok) {
+        const msg: string = data.error?.message ?? resp.statusText;
+        if (msg.includes("has not been used") || msg.includes("is disabled")) {
+          const projectMatch = msg.match(/project (\d+)/);
+          const projectId = projectMatch?.[1] ?? "";
+          const enableUrl = projectId
+            ? `https://console.developers.google.com/apis/api/analyticsadmin.googleapis.com/overview?project=${projectId}`
+            : "https://console.developers.google.com/apis/library/analyticsadmin.googleapis.com";
+          return res.status(403).json({ message: "Google Analytics Admin API is not enabled. Enable it in Google Cloud Console.", enableUrl });
+        }
+        return res.status(resp.status).json({ message: msg });
+      }
+      const properties: { propertyId: string; displayName: string; accountName: string }[] = [];
+      for (const account of (data.accountSummaries ?? [])) {
+        for (const prop of (account.propertySummaries ?? [])) {
+          properties.push({
+            propertyId: prop.property,
+            displayName: prop.displayName,
+            accountName: account.displayName,
+          });
+        }
+      }
+      res.json({ properties });
+    } catch (err: any) {
+      console.error("[GA4] /api/ga4/properties error:", err.message);
+      res.status(500).json({ message: "Failed to fetch GA4 properties: " + err.message });
+    }
+  });
+
+  app.get("/api/gsc/sites", async (_req, res) => {
+    try {
+      const accessToken = await getGoogleAccessToken("google_search_console");
+      if (!accessToken) {
+        return res.status(401).json({ message: "Google Search Console is not connected. Connect it in Setup → Analytics & Search." });
+      }
+      const resp = await fetch("https://www.googleapis.com/webmasters/v3/sites", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const data = await resp.json() as any;
+      if (!resp.ok) {
+        return res.status(resp.status).json({ message: data.error?.message ?? resp.statusText });
+      }
+      const sites = (data.siteEntry ?? []).map((s: any) => ({
+        siteUrl: s.siteUrl,
+        permissionLevel: s.permissionLevel,
+      }));
+      res.json({ sites });
+    } catch (err: any) {
+      console.error("[GSC] /api/gsc/sites error:", err.message);
+      res.status(500).json({ message: "Failed to fetch GSC sites: " + err.message });
+    }
+  });
+
+  app.get("/api/callrail/companies", async (_req, res) => {
+    try {
+      const creds = await storage.getApiCredentialsByService("callrail");
+      if (!creds.length) {
+        return res.status(401).json({ message: "CallRail is not connected. Connect it in Setup → Analytics & Search." });
+      }
+      const apiKey = decrypt(creds[0].encryptedValue);
+      const resp = await fetch("https://api.callrail.com/v3/a.json", {
+        headers: { Authorization: `Token token="${apiKey}"` },
+      });
+      const data = await resp.json() as any;
+      if (!resp.ok) {
+        return res.status(resp.status).json({ message: data.error || resp.statusText });
+      }
+      const companies: { companyId: string; name: string; accountId: string }[] = [];
+      for (const account of (data.accounts ?? [])) {
+        const compResp = await fetch(`https://api.callrail.com/v3/a/${account.id}/companies.json`, {
+          headers: { Authorization: `Token token="${apiKey}"` },
+        });
+        const compData = await compResp.json() as any;
+        for (const co of (compData.companies ?? [])) {
+          companies.push({ companyId: co.id, name: co.name, accountId: account.id });
+        }
+      }
+      res.json({ companies });
+    } catch (err: any) {
+      console.error("[CallRail] /api/callrail/companies error:", err.message);
+      res.status(500).json({ message: "Failed to fetch CallRail companies: " + err.message });
     }
   });
 

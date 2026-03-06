@@ -289,6 +289,219 @@ function GbpLocationPicker({ value, onChange }: { value: string; onChange: (v: s
   );
 }
 
+function Ga4PropertyPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [properties, setProperties] = useState<{ propertyId: string; displayName: string; accountName: string }[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [fetched, setFetched] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [enableUrl, setEnableUrl] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  const fetchProperties = async () => {
+    setLoading(true);
+    setError(null);
+    setEnableUrl(null);
+    try {
+      const res = await fetch("/api/ga4/properties");
+      const data = await res.json() as any;
+      if (!res.ok) {
+        if (data.enableUrl) { setEnableUrl(data.enableUrl); setError(data.message); }
+        else throw new Error(data.message || "Failed to fetch GA4 properties");
+        return;
+      }
+      setProperties(data.properties ?? []);
+      setFetched(true);
+      if ((data.properties ?? []).length === 0) {
+        toast({ title: "No GA4 properties found", description: "Make sure GA4 is connected in Setup → Analytics & Search.", variant: "destructive" });
+      }
+    } catch (err: any) {
+      setError(err.message);
+      toast({ title: "Could not fetch GA4 properties", description: err.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <Label className="flex items-center gap-1.5"><BarChart3 className="w-3 h-3" /> GA4 Property</Label>
+      <div className="flex gap-2">
+        {fetched && properties.length > 0 ? (
+          <select
+            value={value}
+            onChange={e => onChange(e.target.value)}
+            className="flex-1 text-sm rounded-md border bg-background px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring"
+            data-testid="select-ga4-property"
+          >
+            <option value="">— Select a property —</option>
+            {properties.map(p => (
+              <option key={p.propertyId} value={p.propertyId}>
+                {p.displayName} · {p.accountName}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <Input
+            value={value}
+            onChange={e => onChange(e.target.value)}
+            placeholder="Click 'Fetch' to load your GA4 properties"
+            data-testid="input-ga4-id"
+            className="flex-1"
+          />
+        )}
+        <Button type="button" variant="outline" size="sm" onClick={fetchProperties} disabled={loading} data-testid="button-fetch-ga4-properties" className="shrink-0">
+          {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+          <span className="ml-1.5">{fetched ? "Refresh" : "Fetch"}</span>
+        </Button>
+      </div>
+      {error && (
+        <div className="space-y-1">
+          <p className="text-[11px] text-destructive">{error}</p>
+          {enableUrl && (
+            <a href={enableUrl} target="_blank" rel="noopener noreferrer" className="text-[11px] text-primary underline hover:opacity-80" data-testid="link-enable-ga4-api">
+              → Click here to enable the API in Google Cloud Console
+            </a>
+          )}
+        </div>
+      )}
+      {!fetched && <p className="text-[11px] text-muted-foreground">Click Fetch to load properties from your connected GA4 account.</p>}
+      {fetched && value && <p className="text-[11px] text-muted-foreground font-mono truncate">{value}</p>}
+    </div>
+  );
+}
+
+function GscSitePicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [sites, setSites] = useState<{ siteUrl: string; permissionLevel: string }[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [fetched, setFetched] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  const fetchSites = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/gsc/sites");
+      const data = await res.json() as any;
+      if (!res.ok) throw new Error(data.message || "Failed to fetch sites");
+      setSites(data.sites ?? []);
+      setFetched(true);
+      if ((data.sites ?? []).length === 0) {
+        toast({ title: "No GSC sites found", description: "Make sure GSC is connected in Setup → Analytics & Search.", variant: "destructive" });
+      }
+    } catch (err: any) {
+      setError(err.message);
+      toast({ title: "Could not fetch GSC sites", description: err.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <Label className="flex items-center gap-1.5"><Globe className="w-3 h-3" /> GSC Site</Label>
+      <div className="flex gap-2">
+        {fetched && sites.length > 0 ? (
+          <select
+            value={value}
+            onChange={e => onChange(e.target.value)}
+            className="flex-1 text-sm rounded-md border bg-background px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring"
+            data-testid="select-gsc-site"
+          >
+            <option value="">— Select a site —</option>
+            {sites.map(s => (
+              <option key={s.siteUrl} value={s.siteUrl}>
+                {s.siteUrl.replace(/^https?:\/\//, "").replace(/\/$/, "")} ({s.permissionLevel})
+              </option>
+            ))}
+          </select>
+        ) : (
+          <Input
+            value={value}
+            onChange={e => onChange(e.target.value)}
+            placeholder="Click 'Fetch' to load your GSC sites"
+            data-testid="input-gsc-url"
+            className="flex-1"
+          />
+        )}
+        <Button type="button" variant="outline" size="sm" onClick={fetchSites} disabled={loading} data-testid="button-fetch-gsc-sites" className="shrink-0">
+          {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+          <span className="ml-1.5">{fetched ? "Refresh" : "Fetch"}</span>
+        </Button>
+      </div>
+      {error && <p className="text-[11px] text-destructive">{error}</p>}
+      {!fetched && <p className="text-[11px] text-muted-foreground">Click Fetch to load verified sites from your connected GSC account.</p>}
+      {fetched && value && <p className="text-[11px] text-muted-foreground font-mono truncate">{value}</p>}
+    </div>
+  );
+}
+
+function CallRailCompanyPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [companies, setCompanies] = useState<{ companyId: string; name: string }[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [fetched, setFetched] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  const fetchCompanies = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/callrail/companies");
+      const data = await res.json() as any;
+      if (!res.ok) throw new Error(data.message || "Failed to fetch companies");
+      setCompanies(data.companies ?? []);
+      setFetched(true);
+      if ((data.companies ?? []).length === 0) {
+        toast({ title: "No CallRail companies found", description: "Make sure CallRail is connected in Setup → Analytics & Search.", variant: "destructive" });
+      }
+    } catch (err: any) {
+      setError(err.message);
+      toast({ title: "Could not fetch CallRail companies", description: err.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <Label className="flex items-center gap-1.5"><Phone className="w-3 h-3" /> CallRail Company</Label>
+      <div className="flex gap-2">
+        {fetched && companies.length > 0 ? (
+          <select
+            value={value}
+            onChange={e => onChange(e.target.value)}
+            className="flex-1 text-sm rounded-md border bg-background px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring"
+            data-testid="select-callrail-company"
+          >
+            <option value="">— Select a company —</option>
+            {companies.map(c => (
+              <option key={c.companyId} value={c.companyId}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <Input
+            value={value}
+            onChange={e => onChange(e.target.value)}
+            placeholder="Click 'Fetch' to load your CallRail companies"
+            data-testid="input-callrail-id"
+            className="flex-1"
+          />
+        )}
+        <Button type="button" variant="outline" size="sm" onClick={fetchCompanies} disabled={loading} data-testid="button-fetch-callrail-companies" className="shrink-0">
+          {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+          <span className="ml-1.5">{fetched ? "Refresh" : "Fetch"}</span>
+        </Button>
+      </div>
+      {error && <p className="text-[11px] text-destructive">{error}</p>}
+      {!fetched && <p className="text-[11px] text-muted-foreground">Click Fetch to load companies from your connected CallRail account.</p>}
+      {fetched && value && <p className="text-[11px] text-muted-foreground font-mono truncate">{value}</p>}
+    </div>
+  );
+}
+
 function ClientForm({ initial, onSubmit, isPending }: { initial: ClientFormData; onSubmit: (data: ClientFormData) => void; isPending: boolean }) {
   const [form, setForm] = useState<ClientFormData>(initial);
 
@@ -312,18 +525,9 @@ function ClientForm({ initial, onSubmit, isPending }: { initial: ClientFormData;
 
         <TabsContent value="data-sources" className="space-y-4 mt-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="gscUrl" className="flex items-center gap-1.5"><Globe className="w-3 h-3" /> GSC Site URL</Label>
-              <Input id="gscUrl" value={form.gscSiteUrl} onChange={e => update("gscSiteUrl", e.target.value)} placeholder="https://example.com" data-testid="input-gsc-url" />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="ga4" className="flex items-center gap-1.5"><BarChart3 className="w-3 h-3" /> GA4 Property ID</Label>
-              <Input id="ga4" value={form.ga4PropertyId} onChange={e => update("ga4PropertyId", e.target.value)} placeholder="properties/123456" data-testid="input-ga4-id" />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="callrail" className="flex items-center gap-1.5"><Phone className="w-3 h-3" /> CallRail Company ID</Label>
-              <Input id="callrail" value={form.callrailCompanyId} onChange={e => update("callrailCompanyId", e.target.value)} placeholder="COM-ABC123" data-testid="input-callrail-id" />
-            </div>
+            <GscSitePicker value={form.gscSiteUrl} onChange={v => update("gscSiteUrl", v)} />
+            <Ga4PropertyPicker value={form.ga4PropertyId} onChange={v => update("ga4PropertyId", v)} />
+            <CallRailCompanyPicker value={form.callrailCompanyId} onChange={v => update("callrailCompanyId", v)} />
             <div className="space-y-2">
               <Label htmlFor="ctm" className="flex items-center gap-1.5"><Phone className="w-3 h-3" /> CTM Account ID</Label>
               <Input id="ctm" value={form.ctmAccountId} onChange={e => update("ctmAccountId", e.target.value)} placeholder="CTM-ABC123" data-testid="input-ctm-id" />

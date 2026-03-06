@@ -102,9 +102,10 @@ export async function fetchAirtableWorkLog(
 
   const params = new URLSearchParams({
     filterByFormula: buildFilterFormula(startDate, endDate),
-    sort: JSON.stringify([{ field: "Due", direction: "desc" }]),
     maxRecords: "200",
   });
+  params.append("sort[0][field]", "Due");
+  params.append("sort[0][direction]", "desc");
   if (resolvedViewName) params.set("view", resolvedViewName);
 
   const url = `https://api.airtable.com/v0/${airtableBaseId}/${encodeURIComponent(airtableTableName)}?${params}`;

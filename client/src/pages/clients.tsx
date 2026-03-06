@@ -926,7 +926,7 @@ function ServiceRow({
   const brokenConnection = hasId && !hasCred && !isManual;
   const notConfigured = !hasSfUpload && !hasCTUpload && !hasId;
 
-  if (notConfigured && !def.alwaysShow) return null;
+  if (notConfigured) return null;
 
   const Icon = def.icon;
 
@@ -1129,7 +1129,6 @@ function ClientCard({
   };
 
   const visibleDefs = SERVICE_DEFS.filter(def => {
-    if (def.alwaysShow) return true;
     if (def.key === "sf") return !!(sfSummary.find(r => r.clientId === client.id));
     if (def.key === "ct_manual") return !!(ctSummary.find(r => r.clientId === client.id));
     return !!def.getValue(client);

@@ -209,20 +209,20 @@ function SearchableSelect({
   const selected = options.find(o => o.value === value);
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={setOpen} modal={false}>
       <PopoverTrigger asChild>
         <Button
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className="w-full justify-between font-normal text-sm truncate"
+          className="w-full justify-between font-normal text-sm"
           data-testid={testId}
         >
-          <span className="truncate">{selected ? selected.label : <span className="text-muted-foreground">{placeholder}</span>}</span>
+          <span className="truncate max-w-[calc(100%-1.5rem)]">{selected ? selected.label : <span className="text-muted-foreground">{placeholder}</span>}</span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+      <PopoverContent className="p-0" style={{ width: "var(--radix-popover-trigger-width)" }} align="start">
         <Command>
           <CommandInput placeholder="Search..." />
           <CommandList>
@@ -234,7 +234,7 @@ function SearchableSelect({
                   value={opt.label}
                   onSelect={() => { onChange(opt.value); setOpen(false); }}
                 >
-                  <Check className={`mr-2 h-4 w-4 ${value === opt.value ? "opacity-100" : "opacity-0"}`} />
+                  <Check className={`mr-2 h-4 w-4 shrink-0 ${value === opt.value ? "opacity-100" : "opacity-0"}`} />
                   <span className="truncate">{opt.label}</span>
                 </CommandItem>
               ))}

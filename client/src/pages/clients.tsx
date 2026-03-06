@@ -149,6 +149,7 @@ interface ClientFormData {
   airtableTableName: string;
   airtableProductionView: string;
   airtablePublishedView: string;
+  asanaProjectId: string;
   gbpLocationName: string;
   gbpProfileUrl: string;
   brandTerms: string[];
@@ -173,6 +174,7 @@ const emptyForm: ClientFormData = {
   airtableTableName: "",
   airtableProductionView: "",
   airtablePublishedView: "",
+  asanaProjectId: "",
   gbpLocationName: "",
   gbpProfileUrl: "",
   brandTerms: [],
@@ -532,6 +534,10 @@ function ClientForm({ initial, onSubmit, isPending }: { initial: ClientFormData;
             <div className="space-y-2">
               <Label htmlFor="airtablePublishedView" className="flex items-center gap-1.5"><Database className="w-3 h-3" /> Published View Name</Label>
               <Input id="airtablePublishedView" value={form.airtablePublishedView} onChange={e => update("airtablePublishedView", e.target.value)} placeholder="e.g., Anchored Tides Published View" data-testid="input-airtable-published-view" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="asanaProjectId" className="flex items-center gap-1.5"><Database className="w-3 h-3" /> Asana Project ID (GID)</Label>
+              <Input id="asanaProjectId" value={form.asanaProjectId} onChange={e => update("asanaProjectId", e.target.value)} placeholder="e.g., 1206926844847672" data-testid="input-asana-project-id" />
             </div>
             <div className="md:col-span-2">
               <GbpLocationPicker value={form.gbpLocationName} onChange={v => update("gbpLocationName", v)} clientName={form.name} />
@@ -1277,6 +1283,7 @@ export default function ClientsPage() {
                 airtableTableName: (editingClient as any).airtableTableName || "",
                 airtableProductionView: (editingClient as any).airtableProductionView || "",
                 airtablePublishedView: (editingClient as any).airtablePublishedView || "",
+                asanaProjectId: (editingClient as any).asanaProjectId || "",
                 gbpLocationName: (editingClient as any).gbpLocationName || "",
                 gbpProfileUrl: (editingClient as any).gbpProfileUrl || "",
                 brandTerms: editingClient.brandTerms || [],

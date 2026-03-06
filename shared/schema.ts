@@ -26,6 +26,7 @@ export const clients = pgTable("clients", {
   ctmOrganicSourceTerms: text("ctm_organic_source_terms").array().default(sql`'{}'::text[]`),
   gbpLocationName: text("gbp_location_name"),
   gbpProfileUrl: text("gbp_profile_url"),
+  asanaProjectId: text("asana_project_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

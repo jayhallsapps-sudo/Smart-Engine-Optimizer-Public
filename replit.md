@@ -42,6 +42,7 @@ server/
   gbpClient.ts         - Live Google Business Profile API (reviews, star rating)
   sfClient.ts          - Screaming Frog stored data reader (technical health, new pages diff)
   airtable.ts          - Live Airtable REST API for work log
+  asanaClient.ts       - Asana API via Replit connector (tasks by section → New Content/Technical SEO/Local SEO)
   reportGenerators.ts  - .docx (biweekly) and .pptx (monthly/QBR) generators
   qbrPrepGenerator.ts  - QBR Prep report engine: quarter window logic, multi-source data fetch (GSC/GA4/SF/CallRail), heuristic opportunity scoring, JSON+Markdown output
   googleAuth.ts        - Google OAuth flow (GSC, GA4, GBP, Sheets scopes)

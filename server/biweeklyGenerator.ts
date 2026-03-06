@@ -5,6 +5,7 @@ import { queryCallRail, handlesCallRailCommand } from "./callrailClient";
 import { queryCtm, handlesCtmCommand } from "./ctmClient";
 import { fetchAirtableWorkLog } from "./airtable";
 import { fetchNsmGoals } from "./sheetsClient";
+import { fetchAsanaWorkLog, asanaSectionToCategory, groupAsanaTasks } from "./asanaClient";
 import type { WorkLogItem } from "./airtable";
 import type { DocxSection } from "../client/src/components/report-preview/docx-preview";
 
@@ -171,7 +172,9 @@ export async function generateBiweekly(input: {
   const now = new Date();
   const customDateRange = `custom:${startDate}:${endDate}`;
 
-  const [gscResult, ga4Result, callTrackingResult, publishedResult, productionResult, sfReportsResult, nsmResult] =
+  const asanaProjectId = (client as any).asanaProjectId as string | null | undefined;
+
+  const [gscResult, ga4Result, callTrackingResult, publishedResult, productionResult, sfReportsResult, nsmResult, asanaResult] =
     await Promise.allSettled([
       (async () => {
         if (handlesGscCommand("gsc_qoq_queries" as any)) {
@@ -203,6 +206,10 @@ export async function generateBiweekly(input: {
       })(),
       (async () => storage.getSfReports(clientId))(),
       (async () => fetchNsmGoals(client.name))(),
+      (async () => {
+        if (!asanaProjectId) return null;
+        return fetchAsanaWorkLog(asanaProjectId, startDate, endDate);
+      })(),
     ]);
 
   const sections: DocxSection[] = [];
@@ -285,6 +292,12 @@ export async function generateBiweekly(input: {
   const productionContent = productionItems.filter(i => !isOptimizationItem(i));
   const productionOptimization = productionItems.filter(i => isOptimizationItem(i));
 
+  const asanaData = asanaResult.status === "fulfilled" && asanaResult.value && (asanaResult.value as any).success
+    ? (asanaResult.value as { success: true; completed: import("./asanaClient").AsanaTask[]; upcoming: import("./asanaClient").AsanaTask[] })
+    : null;
+  const asanaCompletedByCategory = asanaData ? groupAsanaTasks(asanaData.completed) : {};
+  const asanaUpcomingByCategory = asanaData ? groupAsanaTasks(asanaData.upcoming) : {};
+
   const allSfReports = sfReportsResult.status === "fulfilled" ? (sfReportsResult.value ?? []) : [];
   const hasSf = allSfReports.length > 0;
   const sfCounts = hasSf ? aggregateSfCounts(allSfReports) : null;
@@ -316,18 +329,48 @@ export async function generateBiweekly(input: {
     if (resolved.missingMeta > 0) sfDidItems.push({ text: `Added meta descriptions to ${resolved.missingMeta} priority pages` });
   }
 
-  const newContentDid: BulletItem[] = publishedContent.map(i => ({ text: i.task, url: i.url ?? undefined }));
-  const newContentNext: string[] = productionContent.map(i => i.task);
-  const optDid: BulletItem[] = publishedOptimization.map(i => ({ text: i.task, url: i.url ?? undefined }));
-  const optNext: string[] = productionOptimization.map(i => i.task);
+  const asanaContentDid: BulletItem[] = (asanaCompletedByCategory["New Content"] ?? []).map(t => ({
+    text: asanaSectionToCategory(t.section).italicize ? `*${t.name}*` : t.name,
+  }));
+  const asanaContentNext: string[] = (asanaUpcomingByCategory["New Content"] ?? []).map(t => t.name);
+  const asanaTechDid: BulletItem[] = (asanaCompletedByCategory["Technical SEO"] ?? []).map(t => ({
+    text: asanaSectionToCategory(t.section).italicize ? `*${t.name}*` : t.name,
+  }));
+  const asanaTechNext: string[] = (asanaUpcomingByCategory["Technical SEO"] ?? []).map(t => t.name);
+  const asanaLocalDid: BulletItem[] = (asanaCompletedByCategory["Local SEO"] ?? []).map(t => ({
+    text: asanaSectionToCategory(t.section).italicize ? `*${t.name}*` : t.name,
+  }));
+  const asanaLocalNext: string[] = (asanaUpcomingByCategory["Local SEO"] ?? []).map(t => t.name);
+
+  const newContentDid: BulletItem[] = [
+    ...(noAirtable ? [] : publishedContent.map(i => ({ text: i.task, url: i.url ?? undefined }))),
+    ...asanaContentDid,
+  ];
+  const newContentNext: string[] = [
+    ...(noAirtable ? [] : productionContent.map(i => i.task)),
+    ...asanaContentNext,
+  ];
+  const optDid: BulletItem[] = [
+    ...(noAirtable ? [] : publishedOptimization.map(i => ({ text: i.task, url: i.url ?? undefined }))),
+  ];
+  const optNext: string[] = [
+    ...(noAirtable ? [] : productionOptimization.map(i => i.task)),
+  ];
+
+  const techDid: BulletItem[] = [...sfDidItems, ...asanaTechDid];
+  const localDid: BulletItem[] = [...asanaLocalDid];
+  const localNext: string[] = asanaLocalNext.length > 0 ? asanaLocalNext : [
+    "Optimize GBP photos and posts for active campaigns.",
+    "Monitor and respond to new Google reviews.",
+  ];
 
   const workLog: NonNullable<DocxSection["workLog"]> = [
     makeRow(
       "New Content",
-      noAirtable ? [] : newContentDid,
-      noAirtable ? [] : newContentNext,
-      "Connect Airtable in Setup to pull live published content.",
-      noAirtable ? "Connect Airtable in Setup to pull upcoming content." : ""
+      noAirtable && !asanaData ? [] : newContentDid,
+      noAirtable && !asanaData ? [] : newContentNext,
+      "Connect Airtable or Asana in Setup to pull live published content.",
+      noAirtable && !asanaData ? "Connect Airtable or Asana in Setup to pull upcoming content." : ""
     ),
     makeRow(
       "Optimization",
@@ -338,20 +381,17 @@ export async function generateBiweekly(input: {
     ),
     makeRow(
       "Technical SEO",
-      sfDidItems,
-      sfPriorities,
+      techDid,
+      sfPriorities.length > 0 ? sfPriorities : [...asanaTechNext, "Review Core Web Vitals for top landing pages."],
       "Enter technical SEO tasks completed this period.",
-      sfPriorities[0]
+      sfPriorities[0] ?? asanaTechNext[0] ?? "Review Core Web Vitals for top landing pages."
     ),
     makeRow(
       "Local SEO",
-      [],
-      [
-        "Optimize GBP photos and posts for active campaigns.",
-        "Monitor and respond to new Google reviews.",
-      ],
+      localDid,
+      localNext,
       "Review GBP for content published or updated this period.",
-      "Optimize GBP photos and posts for active campaigns."
+      localNext[0] ?? "Optimize GBP photos and posts for active campaigns."
     ),
   ];
 

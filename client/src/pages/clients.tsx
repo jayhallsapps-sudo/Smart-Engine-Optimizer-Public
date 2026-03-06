@@ -149,6 +149,7 @@ interface ClientFormData {
   airtableTableName: string;
   airtableViewName: string;
   gbpLocationName: string;
+  gbpProfileUrl: string;
   brandTerms: string[];
   leadEvents: string[];
   moneyPages: string[];
@@ -171,6 +172,7 @@ const emptyForm: ClientFormData = {
   airtableTableName: "",
   airtableViewName: "Published",
   gbpLocationName: "",
+  gbpProfileUrl: "",
   brandTerms: [],
   leadEvents: [],
   moneyPages: [],
@@ -619,6 +621,34 @@ function ClientForm({ initial, onSubmit, isPending }: { initial: ClientFormData;
             </div>
             <div className="md:col-span-2">
               <GbpLocationPicker value={form.gbpLocationName} onChange={v => update("gbpLocationName", v)} />
+            </div>
+            <div className="md:col-span-2 space-y-2">
+              <Label htmlFor="gbpProfileUrl" className="flex items-center gap-1.5">
+                <MapPin className="w-3 h-3" /> GBP Listing URL
+              </Label>
+              <Input
+                id="gbpProfileUrl"
+                value={form.gbpProfileUrl}
+                onChange={e => update("gbpProfileUrl", e.target.value)}
+                placeholder="https://maps.app.goo.gl/..."
+                data-testid="input-gbp-profile-url"
+              />
+              {form.gbpProfileUrl && (
+                <a
+                  href={form.gbpProfileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-[11px] text-primary underline hover:opacity-80"
+                  data-testid="link-gbp-profile"
+                >
+                  → Open Google Business Profile listing
+                </a>
+              )}
+              {!form.gbpProfileUrl && (
+                <p className="text-[11px] text-muted-foreground">
+                  Paste the Google Maps link for this client's GBP listing so you can access it quickly.
+                </p>
+              )}
             </div>
           </div>
         </TabsContent>
@@ -1307,6 +1337,7 @@ export default function ClientsPage() {
                 airtableTableName: (editingClient as any).airtableTableName || "",
                 airtableViewName: (editingClient as any).airtableViewName || "Published",
                 gbpLocationName: (editingClient as any).gbpLocationName || "",
+                gbpProfileUrl: (editingClient as any).gbpProfileUrl || "",
                 brandTerms: editingClient.brandTerms || [],
                 leadEvents: editingClient.leadEvents || [],
                 moneyPages: editingClient.moneyPages || [],

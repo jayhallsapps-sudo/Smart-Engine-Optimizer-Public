@@ -24,6 +24,7 @@ export const clients = pgTable("clients", {
   callrailOrganicSourceTerms: text("callrail_organic_source_terms").array().default(sql`'{}'::text[]`),
   ctmOrganicSourceTerms: text("ctm_organic_source_terms").array().default(sql`'{}'::text[]`),
   gbpLocationName: text("gbp_location_name"),
+  gbpProfileUrl: text("gbp_profile_url"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

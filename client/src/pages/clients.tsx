@@ -713,6 +713,7 @@ const SERVICE_DEFS = [
     getValue: (c: Client) => c.gscSiteUrl,
     format: (v: string) => v.replace(/^https?:\/\//, "").replace(/\/$/, ""),
     isManual: false,
+    alwaysShow: true,
   },
   {
     key: "ga4",
@@ -723,46 +724,18 @@ const SERVICE_DEFS = [
     getValue: (c: Client) => c.ga4PropertyId,
     format: (v: string) => v,
     isManual: false,
+    alwaysShow: true,
   },
   {
-    key: "callrail",
-    label: "CallRail",
-    short: "CallRail",
-    credService: "callrail",
-    icon: Phone,
-    getValue: (c: Client) => c.callrailCompanyId,
+    key: "gbp",
+    label: "Google Business Profile",
+    short: "GBP",
+    credService: "google_business_profile",
+    icon: MapPin,
+    getValue: (c: Client) => (c as any).gbpLocationName,
     format: (v: string) => v,
     isManual: false,
-  },
-  {
-    key: "ctm",
-    label: "Call Tracking Metrics",
-    short: "CTM",
-    credService: "call_tracking_metrics",
-    icon: Phone,
-    getValue: (c: Client) => c.ctmAccountId,
-    format: (v: string) => v,
-    isManual: false,
-  },
-  {
-    key: "nimbata",
-    label: "Nimbata",
-    short: "Nimbata",
-    credService: "nimbata",
-    icon: Phone,
-    getValue: (c: Client) => (c as any).nimbataAccountId,
-    format: (v: string) => v,
-    isManual: false,
-  },
-  {
-    key: "ahrefs",
-    label: "Ahrefs",
-    short: "Ahrefs",
-    credService: "ahrefs",
-    icon: LinkIcon,
-    getValue: (c: Client) => c.ahrefsProjectUrl,
-    format: (v: string) => v.replace(/^https?:\/\//, "").replace(/\/$/, ""),
-    isManual: false,
+    alwaysShow: true,
   },
   {
     key: "semrush",
@@ -773,26 +746,7 @@ const SERVICE_DEFS = [
     getValue: (c: Client) => c.semrushProjectId,
     format: (v: string) => v,
     isManual: false,
-  },
-  {
-    key: "ct_manual",
-    label: "Manual Call Tracking",
-    short: "CT Manual",
-    credService: null,
-    icon: Upload,
-    getValue: (_c: Client) => null,
-    format: (v: string) => v,
-    isManual: true,
-  },
-  {
-    key: "sf",
-    label: "Screaming Frog",
-    short: "SF",
-    credService: null,
-    icon: Bug,
-    getValue: (c: Client) => c.screamingFrogProfile,
-    format: (v: string) => v,
-    isManual: true,
+    alwaysShow: true,
   },
   {
     key: "airtable",
@@ -803,6 +757,73 @@ const SERVICE_DEFS = [
     getValue: (c: Client) => (c as any).airtableBaseId,
     format: (v: string) => v,
     isManual: false,
+    alwaysShow: true,
+  },
+  {
+    key: "sf",
+    label: "Screaming Frog",
+    short: "SF",
+    credService: null,
+    icon: Bug,
+    getValue: (c: Client) => c.screamingFrogProfile,
+    format: (v: string) => v,
+    isManual: true,
+    alwaysShow: true,
+  },
+  {
+    key: "callrail",
+    label: "CallRail",
+    short: "CallRail",
+    credService: "callrail",
+    icon: Phone,
+    getValue: (c: Client) => c.callrailCompanyId,
+    format: (v: string) => v,
+    isManual: false,
+    alwaysShow: false,
+  },
+  {
+    key: "ctm",
+    label: "Call Tracking Metrics",
+    short: "CTM",
+    credService: "call_tracking_metrics",
+    icon: Phone,
+    getValue: (c: Client) => c.ctmAccountId,
+    format: (v: string) => v,
+    isManual: false,
+    alwaysShow: false,
+  },
+  {
+    key: "nimbata",
+    label: "Nimbata",
+    short: "Nimbata",
+    credService: "nimbata",
+    icon: Phone,
+    getValue: (c: Client) => (c as any).nimbataAccountId,
+    format: (v: string) => v,
+    isManual: false,
+    alwaysShow: false,
+  },
+  {
+    key: "ct_manual",
+    label: "Manual Call Tracking",
+    short: "CT Manual",
+    credService: null,
+    icon: Upload,
+    getValue: (_c: Client) => null,
+    format: (v: string) => v,
+    isManual: true,
+    alwaysShow: false,
+  },
+  {
+    key: "ahrefs",
+    label: "Ahrefs",
+    short: "Ahrefs",
+    credService: "ahrefs",
+    icon: LinkIcon,
+    getValue: (c: Client) => c.ahrefsProjectUrl,
+    format: (v: string) => v.replace(/^https?:\/\//, "").replace(/\/$/, ""),
+    isManual: false,
+    alwaysShow: false,
   },
 ] as const;
 
@@ -840,8 +861,10 @@ function ServiceRow({
   const hasCTUpload = def.key === "ct_manual" && isManual && !!ctReport;
 
   const fullyConnected = hasSfUpload || hasCTUpload || (hasId && (hasCred || isManual));
-  const idOnlyMissingCred = hasId && !hasCred && !isManual;
+  const brokenConnection = hasId && !hasCred && !isManual;
   const notConfigured = !hasSfUpload && !hasCTUpload && !hasId;
+
+  if (notConfigured && !def.alwaysShow) return null;
 
   const Icon = def.icon;
 
@@ -850,8 +873,8 @@ function ServiceRow({
       className={`flex items-start gap-3 px-3 py-2.5 rounded-md border text-sm ${
         fullyConnected
           ? "bg-green-50 border-green-100 dark:bg-green-950/20 dark:border-green-900/40"
-          : idOnlyMissingCred
-          ? "bg-amber-50 border-amber-100 dark:bg-amber-950/20 dark:border-amber-900/40"
+          : brokenConnection
+          ? "bg-red-50 border-red-100 dark:bg-red-950/20 dark:border-red-900/40"
           : "bg-muted/30 border-border/50 opacity-60"
       }`}
       data-testid={`service-row-${def.key}-${client.id}`}
@@ -859,8 +882,8 @@ function ServiceRow({
       <div className="mt-0.5 shrink-0">
         {fullyConnected ? (
           <CheckCircle2 className="w-4 h-4 text-green-600 dark:text-green-400" />
-        ) : idOnlyMissingCred ? (
-          <AlertCircle className="w-4 h-4 text-amber-500" />
+        ) : brokenConnection ? (
+          <XCircle className="w-4 h-4 text-red-500" />
         ) : (
           <Circle className="w-4 h-4 text-muted-foreground/40" />
         )}
@@ -902,7 +925,7 @@ function ServiceRow({
         )}
 
         {hasId && !hasCred && !isManual && (
-          <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-0.5">No credential saved — go to Setup</p>
+          <p className="text-[10px] text-red-600 dark:text-red-400 mt-0.5">Connection broken — check Setup</p>
         )}
 
         {def.key === "sf" && isManual && hasSfUpload && (
@@ -1043,11 +1066,15 @@ function ClientCard({
     }
   };
 
-  const connectedCount = SERVICE_DEFS.filter(def => {
+  const visibleDefs = SERVICE_DEFS.filter(def => {
+    if (def.alwaysShow) return true;
+    if (def.key === "sf") return !!(sfSummary.find(r => r.clientId === client.id));
+    if (def.key === "ct_manual") return !!(ctSummary.find(r => r.clientId === client.id));
+    return !!def.getValue(client);
+  });
+  const connectedCount = visibleDefs.filter(def => {
     const hasId = !!def.getValue(client);
-    const hasCred = def.credService
-      ? credentials.some(c => c.service === def.credService)
-      : true;
+    const hasCred = def.credService ? credentials.some(c => c.service === def.credService) : true;
     if (def.key === "sf") return !!(sfSummary.find(r => r.clientId === client.id));
     if (def.key === "ct_manual") return !!(ctSummary.find(r => r.clientId === client.id));
     return hasId && hasCred;
@@ -1063,7 +1090,7 @@ function ClientCard({
           <div>
             <h3 className="font-medium text-sm" data-testid={`text-client-name-${client.id}`}>{client.name}</h3>
             <p className="text-xs text-muted-foreground">
-              {connectedCount} of {SERVICE_DEFS.length} sources connected
+              {connectedCount} of {visibleDefs.length} sources connected
             </p>
           </div>
         </div>

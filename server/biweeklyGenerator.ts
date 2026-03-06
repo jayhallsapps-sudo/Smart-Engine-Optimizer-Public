@@ -137,24 +137,25 @@ function allAirtableItems(result: PromiseSettledResult<any>): WorkLogItem[] {
   return items;
 }
 
-type BulletItem = { text: string; url?: string };
+type BulletItem = { text: string; url?: string; source?: string };
 type WorkLogRow = NonNullable<DocxSection["workLog"]>[number];
 
 function makeRow(
   area: string,
   didItems: BulletItem[],
-  nextItems: string[],
+  nextItemsRich: BulletItem[],
   didPlaceholder: string,
   nextPlaceholder: string
 ): WorkLogRow {
   const actualDid = didItems.length > 0 ? didItems : didPlaceholder ? [{ text: didPlaceholder }] : [];
-  const actualNext = nextItems.length > 0 ? nextItems : nextPlaceholder ? [nextPlaceholder] : [];
+  const actualNext = nextItemsRich.length > 0 ? nextItemsRich : nextPlaceholder ? [{ text: nextPlaceholder }] : [];
   return {
     area,
     whatWeDid: actualDid.map(i => i.text).join("\n"),
-    whatsNext: actualNext.join("\n"),
+    whatsNext: actualNext.map(i => i.text).join("\n"),
     items: actualDid,
-    nextItems: actualNext,
+    nextItems: actualNext.map(i => i.text),
+    nextItemsRich: actualNext,
   };
 }
 
@@ -229,12 +230,13 @@ export async function generateBiweekly(input: {
     previous?: string;
     delta?: string;
     isPositive?: boolean;
+    source?: string;
   }> = [];
 
   if (ga4Result.status === "fulfilled" && ga4Result.value) {
     const summary = (ga4Result.value as any).summary ?? [];
     for (const s of summary) {
-      pulseMetrics.push({ label: s.label, current: s.current });
+      pulseMetrics.push({ label: s.label, current: s.current, source: "GA4" });
     }
   }
 
@@ -244,16 +246,17 @@ export async function generateBiweekly(input: {
     const summary = (gscResult.value as any).summary ?? [];
     for (const s of summary.slice(0, 3)) {
       if (!EXCLUDED_PULSE_LABELS.has(s.label)) {
-        pulseMetrics.push({ label: s.label, current: s.current });
+        pulseMetrics.push({ label: s.label, current: s.current, source: "GSC" });
       }
     }
   }
 
   if (callTrackingResult.status === "fulfilled" && callTrackingResult.value) {
+    const callSource = (client as any).callrailCompanyId ? "CallRail" : (client as any).ctmAccountId ? "CallRail" : "CallRail";
     const summary = (callTrackingResult.value as any).summary ?? [];
     for (const s of summary.slice(0, 2)) {
       if (!EXCLUDED_PULSE_LABELS.has(s.label)) {
-        pulseMetrics.push({ label: s.label, current: s.current });
+        pulseMetrics.push({ label: s.label, current: s.current, source: callSource });
       }
     }
   }
@@ -261,15 +264,15 @@ export async function generateBiweekly(input: {
   const nsmGoals = nsmResult.status === "fulfilled" ? nsmResult.value : null;
   if (nsmGoals) {
     pulseMetrics.push(
-      { label: "NSM Quarter",          current: nsmGoals.quarter },
-      { label: "NSM Sessions Goal",     current: nsmGoals.sessionsGoal },
-      { label: "NSM Sessions Actual",   current: nsmGoals.sessionsActual },
-      { label: "NSM Sessions %",        current: nsmGoals.sessionsPercent },
-      { label: "NSM Sessions On Track", current: nsmGoals.sessionsOnTrack },
-      { label: `NSM MVP (${nsmGoals.mvpType}) Goal`,    current: nsmGoals.mvpGoal },
-      { label: `NSM MVP (${nsmGoals.mvpType}) Actual`,  current: nsmGoals.mvpActual },
-      { label: `NSM MVP (${nsmGoals.mvpType}) %`,       current: nsmGoals.mvpPercent },
-      { label: `NSM MVP (${nsmGoals.mvpType}) On Track`,current: nsmGoals.mvpOnTrack },
+      { label: "NSM Quarter",          current: nsmGoals.quarter, source: "NSM" },
+      { label: "NSM Sessions Goal",     current: nsmGoals.sessionsGoal, source: "NSM" },
+      { label: "NSM Sessions Actual",   current: nsmGoals.sessionsActual, source: "NSM" },
+      { label: "NSM Sessions %",        current: nsmGoals.sessionsPercent, source: "NSM" },
+      { label: "NSM Sessions On Track", current: nsmGoals.sessionsOnTrack, source: "NSM" },
+      { label: `NSM MVP (${nsmGoals.mvpType}) Goal`,    current: nsmGoals.mvpGoal, source: "NSM" },
+      { label: `NSM MVP (${nsmGoals.mvpType}) Actual`,  current: nsmGoals.mvpActual, source: "NSM" },
+      { label: `NSM MVP (${nsmGoals.mvpType}) %`,       current: nsmGoals.mvpPercent, source: "NSM" },
+      { label: `NSM MVP (${nsmGoals.mvpType}) On Track`,current: nsmGoals.mvpOnTrack, source: "NSM" },
     );
   }
 
@@ -331,38 +334,59 @@ export async function generateBiweekly(input: {
 
   const asanaContentDid: BulletItem[] = (asanaCompletedByCategory["New Content"] ?? []).map(t => ({
     text: asanaSectionToCategory(t.section).italicize ? `*${t.name}*` : t.name,
+    source: "Asana",
   }));
-  const asanaContentNext: string[] = (asanaUpcomingByCategory["New Content"] ?? []).map(t => t.name);
+  const asanaContentNext: BulletItem[] = (asanaUpcomingByCategory["New Content"] ?? []).map(t => ({
+    text: t.name,
+    source: "Asana",
+  }));
   const asanaTechDid: BulletItem[] = (asanaCompletedByCategory["Technical SEO"] ?? []).map(t => ({
     text: asanaSectionToCategory(t.section).italicize ? `*${t.name}*` : t.name,
+    source: "Asana",
   }));
-  const asanaTechNext: string[] = (asanaUpcomingByCategory["Technical SEO"] ?? []).map(t => t.name);
+  const asanaTechNext: BulletItem[] = (asanaUpcomingByCategory["Technical SEO"] ?? []).map(t => ({
+    text: t.name,
+    source: "Asana",
+  }));
   const asanaLocalDid: BulletItem[] = (asanaCompletedByCategory["Local SEO"] ?? []).map(t => ({
     text: asanaSectionToCategory(t.section).italicize ? `*${t.name}*` : t.name,
+    source: "Asana",
   }));
-  const asanaLocalNext: string[] = (asanaUpcomingByCategory["Local SEO"] ?? []).map(t => t.name);
+  const asanaLocalNext: BulletItem[] = (asanaUpcomingByCategory["Local SEO"] ?? []).map(t => ({
+    text: t.name,
+    source: "Asana",
+  }));
 
   const newContentDid: BulletItem[] = [
-    ...(noAirtable ? [] : publishedContent.map(i => ({ text: i.task, url: i.url ?? undefined }))),
+    ...(noAirtable ? [] : publishedContent.map(i => ({ text: i.task, url: i.url ?? undefined, source: "Airtable" }))),
     ...asanaContentDid,
   ];
-  const newContentNext: string[] = [
-    ...(noAirtable ? [] : productionContent.map(i => i.task)),
+  const newContentNext: BulletItem[] = [
+    ...(noAirtable ? [] : productionContent.map(i => ({ text: i.task, source: "Airtable" }))),
     ...asanaContentNext,
   ];
   const optDid: BulletItem[] = [
-    ...(noAirtable ? [] : publishedOptimization.map(i => ({ text: i.task, url: i.url ?? undefined }))),
+    ...(noAirtable ? [] : publishedOptimization.map(i => ({ text: i.task, url: i.url ?? undefined, source: "Airtable" }))),
   ];
-  const optNext: string[] = [
-    ...(noAirtable ? [] : productionOptimization.map(i => i.task)),
+  const optNext: BulletItem[] = [
+    ...(noAirtable ? [] : productionOptimization.map(i => ({ text: i.task, source: "Airtable" }))),
   ];
 
-  const techDid: BulletItem[] = [...sfDidItems, ...asanaTechDid];
+  const sfDidItemsTagged: BulletItem[] = sfDidItems.map(i => ({ ...i, source: "Screaming Frog" }));
+  const techDid: BulletItem[] = [...sfDidItemsTagged, ...asanaTechDid];
   const localDid: BulletItem[] = [...asanaLocalDid];
-  const localNext: string[] = asanaLocalNext.length > 0 ? asanaLocalNext : [
-    "Optimize GBP photos and posts for active campaigns.",
-    "Monitor and respond to new Google reviews.",
+  const localNext: BulletItem[] = asanaLocalNext.length > 0 ? asanaLocalNext : [
+    { text: "Optimize GBP photos and posts for active campaigns." },
+    { text: "Monitor and respond to new Google reviews." },
   ];
+
+  const sfPrioritiesRich: BulletItem[] = sfPriorities.map(t => ({
+    text: t,
+    source: hasSf ? "Screaming Frog" : undefined,
+  }));
+  const techNext: BulletItem[] = sfPrioritiesRich.length > 0
+    ? sfPrioritiesRich
+    : [...asanaTechNext, { text: "Review Core Web Vitals for top landing pages." }];
 
   const workLog: NonNullable<DocxSection["workLog"]> = [
     makeRow(
@@ -382,16 +406,16 @@ export async function generateBiweekly(input: {
     makeRow(
       "Technical SEO",
       techDid,
-      sfPriorities.length > 0 ? sfPriorities : [...asanaTechNext, "Review Core Web Vitals for top landing pages."],
+      techNext,
       "Enter technical SEO tasks completed this period.",
-      sfPriorities[0] ?? asanaTechNext[0] ?? "Review Core Web Vitals for top landing pages."
+      techNext[0]?.text ?? "Review Core Web Vitals for top landing pages."
     ),
     makeRow(
       "Local SEO",
       localDid,
       localNext,
       "Review GBP for content published or updated this period.",
-      localNext[0] ?? "Optimize GBP photos and posts for active campaigns."
+      localNext[0]?.text ?? "Optimize GBP photos and posts for active campaigns."
     ),
   ];
 

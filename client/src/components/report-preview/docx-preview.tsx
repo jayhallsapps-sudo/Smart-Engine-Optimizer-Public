@@ -3,7 +3,39 @@ import { Pencil, Check, X } from "lucide-react";
 import { EditableSection } from "./editable-section";
 import { MetricCard } from "./report-chart";
 
-interface BulletItem { text: string; url?: string }
+interface BulletItem { text: string; url?: string; source?: string }
+
+const SOURCE_COLORS: Record<string, { bg: string; text: string }> = {
+  "Airtable":       { bg: "#FFF3D6", text: "#B45309" },
+  "Asana":          { bg: "#FDEAEA", text: "#C0392B" },
+  "Screaming Frog": { bg: "#E6F4EA", text: "#1E7E34" },
+  "GA4":            { bg: "#E8F0FE", text: "#1967D2" },
+  "GSC":            { bg: "#E6F4EA", text: "#137333" },
+  "CallRail":       { bg: "#F3E8FF", text: "#6D28D9" },
+  "NSM":            { bg: "#EEF2FF", text: "#4338CA" },
+};
+
+function SourceBadge({ source }: { source: string }) {
+  const colors = SOURCE_COLORS[source] ?? { bg: "#F3F4F6", text: "#6B7280" };
+  return (
+    <span
+      style={{
+        backgroundColor: colors.bg,
+        color: colors.text,
+        fontSize: "8px",
+        padding: "1px 4px",
+        borderRadius: "3px",
+        fontWeight: 500,
+        lineHeight: 1.4,
+        whiteSpace: "nowrap",
+        flexShrink: 0,
+        letterSpacing: "0.01em",
+      }}
+    >
+      {source}
+    </span>
+  );
+}
 
 function WorkLogBulletCell({
   editKey,
@@ -76,21 +108,24 @@ function WorkLogBulletCell({
           <li className="text-muted-foreground italic">—</li>
         ) : (
           displayItems.map((item, ii) => (
-            <li key={ii} className="flex items-start gap-1">
+            <li key={ii} className="flex items-start gap-1.5 flex-wrap">
               <span className="text-gray-400 mt-px shrink-0">•</span>
-              {item.url && !wasEdited ? (
-                <a
-                  href={item.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-600 underline break-all"
-                  onClick={e => e.stopPropagation()}
-                >
-                  {item.text}
-                </a>
-              ) : (
-                <span>{item.text}</span>
-              )}
+              <span className="flex items-start gap-1 flex-1 flex-wrap">
+                {item.url && !wasEdited ? (
+                  <a
+                    href={item.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 underline break-all"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    {item.text}
+                  </a>
+                ) : (
+                  <span className="break-words">{item.text}</span>
+                )}
+                {item.source && !wasEdited && <SourceBadge source={item.source} />}
+              </span>
             </li>
           ))
         )}
@@ -104,14 +139,15 @@ export interface DocxSection {
   id: string;
   type: "header" | "pulse" | "progress" | "partnership" | "qbr-exec" | "qbr-category" | "bullets" | "technical";
   title?: string;
-  metrics?: Array<{ label: string; current: string; previous?: string; delta?: string; isPositive?: boolean }>;
+  metrics?: Array<{ label: string; current: string; previous?: string; delta?: string; isPositive?: boolean; source?: string }>;
   bullets?: string[];
   workLog?: Array<{
     area: string;
     whatWeDid: string;
     whatsNext: string;
-    items?: Array<{ text: string; url?: string }>;
+    items?: Array<{ text: string; url?: string; source?: string }>;
     nextItems?: string[];
+    nextItemsRich?: Array<{ text: string; url?: string; source?: string }>;
   }>;
   table?: { headers: string[]; rows: (string | number)[][] };
   technicalTable?: { headers: string[]; rows: string[][] };
@@ -438,9 +474,10 @@ function DocxSectionBlock({
                 <div key={mi}>
                   <div className="flex items-start gap-1.5">
                     <span style={{ color: accentColor }} className="font-bold mt-0.5 shrink-0">●</span>
-                    <div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="font-bold" style={{ color: accentColor }}>{m.label}: </span>
                       <span>{m.current}</span>
+                      {m.source && <SourceBadge source={m.source} />}
                     </div>
                   </div>
                   <div className="flex items-start gap-1.5 pl-5 mt-0.5 text-[11px] text-gray-500">
@@ -562,7 +599,7 @@ function DocxSectionBlock({
                     <WorkLogBulletCell
                       editKey={`${section.id}_worklog_${ri}_next`}
                       rawValue={row.whatsNext}
-                      items={row.nextItems?.map(t => ({ text: t }))}
+                      items={row.nextItemsRich ?? row.nextItems?.map(t => ({ text: t }))}
                       edits={edits}
                       onEdit={onEdit}
                     />

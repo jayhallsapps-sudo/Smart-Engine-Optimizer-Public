@@ -69,20 +69,39 @@ export function ReportLineChart({ data, keys, colors, height = 220, title }: Rep
   );
 }
 
+const SOURCE_COLORS: Record<string, { bg: string; text: string }> = {
+  GA4:             { bg: "#DBEAFE", text: "#1D4ED8" },
+  GSC:             { bg: "#D1FAE5", text: "#065F46" },
+  CallRail:        { bg: "#F3E8FF", text: "#7E22CE" },
+  Airtable:        { bg: "#FEF3C7", text: "#92400E" },
+  Asana:           { bg: "#FFE4E1", text: "#BE123C" },
+  NSM:             { bg: "#E0E7FF", text: "#3730A3" },
+  "Screaming Frog":{ bg: "#FEE2E2", text: "#991B1B" },
+};
+
 interface MetricCardProps {
   label: string;
   current: string;
   previous?: string;
   delta?: string;
   isPositive?: boolean;
+  source?: string;
 }
 
-export function MetricCard({ label, current, previous, delta, isPositive }: MetricCardProps) {
+export function MetricCard({ label, current, previous, delta, isPositive, source }: MetricCardProps) {
   const arrow = isPositive ? "▲" : "▼";
   const dColor = isPositive ? "#16A34A" : "#DC2626";
+  const sc = source ? (SOURCE_COLORS[source] ?? { bg: "#F3F4F6", text: "#374151" }) : null;
   return (
     <div className="bg-[#E8F0FE] border border-[#D1D5DB] rounded-lg p-3 flex flex-col gap-0.5 min-w-0">
-      <div className="text-[10px] text-[#6B7280] font-medium uppercase tracking-wide truncate">{label}</div>
+      <div className="flex items-center justify-between gap-1">
+        <div className="text-[10px] text-[#6B7280] font-medium uppercase tracking-wide truncate">{label}</div>
+        {sc && (
+          <span style={{ background: sc.bg, color: sc.text, fontSize: 7, fontWeight: 600, padding: "1px 4px", borderRadius: 3, whiteSpace: "nowrap" }}>
+            {source}
+          </span>
+        )}
+      </div>
       <div className="text-xl font-bold text-[#1F2937] truncate">{current}</div>
       {previous && (
         <div className="text-[10px] text-[#6B7280]">

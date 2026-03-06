@@ -65,18 +65,18 @@ export async function generateMonthly(input: {
     date: fmtDate(now),
   });
 
-  const perfMetrics: Array<{ label: string; current: string; previous?: string; delta?: string; isPositive?: boolean }> = [];
+  const perfMetrics: Array<{ label: string; current: string; previous?: string; delta?: string; isPositive?: boolean; source?: string }> = [];
   if (ga4Funnel.status === "fulfilled" && ga4Funnel.value) {
     const summary = (ga4Funnel.value as any).summary ?? [];
-    perfMetrics.push(...summary.slice(0, 4).map((s: any) => ({ label: s.label, current: s.current, previous: s.previous, delta: s.deltaPercent, isPositive: s.isPositive })));
+    perfMetrics.push(...summary.slice(0, 4).map((s: any) => ({ label: s.label, current: s.current, previous: s.previous, delta: s.deltaPercent, isPositive: s.isPositive, source: "GA4" })));
   }
   if (gscQueries.status === "fulfilled" && gscQueries.value) {
     const summary = (gscQueries.value as any).summary ?? [];
-    perfMetrics.push(...summary.slice(0, 2).map((s: any) => ({ label: s.label, current: s.current, previous: s.previous, delta: s.deltaPercent, isPositive: s.isPositive })));
+    perfMetrics.push(...summary.slice(0, 2).map((s: any) => ({ label: s.label, current: s.current, previous: s.previous, delta: s.deltaPercent, isPositive: s.isPositive, source: "GSC" })));
   }
   if (ctResult.status === "fulfilled" && ctResult.value) {
     const summary = (ctResult.value as any).summary ?? [];
-    perfMetrics.push(...summary.slice(0, 1).map((s: any) => ({ label: s.label, current: s.current, previous: s.previous, delta: s.deltaPercent, isPositive: s.isPositive })));
+    perfMetrics.push(...summary.slice(0, 1).map((s: any) => ({ label: s.label, current: s.current, previous: s.previous, delta: s.deltaPercent, isPositive: s.isPositive, source: "CallRail" })));
   }
 
   slides.push({

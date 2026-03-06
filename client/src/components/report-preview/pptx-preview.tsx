@@ -10,13 +10,13 @@ export interface Slide {
   subtitle?: string;
   clientName?: string;
   date?: string;
-  metrics?: Array<{ label: string; current: string; previous?: string; delta?: string; isPositive?: boolean }>;
+  metrics?: Array<{ label: string; current: string; previous?: string; delta?: string; isPositive?: boolean; source?: string }>;
   table?: { headers: string[]; rows: (string | number)[][] };
   chartData?: Array<{ label: string; [key: string]: string | number }>;
   chartKeys?: string[];
   bullets?: string[];
   leftContent?: { type: "bullets" | "table"; bullets?: string[]; table?: { headers: string[]; rows: (string | number)[][] } };
-  rightContent?: { type: "chart-bar" | "chart-line" | "metrics"; chartData?: Array<{ label: string; [key: string]: string | number }>; chartKeys?: string[]; metrics?: Array<{ label: string; current: string; previous?: string; delta?: string; isPositive?: boolean }> };
+  rightContent?: { type: "chart-bar" | "chart-line" | "metrics"; chartData?: Array<{ label: string; [key: string]: string | number }>; chartKeys?: string[]; metrics?: Array<{ label: string; current: string; previous?: string; delta?: string; isPositive?: boolean; source?: string }> };
   loading?: boolean;
 }
 

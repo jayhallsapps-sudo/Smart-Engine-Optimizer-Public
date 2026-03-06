@@ -86,28 +86,28 @@ function getSfTopPriorities(counts: SfIssueCounts): string[] {
   const issues: Array<{ count: number; label: string }> = [];
 
   if (counts.canonical > 0) {
-    issues.push({ count: counts.canonical, label: `Resolve ${counts.canonical} canonical mismatch${counts.canonical !== 1 ? "es" : ""} (conflicting canonical tags detected)` });
-  }
-  if (counts.images > 0) {
-    issues.push({ count: counts.images, label: `Optimize ${counts.images} oversized image${counts.images !== 1 ? "s" : ""} (>150 KB) to improve page speed` });
+    issues.push({ count: counts.canonical, label: `Fix canonical tag conflicts — ${counts.canonical} page${counts.canonical !== 1 ? "s" : ""} with mismatched or non-self-referencing canonicals` });
   }
   if (counts.errors404 > 0) {
-    issues.push({ count: counts.errors404, label: `Fix ${counts.errors404} broken link${counts.errors404 !== 1 ? "s" : ""} returning 404 errors` });
+    issues.push({ count: counts.errors404, label: `Resolve ${counts.errors404} broken internal link${counts.errors404 !== 1 ? "s" : ""} — implement 301 redirects or update destination URLs` });
+  }
+  if (counts.images > 0) {
+    issues.push({ count: counts.images, label: `Compress ${counts.images} oversized image${counts.images !== 1 ? "s" : ""} (>150 KB) — prioritize images on service and location pages` });
   }
   if (counts.missingMeta > 0) {
-    issues.push({ count: counts.missingMeta, label: `Prioritize meta descriptions for top-traffic pages (${counts.missingMeta} pages flagged — focus on highest-value first)` });
+    issues.push({ count: counts.missingMeta, label: `Write missing meta descriptions for service and location pages — prioritize by organic traffic volume` });
   }
 
   issues.sort((a, b) => b.count - a.count);
   const top3 = issues.slice(0, 3).map(i => i.label);
 
   const fallbacks = [
-    "Review crawl for redirect chains and broken internal links",
-    "Audit Core Web Vitals for top landing pages",
-    "Check for duplicate content issues",
+    "Audit redirect chains and broken internal links in crawl data",
+    "Review Core Web Vitals for top service and location landing pages",
+    "Identify and consolidate duplicate content across location pages",
   ];
   while (top3.length < 3) {
-    top3.push(fallbacks[top3.length] ?? "Additional technical review");
+    top3.push(fallbacks[top3.length] ?? "Review crawl report for additional technical issues");
   }
 
   return top3;

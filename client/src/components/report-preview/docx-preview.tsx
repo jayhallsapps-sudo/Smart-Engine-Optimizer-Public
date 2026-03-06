@@ -166,10 +166,10 @@ const EFFORT_LABELS: Record<string, string> = {
 };
 
 const BW_SECTION_NUMS: Record<string, number> = {
-  bw_pulse: 0,
-  bw_progress: 1,
-  bw_technical: 2,
-  bw_partnership: 2,
+  bw_pulse: 1,
+  bw_progress: 2,
+  bw_technical: 3,
+  bw_partnership: 3,
 };
 
 export function DocxPreview({
@@ -257,10 +257,11 @@ export function DocxPreview({
 
               {purposeSection && (
                 <div style={{ marginBottom: "20px" }}>
-                  <div style={{ borderBottom: `2px solid ${accentColor}`, paddingBottom: "4px", marginBottom: "6px" }}>
-                    <span style={{ fontSize: "14px", fontWeight: 700, color: accentColor, textTransform: "uppercase", letterSpacing: "0.04em" }}>
-                      Purpose
-                    </span>
+                  <div
+                    className="text-base font-bold"
+                    style={{ color: accentColor, borderBottom: `2px solid ${accentColor}`, paddingBottom: 4, marginBottom: 8 }}
+                  >
+                    1. Purpose
                   </div>
                   <div style={{ fontSize: "12px", color: "#374151" }}>
                     <EditableSection

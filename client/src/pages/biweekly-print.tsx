@@ -6,7 +6,7 @@ export default function BiweeklyPrint() {
   const [error, setError] = useState(false);
 
   useEffect(() => {
-    const raw = sessionStorage.getItem("bw_print_data");
+    const raw = localStorage.getItem("bw_print_data");
     if (!raw) { setError(true); return; }
     try { setData(JSON.parse(raw)); } catch { setError(true); }
   }, []);

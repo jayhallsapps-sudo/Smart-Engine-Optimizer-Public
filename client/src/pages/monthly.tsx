@@ -78,7 +78,7 @@ export default function MonthlyPage() {
 
   function downloadPdf() {
     if (!report) return;
-    sessionStorage.setItem("monthly_print_data", JSON.stringify({ report, edits }));
+    localStorage.setItem("monthly_print_data", JSON.stringify({ report, edits }));
     window.open("/monthly/print", "_blank");
   }
 

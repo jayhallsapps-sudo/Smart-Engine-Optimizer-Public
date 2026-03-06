@@ -10,7 +10,7 @@ export default function MonthlyPrint() {
   const [error, setError] = useState(false);
 
   useEffect(() => {
-    const raw = sessionStorage.getItem("monthly_print_data");
+    const raw = localStorage.getItem("monthly_print_data");
     if (!raw) { setError(true); return; }
     try { setData(JSON.parse(raw)); } catch { setError(true); }
   }, []);

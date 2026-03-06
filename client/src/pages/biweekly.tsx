@@ -163,7 +163,7 @@ export default function BiweeklyPage() {
 
   function downloadPdf() {
     if (!report) return;
-    sessionStorage.setItem("bw_print_data", JSON.stringify({ report, edits }));
+    localStorage.setItem("bw_print_data", JSON.stringify({ report, edits }));
     window.open("/biweekly/print", "_blank");
   }
 

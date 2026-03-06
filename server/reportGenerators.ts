@@ -54,6 +54,8 @@ export interface WorkLogRow {
   whatWeDid: string;
   whatsNext: string;
   url?: string;
+  items?: Array<{ text: string; url?: string }>;
+  nextItems?: string[];
 }
 
 const WEBSERV_BLUE = "1B3A6B";
@@ -194,6 +196,37 @@ function bwSectionHeading(num: number, title: string) {
 const WL_COL = [1440, 4320, 2880] as const;
 
 function buildBwWorkLogTable(rows: WorkLogRow[]): Table {
+  function makeItemParagraphs(
+    items: Array<{ text: string; url?: string }>,
+    fallbackText: string
+  ): Paragraph[] {
+    if (!items || items.length === 0) {
+      return [new Paragraph({ children: [new TextRun({ text: fallbackText || "—", size: 18 })] })];
+    }
+    return items.map(item =>
+      new Paragraph({
+        bullet: { level: 0 },
+        spacing: { after: 40 },
+        children: item.url
+          ? [new ExternalHyperlink({ link: item.url, children: [new TextRun({ text: item.text, size: 18, style: "Hyperlink" })] })]
+          : [new TextRun({ text: item.text, size: 18 })],
+      })
+    );
+  }
+
+  function makeNextParagraphs(nextItems: string[], fallbackText: string): Paragraph[] {
+    if (!nextItems || nextItems.length === 0) {
+      return [new Paragraph({ children: [new TextRun({ text: fallbackText || "—", size: 18 })] })];
+    }
+    return nextItems.map(item =>
+      new Paragraph({
+        bullet: { level: 0 },
+        spacing: { after: 40 },
+        children: [new TextRun({ text: item, size: 18 })],
+      })
+    );
+  }
+
   return new Table({
     width: { size: TEXT_AREA_DXA, type: WidthType.DXA },
     columnWidths: [...WL_COL],
@@ -208,28 +241,25 @@ function buildBwWorkLogTable(rows: WorkLogRow[]): Table {
       }),
       ...rows.map((row, ri) => {
         const shade = ri % 2 === 1;
+        const didChildren = makeItemParagraphs(row.items ?? [], row.whatWeDid);
+        const nextChildren = makeNextParagraphs(row.nextItems ?? [], row.whatsNext);
         const didCell = new TableCell({
           width: { size: WL_COL[1], type: WidthType.DXA },
           shading: shade ? { type: ShadingType.SOLID, color: WEBSERV_LIGHT } : undefined,
           borders: makeBorder(),
-          children: [
-            new Paragraph({
-              children: row.url
-                ? [
-                    new ExternalHyperlink({
-                      link: row.url,
-                      children: [new TextRun({ text: row.whatWeDid || "—", size: 18, style: "Hyperlink" })],
-                    }),
-                  ]
-                : [new TextRun({ text: row.whatWeDid || "—", size: 18 })],
-            }),
-          ],
+          children: didChildren,
+        });
+        const nextCell = new TableCell({
+          width: { size: WL_COL[2], type: WidthType.DXA },
+          shading: shade ? { type: ShadingType.SOLID, color: WEBSERV_LIGHT } : undefined,
+          borders: makeBorder(),
+          children: nextChildren,
         });
         return new TableRow({
           children: [
             bodyCell(row.area, shade, WL_COL[0]),
             didCell,
-            bodyCell(row.whatsNext, shade, WL_COL[2]),
+            nextCell,
           ],
         });
       }),

@@ -1008,7 +1008,7 @@ export async function registerRoutes(
         const items: any[] = [];
         if (s.metrics?.length) items.push({ summary: s.metrics.map((m: any) => ({ label: m.label, current: m.current, previous: m.previous ?? "—", deltaPercent: m.delta ?? "—", isPositive: m.isPositive ?? true })) });
         if (s.bullets?.length) items.push({ manualText: (s.bullets as string[]).map((b, bi) => edits?.[`${s.id}_bullet_${bi}`] ?? b).filter(Boolean).join("\n") });
-        if (s.workLog?.length) items.push({ tableRows: (s.workLog as any[]).map((r: any, ri: number) => ({ area: r.area, whatWeDid: edits?.[`${s.id}_worklog_${ri}_did`] ?? r.whatWeDid, whatsNext: edits?.[`${s.id}_worklog_${ri}_next`] ?? r.whatsNext })) });
+        if (s.workLog?.length) items.push({ tableRows: (s.workLog as any[]).map((r: any, ri: number) => ({ area: r.area, whatWeDid: edits?.[`${s.id}_worklog_${ri}_did`] ?? r.whatWeDid, whatsNext: edits?.[`${s.id}_worklog_${ri}_next`] ?? r.whatsNext, items: r.items, nextItems: r.nextItems })) });
         if (s.table) items.push({ tables: [{ title: s.title, headers: s.table.headers, rows: s.table.rows }] });
         if (s.technicalTable) {
           const tbl = s.technicalTable as { headers: string[]; rows: string[][] };

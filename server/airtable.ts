@@ -35,7 +35,8 @@ export function getCreditTypeLabel(raw: string): string {
 export async function fetchAirtableWorkLog(
   clientId: number,
   startDate: string,
-  endDate: string
+  endDate: string,
+  viewNameOverride?: string
 ): Promise<{ success: true; data: WorkLogResult } | { success: false; error: string; setupRequired?: boolean }> {
   const client = await storage.getClient(clientId);
   if (!client) {
@@ -44,7 +45,7 @@ export async function fetchAirtableWorkLog(
 
   const airtableBaseId = (client as any).airtableBaseId as string | null;
   const airtableTableName = (client as any).airtableTableName as string | null;
-  const airtableViewName = (client as any).airtableViewName as string | null ?? "Published";
+  const airtableViewName = viewNameOverride ?? ((client as any).airtableViewName as string | null) ?? "Published";
 
   if (!airtableBaseId || !airtableTableName) {
     return {

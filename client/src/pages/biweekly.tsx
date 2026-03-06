@@ -184,25 +184,41 @@ export default function BiweeklyPage() {
     }
   }
 
-  async function handleSfUpload(file: File) {
-    if (!clientId) return;
+  async function handleSfUpload(files: FileList | File[]) {
+    if (!clientId || !files || files.length === 0) return;
     setSfUploading(true);
+    const fileArray = Array.from(files);
+    let successCount = 0;
+    const errors: string[] = [];
     try {
-      const text = await file.text();
-      const { headers, data } = parseCSV(text);
-      if (headers.length === 0) throw new Error("CSV appears empty or unreadable.");
-      const reportDate = new Date().toISOString().slice(0, 10);
-      await apiRequest("POST", `/api/clients/${clientId}/sf-reports`, {
-        filename: file.name,
-        reportDate,
-        headers,
-        data,
-        rowCount: data.length,
-      });
+      for (const file of fileArray) {
+        try {
+          const text = await file.text();
+          const { headers, data } = parseCSV(text);
+          if (headers.length === 0) throw new Error("CSV appears empty or unreadable.");
+          const reportDate = new Date().toISOString().slice(0, 10);
+          await apiRequest("POST", `/api/clients/${clientId}/sf-reports`, {
+            filename: file.name,
+            reportDate,
+            headers,
+            data,
+            rowCount: data.length,
+          });
+          successCount++;
+        } catch (err: any) {
+          errors.push(`${file.name}: ${err.message}`);
+        }
+      }
       await refetchSf();
-      toast({ title: "Crawl uploaded", description: `${file.name} — ${data.length} rows imported.` });
-    } catch (err: any) {
-      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+      if (successCount > 0) {
+        toast({
+          title: successCount === 1 ? "Crawl uploaded" : `${successCount} crawls uploaded`,
+          description: errors.length > 0 ? `${errors.length} file(s) failed.` : undefined,
+        });
+      }
+      if (errors.length > 0 && successCount === 0) {
+        toast({ title: "Upload failed", description: errors[0], variant: "destructive" });
+      }
     } finally {
       setSfUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -349,10 +365,12 @@ export default function BiweeklyPage() {
                       ref={fileInputRef}
                       type="file"
                       accept=".csv"
+                      multiple
                       className="hidden"
                       onChange={e => {
-                        const file = e.target.files?.[0];
-                        if (file) handleSfUpload(file);
+                        if (e.target.files && e.target.files.length > 0) {
+                          handleSfUpload(e.target.files);
+                        }
                       }}
                     />
                     <Button
@@ -370,7 +388,7 @@ export default function BiweeklyPage() {
                       )}
                     </Button>
                     <p className="text-[10px] text-muted-foreground">
-                      Upload Screaming Frog export CSV. Up to 10 crawls stored per client.
+                      Upload one or more Screaming Frog CSVs. Up to 10 crawls stored per client.
                     </p>
                     {displayedSfReports.length === 0 && (
                       <p className="text-[10px] text-muted-foreground italic">No crawls uploaded yet.</p>

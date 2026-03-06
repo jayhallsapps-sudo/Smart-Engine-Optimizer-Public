@@ -7,7 +7,13 @@ export interface DocxSection {
   title?: string;
   metrics?: Array<{ label: string; current: string; previous?: string; delta?: string; isPositive?: boolean }>;
   bullets?: string[];
-  workLog?: Array<{ area: string; whatWeDid: string; whatsNext: string }>;
+  workLog?: Array<{
+    area: string;
+    whatWeDid: string;
+    whatsNext: string;
+    items?: Array<{ text: string; url?: string }>;
+    nextItems?: string[];
+  }>;
   table?: { headers: string[]; rows: (string | number)[][] };
   technicalTable?: { headers: string[]; rows: string[][] };
   wins?: Array<{ title: string; evidence: string; source: string }>;
@@ -250,26 +256,52 @@ function DocxSectionBlock({
           <tbody>
             {section.workLog.map((row, ri) => (
               <tr key={ri} style={{ background: ri % 2 === 1 ? "#F0F4FA" : "white" }}>
-                <td className="px-2 py-1.5 border border-[#D1D5DB] text-[10px] align-top">{row.area || "—"}</td>
+                <td className="px-2 py-1.5 border border-[#D1D5DB] text-[10px] align-top font-medium">{row.area || "—"}</td>
                 <td className="px-2 py-1.5 border border-[#D1D5DB] text-[10px] align-top">
-                  <EditableSection
-                    editKey={`${section.id}_worklog_${ri}_did`}
-                    value={row.whatWeDid}
-                    edits={edits}
-                    onEdit={onEdit}
-                    as="span"
-                    multiline
-                  />
+                  {row.items && row.items.length > 0 ? (
+                    <ul className="space-y-0.5 list-none p-0 m-0">
+                      {row.items.map((item, ii) => (
+                        <li key={ii} className="flex items-start gap-1">
+                          <span className="text-gray-400 mt-px">•</span>
+                          {item.url ? (
+                            <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline break-all">{item.text}</a>
+                          ) : (
+                            <span>{item.text}</span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <EditableSection
+                      editKey={`${section.id}_worklog_${ri}_did`}
+                      value={row.whatWeDid}
+                      edits={edits}
+                      onEdit={onEdit}
+                      as="span"
+                      multiline
+                    />
+                  )}
                 </td>
                 <td className="px-2 py-1.5 border border-[#D1D5DB] text-[10px] align-top">
-                  <EditableSection
-                    editKey={`${section.id}_worklog_${ri}_next`}
-                    value={row.whatsNext}
-                    edits={edits}
-                    onEdit={onEdit}
-                    as="span"
-                    multiline
-                  />
+                  {row.nextItems && row.nextItems.length > 0 ? (
+                    <ul className="space-y-0.5 list-none p-0 m-0">
+                      {row.nextItems.map((item, ii) => (
+                        <li key={ii} className="flex items-start gap-1">
+                          <span className="text-gray-400 mt-px">•</span>
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <EditableSection
+                      editKey={`${section.id}_worklog_${ri}_next`}
+                      value={row.whatsNext}
+                      edits={edits}
+                      onEdit={onEdit}
+                      as="span"
+                      multiline
+                    />
+                  )}
                 </td>
               </tr>
             ))}

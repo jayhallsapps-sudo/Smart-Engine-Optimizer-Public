@@ -77,23 +77,48 @@ export function getSampleBiweeklySections(): SectionData[] {
           tableRows: [
             {
               area: "New Content",
-              whatWeDid: "Published 'Signs Your Water Heater Needs Replacing' blog post — 1,200 words, targeting water-heater-replacement-cost cluster. Indexed within 48 hrs.",
-              whatsNext: "Monitor impressions over 30 days; build 2 internal links from service pages.",
+              whatWeDid: "Published 'Signs Your Water Heater Needs Replacing' blog post\nPublished 'Emergency Plumbing Checklist' guide",
+              whatsNext: "Tankless Water Heater Buying Guide\nDrain Cleaning vs Hydro Jetting: Which Do You Need?",
+              items: [
+                { text: "Published 'Signs Your Water Heater Needs Replacing' blog post", url: "https://example.com/signs-water-heater-needs-replacing" },
+                { text: "Published 'Emergency Plumbing Checklist' guide", url: "https://example.com/emergency-plumbing-checklist" },
+              ],
+              nextItems: [
+                "Tankless Water Heater Buying Guide",
+                "Drain Cleaning vs Hydro Jetting: Which Do You Need?",
+              ],
             },
             {
-              area: "Content Optimization",
-              whatWeDid: "Rewrote meta titles and H1s for 8 AC repair pages. Average position improved from 18.3 → 14.7 after update.",
-              whatsNext: "Refresh body copy on top 3 pages with new FAQ schema once rankings stabilize.",
+              area: "Optimization",
+              whatWeDid: "Rewrote meta titles and H1s for 8 AC repair pages\nUpdated CTA on water heater service page",
+              whatsNext: "Refresh body copy on top 3 pages with FAQ schema\nA/B test new hero section on /ac-repair",
+              items: [
+                { text: "Rewrote meta titles and H1s for 8 AC repair pages" },
+                { text: "Updated CTA on water heater service page", url: "https://example.com/water-heater-repair" },
+              ],
+              nextItems: [
+                "Refresh body copy on top 3 pages with FAQ schema",
+                "A/B test new hero section on /ac-repair",
+              ],
             },
             {
               area: "Technical SEO",
               whatWeDid: "Fixed 34 broken internal links flagged in last Screaming Frog crawl. Resolved 2 redirect chains > 3 hops.",
-              whatsNext: "Run re-crawl next week to confirm fixes. Address remaining 12 slow pages (LCP > 4s).",
+              whatsNext: "Resolve 12 canonical mismatches detected in crawl\nOptimize 7 oversized images (>150 KB) for page speed\nFix 3 pages missing meta descriptions",
+              nextItems: [
+                "Resolve 12 canonical mismatches detected in crawl",
+                "Optimize 7 oversized images (>150 KB) for page speed",
+                "Fix 3 pages missing meta descriptions",
+              ],
             },
             {
               area: "Local SEO",
               whatWeDid: "Optimized GBP posts for summer HVAC campaign. Added 14 new Q&A entries. Profile views up 22% vs prior period.",
-              whatsNext: "Upload 10 new job-site photos. Request 5 new Google reviews from recent customers.",
+              whatsNext: "Upload 10 new job-site photos to GBP\nRequest 5 new Google reviews from recent customers",
+              nextItems: [
+                "Upload 10 new job-site photos to GBP",
+                "Request 5 new Google reviews from recent customers",
+              ],
             },
           ],
         },

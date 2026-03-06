@@ -13,6 +13,7 @@ import {
   ShadingType,
   ImageRun,
   Header,
+  Footer,
   ExternalHyperlink,
   TextWrappingType,
   HorizontalPositionAlign,
@@ -607,21 +608,26 @@ export async function generateBiweeklyDocx(
     children.push(new Paragraph({ children: [], spacing: { after: 200 } }));
   }
 
-  children.push(
-    new Paragraph({
-      border: { top: { style: BorderStyle.SINGLE, size: 1, color: "888888" } },
-      children: [
-        new TextRun({ text: bwCfg.footerText, size: 16, color: WEBSERV_GRAY }),
-      ],
-      alignment: AlignmentType.CENTER,
-      spacing: { before: 280, after: 0 },
-    })
-  );
+  const docFooter = new Footer({
+    children: [
+      new Paragraph({
+        border: { top: { style: BorderStyle.SINGLE, size: 1, color: "888888" } },
+        children: [
+          new TextRun({ text: bwCfg.footerText, size: 16, color: WEBSERV_GRAY }),
+        ],
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 80, after: 80 },
+      }),
+    ],
+  });
 
   const doc = new Document({
     sections: [{
       headers: {
         default: docHeader,
+      },
+      footers: {
+        default: docFooter,
       },
       properties: {
         page: {
@@ -630,10 +636,11 @@ export async function generateBiweeklyDocx(
           margin: {
             // header bleeds from top edge; body starts after image height (≈1.76") + gap
             top: convertInchesToTwip(2.0),
-            bottom: convertInchesToTwip(1),
+            bottom: convertInchesToTwip(0.75),
             left: convertInchesToTwip(1.25),
             right: convertInchesToTwip(1.25),
             header: 0, // image anchors to the very top of the page
+            footer: convertInchesToTwip(0.4),
           },
         },
       },

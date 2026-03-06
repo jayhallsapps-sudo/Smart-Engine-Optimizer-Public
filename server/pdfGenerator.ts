@@ -45,21 +45,37 @@ export async function generateBiweeklyPdf(
     const bwCfg = readBwConfig();
     const headerImagePath = path.join(process.cwd(), "server", "assets", "biweekly_header.png");
     const hasHeader = fs.existsSync(headerImagePath);
+    const headerImgData = hasHeader ? fs.readFileSync(headerImagePath) : null;
+    const headerImgH = headerImgData ? Math.round((143 / 692) * PAGE_W) : 0;
+
+    const PAGE_H = 792; // LETTER height in points
+    const FOOTER_TOP = PAGE_H - 36; // footer separator Y position
+
+    function drawFooter() {
+      doc.moveTo(MARGIN_L, FOOTER_TOP).lineTo(MARGIN_L + BODY_W, FOOTER_TOP)
+        .lineWidth(0.5).strokeColor(LIGHT_GRAY).stroke();
+      doc.font("Helvetica").fontSize(8).fillColor(LIGHT_GRAY)
+        .text(bwCfg.footerText, MARGIN_L, FOOTER_TOP + 6, { width: BODY_W, align: "center", lineBreak: false });
+    }
 
     let bodyY = 56;
-    if (hasHeader) {
-      const imgData = fs.readFileSync(headerImagePath);
-      const imgH = Math.round((143 / 692) * PAGE_W);
-      doc.image(imgData, 0, 0, { width: PAGE_W });
-      bodyY = imgH + 14;
+    if (headerImgData) {
+      doc.image(headerImgData, 0, 0, { width: PAGE_W });
+      bodyY = headerImgH + 14;
     }
 
     let y = bodyY;
 
     function pageBreakIfNeeded(needed = 60) {
-      if (y + needed > 750) {
+      if (y + needed > FOOTER_TOP - 10) {
+        drawFooter();
         doc.addPage();
-        y = 56;
+        if (headerImgData) {
+          doc.image(headerImgData, 0, 0, { width: PAGE_W });
+          y = headerImgH + 14;
+        } else {
+          y = 56;
+        }
       }
     }
 
@@ -238,14 +254,7 @@ export async function generateBiweeklyPdf(
       y += 10;
     }
 
-    // ── Footer ────────────────────────────────────────────────
-    pageBreakIfNeeded(30);
-    doc.moveTo(MARGIN_L, y).lineTo(MARGIN_L + BODY_W, y)
-      .lineWidth(0.5).strokeColor(LIGHT_GRAY).stroke();
-    y += 6;
-    doc.font("Helvetica").fontSize(8).fillColor(LIGHT_GRAY)
-      .text(bwCfg.footerText, MARGIN_L, y, { width: BODY_W, align: "center" });
-
+    drawFooter();
     doc.end();
   });
 }

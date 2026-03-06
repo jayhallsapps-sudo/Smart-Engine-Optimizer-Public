@@ -199,12 +199,14 @@ export function DocxPreview({
     const otherSections = sections.filter(s => s.id !== "bw_purpose");
 
     return (
-      <div className="bg-gray-200 dark:bg-gray-700 min-h-full p-4 overflow-y-auto">
+      <div className="bg-muted/30 min-h-full flex items-start justify-center p-6 overflow-y-auto">
         <div
-          className="bg-white shadow-lg mx-auto overflow-hidden"
+          className="bg-white shadow-lg overflow-hidden"
           style={{
             width: "794px",
             minHeight: "1123px",
+            display: "flex",
+            flexDirection: "column",
             fontFamily: "'Calibri', 'Segoe UI', Arial, sans-serif",
             fontSize: "11pt",
             color: "#111827",
@@ -212,9 +214,9 @@ export function DocxPreview({
           data-testid="docx-preview-page"
         >
           {headerImgUrl ? (
-            <img src={headerImgUrl} alt="Header" style={{ width: "100%", display: "block" }} />
+            <img src={headerImgUrl} alt="Header" style={{ width: "100%", display: "block", flexShrink: 0 }} />
           ) : (
-            <div style={{ width: "100%", height: "120px", background: `linear-gradient(135deg, #C0392B 60%, #a02820)`, display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: "32px" }}>
+            <div style={{ width: "100%", height: "120px", flexShrink: 0, background: `linear-gradient(135deg, #C0392B 60%, #a02820)`, display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: "32px" }}>
               <div style={{ textAlign: "right" }}>
                 <div style={{ fontSize: "26px", fontWeight: 700, color: "white", letterSpacing: "3px", lineHeight: 1 }}>W</div>
                 <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.8)", letterSpacing: "4px" }}>WEBSERV</div>
@@ -222,57 +224,59 @@ export function DocxPreview({
             </div>
           )}
 
-          <div style={{ padding: "24px 56px 40px" }}>
-            <div style={{ marginBottom: "6px", fontSize: "20px", fontWeight: 700 }}>
-              <EditableSection editKey="report_title" value={reportTitle} edits={edits} onEdit={onEdit} as="span" />
-              {": "}
-              <EditableSection editKey="client_name" value={clientName} edits={edits} onEdit={onEdit} as="span" />
-            </div>
-            {preparedBy !== undefined && (
-              <div style={{ fontSize: "12px", marginBottom: "4px" }}>
-                <strong>Prepared by: </strong>
-                <EditableSection editKey="preparedBy" value={preparedBy} edits={edits} onEdit={onEdit} as="span" />
+          <div style={{ padding: "24px 56px 0", flex: 1, display: "flex", flexDirection: "column" }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ marginBottom: "6px", fontSize: "20px", fontWeight: 700 }}>
+                <EditableSection editKey="report_title" value={reportTitle} edits={edits} onEdit={onEdit} as="span" />
+                {": "}
+                <EditableSection editKey="client_name" value={clientName} edits={edits} onEdit={onEdit} as="span" />
               </div>
-            )}
-            {attendees !== undefined && (
-              <div style={{ fontSize: "12px", marginBottom: "4px" }}>
-                <strong>Attendees: </strong>
-                <EditableSection editKey="attendees" value={attendees} edits={edits} onEdit={onEdit} as="span" />
-              </div>
-            )}
-            <div style={{ fontSize: "12px", display: "inline-block", backgroundColor: "#E8EAED", padding: "2px 8px", borderRadius: "3px", marginBottom: "20px" }}>
-              <strong>Date: </strong>
-              <EditableSection editKey="report_date" value={date} edits={edits} onEdit={onEdit} as="span" />
-            </div>
-
-            {purposeSection && (
-              <div style={{ marginBottom: "20px" }}>
-                <div style={{ fontSize: "13px", fontWeight: 700, color: accentColor, marginBottom: "4px" }}>Purpose:</div>
-                <div style={{ fontSize: "12px", color: "#374151" }}>
-                  <EditableSection
-                    editKey="bw_purpose_bullet_0"
-                    value={purposeSection.bullets?.[0] ?? ""}
-                    edits={edits}
-                    onEdit={onEdit}
-                    as="div"
-                    multiline
-                  />
+              {preparedBy !== undefined && (
+                <div style={{ fontSize: "12px", marginBottom: "4px" }}>
+                  <strong>Prepared by: </strong>
+                  <EditableSection editKey="preparedBy" value={preparedBy} edits={edits} onEdit={onEdit} as="span" />
                 </div>
+              )}
+              {attendees !== undefined && (
+                <div style={{ fontSize: "12px", marginBottom: "4px" }}>
+                  <strong>Attendees: </strong>
+                  <EditableSection editKey="attendees" value={attendees} edits={edits} onEdit={onEdit} as="span" />
+                </div>
+              )}
+              <div style={{ fontSize: "12px", display: "inline-block", backgroundColor: "#E8EAED", padding: "2px 8px", borderRadius: "3px", marginBottom: "20px" }}>
+                <strong>Date: </strong>
+                <EditableSection editKey="report_date" value={date} edits={edits} onEdit={onEdit} as="span" />
               </div>
-            )}
 
-            {otherSections.map(section => (
-              <DocxSectionBlock
-                key={section.id}
-                section={section}
-                sectionIndex={BW_SECTION_NUMS[section.id] ?? 0}
-                edits={edits}
-                onEdit={onEdit}
-                bwTheme={bwTheme}
-              />
-            ))}
+              {purposeSection && (
+                <div style={{ marginBottom: "20px" }}>
+                  <div style={{ fontSize: "13px", fontWeight: 700, color: accentColor, marginBottom: "4px" }}>Purpose:</div>
+                  <div style={{ fontSize: "12px", color: "#374151" }}>
+                    <EditableSection
+                      editKey="bw_purpose_bullet_0"
+                      value={purposeSection.bullets?.[0] ?? ""}
+                      edits={edits}
+                      onEdit={onEdit}
+                      as="div"
+                      multiline
+                    />
+                  </div>
+                </div>
+              )}
 
-            <div style={{ borderTop: "1px solid #9CA3AF", marginTop: "24px", paddingTop: "8px", textAlign: "center", fontSize: "10px", color: "#6B7280" }}>
+              {otherSections.map(section => (
+                <DocxSectionBlock
+                  key={section.id}
+                  section={section}
+                  sectionIndex={BW_SECTION_NUMS[section.id] ?? 0}
+                  edits={edits}
+                  onEdit={onEdit}
+                  bwTheme={bwTheme}
+                />
+              ))}
+            </div>
+
+            <div style={{ borderTop: "1px solid #9CA3AF", marginTop: "24px", paddingTop: "8px", paddingBottom: "32px", textAlign: "center", fontSize: "10px", color: "#6B7280" }}>
               {footerText}
             </div>
           </div>

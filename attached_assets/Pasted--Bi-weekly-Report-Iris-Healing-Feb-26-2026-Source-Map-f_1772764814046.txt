@@ -1,0 +1,118 @@
+## Bi-weekly Report — Iris Healing (Feb 26, 2026) Source Map (final revised) 
+
+### Header block (top of page)
+
+* **Title: “SEO Bi-weekly Meeting: Iris Healing”**
+
+  * Source: Static template text (editable)
+
+* **Prepared By**
+
+  * Source: Manual entry
+  * Default/placeholder value: `JAY HALL`
+
+* **Date**
+
+  * Source: Manual entry (meeting/report date)
+
+* **Purpose paragraph**
+
+  * Source: Static template text (editable)
+
+---
+
+### Performance Pulse & Key Insights
+
+* **Organic Sessions QTD**
+
+  * Primary data source: GA4 (Sessions; Organic Search only; date range = quarter-to-date)
+  * Reporting source-of-truth: SEO NSM Tracker 2026 Google Sheet → Q1 tab → Organic Sessions Actual (QTD)
+
+* **Organic Sessions Goal (Q1 target)**
+
+  * Source-of-truth: SEO NSM Tracker 2026 Google Sheet → Q1 tab → Organic Sessions Target
+
+* **% to Organic Sessions Target**
+
+  * Source-of-truth: SEO NSM Tracker 2026 Google Sheet → Q1 tab → % to Organic Sessions Target (calculated)
+
+* **Key insight bullets about where traffic is concentrated (specific landing pages referenced)**
+
+  * Primary source: GA4 → Landing page report filtered to Organic Search (sessions by landing page)
+  * Support/verification: GSC → Performance → Pages (clicks/impressions/CTR/avg position by page)
+
+* **Any “specific page drove results” callouts (example URLs used in narrative)**
+
+  * Source for identifying the page(s): GA4 landing page sessions (organic) and/or GSC page clicks (organic)
+  * Explanation text (why it happened, media attention, etc.)
+
+    * Source: Manual commentary (not a stat pull)
+
+* **Google update impact mention**
+
+  * Source: Manual commentary supported by trends from:
+
+    * GSC (click/position changes across the referenced time window)
+    * GA4 (organic sessions changes across the referenced time window)
+
+* **NSM Metric QTD (SEO calls/leads)**
+
+  * Source-of-truth for the displayed number: SEO NSM Tracker 2026 Google Sheet → Q1 tab → MVP NSM Actual (Real Calls) (or your defined NSM actual column)
+  * Underlying raw source (where the “real calls” originate): Call tracking platform (CTM/CallRail), filtered to your SEO/organic attribution rules
+
+* **NSM Goal (Q1 target)**
+
+  * Source-of-truth: SEO NSM Tracker 2026 Google Sheet → Q1 tab → MVP NSM Target
+
+* **% to NSM Target**
+
+  * Source-of-truth: SEO NSM Tracker 2026 Google Sheet → Q1 tab → % to MVP NSM Target (calculated)
+
+---
+
+### Progress & Quick Wins (table)
+
+#### Published / completed work (the “done” side)
+
+* **Published X new pages + list of page titles/URLs**
+
+  * Primary source-of-truth: Airtable (content records)
+  * Rule: Airtable `Status = Live` (and published date within the bi-weekly date range, if publish date is tracked)
+  * Fallback: Asana tasks marked complete with URL fields populated
+
+#### Coming work (the “What’s Next” side)
+
+* **What’s Next: New Pages / Optimizations**
+
+  * Primary source-of-truth: Airtable (content records / backlog)
+  * Rule: Airtable `Status != Live` AND `Status IN` the “coming work” set:
+
+    * `Content Refresh`
+    * `Update Featured Image`
+    * `Cannibal Interview`
+    * `Remove and Redirect`
+    * `Ready for Edit`
+    * `Backlog Revision`
+  * Fallback: Asana tasks filtered by section/labels matching the same intent (if Airtable is missing)
+
+---
+
+### Technical Maintenance
+
+* **Canonicalized URLs issues**
+
+  * Primary source-of-truth: Screaming Frog crawl import
+  * Pull from: Canonicals report / indexability vs canonical mismatches / duplicates (as defined in your crawl rules)
+
+* **Image fixes count (e.g., “Fix 198 images for size”)**
+
+  * Primary source-of-truth: Screaming Frog crawl import
+  * Pull from: Images report (based on your image-size criteria: large file size / oversized dimensions / missing width-height, if you track that)
+
+---
+
+### Partnership & Alignment
+
+* **Open discussion / recap / next steps**
+
+  * Source: Manual meeting notes (or transcript summary), not a platform stat pull

@@ -497,7 +497,7 @@ function GscSitePicker({ value, onChange }: { value: string; onChange: (v: strin
 }
 
 function CallRailCompanyPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const [companies, setCompanies] = useState<{ companyId: string; name: string }[]>([]);
+  const [companies, setCompanies] = useState<{ companyId: string; name: string; accountName: string }[]>([]);
   const [loading, setLoading] = useState(false);
   const [fetched, setFetched] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -532,7 +532,7 @@ function CallRailCompanyPicker({ value, onChange }: { value: string; onChange: (
             <SearchableSelect
               value={value}
               onChange={onChange}
-              options={companies.map(c => ({ value: c.companyId, label: c.name }))}
+              options={companies.map(c => ({ value: c.companyId, label: c.accountName ? `${c.name} (${c.accountName})` : c.name }))}
               placeholder="— Select a company —"
               testId="select-callrail-company"
             />

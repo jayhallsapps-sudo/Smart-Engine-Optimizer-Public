@@ -236,23 +236,40 @@ export async function registerRoutes(
         return res.status(401).json({ message: "CallRail is not connected. Connect it in Setup → Analytics & Search." });
       }
       const apiKey = decrypt(creds[0].encryptedValue);
-      const resp = await fetch("https://api.callrail.com/v3/a.json", {
-        headers: { Authorization: `Token token="${apiKey}"` },
-      });
-      const data = await resp.json() as any;
-      if (!resp.ok) {
-        return res.status(resp.status).json({ message: data.error || resp.statusText });
+      const crHeaders = { Authorization: `Token token="${apiKey}"` };
+
+      // Fetch all accounts (paginated)
+      const allAccounts: any[] = [];
+      let accountPage = 1;
+      while (true) {
+        const r = await fetch(`https://api.callrail.com/v3/a.json?per_page=100&page=${accountPage}`, { headers: crHeaders });
+        const d = await r.json() as any;
+        if (!r.ok) return res.status(r.status).json({ message: d.error || r.statusText });
+        const batch: any[] = d.accounts ?? [];
+        allAccounts.push(...batch);
+        if (allAccounts.length >= (d.total_records ?? batch.length) || batch.length === 0) break;
+        accountPage++;
       }
-      const companies: { companyId: string; name: string; accountId: string }[] = [];
-      for (const account of (data.accounts ?? [])) {
-        const compResp = await fetch(`https://api.callrail.com/v3/a/${account.id}/companies.json`, {
-          headers: { Authorization: `Token token="${apiKey}"` },
-        });
-        const compData = await compResp.json() as any;
-        for (const co of (compData.companies ?? [])) {
-          companies.push({ companyId: co.id, name: co.name, accountId: account.id });
+
+      // For each account, fetch all companies (paginated)
+      const companies: { companyId: string; name: string; accountId: string; accountName: string }[] = [];
+      for (const account of allAccounts) {
+        let page = 1;
+        while (true) {
+          const r = await fetch(`https://api.callrail.com/v3/a/${account.id}/companies.json?per_page=100&page=${page}`, { headers: crHeaders });
+          const d = await r.json() as any;
+          if (!r.ok) break;
+          const batch: any[] = d.companies ?? [];
+          for (const co of batch) {
+            companies.push({ companyId: co.id, name: co.name, accountId: account.id, accountName: account.name ?? account.id });
+          }
+          if (companies.filter(c => c.accountId === account.id).length >= (d.total_records ?? batch.length) || batch.length === 0) break;
+          page++;
         }
       }
+
+      // Sort alphabetically by name
+      companies.sort((a, b) => a.name.localeCompare(b.name));
       res.json({ companies });
     } catch (err: any) {
       console.error("[CallRail] /api/callrail/companies error:", err.message);

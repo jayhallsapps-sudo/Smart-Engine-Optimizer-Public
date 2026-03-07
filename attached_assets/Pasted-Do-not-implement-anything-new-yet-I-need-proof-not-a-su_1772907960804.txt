@@ -1,0 +1,104 @@
+Do not implement anything new yet. I need proof, not a summary.
+
+Show me concrete evidence for each claimed QBR Prep change.
+
+Return your answer in this exact structure:
+
+1. Files changed
+List every file you modified for QBR Prep v2 and what changed in each file.
+
+2. Database / schema proof
+Show the exact schema or migration for durable QBR Prep saved state.
+Include:
+- table name
+- columns
+- indexes
+- how autosave/manual save persist edits
+- how reports are reloaded later
+
+3. Frontend query key fix proof
+Show the before/after code for the React Query key pattern fix.
+Explain exactly why the old array key collided with the :id route and how the new string key prevents it.
+
+4. Autosave stale closure proof
+Show the exact code for:
+- the broken autosave pattern
+- the fixed ref-based version
+- the debounce logic
+- how current edits/reportData/savedReportId are guaranteed to be current
+
+5. Screaming Frog validation proof
+Show the backend code in /generate-v2 that rejects generation when no fresh Screaming Frog crawl exists for the client.
+Also show the error response shape and the frontend behavior when this happens.
+
+6. QBR Prep generation proof
+Show the exact section-generation pipeline for all 7 sections:
+- What Matters Most This Quarter
+- Where Conversions Actually Happen
+- Top Organic Traffic Drivers
+- Site Service Overview
+- SEO Tier Diagnosis
+- What We Need to Do Next
+- What We Track
+
+For each section, tell me:
+- which function builds it
+- which data sources it uses
+- what fallback happens when data is missing
+- where “Manual entry needed” is rendered
+
+7. Print / PDF proof
+Show:
+- the code for generatePdfViaPuppeteer changes
+- the qbr-prep-print.tsx route
+- the App.tsx route registration
+- how the print route differs from the live editable preview
+- how the Monthly export pipeline was reused
+
+8. Save / reload proof
+Demonstrate the exact flow for:
+- generate report
+- autosave
+- manual save
+- reopen existing saved report
+- continue editing
+- export after reload
+
+9. Anchored Tides proof
+Do not just say “e2e passed.”
+Show:
+- the actual generated report JSON for Anchored Tides (redact only what is truly sensitive)
+- the inferred analysis window
+- the inferred planning quarter
+- the generated Section 5 diagnosis
+- the generated Section 6 priorities
+- the generated Section 7 tracking rows
+
+10. UI proof
+Provide:
+- one screenshot of the left panel
+- one screenshot of the continuous-page preview
+- one screenshot of the print/PDF render
+- one screenshot showing an inline edit
+- one screenshot showing save state
+
+11. Known issues
+List any remaining issues, compromises, or edge cases.
+Be honest. I do not want “all tasks complete” unless there are truly no known issues.
+
+12. Final verification checklist
+Answer pass/fail for each:
+- fresh Screaming Frog required before generation
+- quarter logic uses current quarter-to-date and next planning quarter
+- all 7 sections render
+- full inline editing works
+- autosave works
+- manual save works
+- durable reload works
+- PDF export works
+- DOCX export works
+- Google Drive upload works
+- Monthly reports were not broken
+
+Important:
+Do not summarize. Show code, evidence, screenshots, and exact outputs.

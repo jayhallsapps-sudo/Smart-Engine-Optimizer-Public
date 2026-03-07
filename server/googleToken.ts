@@ -87,6 +87,36 @@ export function dateRangeToGoogleDates(dateRange: string): {
     const prevQEnd = new Date(now.getFullYear(), qStartMonth, 0);
     return { startDate: fmt(qStart), endDate, prevStartDate: fmt(prevQStart), prevEndDate: fmt(prevQEnd) };
   }
+  // calendar_month:YYYY-MM — exact calendar month vs prior calendar month
+  if (dateRange.startsWith("calendar_month:")) {
+    const ym = dateRange.replace("calendar_month:", "");
+    const [y, m] = ym.split("-").map(Number);
+    return {
+      startDate: fmt(new Date(y, m - 1, 1)),
+      endDate: fmt(new Date(y, m, 0)),
+      prevStartDate: fmt(new Date(y, m - 2, 1)),
+      prevEndDate: fmt(new Date(y, m - 1, 0)),
+    };
+  }
+
+  // calendar_qtd:YYYY-MM — quarter-to-date through end of selected month vs same-length prior window
+  if (dateRange.startsWith("calendar_qtd:")) {
+    const ym = dateRange.replace("calendar_qtd:", "");
+    const [y, m] = ym.split("-").map(Number);
+    const qStartMonth = Math.floor((m - 1) / 3) * 3;
+    const qtdStart = new Date(y, qStartMonth, 1);
+    const qtdEnd = new Date(y, m, 0);
+    const qtdDays = Math.round((qtdEnd.getTime() - qtdStart.getTime()) / 86400000);
+    const prevQtdEnd = new Date(qtdStart.getTime() - 86400000);
+    const prevQtdStart = new Date(prevQtdEnd.getTime() - qtdDays * 86400000);
+    return {
+      startDate: fmt(qtdStart),
+      endDate: fmt(qtdEnd),
+      prevStartDate: fmt(prevQtdStart),
+      prevEndDate: fmt(prevQtdEnd),
+    };
+  }
+
   // default: last_90_vs_prev_90
   const startDate = fmt(sub(now, 90));
   const prevEndDate = fmt(sub(now, 91));

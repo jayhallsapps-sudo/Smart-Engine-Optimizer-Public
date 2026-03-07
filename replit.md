@@ -50,6 +50,7 @@ server/
   qbrPrepDocxGenerator.ts - QBR Prep DOCX export generator (branded red header, 7-section tables)
   qbrPrepTypes.ts      - TypeScript types for QBR Prep report data model (sections 1-7, meta, source snapshot)
   qbrPrepHelpers.ts    - Quarter logic, branded query classifier, page type classifier, tier diagnosis engine
+  monthlyGenerator.ts  - Monthly report engine: 9 guaranteed slides, calendar_month: date windows, QTD KPI slide
   googleAuth.ts        - Google OAuth flow (GSC, GA4, GBP, Sheets scopes)
   seed.ts              - Seeds 8 recovery centre clients
 shared/
@@ -104,6 +105,20 @@ Other: gbp_local_summary, content_output_summary, technical_health_summary, core
   - Monthly (30d): Executive Summary KPIs, Visibility & Demand, Conversion Performance, Work Completed, Next Month Priorities
   - QBR (90d): QBR Scorecard, What Worked/Didn't, Strategic Insights, Risks & Constraints, Next Quarter Roadmap, Appendix
 - "Generate Report" compiles all committed data into a formatted text report (downloadable as .txt) with a trusted advisor narrative instruction block at the top (what happened / why / next steps / what we need from the client — tied to leads/VOBs/admissions)
+
+## Monthly Report Feature (v2 — Rebuilt)
+A 9-slide monthly SEO deck generator (PPTX) with true calendar-month date windows, inline editing, and AM inputs.
+- **Slides (locked order)**: 1) Title, 2) Monthly Performance Overview (metrics), 3) Top Organic Queries (table), 4) QTD KPI (table — goals always "Manual entry needed"), 5) Top Landing Pages (table), 6) Top Pages by Clicks (chart/table), 7) Keyword Visibility Distribution (table), 8) Work Completed (table), 9) Next Month Priorities (bullets)
+- **Date logic**: Uses `calendar_month:YYYY-MM` for true calendar windows (e.g. March = 2026-03-01 to 2026-03-31); QTD uses `calendar_qtd:YYYY-MM`; NOT rolling 30-day
+- **AM Inputs**: 6 optional fields (progressFeeling, hypothesis, auditNotes, contextAnomalies, leadershipNote, focusNextMonth) — injected into slide commentary
+- **Crawl Assets**: Current + comparison SF crawl selectors enrich priorities slide with technical context
+- **Inline editing**: All table cells (`{slide_id}_cell_{ri}_{ci}`) and bullets (`{slide_id}_bullet_{i}`) editable; applied at PPTX and Drive export time
+- **Persistence**: Reports saved via `useReportSave` hook (2s autosave debounce); crawl IDs stored in `savedReport.currentCrawlAssetId` / `comparisonCrawlAssetId` and restored on load
+- **Save name format**: `Monthly - {Client Name} - {Month} {Year} - Generated {YYYY-MM-DD}`
+- **Missing data rule**: "Manual entry needed" — never invents data, never drops slides
+- **Brand**: #C0392B red, #1B3A6B navy, Calibri font, header/footer on every slide
+- **Export**: Download PPTX, Save to Google Drive (edits applied before both)
+- **DB table**: `saved_reports` (shared with biweekly) — reportType = "monthly"
 
 ## QBR Prep Feature (v2)
 A 7-section quarterly SEO planning snapshot generator that inherits the Monthly report visual design system (red #C0392B accent, Calibri font, branded header). Key details:

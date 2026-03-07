@@ -1,0 +1,691 @@
+Rebuild the SmartEO Monthly Report feature as a slide-based report generator using the existing Monthly slide substance, but with the stronger product behavior and branded design system already established in Bi-weekly and QBR Prep.
+
+This is a rebuild/spec alignment task, not a loose enhancement task.
+
+Do not change the substance of the existing monthly deck. Keep the slide structure and reporting purpose aligned to the attached Sol Women’s Treatment monthly report deck. The goal is to preserve what the report says, while improving how SmartEO generates, edits, saves, previews, and exports it.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Build the Monthly Report as a SmartEO slide-deck generator that:
+
+1. preserves the existing Monthly report slide substance
+2. uses the shared report save/load/autosave infrastructure
+3. uses the shared crawl asset system with:
+   - current crawl selection
+   - comparison crawl selection
+   - upload new crawl support
+4. supports optional AM inputs
+5. allows full inline editing after generation
+6. renders a slide-based live preview inside the app
+7. exports as a high-quality PPTX
+8. uploads cleanly to Google Drive / Google Slides workflow
+9. uses the same branded design system as Bi-weekly and QBR Prep
+10. uses true calendar month reporting wherever the source supports it
+11. compares against the prior calendar month, not rolling last-30-vs-prev-30
+
+==================================================
+NON-GOALS
+==================================================
+
+Do NOT:
+- redesign the monthly report substance
+- add extra slides beyond the approved deck structure
+- turn the monthly report into a document-style page
+- create a totally new visual language
+- remove the existing PPTX export path
+- use SEMrush or Ahrefs unless primary sources are insufficient
+- silently omit core slides when data is missing
+
+==================================================
+SOURCE OF TRUTH
+==================================================
+
+Use the attached Sol Women’s Treatment monthly deck as the slide substance reference.
+
+Keep the same slide substance and intent.
+
+You may improve:
+- visual styling
+- table styling
+- red branded section treatment
+- layout polish
+- preview/edit UX
+- export fidelity
+- fallback handling
+
+You may NOT materially change:
+- the core slide order
+- the core purpose of each slide
+- the fact that this is a monthly slideshow deck
+
+==================================================
+LOCKED MONTHLY SLIDE STACK
+==================================================
+
+Build exactly these slides in this order:
+
+1. Title Slide
+2. Monthly Performance Overview
+3. Top Organic Queries
+4. QTD Key Performance Indicators
+5. Top Landing Pages
+6. Top Pages by Clicks
+7. Keyword Visibility Distribution
+8. Work Completed This Month
+9. Next Month Priorities
+
+Important:
+- keep this slide order
+- do not remove slides just because a source is missing
+- if source data is unavailable, render the slide with fallback content or “Manual entry needed”
+- do not silently drop slides
+
+==================================================
+DESIGN SYSTEM
+==================================================
+
+The Monthly report must visually align with Bi-weekly and QBR Prep.
+
+Use the same design language:
+- brand reds
+- table styling family
+- typography family
+- cleaner, more polished visual system
+- consistent SmartEO/Webserv branding treatment
+- dark app shell with branded preview inside
+- slide design suitable for PPTX and Google Slides
+
+This is still a slide deck, so preserve slide logic:
+- discrete slides
+- slide navigation
+- slide-based editing
+- slide-friendly export
+
+Do NOT make the deck look like the old monthly report if it conflicts with the new brand system.
+Do preserve the slide substance.
+
+==================================================
+SHARED INFRASTRUCTURE REQUIREMENTS
+==================================================
+
+Monthly must use the shared infrastructure already built for reports.
+
+Required:
+- shared saved_reports persistence
+- shared autosave
+- shared manual save
+- shared saved report selector
+- shared CrawlAssetSelector
+- current crawl selection
+- comparison crawl selection
+- selected crawl IDs persisted with the saved report
+- save/reload/edit flow consistent with other report types
+
+Do NOT keep Monthly on a snowflake save system.
+
+==================================================
+LEFT PANEL / CONTROL BAR
+==================================================
+
+Use the shared report controls pattern and include the Monthly-specific inputs.
+
+Required controls:
+- Client selector
+- Month selector
+- Year selector
+- Saved report selector
+- Current crawl selector
+- Comparison crawl selector
+- Upload new crawl
+- Save button
+- Generate / Regenerate button
+
+Optional AM inputs:
+Use the QBR Prep-style AM inputs plus these Monthly-specific ones, but keep the UI compact and not bloated.
+
+Include:
+- How did SEO progress feel this month?
+- AM hypothesis / suspected focus
+- Manual audit notes
+- Key context / anomalies this month
+- What should leadership know?
+- Focus next month
+
+Requirements:
+- all AM inputs are optional
+- use compact textareas / inputs so the panel does not become cluttered
+- AM inputs should influence commentary and priorities where relevant, but should not override source data
+
+==================================================
+DATE LOGIC
+==================================================
+
+Switch Monthly to true calendar month reporting wherever the source supports it.
+
+For a selected report month:
+- analysis window = first day of selected month through last day of selected month
+- comparison window = prior calendar month
+
+Example:
+- selected month: March 2026
+- analysis window: 2026-03-01 through 2026-03-31
+- comparison window: 2026-02-01 through 2026-02-28
+
+Do NOT use rolling last_30_vs_prev_30 for the final Monthly product when the connected source can support actual calendar month windows.
+
+Use actual calendar month for:
+- GSC where supported by integration
+- GA4 where supported by integration
+- Call tracking where supported by integration
+- Airtable
+- Asana
+- GBP where supported
+
+If a source cannot support exact month windows in the current integration:
+- use the best available fallback
+- document that fallback in code clearly
+- do not fake calendar precision
+
+==================================================
+DATA SOURCE PRIORITY
+==================================================
+
+Use this source priority:
+
+1. Google Search Console
+2. GA4
+3. Call tracking
+4. Google Sheets NSM tracker
+5. Google Business Profile
+6. Screaming Frog
+7. Airtable
+8. Asana
+9. SEMrush only if absolutely necessary
+10. Ahrefs only if access becomes available later
+
+Rules:
+- prefer primary sources over SEMrush/Ahrefs
+- only use SEMrush on the keyword visibility slide if no better primary equivalent exists
+- do not let SEMrush become the backbone of the deck
+
+==================================================
+SLIDE-BY-SLIDE SPEC
+==================================================
+
+--------------------------------------------------
+SLIDE 1 — TITLE SLIDE
+--------------------------------------------------
+
+Purpose:
+Deck cover slide.
+
+Content:
+- client name
+- report title
+- month label
+- generated date
+
+Editable after generation:
+- all text
+
+Data sources:
+- SmartEO client metadata
+- selected month/year
+- generation timestamp
+
+--------------------------------------------------
+SLIDE 2 — MONTHLY PERFORMANCE OVERVIEW
+--------------------------------------------------
+
+Purpose:
+Quick headline summary of the month.
+
+Content:
+Summary KPI cards or equivalent polished summary metrics using:
+- organic sessions
+- conversions / admits proxy
+- qualified calls
+- one additional core metric if supported cleanly
+
+Each metric should show:
+- current month value
+- prior month value
+- delta
+- positive/negative/neutral signal
+
+Primary sources:
+- GA4
+- call tracking
+- GSC
+- NSM sheet if needed for context
+
+Fallback rule:
+- if a metric source is missing, show placeholder value plus “Manual entry needed” note where appropriate
+- do not remove the slide
+
+Editable after generation:
+- metric commentary
+- labels
+- supporting notes
+
+--------------------------------------------------
+SLIDE 3 — TOP ORGANIC QUERIES
+--------------------------------------------------
+
+Purpose:
+Show top query-level organic drivers for the selected month.
+
+Content:
+- top queries table
+- clicks
+- impressions
+- CTR
+- position or movement if available
+- concise commentary if space allows
+
+Primary source:
+- GSC query data for selected calendar month
+- prior month comparison if supported
+
+Rules:
+- use real query data
+- avoid flooding the slide with too many rows
+- prioritize relevance and readability
+
+Fallback:
+- if GSC unavailable, keep the slide and show Manual entry needed
+
+Editable after generation:
+- table text
+- commentary
+
+--------------------------------------------------
+SLIDE 4 — QTD KEY PERFORMANCE INDICATORS
+--------------------------------------------------
+
+Purpose:
+Keep this slide because it exists in the approved report substance.
+
+Content:
+Quarter-to-date KPI view showing:
+- sessions goal/actual
+- calls/admits goal/actual
+- percent-to-goal
+- on-track or behind status
+- other approved KPI fields from the NSM tracker / connected data
+
+Primary sources:
+- Google Sheets NSM Tracker
+- GA4
+- call tracking
+- GBP if relevant for local KPI support
+
+Important:
+- this is QTD inside the monthly deck
+- do not remove it
+- align the content to the approved slide substance
+
+Fallback:
+- if some KPI fields are unavailable, render the rows with Manual entry needed
+- do not drop the slide
+
+Editable after generation:
+- KPI notes
+- supporting commentary
+- text labels
+
+--------------------------------------------------
+SLIDE 5 — TOP LANDING PAGES
+--------------------------------------------------
+
+Purpose:
+Show top landing pages driving performance for the month.
+
+Primary sources:
+- GA4 organic landing page performance
+- GSC page data as support
+- call tracking page attribution where useful
+
+Content:
+- page
+- sessions or visits
+- conversions / admits proxy if available
+- concise note or takeaway
+
+Rules:
+- use actual month window
+- prioritize readability and real business relevance
+
+Fallback:
+- if GA4 landing page data is unavailable, use GSC page data as support
+- if still weak, render Manual entry needed rows
+
+Editable after generation:
+- table content
+- commentary
+
+--------------------------------------------------
+SLIDE 6 — TOP PAGES BY CLICKS
+--------------------------------------------------
+
+Purpose:
+Show page-level organic visibility and traffic leaders.
+
+Primary source:
+- GSC pages for selected month
+
+Content:
+- page labels
+- clicks
+- impressions
+- chart or table format as appropriate for the slide substance
+- keep it presentation-friendly
+
+Rules:
+- use better page labels than raw ugly slugs where possible
+- if using slug fallback, clean it intelligently
+- preserve slide readability
+
+Fallback:
+- if GSC pages unavailable, keep slide and render Manual entry needed
+
+Editable after generation:
+- labels
+- notes
+- commentary
+
+--------------------------------------------------
+SLIDE 7 — KEYWORD VISIBILITY DISTRIBUTION
+--------------------------------------------------
+
+Purpose:
+Show ranking distribution / visibility trend.
+
+Primary rule:
+- use primary sources first if they can meaningfully support this slide
+- if they cannot, use SEMrush as backup specifically for this slide
+
+Content:
+- position buckets
+- count / distribution
+- share / trend if available
+
+Rules:
+- do not use Ahrefs unless later enabled
+- do not use SEMrush elsewhere unnecessarily
+- keep the slide because it belongs in the approved deck substance
+
+Fallback:
+- if no adequate source exists, render the structure with Manual entry needed
+
+Editable after generation:
+- commentary
+- labels
+- notes
+
+--------------------------------------------------
+SLIDE 8 — WORK COMPLETED THIS MONTH
+--------------------------------------------------
+
+Purpose:
+Summarize actual work completed in the selected month.
+
+Primary sources:
+- Airtable
+- Asana
+
+Content:
+- work completed table or bullet structure consistent with the existing slide substance
+- grouped logically by area/category
+- content, technical, local, CRO, etc. where possible
+
+Rules:
+- use true selected month window
+- avoid duplicate task noise
+- keep it concise and leadership-readable
+
+Fallback:
+- if both Airtable and Asana are empty, keep the slide and show Manual entry needed instead of generic fluff
+
+Editable after generation:
+- all rows / bullets
+- notes
+
+--------------------------------------------------
+SLIDE 9 — NEXT MONTH PRIORITIES
+--------------------------------------------------
+
+Purpose:
+Show next month’s priorities without turning this into a long roadmap.
+
+Primary sources:
+- Asana upcoming tasks
+- Airtable in-flight items where relevant
+- selected current/comparison crawl
+- AM inputs
+- current month performance data
+
+Content:
+- concise bullets
+- realistic next-month focus areas
+- must feel tied to what happened this month
+
+Rules:
+- no giant roadmap
+- no endless bullet spam
+- use current + comparison crawl to support what changed / what still needs work where useful
+- AM inputs can enrich the wording, not replace the data
+
+Fallback:
+- if upcoming task data is weak, generate grounded priorities from the month’s actual performance + crawl context
+- avoid generic filler
+
+Editable after generation:
+- all bullets / notes
+
+==================================================
+CRAWL USAGE
+==================================================
+
+Monthly must support:
+- current crawl
+- comparison crawl
+
+Persist both in saved report state.
+
+Use crawl inputs where relevant for:
+- changed site condition
+- URL additions/removals
+- technical movement
+- context for next month priorities
+- support commentary on what changed vs what still needs attention
+
+Do not force crawl data onto slides where it does not belong.
+
+==================================================
+MISSING DATA RULE
+==================================================
+
+Do not silently omit expected core slides.
+
+If data is missing:
+- render the slide anyway
+- use placeholder rows/cards/notes
+- use the exact phrase “Manual entry needed” where appropriate
+- keep the deck structure stable from report to report
+
+==================================================
+EDITABILITY RULE
+==================================================
+
+Everything should be manually editable after generation.
+
+That includes:
+- slide titles
+- table cell text
+- bullet text
+- commentary
+- metric labels
+- metric notes
+- strategic notes
+- worklog text
+- priorities text
+
+If there are charts, chart labels/annotations should also be editable where reasonably possible without destabilizing the slide model.
+
+==================================================
+PREVIEW / UI REQUIREMENTS
+==================================================
+
+Build a proper slide preview experience inside SmartEO.
+
+Requirements:
+- slide-based preview, not one long document
+- next/previous slide navigation or slide picker
+- inline editing on each slide
+- save status indicator
+- saved report selector
+- crawl selectors
+- export buttons
+
+Do not leave Monthly as a weak placeholder page.
+
+==================================================
+PERSISTENCE REQUIREMENTS
+==================================================
+
+Monthly must use the shared saved_reports system.
+
+Store:
+- report_type = "monthly"
+- generated_report_json
+- edits_json
+- current_crawl_asset_id
+- comparison_crawl_asset_id
+- report period label
+- generated date
+- any relevant metadata
+
+Reload must restore:
+- slide data
+- inline edits
+- selected crawl IDs
+- selected month/year if appropriate
+
+==================================================
+EXPORT REQUIREMENTS
+==================================================
+
+Monthly must support:
+1. high-quality PPTX export
+2. Google Drive upload for slide workflow
+
+Requirements:
+- PPTX should open cleanly and look polished
+- output should be suitable for importing/opening in Google Slides
+- preserve slide order and edited content
+- preserve branded design as much as possible
+- do not degrade the export just because the preview is editable
+
+If needed:
+- treat preview slide model as the source structure and generate PPTX from that model cleanly
+
+==================================================
+AM INPUT USAGE
+==================================================
+
+Use these optional inputs:
+- How did SEO progress feel this month?
+- AM hypothesis / suspected focus
+- Manual audit notes
+- Key context / anomalies this month
+- What should leadership know?
+- Focus next month
+
+Rules:
+- optional only
+- should enrich commentary and priorities
+- should not replace actual source data
+- keep UI compact
+
+==================================================
+SAVED REPORT NAMING
+==================================================
+
+Use readable saved report names like:
+- Monthly - Client Name - March 2026 - Generated 2026-03-07
+
+Use consistent naming in saved_reports and in the selector dropdown.
+
+==================================================
+REBUILD STRATEGY
+==================================================
+
+Implement in phases.
+
+PHASE 1
+- inspect current monthly generator and slide model
+- convert date logic from rolling 30-vs-30 to true calendar month / prior calendar month where supported
+- define final slide schema
+- wire Monthly fully into shared save/load/crawl infrastructure
+
+PHASE 2
+- rebuild Monthly preview UI into a proper editable slide experience
+- integrate shared controls
+- integrate AM inputs
+- persist selected crawl IDs
+
+PHASE 3
+- improve slide generation logic per slide
+- ensure all 9 slides always render
+- add proper fallbacks and Manual entry needed handling
+- ensure use of current/comparison crawl where relevant
+
+PHASE 4
+- refine PPTX export and Drive upload for the new slide model
+- validate against the attached Sol deck substance
+- test end-to-end
+
+==================================================
+ACCEPTANCE CRITERIA
+==================================================
+
+The Monthly rebuild is correct only when all of the following are true:
+
+1. Monthly uses true calendar month logic where supported.
+2. Prior comparison is prior calendar month where supported.
+3. Monthly uses the shared save/load/autosave system.
+4. Monthly uses current + comparison crawl selectors.
+5. Monthly supports upload new crawl.
+6. Monthly renders a proper slide-based preview.
+7. Monthly preserves the approved slide substance.
+8. Monthly uses the Bi-weekly / QBR Prep branded design language.
+9. All 9 approved slides render in the fixed order.
+10. Missing data does not remove slides; it shows Manual entry needed.
+11. Everything remains inline editable after generation.
+12. Saved reports reload correctly.
+13. Selected crawl IDs persist in saved report state.
+14. PPTX export works cleanly.
+15. Google Drive upload works cleanly.
+16. The feature is tested against the attached Sol monthly deck structure.
+
+==================================================
+OUTPUT REQUIREMENT
+==================================================
+
+Do not just say “done.”
+
+When finished, return:
+1. files changed
+2. slide schema
+3. data mapping per slide
+4. how date logic was changed
+5. how shared save/load/crawl infrastructure was integrated
+6. how editability works
+7. how PPTX/Drive export works
+8. known issues or compromises
+9. proof of end-to-end flow
+
+Start with Phase 1 now.

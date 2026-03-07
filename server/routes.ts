@@ -1544,10 +1544,18 @@ export async function registerRoutes(
   });
 
   app.post("/api/reports/monthly/generate", async (req, res) => {
-    const { clientId, month, year, timezone } = req.body;
+    const { clientId, month, year, timezone, amInputs, currentCrawlAssetId, comparisonCrawlAssetId } = req.body;
     if (!clientId || !month || !year) return res.status(400).json({ message: "clientId, month, year are required" });
     try {
-      const output = await generateMonthly({ clientId: Number(clientId), month: Number(month), year: Number(year), timezone: timezone ?? "America/Los_Angeles" });
+      const output = await generateMonthly({
+        clientId: Number(clientId),
+        month: Number(month),
+        year: Number(year),
+        timezone: timezone ?? "America/Los_Angeles",
+        amInputs: amInputs ?? {},
+        currentCrawlAssetId: currentCrawlAssetId ?? null,
+        comparisonCrawlAssetId: comparisonCrawlAssetId ?? null,
+      });
       res.json(output);
     } catch (err: any) {
       console.error("Monthly generation error:", err);
@@ -1562,13 +1570,12 @@ export async function registerRoutes(
       const sections: SectionData[] = (json.slides ?? []).filter((s: any) => s.type !== "title").map((s: any, idx: number) => {
         const items: any[] = [];
         if (s.metrics?.length) items.push({ summary: s.metrics.map((m: any) => ({ label: m.label, current: m.current, previous: m.previous ?? "—", deltaPercent: m.delta ?? "—", isPositive: m.isPositive ?? true })) });
-        if (s.table) items.push({ tables: [{ title: s.subtitle ?? "", headers: s.table.headers, rows: s.table.rows }] });
-        if (s.bullets) items.push({ manualText: (s.bullets as string[]).join("\n") });
+        if (s.table) items.push({ tables: [{ title: edits?.[`${s.id}_subtitle`] ?? s.subtitle ?? "", headers: s.table.headers, rows: (s.table.rows as any[][]).map((row: any[], ri: number) => row.map((cell: any, ci: number) => edits?.[`${s.id}_cell_${ri}_${ci}`] ?? String(cell))) }] });
+        if (s.bullets) items.push({ manualText: (s.bullets as string[]).map((b: string, bi: number) => edits?.[`${s.id}_bullet_${bi}`] ?? b).join("\n") });
         return { sectionId: `slide_${idx}`, title: edits?.[`${s.id}_title`] ?? s.title ?? "", items };
       });
-      const titleSlide = (json.slides as any[]).find((s: any) => s.type === "title");
       const clientName = edits?.["title_client"] ?? json.client_name ?? "Client";
-      const reportTitle = json.report_title ?? "Monthly Report";
+      const reportTitle = edits?.["title_title"] ?? json.report_title ?? "Monthly Report";
       const generatedAt = json.generated_at ? new Date(json.generated_at).toLocaleDateString("en-US") : new Date().toLocaleDateString("en-US");
       const buffer = await generatePptx(clientName, reportTitle, generatedAt, sections);
       const slug = clientName.toLowerCase().replace(/\s+/g, "_");
@@ -1589,14 +1596,17 @@ export async function registerRoutes(
       const sections: SectionData[] = (json.slides ?? []).filter((s: any) => s.type !== "title").map((s: any, idx: number) => {
         const items: any[] = [];
         if (s.metrics?.length) items.push({ summary: s.metrics.map((m: any) => ({ label: m.label, current: m.current, previous: m.previous ?? "—", deltaPercent: m.delta ?? "—", isPositive: m.isPositive ?? true })) });
-        if (s.table) items.push({ tables: [{ title: s.subtitle ?? "", headers: s.table.headers, rows: s.table.rows }] });
-        if (s.bullets) items.push({ manualText: (s.bullets as string[]).join("\n") });
-        return { sectionId: `slide_${idx}`, title: s.title ?? "", items };
+        if (s.table) items.push({ tables: [{ title: edits?.[`${s.id}_subtitle`] ?? s.subtitle ?? "", headers: s.table.headers, rows: (s.table.rows as any[][]).map((row: any[], ri: number) => row.map((cell: any, ci: number) => edits?.[`${s.id}_cell_${ri}_${ci}`] ?? String(cell))) }] });
+        if (s.bullets) items.push({ manualText: (s.bullets as string[]).map((b: string, bi: number) => edits?.[`${s.id}_bullet_${bi}`] ?? b).join("\n") });
+        return { sectionId: `slide_${idx}`, title: edits?.[`${s.id}_title`] ?? s.title ?? "", items };
       });
-      const buffer = await generatePptx(json.client_name, json.report_title, new Date(json.generated_at).toLocaleDateString("en-US"), sections);
+      const driveClientName = edits?.["title_client"] ?? json.client_name ?? "Client";
+      const driveReportTitle = edits?.["title_title"] ?? json.report_title ?? "Monthly Report";
+      const driveGeneratedAt = json.generated_at ? new Date(json.generated_at).toLocaleDateString("en-US") : new Date().toLocaleDateString("en-US");
+      const buffer = await generatePptx(driveClientName, driveReportTitle, driveGeneratedAt, sections);
       const { ReplitConnectors } = await import("@replit/connectors-sdk");
       const connectors = new ReplitConnectors();
-      const filename = `${json.client_name} Monthly SEO ${json.month_label}.pptx`;
+      const filename = `${driveClientName} Monthly SEO ${json.month_label ?? "Report"}.pptx`;
       const metadata = JSON.stringify({ name: filename });
       const boundary = "-------smarteo_mo_boundary";
       const CRLF = "\r\n";

@@ -14,7 +14,7 @@ import type { SavedReport } from "@shared/schema";
 interface ReportSaveSelectorProps {
   clientId: number | null | undefined;
   reportType: string;
-  onLoad: (reportData: any, edits: Record<string, string>, savedId: number) => void;
+  onLoad: (reportData: any, edits: Record<string, string>, savedId: number, savedReport?: SavedReport) => void;
 }
 
 export function ReportSaveSelector({ clientId, reportType, onLoad }: ReportSaveSelectorProps) {
@@ -36,7 +36,8 @@ export function ReportSaveSelector({ clientId, reportType, onLoad }: ReportSaveS
       onLoad(
         report.generatedReportJson,
         (report.editsJson as Record<string, string>) ?? {},
-        report.id
+        report.id,
+        report
       );
     } catch {
     } finally {

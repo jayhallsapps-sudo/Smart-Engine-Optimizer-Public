@@ -28,6 +28,9 @@ interface PptxPreviewProps {
 
 const SLIDE_W = 720;
 const SLIDE_H = 405;
+const NAVY = "#1B3A6B";
+const RED = "#C0392B";
+const LIGHT_BLUE = "#E8F0FE";
 
 export function PptxPreview({ slides, edits, onEdit }: PptxPreviewProps) {
   const [current, setCurrent] = useState(0);
@@ -91,13 +94,13 @@ export function PptxPreview({ slides, edits, onEdit }: PptxPreviewProps) {
             <button
               key={s.id}
               onClick={() => setCurrent(i)}
-              className={`relative w-full rounded border-2 overflow-hidden transition-all ${i === current ? "border-blue-400" : "border-gray-600 hover:border-gray-400"}`}
-              style={{ paddingTop: "56.25%", background: s.type === "title" ? "#1B3A6B" : "#F8FAFC" }}
+              className={`relative w-full rounded border-2 overflow-hidden transition-all ${i === current ? "border-red-400" : "border-gray-600 hover:border-gray-400"}`}
+              style={{ paddingTop: "56.25%", background: s.type === "title" ? NAVY : "#F8FAFC" }}
               data-testid={`thumb-slide-${i}`}
               title={s.title ?? `Slide ${i + 1}`}
             >
               <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-[6px] font-bold truncate px-1" style={{ color: s.type === "title" ? "#BFD7FF" : "#1B3A6B" }}>
+                <span className="text-[6px] font-bold truncate px-1" style={{ color: s.type === "title" ? "#BFD7FF" : NAVY }}>
                   {s.title ?? `Slide ${i + 1}`}
                 </span>
               </div>
@@ -110,18 +113,25 @@ export function PptxPreview({ slides, edits, onEdit }: PptxPreviewProps) {
   );
 }
 
-function SlideHeader({ title, slideTitle }: { title?: string; slideTitle?: string }) {
+function SlideHeader({ slideTitle }: { slideTitle?: string }) {
   return (
-    <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 48, background: "#1B3A6B", display: "flex", alignItems: "center", paddingLeft: 20 }}>
-      <span style={{ color: "white", fontWeight: "bold", fontSize: 13 }}>{slideTitle ?? title}</span>
+    <div style={{ position: "absolute", top: 0, left: 0, right: 0 }}>
+      <div style={{ height: 44, background: NAVY, display: "flex", alignItems: "center", paddingLeft: 20, paddingRight: 20 }}>
+        <span style={{ color: "white", fontWeight: "bold", fontSize: 13, flex: 1 }}>{slideTitle}</span>
+        <span style={{ fontSize: 7, color: "#93C5FD" }}>Webserv</span>
+      </div>
+      <div style={{ height: 3, background: RED }} />
     </div>
   );
 }
 
 function SlideFooter() {
   return (
-    <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 22, background: "#F0F4FA", borderTop: "1px solid #D1D5DB", display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: 14, paddingLeft: 14 }}>
-      <span style={{ fontSize: 7, color: "#9CA3AF" }}>Webserv  |  webserv.io</span>
+    <div style={{ position: "absolute", bottom: 0, left: 0, right: 0 }}>
+      <div style={{ height: 2, background: RED }} />
+      <div style={{ height: 20, background: "#F0F4FA", display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: 14, paddingLeft: 14 }}>
+        <span style={{ fontSize: 7, color: "#9CA3AF" }}>Webserv  |  webserv.io</span>
+      </div>
     </div>
   );
 }
@@ -139,8 +149,9 @@ export function SlideRenderer({ slide, edits, onEdit }: { slide: Slide; edits: R
 
   if (slide.type === "title") {
     return (
-      <div style={{ position: "absolute", inset: 0, background: "#1B3A6B", display: "flex", flexDirection: "column", justifyContent: "center", padding: "32px 40px" }}>
-        <div style={{ position: "absolute", bottom: 28, left: 0, right: 0, height: 28, background: "rgba(255,255,255,0.1)" }} />
+      <div style={{ position: "absolute", inset: 0, background: `linear-gradient(135deg, ${NAVY} 60%, #0f2547)`, display: "flex", flexDirection: "column", justifyContent: "center", padding: "32px 40px" }}>
+        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 5, background: RED }} />
+        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 5, background: RED }} />
         <div style={{ color: "white", fontSize: 26, fontWeight: "bold", lineHeight: 1.2, marginBottom: 10 }}>
           <EditableSection editKey={`${slide.id}_title`} value={slide.title ?? ""} edits={edits} onEdit={onEdit} as="div" />
         </div>
@@ -148,7 +159,7 @@ export function SlideRenderer({ slide, edits, onEdit }: { slide: Slide; edits: R
           <EditableSection editKey={`${slide.id}_client`} value={slide.clientName ?? ""} edits={edits} onEdit={onEdit} as="div" />
         </div>
         <div style={{ color: "#93C5FD", fontSize: 10 }}>{slide.date}</div>
-        <div style={{ position: "absolute", bottom: 12, left: 40, color: "#BFD7FF", fontSize: 7 }}>Webserv  |  webserv.io</div>
+        <div style={{ position: "absolute", bottom: 18, left: 40, color: "#BFD7FF", fontSize: 7 }}>Webserv  |  webserv.io</div>
       </div>
     );
   }
@@ -158,9 +169,13 @@ export function SlideRenderer({ slide, edits, onEdit }: { slide: Slide; edits: R
     const cols = Math.min(4, mets.length || 1);
     return (
       <div style={{ position: "absolute", inset: 0 }}>
-        <SlideHeader slideTitle={slide.title} />
-        <div style={{ position: "absolute", top: 56, left: 16, right: 16, bottom: 30, display: "flex", flexDirection: "column", gap: 8, justifyContent: "center" }}>
-          {slide.subtitle && <div style={{ fontSize: 9, color: "#6B7280", marginBottom: 4 }}>{slide.subtitle}</div>}
+        <SlideHeader slideTitle={edits[`${slide.id}_title`] ?? slide.title} />
+        <div style={{ position: "absolute", top: 55, left: 16, right: 16, bottom: 28, display: "flex", flexDirection: "column", gap: 8, justifyContent: "center" }}>
+          {slide.subtitle && (
+            <div style={{ fontSize: 9, color: "#6B7280", marginBottom: 4 }}>
+              <EditableSection editKey={`${slide.id}_subtitle`} value={slide.subtitle} edits={edits} onEdit={onEdit} as="span" />
+            </div>
+          )}
           <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 8 }}>
             {mets.map((m, mi) => (
               <MetricCard key={mi} {...m} />
@@ -177,14 +192,18 @@ export function SlideRenderer({ slide, edits, onEdit }: { slide: Slide; edits: R
     const colW = Math.floor(SLIDE_W / headers.length);
     return (
       <div style={{ position: "absolute", inset: 0 }}>
-        <SlideHeader slideTitle={slide.title} />
-        <div style={{ position: "absolute", top: 56, left: 16, right: 16, bottom: 30, overflow: "auto" }}>
-          {slide.subtitle && <div style={{ fontSize: 9, color: "#6B7280", margin: "6px 0" }}>{slide.subtitle}</div>}
+        <SlideHeader slideTitle={edits[`${slide.id}_title`] ?? slide.title} />
+        <div style={{ position: "absolute", top: 55, left: 16, right: 16, bottom: 28, overflow: "auto" }}>
+          {slide.subtitle && (
+            <div style={{ fontSize: 9, color: "#6B7280", margin: "5px 0 4px" }}>
+              <EditableSection editKey={`${slide.id}_subtitle`} value={slide.subtitle} edits={edits} onEdit={onEdit} as="span" />
+            </div>
+          )}
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 8 }}>
             <thead>
               <tr>
-                {headers.map(h => (
-                  <th key={h} style={{ background: "#1B3A6B", color: "white", padding: "4px 6px", textAlign: "left", fontWeight: "bold", borderRight: "1px solid #2D5A9E", whiteSpace: "nowrap" }}>
+                {headers.map((h, hi) => (
+                  <th key={hi} style={{ background: NAVY, color: "white", padding: "4px 6px", textAlign: "left", fontWeight: "bold", borderRight: "1px solid #2D5A9E", whiteSpace: "nowrap" }}>
                     {h}
                   </th>
                 ))}
@@ -192,10 +211,18 @@ export function SlideRenderer({ slide, edits, onEdit }: { slide: Slide; edits: R
             </thead>
             <tbody>
               {rows.slice(0, 18).map((row, ri) => (
-                <tr key={ri} style={{ background: ri % 2 === 0 ? "white" : "#E8F0FE" }}>
+                <tr key={ri} style={{ background: ri % 2 === 0 ? "white" : LIGHT_BLUE }}>
                   {row.map((cell, ci) => (
-                    <td key={ci} style={{ padding: "3px 6px", borderBottom: "1px solid #E5E7EB", borderRight: "1px solid #F3F4F6", maxWidth: colW, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "#1F2937" }}>
-                      {String(cell)}
+                    <td key={ci} style={{ padding: "2px 4px", borderBottom: "1px solid #E5E7EB", borderRight: "1px solid #F3F4F6", maxWidth: colW, overflow: "hidden", color: "#1F2937" }}>
+                      <EditableSection
+                        editKey={`${slide.id}_cell_${ri}_${ci}`}
+                        value={String(cell)}
+                        edits={edits}
+                        onEdit={onEdit}
+                        as="span"
+                        className="block"
+                        style={{ fontSize: 8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } as any}
+                      />
                     </td>
                   ))}
                 </tr>
@@ -212,8 +239,8 @@ export function SlideRenderer({ slide, edits, onEdit }: { slide: Slide; edits: R
   if ((slide.type === "chart-bar" || slide.type === "chart-line") && slide.chartData) {
     return (
       <div style={{ position: "absolute", inset: 0 }}>
-        <SlideHeader slideTitle={slide.title} />
-        <div style={{ position: "absolute", top: 56, left: 16, right: 16, bottom: 30, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+        <SlideHeader slideTitle={edits[`${slide.id}_title`] ?? slide.title} />
+        <div style={{ position: "absolute", top: 55, left: 16, right: 16, bottom: 28, display: "flex", flexDirection: "column", justifyContent: "center" }}>
           {slide.subtitle && <div style={{ fontSize: 9, color: "#6B7280", marginBottom: 6 }}>{slide.subtitle}</div>}
           {slide.type === "chart-bar"
             ? <ReportBarChart data={slide.chartData} keys={slide.chartKeys ?? ["value"]} height={280} />
@@ -228,12 +255,16 @@ export function SlideRenderer({ slide, edits, onEdit }: { slide: Slide; edits: R
   if (slide.type === "bullets") {
     return (
       <div style={{ position: "absolute", inset: 0 }}>
-        <SlideHeader slideTitle={slide.title} />
-        <div style={{ position: "absolute", top: 56, left: 20, right: 20, bottom: 30, display: "flex", flexDirection: "column", justifyContent: "center", gap: 6 }}>
-          {slide.subtitle && <div style={{ fontSize: 9, color: "#6B7280", marginBottom: 4 }}>{slide.subtitle}</div>}
+        <SlideHeader slideTitle={edits[`${slide.id}_title`] ?? slide.title} />
+        <div style={{ position: "absolute", top: 55, left: 20, right: 20, bottom: 28, display: "flex", flexDirection: "column", justifyContent: "center", gap: 6 }}>
+          {slide.subtitle && (
+            <div style={{ fontSize: 9, color: "#6B7280", marginBottom: 4 }}>
+              <EditableSection editKey={`${slide.id}_subtitle`} value={slide.subtitle} edits={edits} onEdit={onEdit} as="span" />
+            </div>
+          )}
           {(slide.bullets ?? []).map((b, bi) => (
             <div key={bi} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-              <span style={{ color: "#1B3A6B", fontWeight: "bold", fontSize: 12, lineHeight: 1 }}>•</span>
+              <span style={{ color: RED, fontWeight: "bold", fontSize: 12, lineHeight: 1, marginTop: 1 }}>•</span>
               <EditableSection
                 editKey={`${slide.id}_bullet_${bi}`}
                 value={b}
@@ -255,12 +286,12 @@ export function SlideRenderer({ slide, edits, onEdit }: { slide: Slide; edits: R
   if (slide.type === "two-col" && slide.leftContent && slide.rightContent) {
     return (
       <div style={{ position: "absolute", inset: 0 }}>
-        <SlideHeader slideTitle={slide.title} />
-        <div style={{ position: "absolute", top: 56, left: 16, right: 16, bottom: 30, display: "flex", gap: 12, alignItems: "stretch" }}>
+        <SlideHeader slideTitle={edits[`${slide.id}_title`] ?? slide.title} />
+        <div style={{ position: "absolute", top: 55, left: 16, right: 16, bottom: 28, display: "flex", gap: 12, alignItems: "stretch" }}>
           <div style={{ flex: 1, overflow: "auto" }}>
             {slide.leftContent.type === "bullets" && (slide.leftContent.bullets ?? []).map((b, bi) => (
               <div key={bi} style={{ display: "flex", gap: 6, marginBottom: 4, fontSize: 9 }}>
-                <span style={{ color: "#1B3A6B", fontWeight: "bold" }}>•</span>
+                <span style={{ color: RED, fontWeight: "bold" }}>•</span>
                 <span style={{ color: "#1F2937" }}>{b}</span>
               </div>
             ))}
@@ -268,14 +299,14 @@ export function SlideRenderer({ slide, edits, onEdit }: { slide: Slide; edits: R
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 7 }}>
                 <thead>
                   <tr>
-                    {slide.leftContent.table.headers.map(h => (
-                      <th key={h} style={{ background: "#1B3A6B", color: "white", padding: "3px 4px" }}>{h}</th>
+                    {slide.leftContent.table.headers.map((h, hi) => (
+                      <th key={hi} style={{ background: NAVY, color: "white", padding: "3px 4px" }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {slide.leftContent.table.rows.slice(0, 12).map((row, ri) => (
-                    <tr key={ri} style={{ background: ri % 2 ? "#E8F0FE" : "white" }}>
+                    <tr key={ri} style={{ background: ri % 2 ? LIGHT_BLUE : "white" }}>
                       {row.map((cell, ci) => (
                         <td key={ci} style={{ padding: "2px 4px", borderBottom: "1px solid #E5E7EB", color: "#1F2937" }}>{String(cell)}</td>
                       ))}

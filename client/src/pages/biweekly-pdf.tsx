@@ -177,47 +177,6 @@ function WorkLogTable({ workLog }: { workLog: any[] }) {
   );
 }
 
-function PdfPage({ children, headerImgUrl, isLast }: { children: React.ReactNode; headerImgUrl: string | null; isLast: boolean }) {
-  return (
-    <div className="pdf-page" style={{
-      position: "relative",
-      width: "8.5in",
-      height: "11in",
-      margin: "0 auto",
-      padding: 0,
-      overflow: "hidden",
-      background: "#fff",
-      pageBreakAfter: isLast ? "auto" : "always",
-    }}>
-      {/* Header art — flush to top/left/right, outside inner padding */}
-      <div className="page-bg-header" style={{ position: "absolute", top: 0, left: 0, right: 0, pointerEvents: "none", zIndex: 0 }}>
-        {headerImgUrl ? (
-          <img src={headerImgUrl} alt="" style={{ width: "100%", display: "block" }} />
-        ) : (
-          <div style={{ width: "100%", height: "120px", background: `linear-gradient(135deg, #C0392B 60%, #a02820)`, display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: "32px" }}>
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: "26px", fontWeight: 700, color: "white", letterSpacing: "3px", lineHeight: 1 }}>W</div>
-              <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.8)", letterSpacing: "4px" }}>WEBSERV</div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Content — padded, sits above header */}
-      <div className="pdf-page-inner" style={{ position: "relative", zIndex: 1, width: "100%", height: "100%", padding: "0.7in 0.6in 0.7in 0.6in", boxSizing: "border-box", display: "flex", flexDirection: "column" }}>
-        {children}
-      </div>
-
-      {/* Footer — absolutely positioned at bottom of page */}
-      <footer style={{ position: "absolute", left: "0.6in", right: "0.6in", bottom: "0.32in", zIndex: 2 }}>
-        <div style={{ borderTop: "1px solid #B8BDC7", marginBottom: "6px" }} />
-        <div style={{ fontSize: "10px", lineHeight: 1.2, color: "#7C828D", textAlign: "center" }}>
-          {FOOTER_TEXT}
-        </div>
-      </footer>
-    </div>
-  );
-}
 
 export default function BiweeklyPdf() {
   const [data, setData] = useState<{ report: any; edits: Record<string, string> } | null>(null);
@@ -256,74 +215,90 @@ export default function BiweeklyPdf() {
   const progressSection   = sections.find(s => s.id === "bw_progress");
   const partnerSection    = sections.find(s => s.id === "bw_partnership");
 
-  // Header height — estimate 120px at 96dpi → ~1.25in. Content top padding is 0.7in.
-  // First 1.25in is covered by header art, then content starts at 0.7in from top (within the art area).
-  const headerHeight = headerImgUrl ? "120px" : "120px";
-
   return (
-    <>
+    <div data-report-root style={{ background: "white", margin: 0, padding: 0 }}>
       <style>{`
-        @page { size: Letter; margin: 0; }
-        html, body { margin: 0; padding: 0; background: #111; }
+        html, body { margin: 0; padding: 0; background: white; }
         * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
         button { display: none !important; }
       `}</style>
 
-      {/* PAGE 1 — Header art, metadata, Purpose, Performance Pulse */}
-      <PdfPage headerImgUrl={headerImgUrl} isLast={false}>
-        {/* Spacer to push content below header art */}
-        <div style={{ height: headerHeight, flexShrink: 0 }} />
-
-        {/* Title block */}
-        <div style={{ marginBottom: "16px" }}>
-          <div style={{ fontSize: "20px", fontWeight: 700, color: "#111827", lineHeight: 1.2 }}>
-            {reportTitle}: <span>{clientName}</span>
-          </div>
-          {reportingWindow && <div style={{ fontSize: "11px", color: "#6B7280", marginTop: "2px" }}>Reporting Period: {reportingWindow}</div>}
-          {preparedBy && <div style={{ fontSize: "11px", marginTop: "2px" }}><strong>Prepared by: </strong>{preparedBy}</div>}
-          <div style={{ display: "inline-block", fontSize: "11px", backgroundColor: "#E8EAED", padding: "2px 8px", borderRadius: "3px", marginTop: "4px" }}>
-            <strong>Reporting Date: </strong>{date}
-          </div>
+      {/* Single wrapper — no page breaks, no fixed height */}
+      <div style={{
+        position: "relative",
+        width: "8.5in",
+        margin: "0 auto",
+        padding: 0,
+        background: "#fff",
+      }}>
+        {/* Header art — flush to top/left/right */}
+        <div style={{ position: "relative", width: "100%", lineHeight: 0 }}>
+          {headerImgUrl ? (
+            <img src={headerImgUrl} alt="" style={{ width: "100%", display: "block" }} />
+          ) : (
+            <div style={{ width: "100%", height: "120px", background: `linear-gradient(135deg, #C0392B 60%, #a02820)`, display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: "32px" }}>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: "26px", fontWeight: 700, color: "white", letterSpacing: "3px", lineHeight: 1 }}>W</div>
+                <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.8)", letterSpacing: "4px" }}>WEBSERV</div>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* 1. Purpose */}
-        {purposeSection && (
+        {/* Content */}
+        <div style={{ padding: "0.45in 0.6in 0.5in 0.6in" }}>
+          {/* Title block */}
           <div style={{ marginBottom: "16px" }}>
-            <SectionHeading num={1} title="Purpose" />
-            <BulletList bullets={purposeSection.bullets ?? []} sectionId="bw_purpose" />
+            <div style={{ fontSize: "20px", fontWeight: 700, color: "#111827", lineHeight: 1.2 }}>
+              {reportTitle}: <span>{clientName}</span>
+            </div>
+            {reportingWindow && <div style={{ fontSize: "11px", color: "#6B7280", marginTop: "2px" }}>Reporting Period: {reportingWindow}</div>}
+            {preparedBy && <div style={{ fontSize: "11px", marginTop: "2px" }}><strong>Prepared by: </strong>{preparedBy}</div>}
+            <div style={{ display: "inline-block", fontSize: "11px", backgroundColor: "#E8EAED", padding: "2px 8px", borderRadius: "3px", marginTop: "4px" }}>
+              <strong>Reporting Date: </strong>{date}
+            </div>
           </div>
-        )}
 
-        {/* 2. Performance Pulse */}
-        {pulseSection && (
-          <div style={{ marginBottom: "16px" }}>
-            <SectionHeading num={2} title="Performance Pulse" />
-            {pulseSection.metrics && <PulseParagraph metrics={pulseSection.metrics} />}
+          {/* 1. Purpose */}
+          {purposeSection && (
+            <div style={{ marginBottom: "16px" }}>
+              <SectionHeading num={1} title="Purpose" />
+              <BulletList bullets={purposeSection.bullets ?? []} sectionId="bw_purpose" />
+            </div>
+          )}
+
+          {/* 2. Performance Pulse */}
+          {pulseSection && (
+            <div style={{ marginBottom: "16px" }}>
+              <SectionHeading num={2} title="Performance Pulse" />
+              {pulseSection.metrics && <PulseParagraph metrics={pulseSection.metrics} />}
+            </div>
+          )}
+
+          {/* 3. Progress & Quick Wins */}
+          {progressSection && progressSection.workLog && progressSection.workLog.length > 0 && (
+            <div style={{ marginBottom: "16px" }}>
+              <SectionHeading num={3} title="Progress &amp; Quick Wins" />
+              <WorkLogTable workLog={progressSection.workLog} />
+            </div>
+          )}
+
+          {/* 4. Partnership & Alignment */}
+          {partnerSection && (
+            <div style={{ marginBottom: "16px" }}>
+              <SectionHeading num={4} title={partnerSection.title ?? "Partnership &amp; Alignment"} />
+              <BulletList bullets={partnerSection.bullets ?? []} sectionId="bw_partnership" />
+            </div>
+          )}
+
+          {/* Footer */}
+          <div style={{ borderTop: "1px solid #B8BDC7", marginTop: "24px", paddingTop: "8px", paddingBottom: "16px" }}>
+            <div style={{ fontSize: "10px", lineHeight: 1.2, color: "#7C828D", textAlign: "center" }}>
+              {FOOTER_TEXT}
+            </div>
           </div>
-        )}
-      </PdfPage>
-
-      {/* PAGE 2 — Progress & Quick Wins, Partnership & Alignment */}
-      <PdfPage headerImgUrl={headerImgUrl} isLast={true}>
-        {/* Smaller spacer on page 2 — header art still bleeds but we start content sooner */}
-        <div style={{ height: headerHeight, flexShrink: 0 }} />
-
-        {/* 3. Progress & Quick Wins */}
-        {progressSection && progressSection.workLog && progressSection.workLog.length > 0 && (
-          <div style={{ marginBottom: "16px" }}>
-            <SectionHeading num={3} title="Progress &amp; Quick Wins" />
-            <WorkLogTable workLog={progressSection.workLog} />
-          </div>
-        )}
-
-        {/* 4. Partnership & Alignment */}
-        {partnerSection && (
-          <div style={{ marginBottom: "16px" }}>
-            <SectionHeading num={4} title={partnerSection.title ?? "Partnership &amp; Alignment"} />
-            <BulletList bullets={partnerSection.bullets ?? []} sectionId="bw_partnership" />
-          </div>
-        )}
-      </PdfPage>
-    </>
+        </div>
+      </div>
+    </div>
   );
 }

@@ -32,16 +32,18 @@ export async function generatePdfViaPuppeteer(token: string): Promise<Buffer> {
   try {
     const page = await browser.newPage();
 
+    // 8.5in at 96dpi = 816px
     await page.setViewport({ width: 816, height: 1056, deviceScaleFactor: 1 });
 
     const printUrl = `http://localhost:5000/biweekly/pdf-render?token=${token}`;
 
     await page.goto(printUrl, { waitUntil: "networkidle0", timeout: 30000 });
 
-    await page.waitForSelector(".pdf-page", { timeout: 15000 });
+    await page.waitForSelector("[data-report-root]", { timeout: 15000 });
 
-    await page.emulateMediaType("print");
+    await page.emulateMediaType("screen");
 
+    // Wait for fonts and all images (including the header art)
     await page.evaluate(async () => {
       await document.fonts.ready;
 
@@ -57,10 +59,18 @@ export async function generatePdfViaPuppeteer(token: string): Promise<Buffer> {
       );
     });
 
+    await new Promise(r => setTimeout(r, 300));
+
+    // Measure the full rendered height of the report
+    const contentHeight = await page.evaluate(() => {
+      return document.documentElement.scrollHeight;
+    });
+
+    // Capture the entire report as a single page — exactly what is on screen
     const pdf = await page.pdf({
-      format: "Letter",
+      width: "816px",
+      height: `${contentHeight}px`,
       printBackground: true,
-      preferCSSPageSize: true,
       margin: { top: "0", right: "0", bottom: "0", left: "0" },
     });
 

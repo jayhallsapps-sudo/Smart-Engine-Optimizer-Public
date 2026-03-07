@@ -23,15 +23,15 @@ export async function generatePdfViaPuppeteer(token: string): Promise<Buffer> {
       "--no-first-run",
       "--no-zygote",
       "--single-process",
-      "--font-render-hinting=none",
     ],
   });
 
   try {
     const page = await browser.newPage();
 
-    // Match the DocxPreview's 794px content width exactly — no gray margins
-    await page.setViewport({ width: 794, height: 1123, deviceScaleFactor: 2 });
+    // Letter paper at 96 CSS dpi = 816px wide.
+    // Setting viewport to exactly this prevents Puppeteer from scaling/stretching content.
+    await page.setViewport({ width: 816, height: 1056, deviceScaleFactor: 2 });
 
     const url = `http://localhost:5000/biweekly/pdf-render?token=${token}`;
     await page.goto(url, { waitUntil: "networkidle0", timeout: 30000 });
@@ -42,7 +42,7 @@ export async function generatePdfViaPuppeteer(token: string): Promise<Buffer> {
     );
 
     // Let images and fonts settle
-    await new Promise(r => setTimeout(r, 1000));
+    await new Promise(r => setTimeout(r, 600));
 
     const pdf = await page.pdf({
       format: "Letter",

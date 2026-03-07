@@ -25,16 +25,51 @@ export default function BiweeklyPdf() {
   return (
     <>
       <style>{`
-        html, body { margin: 0; padding: 0; background: white !important; }
-        * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+        html, body {
+          margin: 0;
+          padding: 0;
+          background: white !important;
+        }
+
+        * {
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+
+        /* Remove shadow and outer chrome */
         [data-testid="docx-preview-page"] {
           box-shadow: none !important;
         }
-        /* Remove outer gray wrapper padding/bg for PDF capture */
-        .bg-muted\\/30, [class*="bg-muted"] {
+
+        /* Remove the outer muted gray background and padding */
+        .bg-muted\/30 {
           background: white !important;
           padding: 0 !important;
           min-height: unset !important;
+        }
+
+        /* ── Page break control ── */
+
+        /* Prevent thead from repeating on every page */
+        thead {
+          display: table-row-group !important;
+        }
+
+        /* Never break inside a table row */
+        tr {
+          break-inside: avoid !important;
+          page-break-inside: avoid !important;
+        }
+
+        /* Never break inside a source badge */
+        span[style*="border-radius"] {
+          break-inside: avoid !important;
+        }
+
+        /* Keep section headings with the content that follows */
+        h2, h3, [data-testid*="heading"] {
+          break-after: avoid !important;
+          page-break-after: avoid !important;
         }
       `}</style>
       <DocxPreview

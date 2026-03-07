@@ -1,5 +1,61 @@
 import { useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+
+function parseCSV(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = "";
+  let inQuotes = false;
+  const n = text.length;
+  let i = 0;
+  while (i < n) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (i + 1 < n && text[i + 1] === '"') {
+          field += '"';
+          i += 2;
+        } else {
+          inQuotes = false;
+          i++;
+        }
+      } else {
+        field += ch;
+        i++;
+      }
+    } else {
+      if (ch === '"') {
+        inQuotes = true;
+        i++;
+      } else if (ch === ",") {
+        row.push(field.trim());
+        field = "";
+        i++;
+      } else if (ch === "\r") {
+        row.push(field.trim());
+        field = "";
+        rows.push(row);
+        row = [];
+        if (i + 1 < n && text[i + 1] === "\n") i++;
+        i++;
+      } else if (ch === "\n") {
+        row.push(field.trim());
+        field = "";
+        rows.push(row);
+        row = [];
+        i++;
+      } else {
+        field += ch;
+        i++;
+      }
+    }
+  }
+  if (field.trim() !== "" || row.length > 0) {
+    row.push(field.trim());
+    rows.push(row);
+  }
+  return rows.filter((r) => r.some((f) => f !== ""));
+}
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -78,10 +134,10 @@ export function CrawlAssetSelector({
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
       const text = await file.text();
-      const lines = text.trim().split("\n");
-      const headers = lines[0].split(",").map((h) => h.trim().replace(/^"|"$/g, ""));
-      const data = lines.slice(1).map((line) => {
-        const cells = line.split(",").map((c) => c.trim().replace(/^"|"$/g, ""));
+      const rows = parseCSV(text);
+      if (rows.length < 1) throw new Error("CSV file is empty or unreadable");
+      const headers = rows[0];
+      const data = rows.slice(1).map((cells) => {
         const row: Record<string, string> = {};
         headers.forEach((h, i) => {
           row[h] = cells[i] ?? "";

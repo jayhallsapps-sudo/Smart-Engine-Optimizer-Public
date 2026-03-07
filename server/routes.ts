@@ -1277,20 +1277,7 @@ export async function registerRoutes(
         auditNotes,
       });
 
-      const saved = await storage.createQbrPrepReport({
-        clientId: Number(clientId),
-        reportType: "qbr_prep",
-        reportName: `QBR Prep - ${reportData.meta.site} - ${reportData.meta.planningQuarter}`,
-        analysisWindowStart: reportData.meta.analysisWindowStart,
-        analysisWindowEnd: reportData.meta.analysisWindowEnd,
-        planningQuarter: Number(reportData.meta.planningQuarter.replace(/[^0-9]/g, "").charAt(0)),
-        planningYear: reportData.meta.planningYear,
-        generatedOn: reportData.meta.generatedOn,
-        generatedReportJson: reportData as any,
-        sourceSnapshotJson: reportData.sourceSnapshot as any,
-      });
-
-      res.json({ reportData, savedId: saved.id });
+      res.json({ reportData });
     } catch (err: any) {
       console.error("QBR Prep V2 generation error:", err);
       res.status(500).json({ message: "Failed to generate QBR Prep: " + err.message });
@@ -1580,10 +1567,14 @@ export async function registerRoutes(
         return { sectionId: `slide_${idx}`, title: edits?.[`${s.id}_title`] ?? s.title ?? "", items };
       });
       const titleSlide = (json.slides as any[]).find((s: any) => s.type === "title");
-      const buffer = await generatePptx(edits?.["title_client"] ?? json.client_name, json.report_title, new Date(json.generated_at).toLocaleDateString("en-US"), sections);
-      const slug = json.client_name.toLowerCase().replace(/\s+/g, "_");
+      const clientName = edits?.["title_client"] ?? json.client_name ?? "Client";
+      const reportTitle = json.report_title ?? "Monthly Report";
+      const generatedAt = json.generated_at ? new Date(json.generated_at).toLocaleDateString("en-US") : new Date().toLocaleDateString("en-US");
+      const buffer = await generatePptx(clientName, reportTitle, generatedAt, sections);
+      const slug = clientName.toLowerCase().replace(/\s+/g, "_");
+      const monthSlug = (json.month_label ?? "report").replace(/\s/g, "_");
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
-      res.setHeader("Content-Disposition", `attachment; filename="${slug}_monthly_${json.month_label.replace(/\s/g, "_")}.pptx"`);
+      res.setHeader("Content-Disposition", `attachment; filename="${slug}_monthly_${monthSlug}.pptx"`);
       res.send(buffer);
     } catch (err: any) {
       console.error("Monthly PPTX error:", err);

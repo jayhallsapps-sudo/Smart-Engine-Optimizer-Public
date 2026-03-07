@@ -1216,6 +1216,8 @@ export async function registerRoutes(
     }
   });
 
+  const SF_FRESHNESS_DAYS = 90;
+
   app.post("/api/reports/qbr-prep/generate-v2", async (req, res) => {
     const { clientId, generationDate, sentiment, hypothesis, auditNotes } = req.body;
     if (!clientId) return res.status(400).json({ message: "clientId is required" });
@@ -1223,6 +1225,19 @@ export async function registerRoutes(
     const sfReports = await storage.getSfReports(Number(clientId));
     if (!sfReports || sfReports.length === 0) {
       return res.status(400).json({ message: "A Screaming Frog crawl is required before generating a QBR Prep report. Please upload one first." });
+    }
+
+    const latestSf = sfReports[0];
+    const sfUploadedAt = latestSf.createdAt instanceof Date ? latestSf.createdAt : new Date(latestSf.createdAt);
+    const asOf = generationDate ? new Date(generationDate + "T12:00:00") : new Date();
+    const daysSinceUpload = Math.floor((asOf.getTime() - sfUploadedAt.getTime()) / (1000 * 60 * 60 * 24));
+    if (daysSinceUpload > SF_FRESHNESS_DAYS) {
+      return res.status(400).json({
+        message: `Screaming Frog crawl is stale (${daysSinceUpload} days old, limit is ${SF_FRESHNESS_DAYS}). Please upload a fresh crawl before generating.`,
+        staleDays: daysSinceUpload,
+        freshnessLimitDays: SF_FRESHNESS_DAYS,
+        uploadedAt: sfUploadedAt.toISOString(),
+      });
     }
 
     try {

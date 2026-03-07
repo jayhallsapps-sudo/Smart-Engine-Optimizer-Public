@@ -1,0 +1,82 @@
+Good. This is much closer. Do not do a broad rewrite.
+
+We are now in verification and refinement mode.
+
+I want you to fix or prove the remaining weak points only.
+
+1. Prove export end-to-end
+Actually run and show working outputs for:
+- PDF export
+- DOCX export
+- Google Drive upload
+
+For each one, provide:
+- the exact request made
+- the exact response
+- the resulting filename
+- proof the file opened or uploaded successfully
+
+Do not tell me the route exists. Execute it.
+
+2. Tighten Screaming Frog freshness enforcement
+Right now you proved only that a crawl exists.
+I need actual “fresh crawl” logic.
+
+Implement and show:
+- the rule that determines freshness
+- where that timestamp comes from
+- the backend rejection when the latest crawl is too old
+- the frontend message shown when crawl is stale
+
+Use a reasonable default freshness window and make it easy to change in code.
+
+3. Fix the Primary Location extraction bug
+“A Huntington Beach, CA” is wrong.
+Fix the parsing logic so location inference does not capture stray leading tokens.
+Then regenerate Anchored Tides and show the corrected meta block.
+
+4. Strengthen Section 6 specificity
+Review the Section 6 generator and reduce generic filler behavior.
+
+Requirements:
+- priorities must be more explicitly tied to observed crawl, service, traffic, and conversion evidence
+- filler priorities should only appear when clearly justified
+- avoid vague default recommendations unless data supports them
+- if a priority is inferred with lower confidence, signal that in the reason text without becoming wordy
+
+After updating, regenerate Anchored Tides and show:
+- old Section 6
+- new Section 6
+- what changed and why
+
+5. Prove Section 2 with real data
+Use any client in the environment that has working GA4 and/or call-tracking conversion data.
+Generate QBR Prep and show a real populated Section 2.
+
+If no such client exists in this environment, say that clearly and show:
+- which client(s) you tested
+- what failed
+- what exact data dependency is missing
+
+6. Verify Monthly regression
+Run one real Monthly report generation/export smoke test after the QBR Prep changes.
+Show:
+- the route used
+- whether preview loaded
+- whether export still worked
+- any diffs or regressions found
+
+7. Add DB index
+Add an index on qbr_prep_reports(client_id) and show the migration/schema change.
+
+8. Final status table
+Return a table with:
+- feature area
+- current status: PASS / PARTIAL / FAIL
+- proof provided
+- remaining risk
+
+Important:
+Do not rewrite the feature.
+Do not re-explain the architecture.
+Only fix or prove the items above.

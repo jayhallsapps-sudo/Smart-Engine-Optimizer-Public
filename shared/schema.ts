@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, jsonb, integer, serial } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, jsonb, integer, serial, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -128,7 +128,9 @@ export const qbrPrepReports = pgTable("qbr_prep_reports", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   lastSavedAt: timestamp("last_saved_at").defaultNow().notNull(),
   versionLabel: text("version_label"),
-});
+}, (t) => [
+  index("qbr_prep_reports_client_id_idx").on(t.clientId),
+]);
 
 export const insertQbrPrepReportSchema = createInsertSchema(qbrPrepReports).omit({
   id: true,

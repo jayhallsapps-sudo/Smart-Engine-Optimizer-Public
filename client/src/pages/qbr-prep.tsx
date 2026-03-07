@@ -38,6 +38,15 @@ interface SfReport {
   reportDate: string;
   filename: string;
   rowCount: number;
+  createdAt: string;
+}
+
+const SF_FRESHNESS_DAYS = 90;
+
+function sfDaysOld(report: SfReport, asOfDate: string): number {
+  const uploaded = new Date(report.createdAt);
+  const asOf = new Date(asOfDate + "T12:00:00");
+  return Math.floor((asOf.getTime() - uploaded.getTime()) / (1000 * 60 * 60 * 24));
 }
 
 interface QuarterInfo {
@@ -129,6 +138,9 @@ export default function QbrPrepPage() {
   }, [clientId]);
 
   const hasSfCrawl = sfReports.length > 0;
+  const latestSf = sfReports[0];
+  const sfIsFresh = latestSf ? sfDaysOld(latestSf, generationDate) <= SF_FRESHNESS_DAYS : false;
+  const sfReadyForGeneration = hasSfCrawl && sfIsFresh;
 
   const handleSfUpload = async (file: File) => {
     if (!clientId) return;
@@ -434,11 +446,21 @@ export default function QbrPrepPage() {
             ) : (
               <p className="text-[11px] text-muted-foreground">Select a client first</p>
             )}
-            {sfActiveId && sfReports.length > 0 && (
-              <p className="text-[10px] text-green-600 dark:text-green-400 mt-1" data-testid="text-sf-status">
-                ✓ {sfReports.find(r => r.id === sfActiveId)?.rowCount.toLocaleString()} URLs will be analyzed
-              </p>
-            )}
+            {sfActiveId && sfReports.length > 0 && (() => {
+              const activeSf = sfReports.find(r => r.id === sfActiveId);
+              if (!activeSf) return null;
+              const daysOld = sfDaysOld(activeSf, generationDate);
+              const isStale = daysOld > SF_FRESHNESS_DAYS;
+              return (
+                <div className="mt-1 space-y-0.5">
+                  <p className={`text-[10px] ${isStale ? "text-amber-600 dark:text-amber-400" : "text-green-600 dark:text-green-400"}`} data-testid="text-sf-status">
+                    {isStale
+                      ? `⚠ Crawl is ${daysOld} days old (limit: ${SF_FRESHNESS_DAYS}d) — upload a fresh crawl`
+                      : `✓ ${activeSf.rowCount.toLocaleString()} URLs · ${daysOld} days old`}
+                  </p>
+                </div>
+              );
+            })()}
           </div>
 
           <Separator />
@@ -497,7 +519,7 @@ export default function QbrPrepPage() {
           <Button
             className="w-full"
             onClick={() => generateMutation.mutate()}
-            disabled={!clientId || !hasSfCrawl || generateMutation.isPending}
+            disabled={!clientId || !sfReadyForGeneration || generateMutation.isPending}
             data-testid="button-generate-qbr-prep"
           >
             {generateMutation.isPending ? (
@@ -513,6 +535,12 @@ export default function QbrPrepPage() {
             <p className="text-[11px] text-destructive flex items-center gap-1" data-testid="text-sf-required-warning">
               <AlertTriangle className="w-3 h-3 shrink-0" />
               Upload a Screaming Frog crawl before generating.
+            </p>
+          )}
+          {clientId && hasSfCrawl && !sfIsFresh && (
+            <p className="text-[11px] text-amber-600 dark:text-amber-400 flex items-center gap-1" data-testid="text-sf-stale-warning">
+              <AlertTriangle className="w-3 h-3 shrink-0" />
+              Crawl is too old (over {SF_FRESHNESS_DAYS} days). Upload a fresh crawl to generate.
             </p>
           )}
 

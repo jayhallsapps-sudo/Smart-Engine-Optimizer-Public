@@ -334,17 +334,32 @@ function inferLocation(sfData: Record<string, any>[], sfHeaders: string[], clien
   const urlCol = sfHeaders.find(h => /^address$/i.test(h) || /^url$/i.test(h)) ?? sfHeaders[0] ?? "";
   const urls = sfData.map(r => String(r[urlCol] ?? "").toLowerCase());
 
-  const locationPatterns = [
-    /\/([a-z-]+)-california\b/i,
-    /\/([a-z-]+)-ca\b/i,
-    /\/(huntington-beach|costa-mesa|irvine|laguna|newport|anaheim|san-diego|los-angeles|orange-county)/i,
+  const knownCities = [
+    "huntington-beach", "costa-mesa", "irvine", "laguna-beach", "laguna-hills",
+    "laguna-niguel", "newport-beach", "anaheim", "san-diego", "los-angeles",
+    "orange-county", "santa-ana", "long-beach", "torrance", "pasadena",
+    "santa-monica", "culver-city", "burbank", "glendale", "pomona",
+  ];
+
+  const exactCityPattern = new RegExp(`\\/(${knownCities.join("|")})(?:\\/|$|-ca\\b|-california\\b)`, "i");
+
+  const generalPatterns = [
+    /\/([a-z]{2,}(?:-[a-z]{2,}){1,3})-california\b/i,
+    /\/([a-z]{2,}(?:-[a-z]{2,}){1,3})-ca\b/i,
   ];
 
   for (const url of urls) {
-    for (const p of locationPatterns) {
+    const exact = url.match(exactCityPattern);
+    if (exact) {
+      return exact[1].split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ") + ", CA";
+    }
+    for (const p of generalPatterns) {
       const m = url.match(p);
       if (m) {
-        return m[1].split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ") + ", CA";
+        const words = m[1].split("-").filter(w => w.length >= 2);
+        if (words.length > 0) {
+          return words.map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ") + ", CA";
+        }
       }
     }
   }
@@ -830,38 +845,82 @@ function generateSection6(
     }
   }
 
-  while (priorities.length < 5) {
-    const fillers = [
-      {
-        initiative: "Conversion Path Optimization",
-        tier: `Tier ${Math.min(section5.tier, 4)}`,
-        action: "Audit and strengthen the path from organic landing pages to VOB/contact submission",
-        reason: "Incremental conversion rate improvements on existing traffic are the highest-leverage wins",
-      },
-      {
-        initiative: "Content Refresh — Highest-Value Pages",
-        tier: `Tier ${Math.min(section5.tier + 1, 5)}`,
-        action: "Refresh highest-value assisted-conversion content tied to primary service demand",
-        reason: "Existing pages with traffic but declining engagement need refreshed content to maintain position",
-      },
-      {
-        initiative: "Internal Linking Optimization",
-        tier: `Tier ${Math.min(section5.tier, 3)}`,
-        action: "Strengthen internal links from high-traffic informational pages to core service and conversion pages",
-        reason: "Authority flow from content to conversion pages improves the value of existing traffic",
-      },
-    ];
+  const unclearTrafficPages = section3.topTrafficPages.filter(p => p.connectionToAdmits === "Unclear");
+  const topUnclearPage = unclearTrafficPages[0];
+  const goalBehind = section1.rows.some(r => r.goalShift === "-5%");
+  const hasMissingH1s = tierInput.missingH1s > 10;
+  const hasThinPages = tierInput.thinPages > 15;
+  const topTrafficTopic = section3.topTrafficTopics.find(t => t.connectionToAdmits === "Unclear" || t.connectionToAdmits === "Assisted");
+  const thinPagesNote = hasThinPages ? ` (${tierInput.thinPages} thin pages detected in crawl)` : "";
 
-    for (const filler of fillers) {
-      if (priorities.length >= 5) break;
-      if (!priorities.find(p => p.initiative === filler.initiative)) {
-        priorities.push({
-          priority: priorities.length + 1,
-          initiative: filler.initiative,
-          ...filler,
-        });
-      }
+  const evidenceFillers: Array<{ initiative: string; tier: string; action: string; reason: string; condition: boolean }> = [
+    {
+      initiative: "Internal Linking — High-Traffic to Conversion",
+      tier: `Tier ${Math.min(section5.tier, 3)}`,
+      action: topUnclearPage
+        ? `Add internal links from "${topUnclearPage.page}" (${topUnclearPage.clicks} clicks, unclear conversion connection) to primary service and VOB pages`
+        : "Add internal links from high-traffic informational pages to primary service and VOB pages",
+      reason: topUnclearPage
+        ? `${topUnclearPage.clicks} organic clicks land on a page with no clear path to admissions — linking directly to service pages converts that existing traffic`
+        : "Traffic data shows high-volume pages with unclear admit connection — internal linking is the lowest-cost conversion lever",
+      condition: unclearTrafficPages.length > 0 && !priorities.find(p => p.initiative.includes("Internal Link")),
+    },
+    {
+      initiative: "Conversion Path Audit",
+      tier: `Tier ${Math.min(section5.tier, 4)}`,
+      action: goalBehind
+        ? `Audit and repair the organic-to-VOB path — goal is behind pace and conversion leakage is the most likely cause`
+        : "Audit and strengthen the path from organic landing pages to VOB/contact submission",
+      reason: goalBehind
+        ? `Organic sessions are behind Q pace — improving conversion rate on existing traffic is higher ROI than acquiring new traffic`
+        : "Conversion path gaps compound slowly; fixing them now avoids a larger gap by end of quarter (lower confidence without GA4 data)",
+      condition: !priorities.find(p => p.initiative.includes("Conversion")),
+    },
+    {
+      initiative: "Content Refresh — Highest-Traffic Assisted Pages",
+      tier: `Tier ${Math.min(section5.tier + 1, 5)}`,
+      action: topTrafficTopic
+        ? `Refresh content in the "${topTrafficTopic.topic}" cluster (${topTrafficTopic.insight.split(".")[0]}) to improve engagement and strengthen links to service pages`
+        : `Refresh highest-traffic assisted-conversion pages${thinPagesNote}`,
+      reason: topTrafficTopic
+        ? `The "${topTrafficTopic.topic}" topic drives meaningful traffic but shows ${topTrafficTopic.connectionToAdmits.toLowerCase()} admit connection — refreshed content with stronger CTAs and internal links captures more value from existing impressions`
+        : `Existing high-traffic pages${hasThinPages ? ` and ${tierInput.thinPages} detected thin pages` : ""} are the fastest path to improving organic conversion without new content investment`,
+      condition: !priorities.find(p => p.initiative.includes("Content Refresh")) && !isAlreadyDone("content refresh"),
+    },
+    {
+      initiative: "Title & Meta Optimization",
+      tier: "Tier 1",
+      action: hasMissingH1s
+        ? `Fix ${tierInput.missingH1s} pages with missing H1 tags and audit meta descriptions on top-traffic pages to improve CTR`
+        : "Audit title tags and meta descriptions on highest-impression pages to improve organic CTR",
+      reason: hasMissingH1s
+        ? `Crawl shows ${tierInput.missingH1s} pages without H1 tags — these pages are structurally weak and likely suppressed in rankings; fixing them requires low effort for potentially high impact`
+        : "CTR improvements on existing impression volume require no new traffic — they are free growth on what the site already earns",
+      condition: !priorities.find(p => p.initiative.includes("Title") || p.initiative.includes("Meta")),
+    },
+  ];
+
+  for (const f of evidenceFillers) {
+    if (priorities.length >= 5) break;
+    if (f.condition) {
+      priorities.push({
+        priority: priorities.length + 1,
+        initiative: f.initiative,
+        tier: f.tier,
+        action: f.action,
+        reason: f.reason,
+      });
     }
+  }
+
+  if (priorities.length < 5) {
+    priorities.push({
+      priority: priorities.length + 1,
+      initiative: "Organic Channel Health Review",
+      tier: `Tier ${section5.tier}`,
+      action: "Review organic channel baseline metrics QoQ to identify acceleration or decay signals before setting Q3 strategy",
+      reason: "Establishing a clean QoQ baseline is prerequisite to any growth investment — without it, directional decisions are made without evidence",
+    });
   }
 
   return { priorities: priorities.slice(0, 7) };

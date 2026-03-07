@@ -14,7 +14,7 @@ import { testCredential } from "./connectionTest";
 import { insertSfReportSchema, insertCallTrackingReportSchema } from "@shared/schema";
 import { generateBiweeklyDocx, generatePptx, generateQbrPrepDocx } from "./reportGenerators";
 import { generateBiweeklyPdf, generateMonthlyPdf } from "./pdfGenerator";
-import { generateBiweeklyPreviewPdf } from "./previewPdfGenerator";
+import { generatePdfViaPuppeteer } from "./puppeteerPdfGenerator";
 import type { SectionData } from "./reportGenerators";
 import { getSampleBiweeklySections, getSampleMonthlySections, getSampleQbrSections, getSampleQbrPrepJson, SAMPLE_CLIENT_NAME, SAMPLE_ATTENDEES } from "./sampleData";
 import { generateQbrPrep } from "./qbrPrepGenerator";
@@ -1309,7 +1309,10 @@ export async function registerRoutes(
     const { report, edits } = req.body as { report: any; edits?: Record<string, string> };
     if (!report) return res.status(400).json({ message: "report is required" });
     try {
-      const buffer = await generateBiweeklyPreviewPdf(report, edits ?? {});
+      const id = Math.random().toString(36).slice(2) + Date.now().toString(36);
+      printCache.set(id, { data: { report, edits: edits ?? {} }, ts: Date.now() });
+
+      const buffer = await generatePdfViaPuppeteer(id);
       const clientName = edits?.["client_name"] ?? report.client_name ?? "report";
       const slug = clientName.toLowerCase().replace(/\s+/g, "_");
       const dateSlug = (edits?.["report_date"] ?? report.date ?? "").replace(/[\s,]/g, "_");

@@ -29,25 +29,38 @@ export async function generatePdfViaPuppeteer(token: string): Promise<Buffer> {
   try {
     const page = await browser.newPage();
 
-    // Letter paper at 96 CSS dpi = 816px wide.
-    // Setting viewport to exactly this prevents Puppeteer from scaling/stretching content.
     await page.setViewport({ width: 816, height: 1056, deviceScaleFactor: 2 });
 
-    const url = `http://localhost:5000/biweekly/pdf-render?token=${token}`;
-    await page.goto(url, { waitUntil: "networkidle0", timeout: 30000 });
+    const printUrl = `http://localhost:5000/biweekly/pdf-render?token=${token}`;
 
-    await page.waitForFunction(
-      () => document.title === "pdf-ready",
-      { timeout: 15000 }
-    );
+    await page.goto(printUrl, { waitUntil: "networkidle0", timeout: 30000 });
 
-    // Let images and fonts settle
-    await new Promise(r => setTimeout(r, 600));
+    await page.waitForSelector("[data-report-root]", { timeout: 15000 });
+
+    await page.emulateMediaType("print");
+
+    await page.evaluate(async () => {
+      await document.fonts.ready;
+
+      const imgs = Array.from(document.images);
+      await Promise.all(
+        imgs.map(img => {
+          if (img.complete) return Promise.resolve();
+          return new Promise<void>(resolve => {
+            img.addEventListener("load", () => resolve(), { once: true });
+            img.addEventListener("error", () => resolve(), { once: true });
+          });
+        })
+      );
+    });
+
+    await new Promise(r => setTimeout(r, 300));
 
     const pdf = await page.pdf({
       format: "Letter",
       printBackground: true,
-      margin: { top: 0, right: 0, bottom: 0, left: 0 },
+      preferCSSPageSize: true,
+      margin: { top: "0", right: "0", bottom: "0", left: "0" },
     });
 
     return Buffer.from(pdf);

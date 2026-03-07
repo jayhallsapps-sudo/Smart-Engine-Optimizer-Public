@@ -10,10 +10,7 @@ export default function BiweeklyPdf() {
     if (!token) { setError("No token."); return; }
     fetch(`/api/print-cache/${token}`)
       .then((r) => { if (!r.ok) throw new Error(`${r.status}`); return r.json(); })
-      .then((d) => {
-        setData(d);
-        document.title = "pdf-ready";
-      })
+      .then((d) => setData(d))
       .catch((e) => setError(e.message));
   }, []);
 
@@ -23,53 +20,85 @@ export default function BiweeklyPdf() {
   const { report, edits } = data;
 
   return (
-    <>
+    <div className="print-shell" data-report-root>
       <style>{`
+        /* ── @page ── */
+        @page {
+          size: Letter;
+          margin: 0;
+        }
+
+        /* ── Base reset ── */
         html, body {
           margin: 0;
           padding: 0;
-          background: white !important;
+          background: white;
+        }
+        .print-shell {
+          background: white;
         }
 
+        /* ── Color preservation ── */
         * {
           -webkit-print-color-adjust: exact !important;
           print-color-adjust: exact !important;
         }
 
-        /* Remove shadow and outer chrome */
-        [data-testid="docx-preview-page"] {
-          box-shadow: none !important;
-        }
-
-        /* Remove the outer muted gray background and padding */
-        .bg-muted\/30 {
+        /* ── Override DocxPreview outer wrapper ──
+           The component wraps in bg-muted/30 with flex centering.
+           For PDF capture we strip all that chrome. */
+        [data-report-root] > div:first-child {
           background: white !important;
           padding: 0 !important;
           min-height: unset !important;
+          display: block !important;
+          overflow: visible !important;
         }
 
-        /* ── Page break control ── */
+        /* ── Override the inner page container ── */
+        [data-testid="docx-preview-page"] {
+          width: 8.5in !important;
+          min-height: 11in !important;
+          box-shadow: none !important;
+          border: none !important;
+          outline: none !important;
+          overflow: visible !important;
+          position: relative;
+          margin: 0 auto;
+        }
 
-        /* Prevent thead from repeating on every page */
+        /* ── No transforms ── */
+        [data-testid="docx-preview-page"],
+        [data-report-root] {
+          transform: none !important;
+          zoom: 1 !important;
+        }
+
+        /* ── Page break rules ── */
+        .no-break,
+        table,
+        tr,
+        td,
+        th,
+        .card,
+        [data-testid^="section-"] {
+          break-inside: avoid;
+          page-break-inside: avoid;
+        }
+
         thead {
-          display: table-row-group !important;
+          display: table-header-group;
         }
 
-        /* Never break inside a table row */
-        tr {
-          break-inside: avoid !important;
-          page-break-inside: avoid !important;
+        tfoot {
+          display: table-footer-group;
         }
 
-        /* Never break inside a source badge */
-        span[style*="border-radius"] {
-          break-inside: avoid !important;
-        }
-
-        /* Keep section headings with the content that follows */
-        h2, h3, [data-testid*="heading"] {
-          break-after: avoid !important;
-          page-break-after: avoid !important;
+        /* ── Hide editing controls ── */
+        .no-print,
+        [data-testid*="edit-btn"],
+        button {
+          display: none !important;
         }
       `}</style>
       <DocxPreview
@@ -83,6 +112,6 @@ export default function BiweeklyPdf() {
         onEdit={() => {}}
         bwTheme
       />
-    </>
+    </div>
   );
 }

@@ -63,7 +63,7 @@ function quarterMonthNames(quarter: number, year: number) {
   return `${months[start]}–${months[start + 2]} ${year}`;
 }
 
-function extractSummary(result: PromiseSettledResult<any>): Array<{ label: string; current: string; previous?: string; delta?: string; isPositive?: boolean }> {
+function extractSummary(result: PromiseSettledResult<any>): Array<{ label: string; current: string; previous?: string; delta?: string; deltaPercent?: string; isPositive?: boolean }> {
   if (result.status !== "fulfilled" || !result.value) return [];
   return (result.value as any).summary ?? [];
 }
@@ -90,6 +90,121 @@ function fmtNum(n: number | string | undefined): string {
   if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`;
   if (num >= 1_000) return `${(num / 1_000).toFixed(1)}K`;
   return String(num);
+}
+
+// Parse a formatted metric string ("1.2K", "34.2K", "892", "2.1M") → raw number
+function parseFormatted(s: string | undefined): number | null {
+  if (!s || s === MNE || s === "—" || s === "") return null;
+  const t = String(s).trim();
+  if (/^[\d.]+[Kk]$/.test(t)) return parseFloat(t) * 1_000;
+  if (/^[\d.]+[Mm]$/.test(t)) return parseFloat(t) * 1_000_000;
+  const n = parseFloat(t.replace(/,/g, ""));
+  return isNaN(n) ? null : n;
+}
+
+// Parse a percentage-format delta string ("+34.8%", "-5.2%", "0%") → numeric value.
+// Returns null for absolute-change strings like "+2,585" (no "%") or non-parseable values.
+function parseDeltaPct(d: string | undefined): number | null {
+  if (!d || !d.includes("%")) return null;
+  const m = String(d).match(/([+-]?\d+\.?\d*)/);
+  return m ? parseFloat(m[1]) : null;
+}
+
+// Smart goal projection for standard metrics (higher = better)
+// Logic: examine current actuals, prior quarter delta, and trend direction.
+// Returns a deterministic goal + plain-English rationale.
+interface GoalResult { goal: string; rationale: string; }
+type SummaryMetric = { label: string; current: string; previous?: string; delta?: string; deltaPercent?: string; isPositive?: boolean };
+
+function smartProjectGoal(metric: SummaryMetric | undefined): GoalResult {
+  const noData: GoalResult = { goal: MNE, rationale: "No current data — manual entry needed" };
+  if (!metric) return noData;
+
+  const curr = parseFormatted(metric.current);
+  if (curr === null || curr === 0) return noData;
+
+  const hasPrev = metric.previous && metric.previous !== MNE && metric.previous !== "—";
+  if (!hasPrev) {
+    return {
+      goal: fmtNum(Math.round(curr * 1.03)),
+      rationale: "No prior quarter data — conservative +3% applied (low confidence)",
+    };
+  }
+
+  // Prefer deltaPercent (e.g. "+10.1%") over delta (e.g. "+2,585" — absolute, not a %)
+  const deltaNum = parseDeltaPct(metric.deltaPercent ?? metric.delta);
+  const isPositive = metric.isPositive ?? true;
+
+  let growthPct: number;
+  let rationale: string;
+
+  if (deltaNum !== null) {
+    if (!isPositive && deltaNum < -10) {
+      growthPct = 0;
+      rationale = `${deltaNum.toFixed(1)}% QoQ decline — stabilization goal set; growth target deferred until trend reverses`;
+    } else if (!isPositive && deltaNum < 0) {
+      growthPct = 0.02;
+      rationale = `${deltaNum.toFixed(1)}% QoQ decline — conservative +2% recovery target`;
+    } else if (isPositive && deltaNum > 20) {
+      const rate = Math.min((deltaNum * 0.4) / 100, 0.12);
+      growthPct = rate;
+      rationale = `+${deltaNum.toFixed(1)}% QoQ strong growth — projecting ${(rate * 100).toFixed(0)}% (moderated to avoid overcommitment)`;
+    } else if (isPositive && deltaNum > 5) {
+      const rate = Math.max((deltaNum * 0.75) / 100, 0.05);
+      growthPct = rate;
+      rationale = `+${deltaNum.toFixed(1)}% QoQ trend — projecting ${(rate * 100).toFixed(0)}% continuation`;
+    } else if (isPositive) {
+      growthPct = 0.05;
+      rationale = `+${deltaNum.toFixed(1)}% QoQ modest growth — +5% target`;
+    } else {
+      growthPct = 0.03;
+      rationale = `Flat trend — conservative +3% stabilization target`;
+    }
+  } else {
+    growthPct = isPositive ? 0.05 : 0.03;
+    rationale = isPositive
+      ? "Positive trend direction — +5% continuation target"
+      : "Trend direction unclear — conservative +3% target";
+  }
+
+  return { goal: fmtNum(Math.round(curr * (1 + growthPct))), rationale };
+}
+
+// Smart projection for GSC avg position (inverted: lower is better)
+function smartProjectPosition(metric: SummaryMetric | undefined): GoalResult {
+  if (!metric) return { goal: MNE, rationale: "No position data — manual entry needed" };
+  const curr = parseFormatted(metric.current);
+  if (curr === null) return { goal: MNE, rationale: "No position data — manual entry needed" };
+
+  const hasPrev = metric.previous && metric.previous !== MNE && metric.previous !== "—";
+  if (!hasPrev) {
+    return {
+      goal: `${Math.max(1, Math.round(curr - 1))}`,
+      rationale: "No prior quarter data — targeting 1-position improvement (low confidence)",
+    };
+  }
+
+  const isPositive = metric.isPositive ?? true;
+  const deltaNum = parseDeltaPct(metric.deltaPercent ?? metric.delta);
+
+  if (!isPositive) {
+    return {
+      goal: metric.current,
+      rationale: `Position declined QoQ${deltaNum !== null ? ` (${deltaNum.toFixed(1)}%)` : ""} — stabilization goal; manual entry recommended`,
+    };
+  }
+
+  if (deltaNum !== null && Math.abs(deltaNum) > 10) {
+    return {
+      goal: `${Math.max(1, Math.round(curr - 2))}`,
+      rationale: `Strong ${deltaNum.toFixed(1)}% QoQ ranking improvement — targeting further 2-position gain`,
+    };
+  }
+
+  return {
+    goal: `${Math.max(1, Math.round(curr - 1))}`,
+    rationale: `Improving ranking trend — targeting 1-position gain next quarter`,
+  };
 }
 
 // ─── Main Generator ───────────────────────────────────────────────────────────
@@ -599,20 +714,18 @@ export async function generateQbrFull(input: {
   const nextQtrYear = input.quarter === 4 ? input.year + 1 : input.year;
   const nextQtrLabel = `Q${nextQtr} ${nextQtrYear}`;
 
-  // Project goals: modest growth from current actuals
-  function projectGoal(metric: typeof ga4Summary[0] | undefined, growthPct = 0.05): string {
-    if (!metric?.current) return MNE;
-    const curr = parseFloat(String(metric.current).replace(/[^0-9.]/g, ""));
-    if (isNaN(curr) || curr === 0) return MNE;
-    const projected = Math.round(curr * (1 + growthPct));
-    return fmtNum(projected);
-  }
+  // Smart goal projection: factors in current actuals, prior quarter delta, and trend direction.
+  // Each metric gets a deterministic goal + plain-English rationale based on observed trend.
+  const sessionsGoal = smartProjectGoal(ga4Summary[0] ?? organicSessionsMetric);
+  const clicksGoal   = smartProjectGoal(organicClicksMetric ?? gscQueriesSummary[0]);
+  const callsGoal    = smartProjectGoal(callsMetric);
+  const posGoal      = smartProjectPosition(avgPosMetric);
 
   const nsmGoalRows: (string | number)[][] = [
-    ["Organic Sessions (GA4)", organicSessionsMetric?.current ?? MNE, projectGoal(ga4Summary[0], 0.07), "Increase 7% QoQ"],
-    ["Organic Clicks (GSC)", organicClicksMetric?.current ?? MNE, projectGoal(organicClicksMetric, 0.05), "Maintain/improve"],
-    ["Organic Calls", callsMetric?.current ?? MNE, projectGoal(callsMetric, 0.10), "Increase 10% QoQ"],
-    ["Avg. GSC Position", avgPosMetric?.current ?? MNE, MNE, "Improve by 1–2 positions"],
+    ["Organic Sessions (GA4)", organicSessionsMetric?.current ?? MNE, sessionsGoal.goal, sessionsGoal.rationale],
+    ["Organic Clicks (GSC)",   organicClicksMetric?.current ?? MNE,   clicksGoal.goal,   clicksGoal.rationale],
+    ["Organic Calls",          callsMetric?.current ?? MNE,           callsGoal.goal,    callsGoal.rationale],
+    ["Avg. GSC Position",      avgPosMetric?.current ?? MNE,          posGoal.goal,      posGoal.rationale],
   ];
 
   slides.push({

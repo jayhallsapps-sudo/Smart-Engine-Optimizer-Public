@@ -1,0 +1,164 @@
+Do not implement anything new yet. I need proof, not a summary.
+
+Show me concrete evidence that Full QBR v2 was actually rebuilt to spec.
+
+Return your answer in this exact structure:
+
+1. Files changed
+List every file modified for Full QBR v2 and what changed in each file.
+
+2. Final slide schema proof
+Show the exact generated slide schema used by Full QBR v2.
+I need:
+- all 20 slide IDs
+- slide types
+- field structure for each slide
+- how the slide order is enforced
+- how divider slides are represented
+- how title/agenda/closing slides are represented
+
+3. Quarter logic proof
+Show the exact code that implements:
+- selected quarter window
+- prior quarter comparison window
+- next-quarter label logic for the NSM slide
+- any source-specific fallback where exact quarter windows are not supported
+
+Include one real example:
+- selected Q1 2026
+- comparison Q4 2025
+- next-quarter label Q2 2026
+
+4. Data mapping proof by slide
+For each of the 20 slides, tell me:
+- which function builds it
+- which data sources it uses
+- what date window it uses
+- what fallback happens when data is missing
+- where “Manual entry needed” is rendered
+
+Use the exact 20-slide deck order.
+
+5. SEO-only proof
+Show exactly how paid media was removed.
+I need:
+- the old assumptions or routes/logic that referenced paid media
+- the new logic proving the deck is now SEO-only
+- proof no paid-media content is still injected anywhere in the generator or export path
+
+6. Guaranteed-slide proof
+Show the exact code that guarantees all 20 slides always render and are not silently omitted when a source fails.
+
+7. Shared infrastructure integration proof
+Show exactly how Full QBR now uses:
+- shared saved_reports
+- shared autosave
+- shared manual save
+- shared saved report selector
+- current crawl selector
+- comparison crawl selector
+- persisted crawl IDs
+
+I need code and DB proof, not just a description.
+
+8. Inline edit proof
+Show:
+- how titles are keyed
+- how subtitles are keyed
+- how commentary is keyed
+- how bullets are keyed
+- how table cells are keyed
+- how edits are applied in preview
+- how edits are persisted in saved_reports
+- how edits are reapplied during PPTX export
+- how edits are reapplied during Drive upload
+
+9. Divider / slide preview proof
+Show:
+- how divider slides render in the preview
+- how thumbnails/navigation work
+- whether divider slides are included or excluded in PPTX export
+- why that behavior is correct relative to the deck structure
+
+10. PPTX export proof
+Actually execute Full QBR PPTX export and show:
+- request
+- response
+- filename
+- file size
+- proof it is a valid PPTX
+- proof at least one edited commentary field survives
+- proof at least one edited bullet survives
+- proof slide order is preserved in the exported XML structure
+
+11. Google Drive upload proof
+Actually execute Full QBR Drive upload and show:
+- request
+- response
+- fileId
+- filename
+- webViewLink if available
+- proof edited content was applied before upload
+
+12. End-to-end Full QBR proof
+Run one full real sequence:
+- select client
+- select quarter/year
+- select current crawl
+- select comparison crawl
+- generate
+- make one inline commentary edit
+- make one inline bullet edit
+- wait for autosave
+- reload the saved report
+- confirm edits restored
+- export PPTX
+- upload to Drive
+
+Show each step with evidence.
+
+13. DB proof
+Show the actual saved_reports row for the Full QBR test run, including:
+- report_type
+- report_name
+- report_period_label
+- current_crawl_asset_id
+- comparison_crawl_asset_id
+- edits_json
+- created_at
+- last_saved_at
+
+14. Visual proof
+Provide:
+- screenshot of the Full QBR left panel
+- screenshot of slide preview
+- screenshot of a divider slide
+- screenshot of an SEO data slide
+- screenshot showing inline edit state
+- screenshot showing save status
+- screenshot showing crawl selectors
+
+15. Known issues
+List any remaining issues, compromises, or regressions honestly.
+I do not want “everything is clean and verified” unless there are truly no known issues.
+
+16. Final verification table
+Return PASS / PARTIAL / FAIL for each:
+- true calendar quarter logic
+- prior quarter comparison
+- next-quarter label logic
+- all 20 slides render
+- slides never silently drop
+- SEO-only rewrite is complete
+- shared save/load integrated
+- current crawl selector integrated
+- comparison crawl selector integrated
+- inline edits persist
+- PPTX export works
+- Drive upload works
+- edited content survives export
+- Full QBR did not regress
+
+Important:
+Do not summarize.
+Show code, DB evidence, request/response evidence, screenshots, and actual outputs.

@@ -46,6 +46,21 @@ export interface UrlAuditRow {
   h1: string;
 }
 
+export interface CrawlDelta {
+  hasComparison: boolean;
+  comparisonCrawledCount: number;
+  addedUrls: string[];
+  removedUrls: string[];
+  indexableCountDelta: number;
+  deleteRedirectDelta: number;
+  keepCountDelta: number;
+  cannibalizationGroupDelta: number;
+  comparisonDeleteRedirectCount: number;
+  comparisonKeepCount: number;
+  comparisonIndexableCount: number;
+  comparisonCannibalizationGroups: number;
+}
+
 export interface WorkbookState {
   tabName: string;
   competitorBenchmark: {
@@ -63,6 +78,7 @@ export interface WorkbookState {
     lowPerformanceSessions: number;
     flaggedRows: UrlAuditRow[];
     cannibalizationNotes: string[];
+    crawlDelta: CrawlDelta | null;
   };
   buildStatus: {
     completedFields: number;
@@ -180,7 +196,7 @@ function rankOf(val: string, allVals: string[], higherIsBetter = true): string {
 
 // ─── Layer 1: Source Normalization ───────────────────────────────────────────
 
-async function normalizeSources(clientId: number, currentCrawlId: number | null, _comparisonCrawlId: number | null) {
+async function normalizeSources(clientId: number, currentCrawlId: number | null, comparisonCrawlId: number | null) {
   const client = await storage.getClient(clientId);
   if (!client) throw new Error("Client not found");
 
@@ -205,6 +221,7 @@ async function normalizeSources(clientId: number, currentCrawlId: number | null,
     ]);
   }
 
+  // Load current crawl (explicit selection or auto-latest)
   let crawlRows: Record<string, string>[] = [];
   let crawlHeaders: string[] = [];
   if (currentCrawlId) {
@@ -221,6 +238,17 @@ async function normalizeSources(clientId: number, currentCrawlId: number | null,
     }
   }
 
+  // Load comparison crawl (only if explicitly selected — never auto-latest for comparison)
+  let comparisonCrawlRows: Record<string, string>[] = [];
+  let comparisonCrawlHeaders: string[] = [];
+  if (comparisonCrawlId) {
+    const compAsset = await storage.getSfReport(comparisonCrawlId);
+    if (compAsset) {
+      comparisonCrawlRows = (compAsset.data ?? []) as Record<string, string>[];
+      comparisonCrawlHeaders = compAsset.headers ?? [];
+    }
+  }
+
   const ga4LandingPages: Record<string, number> = {};
   if (ga4Result.status === "fulfilled" && ga4Result.value?.tables?.[0]) {
     for (const row of ga4Result.value.tables[0].rows) {
@@ -230,7 +258,118 @@ async function normalizeSources(clientId: number, currentCrawlId: number | null,
     }
   }
 
-  return { client, clientDomain, clientSemrush, competitorDomains, semrushKey, crawlRows, crawlHeaders, ga4LandingPages, gscResult, today };
+  return { client, clientDomain, clientSemrush, competitorDomains, semrushKey, crawlRows, crawlHeaders, comparisonCrawlRows, comparisonCrawlHeaders, ga4LandingPages, gscResult, today };
+}
+
+// ─── URL Audit Processor (shared between current and comparison) ───────────────
+
+interface AuditSummary {
+  indexableCount: number;
+  deleteRedirectCount: number;
+  keepCount: number;
+  urlSet: Set<string>;
+  cannibalizationGroups: number;
+  flaggedRows: UrlAuditRow[];
+  cannibalizationNotes: string[];
+  lowPerformanceSessions: number;
+}
+
+function processUrlAuditRows(
+  crawlRows: Record<string, string>[],
+  crawlHeaders: string[],
+  ga4LandingPages: Record<string, number>
+): AuditSummary {
+  const urlCol = crawlHeaders.find(h => ["Address", "URL", "address"].includes(h)) ?? crawlHeaders[0];
+  const statusCol = crawlHeaders.find(h => ["Status Code", "Status code"].includes(h));
+  const indexCol = crawlHeaders.find(h => ["Indexability"].includes(h));
+  const titleCol = crawlHeaders.find(h => ["Title 1", "Title"].includes(h));
+  const h1Col = crawlHeaders.find(h => ["H1-1", "H1"].includes(h));
+  const wordCountCol = crawlHeaders.find(h => h.toLowerCase().includes("word count"));
+
+  const flaggedRows: UrlAuditRow[] = [];
+  let deleteRedirectCount = 0;
+  let keepCount = 0;
+  let indexableCount = 0;
+  const cannibalizationNotes: string[] = [];
+  const titleGroups: Record<string, string[]> = {};
+  const urlSet = new Set<string>();
+
+  for (const row of crawlRows) {
+    const url = String(row[urlCol] ?? "");
+    if (!url || !url.startsWith("http")) continue;
+    urlSet.add(url);
+
+    const status = String(row[statusCol ?? ""] ?? "200");
+    const indexability = String(row[indexCol ?? ""] ?? "Indexable");
+    const title = String(row[titleCol ?? ""] ?? "");
+    const h1 = String(row[h1Col ?? ""] ?? "");
+    const words = parseInt(String(row[wordCountCol ?? ""] ?? "0")) || 0;
+    const sessions = ga4LandingPages[url] ?? ga4LandingPages[url.replace(/\/$/, "")] ?? 0;
+
+    if (indexability === "Indexable") indexableCount++;
+
+    const isThin = words > 0 && words < 200;
+    const isLowTraffic = sessions < 5;
+    const isDuplicate = title && title.length > 10 && Object.values(titleGroups).some(arr => arr.some(t => {
+      const sim = (a: string, b: string) => {
+        const aw = a.toLowerCase().split(/\s+/), bw = b.toLowerCase().split(/\s+/);
+        const common = aw.filter(w => bw.includes(w));
+        return common.length / Math.max(aw.length, bw.length);
+      };
+      return sim(title, t) > 0.7;
+    }));
+
+    if (title) {
+      const key = title.toLowerCase().slice(0, 20);
+      if (!titleGroups[key]) titleGroups[key] = [];
+      titleGroups[key].push(title);
+    }
+
+    let action = "keep";
+    if (indexability === "Indexable" && status === "200" && isLowTraffic && (isThin || isDuplicate)) {
+      action = "delete & redirect";
+      deleteRedirectCount++;
+    } else if (indexability === "Indexable" && status === "200") {
+      action = "keep";
+      keepCount++;
+    } else {
+      action = status.startsWith("3") ? "redirect" : "review";
+    }
+
+    flaggedRows.push({
+      url: url.replace(/^https?:\/\/[^/]+/, "") || "/",
+      pageType: url.includes("/blog/") || url.includes("/post/") ? "Post" : "Page",
+      sessions: String(sessions),
+      action,
+      redirectTarget: action === "delete & redirect" ? "/" : "",
+      statusCode: status,
+      indexability,
+      title: title.slice(0, 60) || DASH,
+      h1: h1.slice(0, 60) || DASH,
+    });
+  }
+
+  const cannibalGroups = Object.entries(titleGroups).filter(([, titles]) => titles.length > 1);
+  if (cannibalGroups.length > 0) {
+    cannibalizationNotes.push(`${cannibalGroups.length} groups of pages with overlapping title patterns detected`);
+  }
+  const lowPerformanceSessions = flaggedRows
+    .filter(r => r.action === "delete & redirect")
+    .reduce((sum, r) => sum + (parseInt(r.sessions) || 0), 0);
+  if (deleteRedirectCount > 0) {
+    cannibalizationNotes.push(`${deleteRedirectCount} URLs flagged for consolidation — only ${lowPerformanceSessions} total organic sessions combined`);
+  }
+
+  return {
+    indexableCount,
+    deleteRedirectCount,
+    keepCount,
+    urlSet,
+    cannibalizationGroups: cannibalGroups.length,
+    flaggedRows: flaggedRows.slice(0, 100),
+    cannibalizationNotes,
+    lowPerformanceSessions,
+  };
 }
 
 // ─── Layer 2: Workbook Builder ────────────────────────────────────────────────
@@ -239,7 +378,7 @@ async function buildWorkbook(
   sources: Awaited<ReturnType<typeof normalizeSources>>,
   amInputs: MidStrategyAmInputs
 ): Promise<WorkbookState> {
-  const { client, clientDomain, clientSemrush, competitorDomains, semrushKey, crawlRows, crawlHeaders, ga4LandingPages, today } = sources;
+  const { client, clientDomain, clientSemrush, competitorDomains, semrushKey, crawlRows, crawlHeaders, comparisonCrawlRows, comparisonCrawlHeaders, ga4LandingPages, today } = sources;
 
   const missingFields: string[] = [];
   const dataSourcesUsed: string[] = [];
@@ -300,97 +439,64 @@ async function buildWorkbook(
     ? Math.round(((totalCompetitors + 1 - clientRankNum) / (totalCompetitors + 1)) * 100)
     : 0;
 
-  // ── URL Audit (redirect map) ───────────────────────────────────────────────
-  const urlCol = crawlHeaders.find(h => ["Address", "URL", "address"].includes(h)) ?? crawlHeaders[0];
-  const statusCol = crawlHeaders.find(h => ["Status Code", "Status code"].includes(h));
-  const indexCol = crawlHeaders.find(h => ["Indexability"].includes(h));
-  const titleCol = crawlHeaders.find(h => ["Title 1", "Title"].includes(h));
-  const h1Col = crawlHeaders.find(h => ["H1-1", "H1"].includes(h));
-  const wordCountCol = crawlHeaders.find(h => h.toLowerCase().includes("word count"));
-
-  const flaggedRows: UrlAuditRow[] = [];
-  let deleteRedirectCount = 0;
-  let keepCount = 0;
-  const cannibalizationNotes: string[] = [];
-
-  // Detect potential cannibalization: group by H1 words, identify overlapping title patterns
-  const titleGroups: Record<string, string[]> = {};
-
+  // ── URL Audit (redirect map) — current crawl ────────────────────────────────
+  let currentAudit: AuditSummary | null = null;
   if (crawlRows.length > 0) {
     dataSourcesUsed.push("URL audit crawl");
-
-    for (const row of crawlRows) {
-      const url = String(row[urlCol] ?? "");
-      if (!url || !url.startsWith("http")) continue;
-      const status = String(row[statusCol ?? ""] ?? "200");
-      const indexability = String(row[indexCol ?? ""] ?? "Indexable");
-      const title = String(row[titleCol ?? ""] ?? "");
-      const h1 = String(row[h1Col ?? ""] ?? "");
-      const words = parseInt(String(row[wordCountCol ?? ""] ?? "0")) || 0;
-      const sessions = ga4LandingPages[url] ?? ga4LandingPages[url.replace(/\/$/, "")] ?? 0;
-
-      // Flag low-impact pages: indexable, 200, low word count, near-zero sessions
-      const isThin = words > 0 && words < 200;
-      const isLowTraffic = sessions < 5;
-      const isDuplicate = title && title.length > 10 && Object.values(titleGroups).some(arr => arr.some(t => {
-        const sim = (a: string, b: string) => {
-          const aw = a.toLowerCase().split(/\s+/), bw = b.toLowerCase().split(/\s+/);
-          const common = aw.filter(w => bw.includes(w));
-          return common.length / Math.max(aw.length, bw.length);
-        };
-        return sim(title, t) > 0.7;
-      }));
-
-      if (title) {
-        const key = title.toLowerCase().slice(0, 20);
-        if (!titleGroups[key]) titleGroups[key] = [];
-        titleGroups[key].push(title);
-      }
-
-      let action = "keep";
-      if (indexability === "Indexable" && status === "200" && isLowTraffic && (isThin || isDuplicate)) {
-        action = "delete & redirect";
-        deleteRedirectCount++;
-      } else if (indexability === "Indexable" && status === "200") {
-        action = "keep";
-        keepCount++;
-      } else {
-        action = status.startsWith("3") ? "redirect" : "review";
-      }
-
-      flaggedRows.push({
-        url: url.replace(/^https?:\/\/[^/]+/, "") || "/",
-        pageType: url.includes("/blog/") || url.includes("/post/") ? "Post" : "Page",
-        sessions: String(sessions),
-        action,
-        redirectTarget: action === "delete & redirect" ? "/" : "",
-        statusCode: status,
-        indexability,
-        title: title.slice(0, 60) || DASH,
-        h1: h1.slice(0, 60) || DASH,
-      });
-    }
-
-    // Build cannibalization notes
-    const cannibalGroups = Object.entries(titleGroups).filter(([, titles]) => titles.length > 1);
-    if (cannibalGroups.length > 0) {
-      cannibalizationNotes.push(`${cannibalGroups.length} groups of pages with overlapping title patterns detected`);
-    }
-    if (deleteRedirectCount > 0) {
-      const totalSessions = flaggedRows
-        .filter(r => r.action === "delete & redirect")
-        .reduce((sum, r) => sum + (parseInt(r.sessions) || 0), 0);
-      cannibalizationNotes.push(`${deleteRedirectCount} URLs flagged for consolidation — only ${totalSessions} total organic sessions combined`);
-    }
+    currentAudit = processUrlAuditRows(crawlRows, crawlHeaders, ga4LandingPages);
   } else {
     missingFields.push("URL audit (no crawl loaded — upload a Screaming Frog export)");
   }
 
-  const lowPerformanceSessions = flaggedRows
-    .filter(r => r.action === "delete & redirect")
-    .reduce((sum, r) => sum + (parseInt(r.sessions) || 0), 0);
+  // ── URL Audit — comparison crawl & delta ────────────────────────────────────
+  // Comparison crawl is processed without GA4 join (no historical sessions available).
+  // We compare structural metrics only: URL sets, indexability, action classifications.
+  // We only compute a delta when both crawls share the same URL column header (same schema).
+  let crawlDelta: CrawlDelta | null = null;
+  if (currentAudit && comparisonCrawlRows.length > 0) {
+    const currentUrlCol = crawlHeaders.find(h => ["Address", "URL", "address"].includes(h)) ?? crawlHeaders[0];
+    const compUrlCol = comparisonCrawlHeaders.find(h => ["Address", "URL", "address"].includes(h)) ?? comparisonCrawlHeaders[0];
 
-  const completedFields = (clientSemrush ? 2 : 0) + (crawlRows.length ? 3 : 0) + (competitorRows.length ? 2 : 0);
+    // Only compute delta if both crawls have a recognisable URL column
+    if (currentUrlCol && compUrlCol) {
+      dataSourcesUsed.push("Comparison crawl");
+      // Process comparison crawl with empty GA4 map (structural analysis only)
+      const compAudit = processUrlAuditRows(comparisonCrawlRows, comparisonCrawlHeaders, {});
+
+      // Compute URL set differences
+      const addedUrls = Array.from(currentAudit.urlSet)
+        .filter(u => !compAudit.urlSet.has(u))
+        .map(u => u.replace(/^https?:\/\/[^/]+/, "") || "/")
+        .slice(0, 20);
+      const removedUrls = Array.from(compAudit.urlSet)
+        .filter(u => !currentAudit!.urlSet.has(u))
+        .map(u => u.replace(/^https?:\/\/[^/]+/, "") || "/")
+        .slice(0, 20);
+
+      crawlDelta = {
+        hasComparison: true,
+        comparisonCrawledCount: comparisonCrawlRows.length,
+        addedUrls,
+        removedUrls,
+        indexableCountDelta: currentAudit.indexableCount - compAudit.indexableCount,
+        deleteRedirectDelta: currentAudit.deleteRedirectCount - compAudit.deleteRedirectCount,
+        keepCountDelta: currentAudit.keepCount - compAudit.keepCount,
+        cannibalizationGroupDelta: currentAudit.cannibalizationGroups - compAudit.cannibalizationGroups,
+        comparisonDeleteRedirectCount: compAudit.deleteRedirectCount,
+        comparisonKeepCount: compAudit.keepCount,
+        comparisonIndexableCount: compAudit.indexableCount,
+        comparisonCannibalizationGroups: compAudit.cannibalizationGroups,
+      };
+    }
+  }
+
+  const flaggedRows = currentAudit?.flaggedRows ?? [];
+  const deleteRedirectCount = currentAudit?.deleteRedirectCount ?? 0;
+  const keepCount = currentAudit?.keepCount ?? 0;
+  const cannibalizationNotes = currentAudit?.cannibalizationNotes ?? [];
+  const lowPerformanceSessions = currentAudit?.lowPerformanceSessions ?? 0;
+
+  const completedFields = (clientSemrush ? 2 : 0) + (crawlRows.length ? 3 : 0) + (competitorRows.length ? 2 : 0) + (crawlDelta ? 1 : 0);
 
   return {
     tabName,
@@ -407,8 +513,9 @@ async function buildWorkbook(
       deleteRedirectCount,
       keepCount,
       lowPerformanceSessions,
-      flaggedRows: flaggedRows.slice(0, 100),
+      flaggedRows,
       cannibalizationNotes,
+      crawlDelta,
     },
     buildStatus: {
       completedFields,
@@ -589,6 +696,27 @@ function generateSlides(
 
   // ── s10: Cannibalization Intro ─────────────────────────────────────────────
   const overlappingCount = urlAudit.deleteRedirectCount > 0 ? urlAudit.deleteRedirectCount : null;
+  const delta = urlAudit.crawlDelta;
+
+  // Build delta context lines for s10 when comparison crawl is available
+  const s10DeltaBullets: string[] = [];
+  if (delta?.hasComparison) {
+    if (delta.addedUrls.length > 0) {
+      s10DeltaBullets.push(`${delta.addedUrls.length} new URL${delta.addedUrls.length !== 1 ? "s" : ""} added since comparison crawl: ${delta.addedUrls.slice(0, 3).join(", ")}${delta.addedUrls.length > 3 ? " and more" : ""}`);
+    }
+    if (delta.removedUrls.length > 0) {
+      s10DeltaBullets.push(`${delta.removedUrls.length} URL${delta.removedUrls.length !== 1 ? "s" : ""} removed since comparison crawl: ${delta.removedUrls.slice(0, 3).join(", ")}${delta.removedUrls.length > 3 ? " and more" : ""}`);
+    }
+    if (delta.indexableCountDelta !== 0) {
+      const dir = delta.indexableCountDelta > 0 ? "+" : "";
+      s10DeltaBullets.push(`Indexable URL count changed by ${dir}${delta.indexableCountDelta} (${delta.comparisonIndexableCount} → ${delta.comparisonIndexableCount + delta.indexableCountDelta})`);
+    }
+    if (delta.deleteRedirectDelta !== 0) {
+      const improving = delta.deleteRedirectDelta < 0;
+      s10DeltaBullets.push(`Consolidation candidates ${improving ? "reduced" : "increased"} by ${Math.abs(delta.deleteRedirectDelta)} since comparison crawl (${delta.comparisonDeleteRedirectCount} → ${delta.comparisonDeleteRedirectCount + delta.deleteRedirectDelta}) — ${improving ? "cleanup is working" : "new low-performance pages detected"}`);
+    }
+  }
+
   const s10: Slide = {
     id: "s10_cannibalization_intro",
     type: "bullets",
@@ -601,6 +729,7 @@ function generateSlides(
       "Many of these were created historically to target 'near me,' duplicate location, or thin service variations",
       "Risk flag: Keyword cannibalization — multiple pages targeting the same core intent dilute authority",
       ...(urlAudit.cannibalizationNotes.length > 0 ? urlAudit.cannibalizationNotes : []),
+      ...s10DeltaBullets,
       ...(amInputs.auditNotes ? [`Audit notes: ${amInputs.auditNotes}`] : []),
     ],
   };
@@ -608,6 +737,43 @@ function generateSlides(
   // ── s11: Cannibalization Data ──────────────────────────────────────────────
   const totalSessions = urlAudit.lowPerformanceSessions;
   const flagCount = urlAudit.deleteRedirectCount;
+
+  // Build comparison metrics for s11 when delta is available
+  const s11Metrics: any[] = flagCount > 0 ? [
+    {
+      label: "URLs Flagged",
+      current: String(flagCount),
+      previous: delta?.hasComparison ? String(delta.comparisonDeleteRedirectCount) : DASH,
+      deltaPercent: delta?.hasComparison && delta.comparisonDeleteRedirectCount > 0
+        ? `${Math.round(((flagCount - delta.comparisonDeleteRedirectCount) / delta.comparisonDeleteRedirectCount) * 100)}%`
+        : DASH,
+      isPositive: false,
+    },
+    {
+      label: "Combined Sessions (3mo)",
+      current: String(totalSessions),
+      previous: DASH,
+      deltaPercent: DASH,
+      isPositive: false,
+    },
+    {
+      label: "Avg Sessions/Page",
+      current: flagCount > 0 ? String(Math.round(totalSessions / flagCount)) : DASH,
+      previous: DASH,
+      deltaPercent: DASH,
+      isPositive: false,
+    },
+    {
+      label: "Crawled URLs Total",
+      current: fmtNum(urlAudit.totalUrlsCrawled),
+      previous: delta?.hasComparison ? fmtNum(delta.comparisonCrawledCount) : DASH,
+      deltaPercent: delta?.hasComparison && delta.comparisonCrawledCount > 0
+        ? `${Math.round(((urlAudit.totalUrlsCrawled - delta.comparisonCrawledCount) / delta.comparisonCrawledCount) * 100)}%`
+        : DASH,
+      isPositive: true,
+    },
+  ] : [];
+
   const s11: Slide = {
     id: "s11_cannibalization_data",
     type: "bullets",
@@ -617,16 +783,17 @@ function generateSlides(
       flagCount > 0
         ? `The ${flagCount} pages identified for consolidation generated only ${totalSessions} organic sessions total over the last 3 months`
         : `Pages identified for consolidation: ${MNE} — upload a crawl to populate this data`,
+      ...(delta?.hasComparison && delta.deleteRedirectDelta < 0
+        ? [`Progress vs. comparison crawl: ${Math.abs(delta.deleteRedirectDelta)} fewer consolidation candidates — redirect cleanup is having an effect`]
+        : []),
+      ...(delta?.hasComparison && delta.deleteRedirectDelta > 0
+        ? [`Trend vs. comparison crawl: ${delta.deleteRedirectDelta} more consolidation candidates than before — the problem is growing`]
+        : []),
       "This confirms: They are not meaningful traffic drivers — They are not revenue-critical pages — Their removal carries minimal risk",
       "The real issue isn't traffic loss — it's structural drag",
       "These low-performing pages: Dilute authority across dozens of URLs | Create internal competition for high-value keywords | Slow down ranking gains for core service pages | Add unnecessary crawl and index bloat",
     ],
-    metrics: flagCount > 0 ? [
-      { label: "URLs Flagged", current: String(flagCount), isPositive: false },
-      { label: "Combined Sessions (3mo)", current: String(totalSessions), isPositive: false },
-      { label: "Avg Sessions/Page", current: flagCount > 0 ? String(Math.round(totalSessions / flagCount)) : DASH, isPositive: false },
-      { label: "Crawled URLs Total", current: fmtNum(urlAudit.totalUrlsCrawled), isPositive: true },
-    ] : undefined,
+    metrics: s11Metrics.length > 0 ? s11Metrics : undefined,
   };
 
   // ── s12: January Action ────────────────────────────────────────────────────

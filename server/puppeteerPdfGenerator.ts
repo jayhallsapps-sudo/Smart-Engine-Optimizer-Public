@@ -3,7 +3,10 @@ import { execSync } from "child_process";
 
 function findChromium(): string | undefined {
   try {
-    const p = execSync("which chromium 2>/dev/null || which chromium-browser 2>/dev/null || which google-chrome 2>/dev/null", { timeout: 3000 }).toString().trim();
+    const p = execSync(
+      "which chromium 2>/dev/null || which chromium-browser 2>/dev/null || which google-chrome 2>/dev/null",
+      { timeout: 3000 }
+    ).toString().trim();
     if (p) return p;
   } catch {}
   return undefined;
@@ -29,7 +32,8 @@ export async function generatePdfViaPuppeteer(token: string): Promise<Buffer> {
   try {
     const page = await browser.newPage();
 
-    await page.setViewport({ width: 816, height: 1056, deviceScaleFactor: 2 });
+    // Match the exact preview viewport width (794px container + some room)
+    await page.setViewport({ width: 900, height: 1056, deviceScaleFactor: 1 });
 
     const printUrl = `http://localhost:5000/biweekly/pdf-render?token=${token}`;
 
@@ -37,8 +41,9 @@ export async function generatePdfViaPuppeteer(token: string): Promise<Buffer> {
 
     await page.waitForSelector("[data-report-root]", { timeout: 15000 });
 
-    await page.emulateMediaType("print");
+    await page.emulateMediaType("screen");
 
+    // Wait for fonts and images — same as what the browser renders on screen
     await page.evaluate(async () => {
       await document.fonts.ready;
 
@@ -56,10 +61,21 @@ export async function generatePdfViaPuppeteer(token: string): Promise<Buffer> {
 
     await new Promise(r => setTimeout(r, 300));
 
+    // Measure the actual rendered content height — capture the whole thing as-is
+    const contentHeight = await page.evaluate(() => {
+      const el = document.querySelector("[data-testid='docx-preview-page']");
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        return Math.ceil(rect.bottom + 32); // add bottom padding
+      }
+      return document.documentElement.scrollHeight;
+    });
+
+    // Use the exact same dimensions the preview uses: 794px wide, full content height
     const pdf = await page.pdf({
-      format: "Letter",
+      width: "794px",
+      height: `${contentHeight}px`,
       printBackground: true,
-      preferCSSPageSize: true,
       margin: { top: "0", right: "0", bottom: "0", left: "0" },
     });
 

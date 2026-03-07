@@ -20,86 +20,28 @@ export default function BiweeklyPdf() {
   const { report, edits } = data;
 
   return (
-    <div className="print-shell" data-report-root>
+    <div data-report-root style={{ background: "white", margin: 0, padding: 0 }}>
       <style>{`
-        /* ── @page ── */
-        @page {
-          size: Letter;
-          margin: 0;
-        }
+        * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+        html, body { margin: 0; padding: 0; background: white; }
 
-        /* ── Base reset ── */
-        html, body {
-          margin: 0;
-          padding: 0;
-          background: white;
-        }
-        .print-shell {
-          background: white;
-        }
-
-        /* ── Color preservation ── */
-        * {
-          -webkit-print-color-adjust: exact !important;
-          print-color-adjust: exact !important;
-        }
-
-        /* ── Override DocxPreview outer wrapper ──
-           The component wraps in bg-muted/30 with flex centering.
-           For PDF capture we strip all that chrome. */
+        /* Strip the outer gray wrapper the preview uses */
         [data-report-root] > div:first-child {
           background: white !important;
           padding: 0 !important;
           min-height: unset !important;
-          display: block !important;
-          overflow: visible !important;
         }
 
-        /* ── Override the inner page container ── */
+        /* Keep the exact same page container the preview uses — no changes */
         [data-testid="docx-preview-page"] {
-          width: 8.5in !important;
-          min-height: 11in !important;
           box-shadow: none !important;
           border: none !important;
           outline: none !important;
-          overflow: visible !important;
-          position: relative;
-          margin: 0 auto;
+          margin: 0 auto !important;
         }
 
-        /* ── No transforms ── */
-        [data-testid="docx-preview-page"],
-        [data-report-root] {
-          transform: none !important;
-          zoom: 1 !important;
-        }
-
-        /* ── Page break rules ── */
-        .no-break,
-        table,
-        tr,
-        td,
-        th,
-        .card,
-        [data-testid^="section-"] {
-          break-inside: avoid;
-          page-break-inside: avoid;
-        }
-
-        thead {
-          display: table-header-group;
-        }
-
-        tfoot {
-          display: table-footer-group;
-        }
-
-        /* ── Hide editing controls ── */
-        .no-print,
-        [data-testid*="edit-btn"],
-        button {
-          display: none !important;
-        }
+        /* Hide edit controls */
+        button { display: none !important; }
       `}</style>
       <DocxPreview
         clientName={edits["client_name"] ?? report.client_name}

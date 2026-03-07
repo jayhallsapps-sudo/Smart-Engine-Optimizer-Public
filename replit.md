@@ -21,7 +21,8 @@ client/src/
   pages/
     dashboard.tsx      - Homepage: client card grid with live KPI metrics (GSC, GA4, Calls) + manual refresh
     reports.tsx        - Main Reports page (3-panel: selectors top, chat left, checklist right)
-    qbr-prep.tsx       - QBR Prep report generator (sidebar config + opportunity backlog viewer)
+    qbr-prep.tsx       - QBR Prep v2 generator (7-section quarterly SEO planning snapshot with inline editing)
+    qbr-prep-print.tsx - QBR Prep PDF render page (puppeteer-navigated for PDF export)
     clients.tsx        - Client CRUD management (tabbed form: Data Sources, SEO Tools, Config)
     setup.tsx          - Multi-account credential management for 7 services
     history.tsx        - Query log history
@@ -44,7 +45,11 @@ server/
   airtable.ts          - Live Airtable REST API for work log
   asanaClient.ts       - Asana API via Replit connector (tasks by section → New Content/Technical SEO/Local SEO)
   reportGenerators.ts  - .docx (biweekly) and .pptx (monthly/QBR) generators
-  qbrPrepGenerator.ts  - QBR Prep report engine: quarter window logic, multi-source data fetch (GSC/GA4/SF/CallRail), heuristic opportunity scoring, JSON+Markdown output
+  qbrPrepGenerator.ts  - Legacy QBR Prep engine (v1)
+  qbrPrepSectionGenerator.ts - QBR Prep v2 section engine: 7-section generator pulling GSC, GA4, NSM Tracker, Airtable, Asana, SF crawl data
+  qbrPrepDocxGenerator.ts - QBR Prep DOCX export generator (branded red header, 7-section tables)
+  qbrPrepTypes.ts      - TypeScript types for QBR Prep report data model (sections 1-7, meta, source snapshot)
+  qbrPrepHelpers.ts    - Quarter logic, branded query classifier, page type classifier, tier diagnosis engine
   googleAuth.ts        - Google OAuth flow (GSC, GA4, GBP, Sheets scopes)
   seed.ts              - Seeds 8 recovery centre clients
 shared/
@@ -99,6 +104,18 @@ Other: gbp_local_summary, content_output_summary, technical_health_summary, core
   - Monthly (30d): Executive Summary KPIs, Visibility & Demand, Conversion Performance, Work Completed, Next Month Priorities
   - QBR (90d): QBR Scorecard, What Worked/Didn't, Strategic Insights, Risks & Constraints, Next Quarter Roadmap, Appendix
 - "Generate Report" compiles all committed data into a formatted text report (downloadable as .txt) with a trusted advisor narrative instruction block at the top (what happened / why / next steps / what we need from the client — tied to leads/VOBs/admissions)
+
+## QBR Prep Feature (v2)
+A 7-section quarterly SEO planning snapshot generator that inherits the Monthly report visual design system (red #C0392B accent, Calibri font, branded header). Key details:
+- **Sections**: 1) Goals, 2) Conversions, 3) Traffic, 4) Services, 5) SEO Tier Diagnosis, 6) Priorities (5-7 items), 7) Tracking (5-7 items)
+- **Data sources**: GSC, GA4, NSM Tracker (Google Sheets), Airtable work log, Asana tasks, Screaming Frog crawl data, CallRail/CTM
+- **Requirements**: Fresh SF crawl upload is required before generation (enforced UI + backend)
+- **Editing**: All cells/text are inline editable; edits are autosaved (2s debounce) to DB
+- **Persistence**: Reports saved in `qbr_prep_reports` table with full JSON snapshot
+- **Export**: PDF (via Puppeteer at /qbr-prep-print), DOCX (docx library), Google Drive upload
+- **DB table**: `qbr_prep_reports` (id, clientId, reportType, reportName, analysisWindowStart/End, planningQuarter/Year, generatedOn, generatedReportJson, sourceSnapshotJson, htmlSnapshot, createdAt, updatedAt, lastSavedAt, versionLabel)
+- **API routes**: generate-v2, saved CRUD (list/get/update/delete), docx-v2, upload-to-drive-v2, preview-pdf
+- **Missing data rule**: Shows "Manual entry needed" in light italic — never invents data
 
 ## Industry Focus
 Recovery and addiction treatment centres. Seed clients: Anchored Tides Recovery, Bliss Recovery, Horseshoe Ridge Recovery, Heartland Healing Center, Iris Healing, New Day Recovery, Sol Womens Treatment, Williamsburg House. Mock data uses addiction treatment keywords (detox, residential, PHP/IOP, dual diagnosis, insurance verification, admissions).

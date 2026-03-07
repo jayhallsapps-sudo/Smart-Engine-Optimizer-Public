@@ -30,6 +30,8 @@ import { querySemrush, handlesSemrushCommand } from "./semrushClient";
 import { queryGbp } from "./gbpClient";
 import { querySfReport, handlesSfCommand } from "./sfClient";
 import { getGoogleAccessToken } from "./googleToken";
+import { generateQbrPrepReport } from "./qbrPrepSectionGenerator";
+import { generateQbrPrepV2Docx } from "./qbrPrepDocxGenerator";
 
 const AHREFS_COMMANDS = new Set([
   "ahrefs_backlink_overview",
@@ -1211,6 +1213,166 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("QBR Prep Drive upload error:", err);
       res.status(500).json({ message: "Upload failed: " + err.message });
+    }
+  });
+
+  app.post("/api/reports/qbr-prep/generate-v2", async (req, res) => {
+    const { clientId, generationDate, sentiment, hypothesis, auditNotes } = req.body;
+    if (!clientId) return res.status(400).json({ message: "clientId is required" });
+
+    const sfReports = await storage.getSfReports(Number(clientId));
+    if (!sfReports || sfReports.length === 0) {
+      return res.status(400).json({ message: "A Screaming Frog crawl is required before generating a QBR Prep report. Please upload one first." });
+    }
+
+    try {
+      const reportData = await generateQbrPrepReport({
+        clientId: Number(clientId),
+        generationDate: generationDate ?? new Date().toISOString().split("T")[0],
+        sentiment,
+        hypothesis,
+        auditNotes,
+      });
+
+      const saved = await storage.createQbrPrepReport({
+        clientId: Number(clientId),
+        reportType: "qbr_prep",
+        reportName: `QBR Prep - ${reportData.meta.site} - ${reportData.meta.planningQuarter}`,
+        analysisWindowStart: reportData.meta.analysisWindowStart,
+        analysisWindowEnd: reportData.meta.analysisWindowEnd,
+        planningQuarter: Number(reportData.meta.planningQuarter.replace(/[^0-9]/g, "").charAt(0)),
+        planningYear: reportData.meta.planningYear,
+        generatedOn: reportData.meta.generatedOn,
+        generatedReportJson: reportData as any,
+        sourceSnapshotJson: reportData.sourceSnapshot as any,
+      });
+
+      res.json({ reportData, savedId: saved.id });
+    } catch (err: any) {
+      console.error("QBR Prep V2 generation error:", err);
+      res.status(500).json({ message: "Failed to generate QBR Prep: " + err.message });
+    }
+  });
+
+  app.get("/api/reports/qbr-prep/saved", async (req, res) => {
+    const { clientId } = req.query;
+    try {
+      if (clientId) {
+        const reports = await storage.getQbrPrepReports(Number(clientId));
+        res.json(reports);
+      } else {
+        const reports = await storage.getAllQbrPrepReports();
+        res.json(reports);
+      }
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/reports/qbr-prep/saved/:id", async (req, res) => {
+    try {
+      const report = await storage.getQbrPrepReport(Number(req.params.id));
+      if (!report) return res.status(404).json({ message: "Report not found" });
+      res.json(report);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.patch("/api/reports/qbr-prep/saved/:id", async (req, res) => {
+    try {
+      const updated = await storage.updateQbrPrepReport(Number(req.params.id), req.body);
+      if (!updated) return res.status(404).json({ message: "Report not found" });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.delete("/api/reports/qbr-prep/saved/:id", async (req, res) => {
+    try {
+      const deleted = await storage.deleteQbrPrepReport(Number(req.params.id));
+      if (!deleted) return res.status(404).json({ message: "Report not found" });
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/reports/qbr-prep/docx-v2", async (req, res) => {
+    const { reportData, edits } = req.body;
+    if (!reportData) return res.status(400).json({ message: "reportData is required" });
+    try {
+      const buffer = await generateQbrPrepV2Docx(reportData, edits);
+      const slug = (reportData.meta?.site ?? "report").toLowerCase().replace(/\s+/g, "_");
+      const filename = `${slug}_qbr_prep_${reportData.meta?.planningQuarter?.replace(/\s+/g, "_") ?? "report"}.docx`;
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.send(buffer);
+    } catch (err: any) {
+      console.error("QBR Prep V2 DOCX error:", err);
+      res.status(500).json({ message: "Failed to generate DOCX: " + err.message });
+    }
+  });
+
+  app.post("/api/reports/qbr-prep/upload-to-drive-v2", async (req, res) => {
+    const { reportData, edits, reportTitle } = req.body;
+    if (!reportData) return res.status(400).json({ message: "reportData is required" });
+
+    try {
+      const docxBuffer = await generateQbrPrepV2Docx(reportData, edits);
+      const { ReplitConnectors } = await import("@replit/connectors-sdk");
+      const connectors = new ReplitConnectors();
+
+      const filename = (reportTitle ?? "QBR Prep Report") + ".docx";
+      const metadata = JSON.stringify({ name: filename });
+      const boundary = "-------smarteo_qbrv2_boundary";
+      const CRLF = "\r\n";
+
+      const metaBuf = Buffer.from(`--${boundary}${CRLF}Content-Type: application/json; charset=UTF-8${CRLF}${CRLF}${metadata}${CRLF}`, "utf8");
+      const filePrefixBuf = Buffer.from(`--${boundary}${CRLF}Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document${CRLF}${CRLF}`, "utf8");
+      const closeBuf = Buffer.from(`${CRLF}--${boundary}--`, "utf8");
+      const bodyBuffer = Buffer.concat([metaBuf, filePrefixBuf, docxBuffer, closeBuf]);
+
+      const uploadRes = await connectors.proxy(
+        "google-drive",
+        "/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink",
+        {
+          method: "POST",
+          headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
+          body: bodyBuffer,
+        }
+      );
+
+      if (!uploadRes.ok) {
+        const errBody = await uploadRes.json().catch(() => ({})) as any;
+        const msg = errBody?.error?.message || uploadRes.statusText;
+        return res.status(uploadRes.status).json({ message: `Google Drive upload failed: ${msg}` });
+      }
+
+      const driveFile = await uploadRes.json() as { id: string; name: string; webViewLink: string };
+      res.json({ success: true, fileId: driveFile.id, fileName: driveFile.name, webViewLink: driveFile.webViewLink });
+    } catch (err: any) {
+      console.error("QBR Prep V2 Drive upload error:", err);
+      res.status(500).json({ message: "Upload failed: " + err.message });
+    }
+  });
+
+  app.post("/api/reports/qbr-prep/preview-pdf", async (req, res) => {
+    const { reportData, edits } = req.body;
+    if (!reportData) return res.status(400).json({ message: "reportData is required" });
+    try {
+      const id = "qbr-prep-" + Date.now();
+      printCache.set(id, { data: { reportData, edits }, ts: Date.now() });
+      const buffer = await generatePdfViaPuppeteer(id, "qbr-prep-print");
+      printCache.delete(id);
+      const slug = (reportData.meta?.site ?? "report").toLowerCase().replace(/\s+/g, "_");
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="${slug}_qbr_prep.pdf"`);
+      res.send(buffer);
+    } catch (err: any) {
+      console.error("QBR Prep PDF error:", err);
+      res.status(500).json({ message: "PDF generation failed: " + err.message });
     }
   });
 

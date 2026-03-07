@@ -111,6 +111,35 @@ export const insertQueryLogSchema = createInsertSchema(queryLogs).omit({
   createdAt: true,
 });
 
+export const qbrPrepReports = pgTable("qbr_prep_reports", {
+  id: serial("id").primaryKey(),
+  clientId: integer("client_id").notNull(),
+  reportType: text("report_type").notNull().default("qbr_prep"),
+  reportName: text("report_name").notNull(),
+  analysisWindowStart: text("analysis_window_start").notNull(),
+  analysisWindowEnd: text("analysis_window_end").notNull(),
+  planningQuarter: integer("planning_quarter").notNull(),
+  planningYear: integer("planning_year").notNull(),
+  generatedOn: text("generated_on").notNull(),
+  sourceSnapshotJson: jsonb("source_snapshot_json"),
+  generatedReportJson: jsonb("generated_report_json"),
+  htmlSnapshot: text("html_snapshot"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  lastSavedAt: timestamp("last_saved_at").defaultNow().notNull(),
+  versionLabel: text("version_label"),
+});
+
+export const insertQbrPrepReportSchema = createInsertSchema(qbrPrepReports).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  lastSavedAt: true,
+});
+
+export type QbrPrepReport = typeof qbrPrepReports.$inferSelect;
+export type InsertQbrPrepReport = z.infer<typeof insertQbrPrepReportSchema>;
+
 export const insertApiCredentialSchema = createInsertSchema(apiCredentials).omit({
   id: true,
   createdAt: true,

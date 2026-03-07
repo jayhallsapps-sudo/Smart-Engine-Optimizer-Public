@@ -7,6 +7,7 @@ import {
   sfReports,
   callTrackingReports,
   settings,
+  qbrPrepReports,
   type Client,
   type InsertClient,
   type QueryLog,
@@ -18,6 +19,8 @@ import {
   type CallTrackingReport,
   type InsertCallTrackingReport,
   type Setting,
+  type QbrPrepReport,
+  type InsertQbrPrepReport,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -49,6 +52,13 @@ export interface IStorage {
   getSetting(key: string): Promise<string | null>;
   setSetting(key: string, value: string): Promise<Setting>;
   getAllSettings(): Promise<Setting[]>;
+
+  getQbrPrepReports(clientId: number): Promise<QbrPrepReport[]>;
+  getQbrPrepReport(id: number): Promise<QbrPrepReport | undefined>;
+  createQbrPrepReport(report: InsertQbrPrepReport): Promise<QbrPrepReport>;
+  updateQbrPrepReport(id: number, data: Partial<InsertQbrPrepReport>): Promise<QbrPrepReport | undefined>;
+  deleteQbrPrepReport(id: number): Promise<boolean>;
+  getAllQbrPrepReports(): Promise<QbrPrepReport[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -197,6 +207,42 @@ export class DatabaseStorage implements IStorage {
 
   async getAllSettings(): Promise<Setting[]> {
     return db.select().from(settings);
+  }
+
+  async getQbrPrepReports(clientId: number): Promise<QbrPrepReport[]> {
+    return db
+      .select()
+      .from(qbrPrepReports)
+      .where(eq(qbrPrepReports.clientId, clientId))
+      .orderBy(desc(qbrPrepReports.createdAt));
+  }
+
+  async getQbrPrepReport(id: number): Promise<QbrPrepReport | undefined> {
+    const [row] = await db.select().from(qbrPrepReports).where(eq(qbrPrepReports.id, id));
+    return row;
+  }
+
+  async createQbrPrepReport(report: InsertQbrPrepReport): Promise<QbrPrepReport> {
+    const [created] = await db.insert(qbrPrepReports).values(report).returning();
+    return created;
+  }
+
+  async updateQbrPrepReport(id: number, data: Partial<InsertQbrPrepReport>): Promise<QbrPrepReport | undefined> {
+    const [updated] = await db
+      .update(qbrPrepReports)
+      .set({ ...data, updatedAt: new Date(), lastSavedAt: new Date() })
+      .where(eq(qbrPrepReports.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteQbrPrepReport(id: number): Promise<boolean> {
+    const result = await db.delete(qbrPrepReports).where(eq(qbrPrepReports.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async getAllQbrPrepReports(): Promise<QbrPrepReport[]> {
+    return db.select().from(qbrPrepReports).orderBy(desc(qbrPrepReports.createdAt));
   }
 }
 

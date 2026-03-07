@@ -1,0 +1,854 @@
+QBR Prep locked product spec
+
+QBR Prep is a SmartEO-generated quarterly planning report for behavioral health treatment center websites.
+
+It must:
+
+use the same visual design language as the Monthly report
+
+render as a continuous-page live preview
+
+export to PDF, DOCX, and Google Drive using the same export pipeline as Monthly
+
+require a fresh Screaming Frog crawl upload before generation
+
+allow full inline editing after generation
+
+autosave and allow manual save
+
+save a durable generated report state in the database, not just print cache
+
+QBR Prep is not:
+
+a content calendar
+
+a page-by-page content plan
+
+a keyword map
+
+a giant roadmap for the entire website
+
+Section 6 must stay capped at 5 to 7 realistic priorities for the next quarter.
+
+Quarter logic
+
+SmartEO must understand standard business quarters:
+
+Q1 = Jan 1 to Mar 31
+
+Q2 = Apr 1 to Jun 30
+
+Q3 = Jul 1 to Sep 30
+
+Q4 = Oct 1 to Dec 31
+
+Generation rule:
+
+analyze the current quarter to date as of the report run date
+
+label the report as planning for the next quarter
+
+Example:
+
+report run on March 7, 2026
+
+analysis window = Jan 1, 2026 to Mar 7, 2026
+
+planning quarter = Q2 2026
+
+Comparison rule:
+
+upcoming quarter goals must be compared against prior quarter goals
+
+recommended goals for the next quarter should be generated from performance data, site condition, trend strength, and likely execution capacity
+
+goals do not need to be automatically higher or lower; they need to be defensible
+
+Left panel inputs
+
+Use a minimal operational panel. Remove placeholder controls that do not directly improve the report.
+
+Required:
+
+Client
+
+Generate as of date, default today
+
+Required Screaming Frog upload
+
+Generate button
+
+Optional but useful:
+
+How did SEO progress feel this quarter?
+
+AM hypothesis / suspected focus next quarter
+
+Manual audit notes
+
+Remove:
+
+opportunities per category
+
+visible content capacity field
+
+placeholder quarter controls that ask the user to do calendar math manually
+
+Quarter selection should be inferred automatically from the generation date.
+
+Saved report naming
+
+Use:
+QBR Prep - Client Name - Q[planning quarter] [year] - Generated YYYY-MM-DD
+
+Example:
+QBR Prep - Anchored Tides Recovery - Q2 2026 - Generated 2026-03-07
+
+Database requirement
+
+Do not rely only on query_logs and printCache.
+
+Create a durable saved report record for QBR Prep, something like:
+
+report_type
+
+client_id
+
+report_name
+
+analysis_window_start
+
+analysis_window_end
+
+planning_quarter
+
+planning_year
+
+source_snapshot_json
+
+generated_report_json
+
+html_snapshot
+
+last_saved_at
+
+created_at
+
+updated_at
+
+Reason:
+the final report must be reopenable and editable after generation without reconstructing it from scattered query logs.
+
+Header metadata block
+
+At the top of QBR Prep, use a metadata block modeled after the sample QBR structure, but aligned to SmartEO’s cleaner workflow.
+
+Fields:
+
+Site: client display name
+
+Domain: canonical domain
+
+Primary Location: auto-infer from site and crawl, editable inline
+
+Program / Positioning: auto-infer from site and crawl, editable inline
+
+Analysis Window: current quarter to date
+
+Planning Quarter: next quarter
+
+Generated On: current date
+
+Do not include content capacity.
+
+Global data-source priority
+
+Use data in this order where relevant:
+
+SmartEO client metadata
+
+Google Sheets NSM Tracker
+
+GSC
+
+GA4 organic-only reporting
+
+Call tracking
+
+GBP
+
+Screaming Frog upload
+
+Airtable
+
+Asana
+
+SEMrush only where absolutely necessary
+
+Ahrefs only if access later becomes available
+
+If required data is missing:
+
+do not invent values
+
+render the section or cell with a light italic note: Manual entry needed
+
+Branded vs non-brand rules
+
+Treat as branded:
+
+client brand name
+
+brand spelling variants
+
+city-modified brand queries
+
+founder / staff / provider names tied to the brand
+
+unique program names tied to the brand
+
+navigational branded searches
+
+review-site branded searches including the brand
+
+Treat as non-brand:
+
+generic service queries
+
+condition queries
+
+treatment-modality queries
+
+informational queries
+
+competitor-independent “near me” queries unless the brand is explicitly present
+
+For opportunity logic in GSC:
+
+high-impression / low-CTR opportunities should default to non-brand only
+
+branded queries can be reported separately, but should not dominate strategic expansion logic
+
+Core conversion weighting
+
+Use this priority order unless the client setup clearly says otherwise:
+
+admits or strongest admit-proxy metric
+
+qualified phone calls
+
+VOB submissions
+
+treatment-intent form submissions
+
+GBP calls / website clicks where clearly intent-driven
+
+assisted organic landing pages tied to conversion paths
+
+When sources disagree:
+
+prefer the QBR sample’s admits-first logic
+
+use SEO and conversion principles as fallback
+
+never let raw traffic outrank conversion relevance in recommendations
+
+Section-by-section data map
+Section 1 — What Matters Most This Quarter
+
+Purpose:
+Define the two main business goals for next quarter and compare them against prior quarter goals.
+
+Output:
+A 2-row table for Primary Goal and Secondary Goal with:
+
+Goal Type
+
+Goal
+
+Measurement Source
+
+Goal Shift vs Last Quarter
+
+Reason
+
+Data mapping:
+
+Primary candidate goals:
+
+Organic Sessions from Google Sheets NSM Tracker
+
+MVP / call goal from Google Sheets NSM Tracker
+
+Source fields from NSM Tracker:
+
+Q1 2026 Organic Sessions NSM
+
+Q1 2026 Organic Sessions Actual
+
+% to Organic Sessions Target
+
+Q1 2026 MVP NSM
+
+Q1 2026 MVP NSM Actual
+
+% to MVP NSM Target
+
+Supporting trend inputs:
+
+GA4 quarter-to-date organic sessions
+
+call tracking quarter-to-date organic calls
+
+GSC query/page movement
+
+current on-track status from sheet
+
+Generation rule:
+
+infer the likely primary and secondary goals from connected NSM fields
+
+generate proposed next-quarter goals based on current pace, trend direction, site condition, and likely realism
+
+compare next-quarter goals against prior quarter goals, not prior quarter actuals
+
+Fallback:
+
+if Sheets data is missing, infer goals from GA4 organic sessions and call-tracking totals
+
+if still unclear, show Manual entry needed
+
+Reason field guidance:
+
+reason must be grounded in observed performance, bottlenecks, and realistic opportunity
+
+do not use vague language like “continue growth”
+
+must mention why the number is justified
+
+Section 2 — Where Conversions Actually Happen
+
+Purpose:
+Identify the pages, patterns, and sources that actually produce qualified action.
+
+Output:
+Table 1: Top Converting Pages
+
+Type
+
+Page / Pattern
+
+Conversion Source
+
+Notes / What We’re Learning
+
+Table 2: Top Converting Sources
+
+Source
+
+What’s Converting
+
+Notes / What We’re Learning
+
+Data mapping:
+Primary sources:
+
+CallRail / CTM / Nimbata summary data
+
+GA4 organic landing page conversions
+
+GBP calls / website clicks
+
+client site page types from crawl and URL analysis
+
+Pull:
+
+top landing pages driving organic calls
+
+top landing pages driving organic conversions in GA4
+
+top organic referrers / sources in call tracking where available
+
+pages associated with VOB / contact / admissions intent
+
+Page-type classification:
+
+Verify Insurance
+
+Contact / admissions
+
+Detox
+
+Residential / inpatient
+
+PHP / IOP
+
+Dual diagnosis
+
+other clear service pages
+
+Pattern examples:
+
+admissions pathways outperform blog traffic
+
+VOB page is the strongest conversion assist
+
+service pages convert when paired with clear access-to-care paths
+
+Fallback:
+
+if call attribution is weak, use GA4 organic landing pages with conversion signal
+
+if both are weak, use known admissions-path pages plus Manual entry needed
+
+Section 3 — Top Organic Traffic Drivers
+
+Purpose:
+Show what organic traffic is really coming from and whether it connects to admits.
+
+Output:
+Table 1: Top Traffic Topics
+
+Topic
+
+Example Queries
+
+Connection to Admits
+
+Insight
+
+Table 2: Top Traffic Pages
+
+Page
+
+Clicks
+
+CTR
+
+Connection to Admits
+
+Insight
+
+Data mapping:
+Primary sources:
+
+GSC top queries
+
+GSC top pages
+
+GSC query-to-page mapping
+
+GA4 landing pages as support
+
+brand vs non-brand classification layer
+
+Topic clustering:
+Group top queries into strategic topics such as:
+
+detox
+
+residential treatment
+
+women’s rehab
+
+dual diagnosis
+
+insurance / admissions
+
+branded navigation
+
+informational education
+
+local treatment intent
+
+Connection to admits scoring:
+Use a simple classification:
+
+Direct
+
+Assisted
+
+Weak
+
+Unclear
+
+Heuristic:
+
+Direct = service, admissions, insurance, or clear treatment-intent pages
+
+Assisted = informational or branded traffic that regularly supports conversion-path pages
+
+Weak = traffic with little treatment or conversion relevance
+
+Unclear = insufficient data
+
+Insight logic:
+
+identify whether traffic is aligned to revenue-driving services
+
+identify over-reliance on branded traffic
+
+identify strong topics with weak landing pages
+
+identify high-click pages that do not support admits well
+
+Fallback:
+
+if GSC mapping is incomplete, use GSC pages plus GA4 landing pages
+
+if still weak, mark Manual entry needed
+
+Section 4 — Site Service Overview
+
+Purpose:
+Summarize what the site actually offers so diagnosis and priorities stay grounded in the real business.
+
+Output:
+Table:
+
+Service
+
+Example Page
+
+List 5 to 8 services.
+
+Data mapping:
+Primary sources:
+
+fresh Screaming Frog crawl
+
+live site crawl
+
+SmartEO client domain/site context
+
+Detection rules:
+Prefer pages that clearly represent:
+
+detox
+
+residential / inpatient
+
+PHP / IOP
+
+outpatient
+
+dual diagnosis
+
+verify insurance
+
+contact / admissions
+
+location / service area
+
+therapies / modalities hub
+
+conditions hub if clearly present
+
+Do not invent niche services unless clearly supported by the site.
+
+Fallback:
+
+if page confidence is low for any service, still surface the likely service but flag example page as Manual entry needed
+
+Section 5 — SEO Tier Diagnosis
+
+Purpose:
+Identify the current limiting tier using your Treatment Center SEO Priority Framework.
+
+Output:
+A short analytical block, not a table.
+
+Required logic:
+Use a rule-based model, not pure freeform AI opinion.
+
+Tier diagnosis rules:
+
+Diagnose Tier 1 blocked if any of these are true:
+
+core service pages are missing, weak, ambiguous, duplicated, or cannibalized
+
+access-to-care pages are weak, unclear, or hard to reach
+
+conversion pathways are indirect or misleading
+
+high-intent service traffic does not land on clear primary URLs
+
+Diagnose Tier 2 blocked if:
+
+Tier 1 is mostly sound
+
+site lacks strong conditions, therapies, or primary location hubs
+
+internal structure is disorganized
+
+authority cannot flow cleanly between services and supporting content
+
+Diagnose Tier 3 blocked if:
+
+Tier 1 and Tier 2 are mostly sound
+
+legacy duplication, thin archives, overlapping geo/service pages, or taxonomy clutter are suppressing growth
+
+Diagnose Tier 4 blocked if:
+
+tiers 1 to 3 are mostly healthy
+
+comparison-stage pages like team, aftercare, alumni, about, or credibility layers are weak enough to limit choice
+
+Diagnose Tier 5 blocked if:
+
+tiers 1 to 4 are largely healthy
+
+the main need is expansion through blogs, FAQs, or demand capture content
+
+Framework guardrails:
+
+never recommend Tier 4 or 5 before 1 and 2 are addressed
+
+Tier 1 refreshes outrank new blog work
+
+cleanup outranks expansion
+
+diagnosis must cite observed evidence from crawl, conversion paths, and traffic patterns
+
+Section 6 — What We Need to Do Next
+
+Purpose:
+Translate the diagnosis into a realistic quarterly plan.
+
+Output:
+Table with 5 to 7 rows:
+
+Priority
+
+Initiative
+
+Tier
+
+Action
+
+Reason
+
+Data mapping:
+Use all prior sections plus:
+
+Screaming Frog crawl findings
+
+manual audit notes
+
+Airtable recent work
+
+Asana recent work
+
+GA4 / GSC movement
+
+conversion-path evidence
+
+AM sentiment and AM hypothesis
+
+Priority generation rules:
+
+max 7 rows
+
+must be realistic for one quarter
+
+must not become a content calendar
+
+must not list dozens of pages
+
+must reference admits, treatment intent, site structure, or cleanup impact
+
+Action style:
+Good:
+
+Refresh and consolidate primary detox and residential intent so Google sees one clear service path
+
+Strengthen Verify Insurance and admissions entry points to reduce friction on high-intent traffic
+
+Build a conditions hub to support authority flow into existing service pages
+
+Retire overlapping near-me and legacy geo pages into the primary location architecture
+
+Refresh highest-value assisted-conversion content tied to dual diagnosis demand
+
+Bad:
+
+Write 20 blogs
+
+Build every missing page on the site
+
+Create a page-by-page roadmap for six months
+
+Airtable / Asana role:
+Use recent work to avoid recommending things already completed or already in motion.
+
+Screaming Frog role:
+Use crawl to identify:
+
+4xx / 5xx issues
+
+redirects
+
+non-indexables
+
+missing titles
+
+missing H1s
+
+page-count changes
+
+likely structural weak spots based on URL patterns
+
+Fallback:
+
+if audit signals are partial, still generate priorities from prior sections but flag the relevant reason or note with Manual entry needed where necessary
+
+Section 7 — What We Track
+
+Purpose:
+Turn strategy into a compact measurement plan.
+
+Output:
+Table with 5 to 7 rows:
+
+Focus Area
+
+Metric
+
+Source
+
+Why It Matters
+
+Data mapping:
+Choose metrics only if they clearly map to the priorities from Section 6.
+
+Good metric examples:
+
+organic sessions to primary service pages
+
+qualified organic calls
+
+VOB submissions
+
+GSC clicks for target non-brand service topics
+
+CTR improvement on high-impression service queries
+
+calls / website clicks from GBP where relevant
+
+reduction in crawl errors on key service and conversion pages
+
+share of traffic to direct or assisted admit-driving pages
+
+Avoid:
+
+vanity metrics with no tie to the plan
+
+generic “keyword count” unless strategy explicitly depends on it
+
+broad traffic metrics that ignore admit relevance
+
+Fallback:
+
+if source coverage is partial, keep the metric but note the best available source or Manual entry needed
+
+“Manual entry needed” behavior
+
+Whenever data is missing or confidence is too low:
+
+render the cell or note in lighter italic text
+
+use the phrase Manual entry needed
+
+do not fabricate placeholders disguised as data
+
+Examples:
+
+Manual entry needed: conversion source attribution unavailable for this page
+
+Manual entry needed: location confidence low from site crawl
+
+Manual entry needed: no recent GBP insights available
+
+Visual and design rules
+
+Use the Monthly report design language:
+
+curved red header treatment at the top of the live report
+
+numbered red section headings with thin line beneath
+
+same table style family
+
+same footer family
+
+same typography family
+
+continuous-page report preview
+
+For print/PDF:
+
+use the same export engine as Monthly
+
+preserve the continuous-page source layout
+
+allow print page breaks as needed
+
+repeating print headers are optional, not required for V1
+
+Replit build order
+Pass 1 — Data contract and report schema
+
+Build:
+
+qbr_prep_reports table
+
+generated_report_json schema
+
+source_snapshot_json schema
+
+quarter inference logic
+
+branded vs non-brand classifier
+
+conversion weighting logic
+
+section output schema
+
+Do not style anything yet.
+
+Pass 2 — Visual shell
+
+Build:
+
+left control panel
+
+continuous-page preview shell
+
+section components
+
+inline-editable fields
+
+save state
+
+autosave/manual save
+
+export inheritance from Monthly
+
+Do not generate real strategy yet beyond mock data.
+
+Pass 3 — Section generation logic
+
+Build:
+
+source mapping per section
+
+Tier diagnosis engine
+
+Section 6 priority engine
+
+Section 7 measurement mapping
+
+Manual entry needed fallbacks
+
+Anchored Tides first-pass validation

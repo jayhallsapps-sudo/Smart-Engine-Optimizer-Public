@@ -1,9 +1,11 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -11,93 +13,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import {
   Sparkles,
   Download,
-  Upload,
   Loader2,
   Bug,
-  Settings2,
   RefreshCw,
   CloudUpload,
   ExternalLink,
+  Save,
+  FileText,
+  Trash2,
+  ChevronDown,
+  ChevronRight,
+  AlertTriangle,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { DocxPreview } from "@/components/report-preview/docx-preview";
-import type { DocxSection } from "@/components/report-preview/docx-preview";
+import { QbrPrepPreview } from "@/components/report-preview/qbr-prep-preview";
 import type { Client } from "@shared/schema";
-
-interface Opportunity {
-  opportunity_title: string;
-  priority: "P0" | "P1" | "P2";
-  impact: "High" | "Med" | "Low";
-  effort: "S" | "M" | "L";
-  kpi_affected: string;
-  urls: string[];
-  evidence: string;
-  problem: string;
-  opportunity: string;
-  why_it_matters: string;
-  recommended_next_step: string;
-}
-
-interface OpportunityCategory {
-  category_name: string;
-  opportunities: Opportunity[];
-}
-
-interface Win {
-  title: string;
-  evidence: string;
-  source: string;
-}
-
-interface TopOpportunity {
-  title: string;
-  category: string;
-  priority: string;
-  impact: string;
-  kpi: string;
-}
-
-interface QbrPrepJson {
-  report_title: string;
-  client_name: string;
-  past_window_label: string;
-  past_start: string;
-  past_end: string;
-  future_window_label: string;
-  generated_at: string;
-  executive_summary: {
-    wins: Win[];
-    top_opportunities: TopOpportunity[];
-  };
-  opportunity_backlog: OpportunityCategory[];
-}
-
-interface QbrPrepOutput {
-  json: QbrPrepJson;
-  markdown: string;
-}
-
-const PAST_QUARTER_OPTIONS = [
-  { value: "Q1", label: "Q1 (Most Recent)" },
-  { value: "Q2", label: "Q2 (Most Recent)" },
-  { value: "Q3", label: "Q3 (Most Recent)" },
-  { value: "Q4", label: "Q4 (Most Recent)" },
-  { value: "Q1_TODATE", label: "Q1 To Date" },
-  { value: "Q2_TODATE", label: "Q2 To Date" },
-  { value: "Q3_TODATE", label: "Q3 To Date" },
-  { value: "Q4_TODATE", label: "Q4 To Date" },
-];
-
-const FUTURE_QUARTER_OPTIONS = [
-  { value: "Q1", label: "Q1" },
-  { value: "Q2", label: "Q2" },
-  { value: "Q3", label: "Q3" },
-  { value: "Q4", label: "Q4" },
-];
 
 interface SfReport {
   id: number;
@@ -107,35 +40,47 @@ interface SfReport {
   rowCount: number;
 }
 
-function qbrJsonToSections(json: QbrPrepJson): DocxSection[] {
-  const sections: DocxSection[] = [];
+interface QuarterInfo {
+  currentQ: number;
+  analysisStart: string;
+  analysisEnd: string;
+  planningQ: number;
+  planningYear: number;
+  analysisWindowLabel: string;
+  planningQuarterLabel: string;
+}
 
-  sections.push({
-    id: "exec_summary",
-    type: "qbr-exec",
-    title: `Executive Summary — ${json.past_window_label}`,
-    wins: json.executive_summary.wins,
-    topOpps: json.executive_summary.top_opportunities.map(o => ({
-      priority: o.priority,
-      title: o.title,
-      category: o.category,
-      impact: o.impact,
-      kpi: o.kpi,
-    })),
-  });
+function inferQuarterClient(dateStr: string): QuarterInfo {
+  const d = new Date(dateStr + "T12:00:00");
+  const month = d.getMonth() + 1;
+  const year = d.getFullYear();
+  const currentQ = Math.ceil(month / 3);
+  const qStarts = [0, 0, 3, 6, 9];
+  const analysisStart = new Date(year, qStarts[currentQ], 1).toISOString().split("T")[0];
+  const analysisEnd = dateStr;
+  let planningQ = currentQ + 1;
+  let planningYear = year;
+  if (planningQ > 4) { planningQ = 1; planningYear = year + 1; }
+  return {
+    currentQ,
+    analysisStart,
+    analysisEnd,
+    planningQ,
+    planningYear,
+    analysisWindowLabel: `Q${currentQ} ${year} (through ${analysisEnd})`,
+    planningQuarterLabel: `Q${planningQ} ${planningYear}`,
+  };
+}
 
-  const CATEGORY_LETTERS = ["A", "B", "C", "D", "E", "F", "G"];
-  json.opportunity_backlog.forEach((cat, ci) => {
-    const letter = CATEGORY_LETTERS[ci] ?? String(ci + 1);
-    sections.push({
-      id: `category_${ci}`,
-      type: "qbr-category",
-      title: `${letter}. ${cat.category_name} (${cat.opportunities.length} items)`,
-      opportunities: cat.opportunities,
-    });
-  });
-
-  return sections;
+interface SavedReport {
+  id: number;
+  clientId: number;
+  reportName: string;
+  planningQuarter: number;
+  planningYear: number;
+  generatedOn: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export default function QbrPrepPage() {
@@ -143,20 +88,21 @@ export default function QbrPrepPage() {
   const rqClient = useQueryClient();
 
   const [clientId, setClientId] = useState<string>("");
-  const [pastQuarter, setPastQuarter] = useState<string>("Q4");
-  const [futureQuarter, setFutureQuarter] = useState<string>("Q1");
-  const [includeContent, setIncludeContent] = useState(true);
-  const [includeTechnical, setIncludeTechnical] = useState(true);
-  const [includeLocal, setIncludeLocal] = useState(true);
-  const [includeCro, setIncludeCro] = useState(true);
-  const [includeAuthority, setIncludeAuthority] = useState(true);
-  const [includeTracking, setIncludeTracking] = useState(true);
-  const [opportunityCapPerCategory, setOpportunityCapPerCategory] = useState<string>("10");
-  const [result, setResult] = useState<QbrPrepOutput | null>(null);
-  const [edits, setEdits] = useState<Record<string, string>>({});
+  const [generationDate, setGenerationDate] = useState(new Date().toISOString().split("T")[0]);
+  const [sentiment, setSentiment] = useState("");
+  const [hypothesis, setHypothesis] = useState("");
+  const [auditNotes, setAuditNotes] = useState("");
   const [sfActiveId, setSfActiveId] = useState<number | null>(null);
   const [sfUploading, setSfUploading] = useState(false);
   const sfFileInputRef = useRef<HTMLInputElement>(null);
+  const [showAmInputs, setShowAmInputs] = useState(false);
+
+  const [reportData, setReportData] = useState<any>(null);
+  const [edits, setEdits] = useState<Record<string, string>>({});
+  const [savedReportId, setSavedReportId] = useState<number | null>(null);
+  const [showSavedReports, setShowSavedReports] = useState(false);
+
+  const quarter = inferQuarterClient(generationDate);
 
   const { data: clients = [] } = useQuery<Client[]>({ queryKey: ["/api/clients"] });
 
@@ -165,12 +111,24 @@ export default function QbrPrepPage() {
     enabled: !!clientId,
   });
 
+  const { data: savedReports = [] } = useQuery<SavedReport[]>({
+    queryKey: [`/api/reports/qbr-prep/saved?clientId=${clientId}`],
+    enabled: !!clientId,
+  });
+
   useEffect(() => {
     if (sfReports.length > 0 && !sfActiveId) setSfActiveId(sfReports[0].id);
     if (sfReports.length === 0) setSfActiveId(null);
   }, [sfReports]);
 
-  useEffect(() => { setSfActiveId(null); }, [clientId]);
+  useEffect(() => {
+    setSfActiveId(null);
+    setReportData(null);
+    setEdits({});
+    setSavedReportId(null);
+  }, [clientId]);
+
+  const hasSfCrawl = sfReports.length > 0;
 
   const handleSfUpload = async (file: File) => {
     if (!clientId) return;
@@ -206,25 +164,20 @@ export default function QbrPrepPage() {
 
   const generateMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/reports/qbr-prep/generate", {
+      const res = await apiRequest("POST", "/api/reports/qbr-prep/generate-v2", {
         clientId: Number(clientId),
-        pastQuarter,
-        futureQuarter,
-        includeContent,
-        includeTechnical,
-        includeLocal,
-        includeCro,
-        includeAuthority,
-        includeTracking,
-        opportunityCapPerCategory: Number(opportunityCapPerCategory),
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Los_Angeles",
-        sfReportId: sfActiveId ?? undefined,
+        generationDate,
+        sentiment: sentiment || undefined,
+        hypothesis: hypothesis || undefined,
+        auditNotes: auditNotes || undefined,
       });
       return res.json();
     },
-    onSuccess: (data: QbrPrepOutput) => {
-      setResult(data);
+    onSuccess: (data: any) => {
+      setReportData(data.reportData);
       setEdits({});
+      if (data.savedId) setSavedReportId(data.savedId);
+      rqClient.invalidateQueries({ queryKey: [`/api/reports/qbr-prep/saved?clientId=${clientId}`] });
       toast({ title: "QBR Prep generated", description: "Preview ready — click any text to edit." });
     },
     onError: (err: any) => {
@@ -232,16 +185,88 @@ export default function QbrPrepPage() {
     },
   });
 
-  const [docxDownloading, setDocxDownloading] = useState(false);
+  const saveMutation = useMutation({
+    mutationFn: async (payload: { id: number; data: any; currentEdits: Record<string, string> }) => {
+      const res = await apiRequest("PATCH", `/api/reports/qbr-prep/saved/${payload.id}`, {
+        generatedReportJson: { ...payload.data, edits: payload.currentEdits },
+        htmlSnapshot: null,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Report saved" });
+      rqClient.invalidateQueries({ queryKey: [`/api/reports/qbr-prep/saved?clientId=${clientId}`] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Save failed", description: err.message, variant: "destructive" });
+    },
+  });
 
+  const editsRef = useRef(edits);
+  editsRef.current = edits;
+  const reportDataRef = useRef(reportData);
+  reportDataRef.current = reportData;
+  const savedReportIdRef = useRef(savedReportId);
+  savedReportIdRef.current = savedReportId;
+
+  const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleEdit = useCallback((key: string, value: string) => {
+    setEdits(prev => ({ ...prev, [key]: value }));
+    if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+    autosaveTimer.current = setTimeout(() => {
+      const id = savedReportIdRef.current;
+      const data = reportDataRef.current;
+      if (id && data) {
+        saveMutation.mutate({ id, data, currentEdits: { ...editsRef.current, [key]: value } });
+      }
+    }, 2000);
+  }, []);
+
+  const loadSavedReport = async (id: number) => {
+    try {
+      const res = await fetch(`/api/reports/qbr-prep/saved/${id}`);
+      if (!res.ok) throw new Error("Failed to load");
+      const data = await res.json();
+      const json = data.generatedReportJson as any;
+      if (json?.edits) {
+        const { edits: savedEdits, ...rest } = json;
+        setReportData(rest);
+        setEdits(savedEdits);
+      } else {
+        setReportData(json);
+        setEdits({});
+      }
+      setSavedReportId(id);
+      toast({ title: "Report loaded" });
+    } catch (err: any) {
+      toast({ title: "Load failed", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const deleteSavedReport = async (id: number) => {
+    try {
+      await apiRequest("DELETE", `/api/reports/qbr-prep/saved/${id}`);
+      rqClient.invalidateQueries({ queryKey: [`/api/reports/qbr-prep/saved?clientId=${clientId}`] });
+      if (savedReportId === id) {
+        setSavedReportId(null);
+        setReportData(null);
+        setEdits({});
+      }
+      toast({ title: "Report deleted" });
+    } catch (err: any) {
+      toast({ title: "Delete failed", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const [docxDownloading, setDocxDownloading] = useState(false);
   const downloadDocx = async () => {
-    if (!result) return;
+    if (!reportData) return;
     setDocxDownloading(true);
     try {
-      const res = await fetch("/api/reports/qbr-prep/docx", {
+      const res = await fetch("/api/reports/qbr-prep/docx-v2", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ json: result.json }),
+        body: JSON.stringify({ reportData, edits }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ message: "Unknown error" }));
@@ -252,8 +277,8 @@ export default function QbrPrepPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      const slug = result.json.client_name.toLowerCase().replace(/\s+/g, "_");
-      a.download = `${slug}_qbr_prep_${pastQuarter.toLowerCase()}.docx`;
+      const slug = reportData.meta?.site?.toLowerCase().replace(/\s+/g, "_") ?? "report";
+      a.download = `${slug}_qbr_prep_q${quarter.planningQ}_${quarter.planningYear}.docx`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (err: any) {
@@ -265,11 +290,11 @@ export default function QbrPrepPage() {
 
   const uploadMutation = useMutation({
     mutationFn: async () => {
-      if (!result) throw new Error("No report to upload");
-      const res = await apiRequest("POST", "/api/reports/qbr-prep/upload-to-drive", {
-        json: result.json,
-        reportTitle: result.json.report_title,
-        clientId: Number(clientId),
+      if (!reportData) throw new Error("No report to upload");
+      const res = await apiRequest("POST", "/api/reports/qbr-prep/upload-to-drive-v2", {
+        reportData,
+        edits,
+        reportTitle: `QBR Prep - ${reportData.meta?.site} - Q${quarter.planningQ} ${quarter.planningYear}`,
       });
       return res.json();
     },
@@ -288,11 +313,31 @@ export default function QbrPrepPage() {
     },
   });
 
-  function handleEdit(key: string, value: string) {
-    setEdits(prev => ({ ...prev, [key]: value }));
-  }
-
-  const sections: DocxSection[] = result ? qbrJsonToSections(result.json) : [];
+  const [pdfDownloading, setPdfDownloading] = useState(false);
+  const downloadPdf = async () => {
+    if (!reportData) return;
+    setPdfDownloading(true);
+    try {
+      const res = await fetch("/api/reports/qbr-prep/preview-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reportData, edits }),
+      });
+      if (!res.ok) throw new Error("PDF generation failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const slug = reportData.meta?.site?.toLowerCase().replace(/\s+/g, "_") ?? "report";
+      a.download = `${slug}_qbr_prep_q${quarter.planningQ}_${quarter.planningYear}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      toast({ title: "PDF failed", description: err.message, variant: "destructive" });
+    } finally {
+      setPdfDownloading(false);
+    }
+  };
 
   return (
     <div className="flex h-full min-h-0" data-testid="qbr-prep-page">
@@ -301,8 +346,8 @@ export default function QbrPrepPage() {
           <div className="flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-primary" />
             <div>
-              <h1 className="font-semibold text-sm">QBR Prep</h1>
-              <p className="text-xs text-muted-foreground">Opportunity backlog for QBR</p>
+              <h1 className="font-semibold text-sm" data-testid="text-page-title">QBR Prep</h1>
+              <p className="text-xs text-muted-foreground">7-section SEO planning snapshot</p>
             </div>
           </div>
         </div>
@@ -326,46 +371,22 @@ export default function QbrPrepPage() {
             </div>
 
             <div>
-              <Label className="text-xs mb-1 block">Past Quarter (Analysis Window)</Label>
-              <Select value={pastQuarter} onValueChange={setPastQuarter}>
-                <SelectTrigger className="h-8 text-xs" data-testid="trigger-select-past-quarter">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {PAST_QUARTER_OPTIONS.map(o => (
-                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label className="text-xs mb-1 block">Generate as-of Date</Label>
+              <Input
+                type="date"
+                className="h-8 text-xs"
+                value={generationDate}
+                onChange={e => setGenerationDate(e.target.value)}
+                data-testid="input-generation-date"
+              />
             </div>
 
-            <div>
-              <Label className="text-xs mb-1 block">Future Quarter (Planning Label)</Label>
-              <Select value={futureQuarter} onValueChange={setFutureQuarter}>
-                <SelectTrigger className="h-8 text-xs" data-testid="trigger-select-future-quarter">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {FUTURE_QUARTER_OPTIONS.map(o => (
-                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label className="text-xs mb-1 block">Opportunities per Category</Label>
-              <Select value={opportunityCapPerCategory} onValueChange={setOpportunityCapPerCategory}>
-                <SelectTrigger className="h-8 text-xs" data-testid="select-cap">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {["5", "10", "15", "20"].map(v => (
-                    <SelectItem key={v} value={v}>{v}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {clientId && (
+              <div className="text-[11px] bg-muted/50 rounded px-3 py-2 space-y-0.5">
+                <div><span className="text-muted-foreground">Analysis:</span> <strong>{quarter.analysisWindowLabel}</strong></div>
+                <div><span className="text-muted-foreground">Planning:</span> <strong>{quarter.planningQuarterLabel}</strong></div>
+              </div>
+            )}
           </div>
 
           <Separator />
@@ -373,6 +394,11 @@ export default function QbrPrepPage() {
           <div>
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
               <Bug className="w-3 h-3" /> Screaming Frog Crawl
+              {clientId && !hasSfCrawl && (
+                <span className="ml-auto text-destructive flex items-center gap-0.5 normal-case font-medium">
+                  <AlertTriangle className="w-3 h-3" /> Required
+                </span>
+              )}
             </p>
             <input
               ref={sfFileInputRef}
@@ -409,7 +435,7 @@ export default function QbrPrepPage() {
               <p className="text-[11px] text-muted-foreground">Select a client first</p>
             )}
             {sfActiveId && sfReports.length > 0 && (
-              <p className="text-[10px] text-green-600 dark:text-green-400 mt-1">
+              <p className="text-[10px] text-green-600 dark:text-green-400 mt-1" data-testid="text-sf-status">
                 ✓ {sfReports.find(r => r.id === sfActiveId)?.rowCount.toLocaleString()} URLs will be analyzed
               </p>
             )}
@@ -418,24 +444,52 @@ export default function QbrPrepPage() {
           <Separator />
 
           <div>
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
-              <Settings2 className="w-3 h-3" /> Category Toggles
-            </p>
-            <div className="space-y-2.5">
-              {[
-                { id: "content", label: "Content", state: includeContent, set: setIncludeContent },
-                { id: "technical", label: "Technical SEO", state: includeTechnical, set: setIncludeTechnical },
-                { id: "local", label: "Local / GBP", state: includeLocal, set: setIncludeLocal },
-                { id: "cro", label: "CRO / Conversion", state: includeCro, set: setIncludeCro },
-                { id: "authority", label: "Authority / Links", state: includeAuthority, set: setIncludeAuthority },
-                { id: "tracking", label: "Tracking", state: includeTracking, set: setIncludeTracking },
-              ].map(({ id, label, state, set }) => (
-                <div key={id} className="flex items-center justify-between gap-2">
-                  <Label htmlFor={`toggle-${id}`} className="text-xs cursor-pointer">{label}</Label>
-                  <Switch id={`toggle-${id}`} checked={state} onCheckedChange={set} data-testid={`switch-${id}`} />
+            <button
+              className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1 hover:text-foreground transition-colors w-full text-left"
+              onClick={() => setShowAmInputs(!showAmInputs)}
+              data-testid="toggle-am-inputs"
+            >
+              {showAmInputs ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+              AM Inputs (Optional)
+            </button>
+            {showAmInputs && (
+              <div className="space-y-3">
+                <div>
+                  <Label className="text-xs mb-1 block">Client Sentiment</Label>
+                  <Select value={sentiment} onValueChange={setSentiment}>
+                    <SelectTrigger className="h-8 text-xs" data-testid="select-sentiment">
+                      <SelectValue placeholder="Select…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="happy">Happy — strong momentum</SelectItem>
+                      <SelectItem value="neutral">Neutral — steady state</SelectItem>
+                      <SelectItem value="concerned">Concerned — needs attention</SelectItem>
+                      <SelectItem value="frustrated">Frustrated — escalated risk</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-              ))}
-            </div>
+                <div>
+                  <Label className="text-xs mb-1 block">Hypothesis / Focus Area</Label>
+                  <Textarea
+                    className="text-xs min-h-[60px]"
+                    placeholder="What you think should be the priority this quarter…"
+                    value={hypothesis}
+                    onChange={e => setHypothesis(e.target.value)}
+                    data-testid="textarea-hypothesis"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs mb-1 block">Manual Audit Notes</Label>
+                  <Textarea
+                    className="text-xs min-h-[60px]"
+                    placeholder="Any specific site observations…"
+                    value={auditNotes}
+                    onChange={e => setAuditNotes(e.target.value)}
+                    data-testid="textarea-audit-notes"
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           <Separator />
@@ -443,21 +497,82 @@ export default function QbrPrepPage() {
           <Button
             className="w-full"
             onClick={() => generateMutation.mutate()}
-            disabled={!clientId || generateMutation.isPending}
+            disabled={!clientId || !hasSfCrawl || generateMutation.isPending}
             data-testid="button-generate-qbr-prep"
           >
             {generateMutation.isPending ? (
               <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Generating…</>
-            ) : result ? (
+            ) : reportData ? (
               <><RefreshCw className="w-4 h-4 mr-2" /> Regenerate</>
             ) : (
               <><Sparkles className="w-4 h-4 mr-2" /> Generate QBR Prep</>
             )}
           </Button>
+
+          {clientId && !hasSfCrawl && (
+            <p className="text-[11px] text-destructive flex items-center gap-1" data-testid="text-sf-required-warning">
+              <AlertTriangle className="w-3 h-3 shrink-0" />
+              Upload a Screaming Frog crawl before generating.
+            </p>
+          )}
+
+          {clientId && savedReports.length > 0 && (
+            <>
+              <Separator />
+              <div>
+                <button
+                  className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1 hover:text-foreground transition-colors w-full text-left"
+                  onClick={() => setShowSavedReports(!showSavedReports)}
+                  data-testid="toggle-saved-reports"
+                >
+                  {showSavedReports ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                  Saved Reports ({savedReports.length})
+                </button>
+                {showSavedReports && (
+                  <div className="space-y-1.5">
+                    {savedReports.map(r => (
+                      <div
+                        key={r.id}
+                        className={`text-[11px] rounded px-2 py-1.5 flex items-start gap-1.5 cursor-pointer hover:bg-muted/50 ${savedReportId === r.id ? "bg-muted ring-1 ring-primary/20" : ""}`}
+                        data-testid={`saved-report-${r.id}`}
+                      >
+                        <FileText className="w-3 h-3 mt-0.5 shrink-0 text-muted-foreground" />
+                        <div className="flex-1 min-w-0" onClick={() => loadSavedReport(r.id)}>
+                          <div className="font-medium truncate">{r.reportName}</div>
+                          <div className="text-muted-foreground">{new Date(r.createdAt).toLocaleDateString()}</div>
+                        </div>
+                        <button
+                          className="shrink-0 text-muted-foreground hover:text-destructive"
+                          onClick={(e) => { e.stopPropagation(); deleteSavedReport(r.id); }}
+                          data-testid={`delete-saved-report-${r.id}`}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </div>
 
-        {result && (
+        {reportData && (
           <div className="p-4 border-t space-y-2">
+            <Button
+              variant="outline"
+              className="w-full text-xs"
+              onClick={() => {
+                if (savedReportId && reportData) {
+                  saveMutation.mutate({ id: savedReportId, data: reportData, currentEdits: edits });
+                }
+              }}
+              disabled={saveMutation.isPending || !savedReportId}
+              data-testid="button-save-report"
+            >
+              {saveMutation.isPending ? <Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> : <Save className="w-3 h-3 mr-1.5" />}
+              Save Report
+            </Button>
             <Button
               variant="outline"
               className="w-full text-xs"
@@ -467,6 +582,16 @@ export default function QbrPrepPage() {
             >
               {docxDownloading ? <Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> : <Download className="w-3 h-3 mr-1.5" />}
               Download DOCX
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full text-xs"
+              onClick={downloadPdf}
+              disabled={pdfDownloading}
+              data-testid="button-download-pdf"
+            >
+              {pdfDownloading ? <Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> : <Download className="w-3 h-3 mr-1.5" />}
+              Download PDF
             </Button>
             <Button
               variant="outline"
@@ -483,13 +608,13 @@ export default function QbrPrepPage() {
       </aside>
 
       <div className="flex-1 min-w-0 overflow-auto">
-        {!result && !generateMutation.isPending && (
+        {!reportData && !generateMutation.isPending && (
           <div className="h-full flex items-center justify-center">
             <div className="text-center space-y-3 max-w-xs">
               <Sparkles className="w-12 h-12 text-muted-foreground mx-auto" />
-              <h2 className="font-semibold text-lg">QBR Prep Report</h2>
+              <h2 className="font-semibold text-lg" data-testid="text-empty-state-title">QBR Prep Report</h2>
               <p className="text-sm text-muted-foreground">
-                Select a client, configure quarters and category toggles, then click Generate. The preview renders your document in real time — click any text to edit before downloading.
+                Select a client, upload a Screaming Frog crawl, then click Generate. The preview renders your 7-section planning snapshot — click any text to edit before exporting.
               </p>
             </div>
           </div>
@@ -499,20 +624,25 @@ export default function QbrPrepPage() {
           <div className="h-full flex items-center justify-center">
             <div className="text-center space-y-3">
               <Loader2 className="w-10 h-10 animate-spin text-primary mx-auto" />
-              <p className="text-sm font-medium">Analyzing data sources…</p>
-              <p className="text-xs text-muted-foreground">Pulling GSC, GA4, and crawl data — 15–30 seconds.</p>
+              <p className="text-sm font-medium" data-testid="text-generating">Analyzing data sources…</p>
+              <p className="text-xs text-muted-foreground">Pulling GSC, GA4, NSM, and crawl data — 15–30 seconds.</p>
             </div>
           </div>
         )}
 
-        {result && !generateMutation.isPending && (
-          <DocxPreview
-            clientName={result.json.client_name}
-            reportTitle={result.json.report_title}
-            date={new Date(result.json.generated_at).toLocaleDateString("en-US", { dateStyle: "long" })}
-            sections={sections}
+        {reportData && !generateMutation.isPending && (
+          <QbrPrepPreview
+            meta={reportData.meta}
+            section1Goals={reportData.section1Goals}
+            section2Conversions={reportData.section2Conversions}
+            section3Traffic={reportData.section3Traffic}
+            section4Services={reportData.section4Services}
+            section5Diagnosis={reportData.section5Diagnosis}
+            section6Priorities={reportData.section6Priorities}
+            section7Tracking={reportData.section7Tracking}
             edits={edits}
             onEdit={handleEdit}
+            generationMeta={reportData.generationMeta}
           />
         )}
       </div>

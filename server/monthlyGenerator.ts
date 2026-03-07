@@ -36,6 +36,18 @@ function fmtIso(d: Date) {
   return d.toISOString().slice(0, 10);
 }
 
+// Combine progressFeeling + contextAnomalies into a single compact commentary line.
+// Returns undefined when both fields are empty.
+function buildPerformanceCommentary(am: MonthlyAmInputs): string | undefined {
+  const feeling = am.progressFeeling?.trim();
+  const context = am.contextAnomalies?.trim();
+  if (!feeling && !context) return undefined;
+  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+  const end = (s: string) => /[.!?]$/.test(s) ? s : `${s}.`;
+  if (feeling && context) return `${end(cap(feeling))} Context: ${cap(context)}`;
+  return end(cap(feeling || context!));
+}
+
 // Converts a URL slug into a readable label.
 // "/programs/detox-residential-treatment" → "Detox Residential Treatment"
 function cleanPageLabel(rawUrl: string): string {
@@ -202,11 +214,14 @@ export async function generateMonthly(input: {
     );
   }
 
+  const perfCommentary = buildPerformanceCommentary(am);
+
   slides.push({
     id: "performance",
     type: "metrics",
     title: "Monthly Performance Overview",
     subtitle: `${label} vs ${new Date(input.year, input.month - 2, 1).toLocaleDateString("en-US", { month: "long", year: "numeric" })}`,
+    ...(perfCommentary ? { commentary: perfCommentary } : {}),
     metrics:
       perfMetrics.length > 0
         ? perfMetrics
@@ -516,6 +531,14 @@ export async function generateMonthly(input: {
       "Monitor keyword ranking changes and adjust content strategy as needed.",
       "Prepare QTD KPI goals for leadership review — connect NSM Tracker for automated pull."
     );
+  }
+
+  // Inject auditNotes as a concise technical note if provided
+  if (am.auditNotes?.trim()) {
+    const note = am.auditNotes.trim();
+    const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+    const end = (s: string) => /[.!?]$/.test(s) ? s : `${s}.`;
+    nextMonthBullets.push(`Technical note: ${end(cap(note))}`);
   }
 
   // Add AM context bullets if provided

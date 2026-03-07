@@ -8,6 +8,7 @@ export interface Slide {
   type: "title" | "metrics" | "table" | "chart-bar" | "chart-line" | "bullets" | "two-col";
   title?: string;
   subtitle?: string;
+  commentary?: string;
   clientName?: string;
   date?: string;
   metrics?: Array<{ label: string; current: string; previous?: string; delta?: string; isPositive?: boolean; source?: string }>;
@@ -167,12 +168,13 @@ export function SlideRenderer({ slide, edits, onEdit }: { slide: Slide; edits: R
   if (slide.type === "metrics") {
     const mets = slide.metrics ?? [];
     const cols = Math.min(4, mets.length || 1);
+    const commentary = edits[`${slide.id}_commentary`] ?? slide.commentary;
     return (
       <div style={{ position: "absolute", inset: 0 }}>
         <SlideHeader slideTitle={edits[`${slide.id}_title`] ?? slide.title} />
         <div style={{ position: "absolute", top: 55, left: 16, right: 16, bottom: 28, display: "flex", flexDirection: "column", gap: 8, justifyContent: "center" }}>
           {slide.subtitle && (
-            <div style={{ fontSize: 9, color: "#6B7280", marginBottom: 4 }}>
+            <div style={{ fontSize: 9, color: "#6B7280", marginBottom: 2 }}>
               <EditableSection editKey={`${slide.id}_subtitle`} value={slide.subtitle} edits={edits} onEdit={onEdit} as="span" />
             </div>
           )}
@@ -181,6 +183,19 @@ export function SlideRenderer({ slide, edits, onEdit }: { slide: Slide; edits: R
               <MetricCard key={mi} {...m} />
             ))}
           </div>
+          {(commentary || slide.commentary) && (
+            <div style={{ marginTop: 6, padding: "5px 10px", background: "#F0F4FA", borderLeft: `3px solid ${RED}`, borderRadius: 2 }}>
+              <EditableSection
+                editKey={`${slide.id}_commentary`}
+                value={slide.commentary ?? ""}
+                edits={edits}
+                onEdit={onEdit}
+                as="div"
+                multiline
+                style={{ fontSize: 9, color: "#374151", fontStyle: "italic", lineHeight: 1.5 } as any}
+              />
+            </div>
+          )}
         </div>
         <SlideFooter />
       </div>

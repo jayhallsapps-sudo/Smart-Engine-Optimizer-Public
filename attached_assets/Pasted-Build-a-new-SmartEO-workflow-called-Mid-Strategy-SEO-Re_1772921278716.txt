@@ -1,0 +1,566 @@
+Build a new SmartEO workflow called Mid-Strategy SEO Report.
+
+This is NOT a normal report generator. This is a spreadsheet-backed slide-deck workflow.
+
+The most important architectural rule:
+The slide deck must be generated from one shared spreadsheet workbook that contains multiple tabs used by this report. The workbook is the intermediate source of truth for the report. Do not bypass it. Do not hardcode values directly into slides from raw APIs unless explicitly required as a fallback.
+
+This report is more complex than Monthly, QBR Prep, and Full QBR because the spreadsheet tabs drive what appears in the deck.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Build the Mid-Strategy SEO Report as a SmartEO workflow that:
+
+1. uses the attached Mid-Strategy deck as the fixed slide structure
+2. uses the attached spreadsheet workbook as the data backbone
+3. reads and writes the required data into the correct tabs/ranges of that workbook
+4. never invents missing values
+5. leaves missing fields blank, dashed, or marked as Manual entry needed
+6. deeply analyzes the client website and connected SEO sources
+7. uses shared save/load/autosave infrastructure
+8. uses shared current + comparison crawl selection
+9. renders a branded editable slide preview
+10. exports cleanly to PPTX
+11. uploads cleanly to Google Drive / Google Slides workflow
+
+==================================================
+CRITICAL ARCHITECTURE RULE
+==================================================
+
+This report must be built as a 3-layer system.
+
+LAYER 1 — SOURCE NORMALIZATION
+Pull and normalize all usable source data from connected integrations.
+
+LAYER 2 — SPREADSHEET BUILDER
+Populate the required tabs/cells/ranges in the shared spreadsheet workbook for this client/report run.
+The workbook is the intermediate truth for the report.
+Do not guess values.
+Do not silently skip required fields.
+If data is unavailable, leave blank / em dash / Manual entry needed based on the target cell’s intended use.
+
+LAYER 3 — SLIDE GENERATOR
+Generate the Mid-Strategy slide deck from the spreadsheet-backed report state, not directly from raw APIs.
+
+This separation is mandatory.
+
+==================================================
+NON-GOALS
+==================================================
+
+Do NOT:
+- build the slides first and “figure out the spreadsheet later”
+- hardcode benchmark values into slides
+- invent missing competitive metrics
+- create a snowflake save system
+- create a separate crawl system
+- add extra sections or slides
+- silently omit slides or spreadsheet rows because data is missing
+- make assumptions that are not supported by data
+
+==================================================
+SOURCE OF TRUTH
+==================================================
+
+Use:
+1. the attached Mid-Strategy SEO deck as the fixed slide structure
+2. the attached shared spreadsheet workbook as the fixed data workbook
+3. the workbook’s relevant tabs/ranges as the backbone for sections of the deck
+
+Important:
+- it is ONE workbook with multiple tabs, not three separate files
+- be very careful about tab names, ranges, and dependencies
+- the same workbook supports multiple report sections
+- changing or populating the wrong tab/range will corrupt the report logic
+
+Before implementing data writes, inspect the workbook structure carefully and map:
+- each relevant tab
+- each relevant range
+- the purpose of each range
+- which slide(s) depend on that tab/range
+
+Do not proceed with implementation until that mapping is clear.
+
+==================================================
+WORKFLOW INSIDE SMARTEO
+==================================================
+
+Build this workflow inside SmartEO:
+
+1. User opens Mid-Strategy SEO Report
+2. User selects client
+3. User selects current crawl
+4. User selects comparison crawl
+5. User optionally enters AM context inputs
+6. User clicks Build / Refresh Strategy Workbook
+7. SmartEO populates the relevant workbook tabs/ranges from connected data
+8. SmartEO shows workbook-backed status:
+   - completed fields
+   - missing fields
+   - any cells requiring manual entry
+9. User clicks Generate Mid-Strategy Report
+10. SmartEO generates slide preview from workbook-backed state
+11. User edits slides inline
+12. User saves / autosaves
+13. User exports PPTX or uploads to Drive
+
+Optional UX improvement:
+Allow a combined button:
+- Build Workbook + Generate Report
+But under the hood, spreadsheet generation must still happen before slide generation.
+
+==================================================
+SHARED INFRASTRUCTURE REQUIREMENTS
+==================================================
+
+Use the shared infrastructure already built.
+
+Required:
+- shared saved_reports
+- shared autosave
+- shared manual save
+- shared saved report selector
+- shared CrawlAssetSelector
+- current crawl selection
+- comparison crawl selection
+- selected crawl IDs persisted with the saved report
+
+Use:
+report_type = "mid_strategy_seo"
+
+Saved report naming:
+- Mid-Strategy SEO - Client Name - Generated YYYY-MM-DD
+
+Do NOT build snowflake persistence.
+
+==================================================
+LEFT PANEL / CONTROLS
+==================================================
+
+Use a compact left panel.
+
+Required controls:
+- Client selector
+- Saved report selector
+- Current crawl selector
+- Comparison crawl selector
+- Upload new crawl
+- Build / Refresh Strategy Workbook button
+- Generate / Regenerate Report button
+- Save button
+
+Optional AM inputs:
+- How does the account feel so far?
+- AM hypothesis / suspected focus
+- Manual audit notes
+- Key context / anomalies
+- What should leadership know?
+- Focus over next 30–60 days
+- Any sales / admissions context?
+- Any client dependency / approval notes?
+
+Rules:
+- compact UI
+- optional only
+- enrich narrative slides
+- never override actual data
+
+==================================================
+CURRENT-STATE LOGIC
+==================================================
+
+This report is a current-state strategy report.
+
+Use:
+- generation date as report date
+- current website state
+- current crawl as technical truth
+- comparison crawl as optional contrast
+- current source data from live integrations
+- workbook tabs as the normalized report state
+
+No historical month/quarter selector is required unless the workbook explicitly depends on one.
+
+==================================================
+DATA SOURCE PRIORITY
+==================================================
+
+Use this priority:
+
+1. Google Search Console
+2. GA4
+3. Call tracking
+4. Google Sheets source-of-truth sheet(s) already connected to SmartEO
+5. Google Business Profile
+6. Screaming Frog current crawl
+7. Screaming Frog comparison crawl
+8. Airtable
+9. Asana
+10. SEMrush for competitor benchmarking and visibility where appropriate
+11. Ahrefs only if available and truly needed
+
+Rules:
+- use SEMrush for competitor benchmark slides where GSC cannot provide competitor context
+- do not overuse SEMrush outside competitive benchmarking
+- use Ahrefs only if actually connected and available
+- never fabricate AI visibility data unless there is a defensible source in the workbook or connected integrations
+
+==================================================
+SPREADSHEET-BACKED IMPLEMENTATION RULES
+==================================================
+
+This is the most important section.
+
+You must first inspect the workbook and produce an internal mapping of:
+- relevant tab names
+- relevant ranges
+- which report section/slide each tab/range supports
+- what source should populate each field or cluster of fields
+- which fields are raw-source fields
+- which fields are calculated/scored fields
+- which fields are manual-only fields
+
+Implementation requirements:
+1. Build workbook population logic tab-by-tab, not cell-by-cell spaghetti
+2. Normalize data before writing into workbook-backed report state
+3. Never write guessed values into workbook fields
+4. If a field cannot be populated:
+   - leave blank
+   - or use em dash
+   - or use Manual entry needed
+   depending on the intended field style
+5. Preserve workbook-backed state in SmartEO so the user can regenerate slides without losing manual corrections
+6. Allow manual overrides after generation
+7. If the workbook contains formulas or scoring relationships, preserve their logic conceptually in SmartEO’s workbook-backed state
+8. If the workbook relies on values from connected benchmark tabs, populate only from available source data
+
+Important:
+Do not blindly scrape random workbook cells.
+Understand the workbook structure first.
+
+==================================================
+SLIDE STRUCTURE
+==================================================
+
+Use the attached Mid-Strategy deck as the exact fixed V1 slide structure.
+
+Do not add or remove slides.
+
+Based on the attached deck, build the fixed slide sequence in the exact deck order.
+
+Expected structure is strategy/discovery oriented and includes:
+- title
+- agenda
+- competitive baseline / benchmark slides
+- immediate focus slides
+- risk flag / cannibalization slide
+- next steps / asks / client needs slide(s)
+
+Before coding, inspect the deck and extract:
+- slide order
+- slide titles
+- slide types
+- where tables / charts / graphs exist
+- where narrative text exists
+
+Use that exact structure as the output schema.
+
+==================================================
+SLIDE TYPES
+==================================================
+
+Support at minimum:
+- title slide
+- agenda slide
+- section / narrative slide
+- table slide
+- chart slide
+- scorecard / benchmark slide
+- bullets / next steps slide
+
+All slide text and slide table cells should be editable after generation.
+
+==================================================
+EDITABILITY RULE
+==================================================
+
+Everything must be editable after generation.
+
+This includes:
+- slide titles
+- subtitles
+- table cells
+- bullets
+- commentary
+- chart labels where feasible
+- score labels
+- next steps
+- client asks
+- risk notes
+
+Use a consistent edit key strategy like the other report types:
+- ${slide.id}_title
+- ${slide.id}_subtitle
+- ${slide.id}_cell_${ri}_${ci}
+- ${slide.id}_bullet_${bi}
+- ${slide.id}_commentary
+
+==================================================
+COMPETITOR ANALYSIS / BENCHMARKING RULES
+==================================================
+
+This report has a strong competitor-analysis component.
+
+Use:
+- shared workbook competitor tabs/ranges
+- SEMrush competitor data where required
+- current client site data
+- crawl analysis
+- source-backed scoring
+
+Rules:
+- benchmark scores must come from available data, not guesswork
+- if the workbook/tab includes scoring logic, mirror or preserve it carefully
+- if a score cannot be calculated because required components are missing, leave it unresolved rather than inventing a number
+- averages/final scores must be based only on available underlying fields
+- if the report expects a comparative rank and the data is incomplete, mark it as Manual entry needed
+
+==================================================
+SITE ANALYSIS DEPTH
+==================================================
+
+Replit’s implementation must deeply analyze the website, not just skim top metrics.
+
+Use:
+- current crawl
+- comparison crawl
+- URL structure
+- service architecture
+- conversion paths
+- risk flags
+- likely cannibalization patterns
+- weak/low-impact pages
+- structural cleanup opportunities
+- benchmark positioning relative to competitors
+
+This report should feel discovery-driven and strategic.
+
+==================================================
+RISK FLAG / CANNIBALIZATION LOGIC
+==================================================
+
+At least one slide in this report is clearly about structural risk and low-value URLs.
+
+Use:
+- Screaming Frog current crawl
+- comparison crawl
+- GSC page/query overlap
+- GA4 landing behavior where useful
+- page utility / indexability / traffic value signals
+- service intent overlap
+- low-impact URL patterns
+
+Rules:
+- do not overstate risk if evidence is weak
+- clearly distinguish:
+  - true likely cannibalization
+  - thin/low-impact pages
+  - cleanup candidates
+  - redirect candidates
+- if evidence is partial, keep the slide but leave editable placeholders where needed
+
+==================================================
+NEXT STEPS / CLIENT NEEDS LOGIC
+==================================================
+
+The closing section should combine:
+- what Webserv will do next
+- what the client needs to approve / send / confirm
+- what dependencies exist
+- what immediate priorities follow from the benchmark/risk analysis
+
+Primary sources:
+- workbook-backed outputs
+- Airtable
+- Asana
+- crawl analysis
+- AM inputs
+
+Keep it concise and actionable.
+
+==================================================
+MISSING DATA RULE
+==================================================
+
+Do not silently omit slides.
+Do not silently omit spreadsheet-backed sections.
+
+If data is missing:
+- keep the workbook field unresolved
+- keep the slide
+- use blank / em dash / Manual entry needed appropriately
+- keep the content editable
+
+Consistency matters:
+Use the same missing-data style within the report.
+
+==================================================
+PREVIEW / UI REQUIREMENTS
+==================================================
+
+Build a proper slide-based preview inside SmartEO.
+
+Requirements:
+- discrete slide preview
+- slide navigation / slide picker
+- inline editing
+- save status indicator
+- workbook build status
+- saved report selector
+- crawl selectors
+- export buttons
+
+Recommended extra UI:
+Show workbook build status like:
+- workbook built
+- workbook refreshed
+- missing fields detected
+- manual entry required in X fields
+
+==================================================
+PERSISTENCE REQUIREMENTS
+==================================================
+
+Persist:
+- generated report JSON
+- edits JSON
+- current crawl asset ID
+- comparison crawl asset ID
+- workbook-backed normalized state or reference snapshot
+- generated date
+- client ID
+
+Reload must restore:
+- slide data
+- inline edits
+- selected crawl IDs
+- AM input values if stored
+- workbook-backed state needed for regeneration
+
+==================================================
+EXPORT REQUIREMENTS
+==================================================
+
+Support:
+1. PPTX export
+2. Google Drive upload for Google Slides workflow
+
+Requirements:
+- preserve edited content
+- preserve slide order
+- preserve branded design as much as possible
+- use the final slide model as source of truth
+- if slides depend on workbook-backed state, ensure exports use the updated post-edit version
+
+==================================================
+DESIGN SYSTEM
+==================================================
+
+Use the same SmartEO/Webserv branded system as:
+- Bi-weekly
+- QBR Prep
+- Monthly
+- Full QBR
+
+Requirements:
+- same typography family
+- same red-accent style family
+- same cleaner table styling family
+- same polished branded slide look
+- export-friendly layouts
+
+Do NOT leave this looking like an older inconsistent design.
+
+==================================================
+IMPLEMENTATION STRATEGY
+==================================================
+
+Implement in phases.
+
+PHASE 1 — WORKBOOK INTELLIGENCE
+- inspect the workbook structure
+- identify relevant tabs and ranges
+- map each tab/range to report purpose
+- define workbook-backed data schema
+- define source-to-workbook mapping
+- define missing-data behavior
+
+PHASE 2 — SHARED INFRASTRUCTURE INTEGRATION
+- wire report into shared save/load/autosave
+- wire current/comparison crawl selectors
+- wire AM inputs
+- persist workbook-backed state
+
+PHASE 3 — WORKBOOK BUILDER
+- implement workbook refresh/build logic
+- populate workbook-backed report state from connected sources
+- preserve unresolved fields cleanly
+- support regeneration
+
+PHASE 4 — SLIDE GENERATOR
+- inspect attached deck
+- define fixed slide schema
+- map workbook-backed fields to slides
+- implement charts/tables/scorecards/narrative slides
+- make everything editable
+
+PHASE 5 — EXPORT + VALIDATION
+- implement PPTX export
+- implement Drive upload
+- validate that edited content survives export
+- verify workbook-backed state does not drift from slide output
+
+==================================================
+ACCEPTANCE CRITERIA
+==================================================
+
+The Mid-Strategy SEO Report is correct only when all of the following are true:
+
+1. It uses the attached deck as the fixed slide structure.
+2. It uses the attached workbook as the spreadsheet backbone.
+3. Workbook population happens before slide generation.
+4. The workbook is treated as one shared workbook with multiple relevant tabs.
+5. Replit does not invent missing values.
+6. Missing fields remain visibly unresolved.
+7. Current + comparison crawl selectors are integrated.
+8. Shared save/load/autosave is integrated.
+9. The slide preview is editable.
+10. Charts / graphs / tables are generated where the deck expects them.
+11. Competitor benchmark logic is based on real source data.
+12. Risk / cannibalization logic is evidence-based.
+13. PPTX export works.
+14. Google Drive upload works.
+15. Edited content survives export.
+16. The report is fully usable inside SmartEO.
+
+==================================================
+OUTPUT REQUIREMENT
+==================================================
+
+Do not just say “done.”
+
+When finished, return:
+1. files changed
+2. workbook tab/range mapping
+3. source-to-workbook mapping
+4. slide schema
+5. how missing values are handled
+6. how shared save/load/crawl infrastructure was integrated
+7. how editability works
+8. how PPTX/Drive export works
+9. known issues or compromises
+10. proof of end-to-end flow
+
+Start with Phase 1 now.

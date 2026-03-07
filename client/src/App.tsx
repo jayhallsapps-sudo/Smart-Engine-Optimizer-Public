@@ -19,6 +19,7 @@ import BiweeklyPdfPage from "@/pages/biweekly-pdf";
 import MonthlyPage from "@/pages/monthly";
 import MonthlyPrintPage from "@/pages/monthly-print";
 import QbrFullPage from "@/pages/qbr-full";
+import MidStrategyPage from "@/pages/mid-strategy";
 import DashboardPage from "@/pages/dashboard";
 import SampleReportsPage from "@/pages/sample-reports";
 import TemplateBuilderPage from "@/pages/template-builder";
@@ -39,6 +40,7 @@ function Router() {
       <Route path="/biweekly" component={BiweeklyPage} />
       <Route path="/monthly" component={MonthlyPage} />
       <Route path="/qbr" component={QbrFullPage} />
+      <Route path="/mid-strategy" component={MidStrategyPage} />
       <Route path="/qbr-prep" component={QbrPrepPage} />
       <Route path="/reports" component={ReportsPage} />
       <Route path="/clients" component={ClientsPage} />

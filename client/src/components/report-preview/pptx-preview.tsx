@@ -5,7 +5,7 @@ import { ReportBarChart, ReportLineChart, MetricCard } from "./report-chart";
 
 export interface Slide {
   id: string;
-  type: "title" | "divider" | "metrics" | "table" | "chart-bar" | "chart-line" | "bullets" | "two-col";
+  type: "title" | "divider" | "metrics" | "table" | "chart-bar" | "chart-line" | "bullets" | "two-col" | "scorecard";
   title?: string;
   subtitle?: string;
   commentary?: string;
@@ -367,6 +367,62 @@ export function SlideRenderer({ slide, edits, onEdit }: { slide: Slide; edits: R
                 {(slide.rightContent.metrics ?? []).map((m, mi) => (
                   <MetricCard key={mi} {...m} />
                 ))}
+              </div>
+            )}
+          </div>
+        </div>
+        <SlideFooter />
+      </div>
+    );
+  }
+
+  if (slide.type === "scorecard") {
+    const mets = slide.metrics ?? [];
+    const { headers, rows } = slide.table ?? { headers: [], rows: [] };
+    const commentary = edits[`${slide.id}_commentary`] ?? slide.commentary;
+    return (
+      <div style={{ position: "absolute", inset: 0 }}>
+        <SlideHeader slideTitle={edits[`${slide.id}_title`] ?? slide.title} />
+        <div style={{ position: "absolute", top: 55, left: 16, right: 16, bottom: 28, display: "flex", gap: 10 }}>
+          <div style={{ flex: 2, display: "flex", flexDirection: "column", gap: 6, overflow: "auto" }}>
+            {slide.subtitle && (
+              <div style={{ fontSize: 9, color: "#6B7280", marginBottom: 2 }}>
+                <EditableSection editKey={`${slide.id}_subtitle`} value={slide.subtitle} edits={edits} onEdit={onEdit} as="span" />
+              </div>
+            )}
+            {headers.length > 0 && (
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 7.5 }}>
+                <thead>
+                  <tr>
+                    {headers.map((h, hi) => (
+                      <th key={hi} style={{ background: NAVY, color: "white", padding: "3px 5px", textAlign: "left", fontWeight: "bold", borderRight: "1px solid #2D5A9E", whiteSpace: "nowrap" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.slice(0, 14).map((row, ri) => {
+                    const isClient = String(row[0]).startsWith("★");
+                    return (
+                      <tr key={ri} style={{ background: isClient ? "#FFF3F0" : ri % 2 === 0 ? "white" : LIGHT_BLUE, fontWeight: isClient ? "bold" : "normal" }}>
+                        {row.map((cell, ci) => (
+                          <td key={ci} style={{ padding: "2px 4px", borderBottom: "1px solid #E5E7EB", borderRight: "1px solid #F3F4F6", color: isClient ? "#C0392B" : "#1F2937", whiteSpace: "nowrap" }}>
+                            <EditableSection editKey={`${slide.id}_cell_${ri}_${ci}`} value={String(cell)} edits={edits} onEdit={onEdit} as="span" className="block" style={{ fontSize: 7.5 } as any} />
+                          </td>
+                        ))}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6, justifyContent: "center" }}>
+            {mets.slice(0, 4).map((m, mi) => (
+              <MetricCard key={mi} {...m} />
+            ))}
+            {commentary && (
+              <div style={{ marginTop: 4, padding: "5px 8px", background: "#FFF3F0", borderLeft: `3px solid ${RED}`, borderRadius: 2 }}>
+                <EditableSection editKey={`${slide.id}_commentary`} value={commentary} edits={edits} onEdit={onEdit} as="div" multiline style={{ fontSize: 8, color: "#374151", fontStyle: "italic", lineHeight: 1.5 } as any} />
               </div>
             )}
           </div>

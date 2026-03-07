@@ -1,4 +1,4 @@
-import { CalendarDays, BarChart3, TrendingUp, Sparkles, Users, Settings, Zap, History, LayoutDashboard, FlaskConical, PenSquare } from "lucide-react";
+import { CalendarDays, BarChart3, TrendingUp, Sparkles, Users, Settings, Zap, History, LayoutDashboard, FlaskConical, PenSquare, Target } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import {
   Sidebar,
@@ -24,6 +24,7 @@ const reportItems = [
   { title: "Monthly", url: "/monthly", icon: BarChart3 },
   { title: "QBR Full", url: "/qbr", icon: TrendingUp },
   { title: "QBR Prep", url: "/qbr-prep", icon: Sparkles },
+  { title: "Mid-Strategy", url: "/mid-strategy", icon: Target },
 ];
 
 const utilItems = [

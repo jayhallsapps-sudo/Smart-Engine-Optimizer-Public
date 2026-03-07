@@ -22,6 +22,7 @@ client/src/
     dashboard.tsx      - Homepage: client card grid with live KPI metrics (GSC, GA4, Calls) + manual refresh
     reports.tsx        - Main Reports page (3-panel: selectors top, chat left, checklist right)
     qbr-prep.tsx       - QBR Prep v2 generator (7-section quarterly SEO planning snapshot with inline editing)
+    mid-strategy.tsx   - Mid-Strategy SEO Report (14-slide PPTX, workbook status panel, crawl selectors, inline editing)
     qbr-prep-print.tsx - QBR Prep PDF render page (puppeteer-navigated for PDF export)
     clients.tsx        - Client CRUD management (tabbed form: Data Sources, SEO Tools, Config)
     setup.tsx          - Multi-account credential management for 7 services
@@ -47,6 +48,7 @@ server/
   reportGenerators.ts  - .docx (biweekly) and .pptx (monthly/QBR) generators
   monthlyGenerator.ts  - Monthly 9-slide PPTX generator (true calendar month, AM inputs → commentary + audit bullets)
   qbrFullGenerator.ts  - QBR Full 20-slide PPTX generator (true calendar quarter, 8 AM inputs, no paid media, MNE fallbacks)
+  midStrategyGenerator.ts - Mid-Strategy 14-slide PPTX generator (3-layer: source norm → workbook builder → slide gen)
   qbrPrepGenerator.ts  - Legacy QBR Prep engine (v1)
   qbrPrepSectionGenerator.ts - QBR Prep v2 section engine: 7-section generator pulling GSC, GA4, NSM Tracker, Airtable, Asana, SF crawl data
   qbrPrepDocxGenerator.ts - QBR Prep DOCX export generator (branded red header, 7-section tables)
@@ -132,6 +134,21 @@ A 7-section quarterly SEO planning snapshot generator that inherits the Monthly 
 - **DB table**: `qbr_prep_reports` (id, clientId, reportType, reportName, analysisWindowStart/End, planningQuarter/Year, generatedOn, generatedReportJson, sourceSnapshotJson, htmlSnapshot, createdAt, updatedAt, lastSavedAt, versionLabel)
 - **API routes**: generate-v2, saved CRUD (list/get/update/delete), docx-v2, upload-to-drive-v2, preview-pdf
 - **Missing data rule**: Shows "Manual entry needed" in light italic — never invents data
+
+## Mid-Strategy SEO Report Feature (14-slide PPTX)
+A mid-strategy competitive intelligence deck generator for behavioral health clients. Built on a 3-layer architecture: source normalization → workbook builder → slide generator.
+- **Slides (14)**: s01_title, s02_agenda, s03_checkpoint, s04_competitive_authority, s05_competitive_visibility, s06_competitive_ai, s07_competitive_scorecard, s08_immediate_focus, s09_nav_structure, s10_cannibalization_intro, s11_cannibalization_data, s12_january_action, s13_whats_next_detail, s14_next_steps
+- **Data sources**: SEMrush (domain_ranks + domain_organic_competitors), GA4 (landing pages), GSC (QoQ queries), Screaming Frog crawl (URL audit + cannibalization detection)
+- **Workbook**: competitorBenchmark (clientRow + competitorRows, clientRank, percentile), urlAudit (thin < 200 words, low traffic < 5 sessions, duplicate title similarity > 70%), buildStatus (completedFields, missingFields, dataSourcesUsed)
+- **Slide types**: title, bullets, table, scorecard (client row highlighted red + right metrics panel), two-col
+- **Workbook Status Panel**: Real-time build status card on the left panel showing completed fields, missing data alerts, data sources used
+- **AM Inputs**: strategyMonth, navRestructureNote, cannibalizationNote
+- **Persistence**: Saved in saved_reports table with reportType = "mid_strategy_seo"
+- **Export**: Download PPTX, Save to Google Drive
+- **API routes**: POST /api/reports/mid-strategy/generate, /pptx, /upload-to-drive
+- **Missing data rule**: "Manual entry needed" — never invents, never drops slides
+- **Brand**: #C0392B red, #1B3A6B navy, Calibri font
+- **Generator**: server/midStrategyGenerator.ts | **Frontend**: client/src/pages/mid-strategy.tsx
 
 ## Industry Focus
 Recovery and addiction treatment centres. Seed clients: Anchored Tides Recovery, Bliss Recovery, Horseshoe Ridge Recovery, Heartland Healing Center, Iris Healing, New Day Recovery, Sol Womens Treatment, Williamsburg House. Mock data uses addiction treatment keywords (detox, residential, PHP/IOP, dual diagnosis, insurance verification, admissions).

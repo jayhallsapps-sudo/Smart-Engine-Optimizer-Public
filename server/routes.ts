@@ -1741,6 +1741,95 @@ export async function registerRoutes(
     }
   });
 
+  // ─── Mid-Strategy SEO Report ─────────────────────────────────────────────
+  app.post("/api/reports/mid-strategy/generate", async (req, res) => {
+    const { clientId, currentCrawlAssetId, comparisonCrawlAssetId, amInputs } = req.body;
+    if (!clientId) return res.status(400).json({ message: "clientId is required" });
+    try {
+      const { generateMidStrategy } = await import("./midStrategyGenerator");
+      const output = await generateMidStrategy({
+        clientId: Number(clientId),
+        currentCrawlAssetId: currentCrawlAssetId ?? null,
+        comparisonCrawlAssetId: comparisonCrawlAssetId ?? null,
+        amInputs: amInputs ?? {},
+      });
+      res.json(output);
+    } catch (err: any) {
+      console.error("Mid-Strategy generation error:", err);
+      res.status(500).json({ message: "Failed to generate Mid-Strategy report: " + err.message });
+    }
+  });
+
+  app.post("/api/reports/mid-strategy/pptx", async (req, res) => {
+    const { json, edits } = req.body as { json: any; edits?: Record<string, string> };
+    if (!json) return res.status(400).json({ message: "json is required" });
+    try {
+      const sections: SectionData[] = (json.slides ?? [])
+        .filter((s: any) => s.type !== "title")
+        .map((s: any, idx: number) => {
+          const items: any[] = [];
+          if (s.metrics?.length) items.push({ summary: s.metrics.map((m: any) => ({ label: m.label, current: m.current, previous: m.previous ?? "—", deltaPercent: m.delta ?? "—", isPositive: m.isPositive ?? true })) });
+          const comm = edits?.[`${s.id}_commentary`] ?? s.commentary;
+          if (comm) items.push({ manualText: comm });
+          if (s.table) items.push({ tables: [{ title: edits?.[`${s.id}_subtitle`] ?? s.subtitle ?? "", headers: s.table.headers, rows: (s.table.rows as any[][]).map((row: any[], ri: number) => row.map((cell: any, ci: number) => edits?.[`${s.id}_cell_${ri}_${ci}`] ?? String(cell))) }] });
+          if (s.bullets) items.push({ manualText: (s.bullets as string[]).map((b: string, bi: number) => edits?.[`${s.id}_bullet_${bi}`] ?? b).join("\n") });
+          if (s.leftContent?.bullets) items.push({ manualText: (s.leftContent.bullets as string[]).join("\n") });
+          if (s.rightContent?.metrics) items.push({ summary: s.rightContent.metrics.map((m: any) => ({ label: m.label, current: m.current, isPositive: m.isPositive ?? true })) });
+          return { sectionId: `slide_${idx}`, title: edits?.[`${s.id}_title`] ?? s.title ?? "", items };
+        });
+      const clientName = json.client_name ?? "Client";
+      const reportTitle = json.report_title ?? "Mid-Strategy SEO Report";
+      const generatedAt = json.generated_at ? new Date(json.generated_at).toLocaleDateString("en-US") : new Date().toLocaleDateString("en-US");
+      const buffer = await generatePptx(clientName, reportTitle, generatedAt, sections);
+      const slug = clientName.toLowerCase().replace(/\s+/g, "_");
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
+      res.setHeader("Content-Disposition", `attachment; filename="${slug}_Mid_Strategy.pptx"`);
+      res.send(buffer);
+    } catch (err: any) {
+      console.error("Mid-Strategy PPTX error:", err);
+      res.status(500).json({ message: "Failed to generate PPTX: " + err.message });
+    }
+  });
+
+  app.post("/api/reports/mid-strategy/upload-to-drive", async (req, res) => {
+    const { json, edits } = req.body as { json: any; edits?: Record<string, string> };
+    if (!json) return res.status(400).json({ message: "json is required" });
+    try {
+      const sections: SectionData[] = (json.slides ?? [])
+        .filter((s: any) => s.type !== "title")
+        .map((s: any, idx: number) => {
+          const items: any[] = [];
+          if (s.metrics?.length) items.push({ summary: s.metrics.map((m: any) => ({ label: m.label, current: m.current, previous: m.previous ?? "—", deltaPercent: m.delta ?? "—", isPositive: m.isPositive ?? true })) });
+          const comm2 = edits?.[`${s.id}_commentary`] ?? s.commentary;
+          if (comm2) items.push({ manualText: comm2 });
+          if (s.table) items.push({ tables: [{ title: edits?.[`${s.id}_subtitle`] ?? s.subtitle ?? "", headers: s.table.headers, rows: (s.table.rows as any[][]).map((row: any[], ri: number) => row.map((cell: any, ci: number) => edits?.[`${s.id}_cell_${ri}_${ci}`] ?? String(cell))) }] });
+          if (s.bullets) items.push({ manualText: (s.bullets as string[]).map((b: string, bi: number) => edits?.[`${s.id}_bullet_${bi}`] ?? b).join("\n") });
+          if (s.leftContent?.bullets) items.push({ manualText: (s.leftContent.bullets as string[]).join("\n") });
+          return { sectionId: `slide_${idx}`, title: edits?.[`${s.id}_title`] ?? s.title ?? "", items };
+        });
+      const msClientName = json.client_name ?? "Client";
+      const msReportTitle = json.report_title ?? "Mid-Strategy SEO Report";
+      const msGeneratedAt = json.generated_at ? new Date(json.generated_at).toLocaleDateString("en-US") : new Date().toLocaleDateString("en-US");
+      const buffer = await generatePptx(msClientName, msReportTitle, msGeneratedAt, sections);
+      const { ReplitConnectors } = await import("@replit/connectors-sdk");
+      const connectors = new ReplitConnectors();
+      const filename = `${msClientName} Mid-Strategy SEO Report.pptx`;
+      const metadata = JSON.stringify({ name: filename });
+      const boundary = "-------smarteo_mss_boundary";
+      const CRLF = "\r\n";
+      const metaBuf = Buffer.from(`--${boundary}${CRLF}Content-Type: application/json; charset=UTF-8${CRLF}${CRLF}${metadata}${CRLF}`, "utf8");
+      const filePrefixBuf = Buffer.from(`--${boundary}${CRLF}Content-Type: application/vnd.openxmlformats-officedocument.presentationml.presentation${CRLF}${CRLF}`, "utf8");
+      const closeBuf = Buffer.from(`${CRLF}--${boundary}--`, "utf8");
+      const bodyBuffer = Buffer.concat([metaBuf, filePrefixBuf, buffer, closeBuf]);
+      const uploadRes = await connectors.proxy("google-drive", "/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink", { method: "POST", headers: { "Content-Type": `multipart/related; boundary=${boundary}` }, body: bodyBuffer });
+      if (!uploadRes.ok) { const e = await uploadRes.json().catch(() => ({}) as any); return res.status(uploadRes.status).json({ message: `Drive upload failed: ${(e as any)?.error?.message ?? uploadRes.statusText}` }); }
+      const driveFile = await uploadRes.json() as any;
+      res.json({ success: true, fileId: driveFile.id, fileName: driveFile.name, webViewLink: driveFile.webViewLink });
+    } catch (err: any) {
+      res.status(500).json({ message: "Upload failed: " + err.message });
+    }
+  });
+
   app.get("/api/reports/auto-build", async (req, res) => {
     const clientId = Number(req.query.clientId);
     const reportType = String(req.query.reportType ?? "monthly");

@@ -21,9 +21,6 @@ import {
   RefreshCw,
   CloudUpload,
   ExternalLink,
-  Save,
-  FileText,
-  Trash2,
   ChevronDown,
   ChevronRight,
   AlertTriangle,
@@ -31,22 +28,26 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { QbrPrepPreview } from "@/components/report-preview/qbr-prep-preview";
 import type { Client } from "@shared/schema";
+import { useReportSave } from "@/hooks/useReportSave";
+import { SaveStatusIndicator } from "@/components/reports/SaveStatusIndicator";
+import { ReportSaveSelector } from "@/components/reports/ReportSaveSelector";
+import { CrawlAssetSelector } from "@/components/reports/CrawlAssetSelector";
 
-interface SfReport {
+interface CrawlAsset {
   id: number;
-  clientId: number;
   reportDate: string;
-  filename: string;
-  rowCount: number;
   createdAt: string;
+  assetName: string;
+  rowCount: number;
 }
 
 const SF_FRESHNESS_DAYS = 90;
 
-function sfDaysOld(report: SfReport, asOfDate: string): number {
-  const uploaded = new Date(report.createdAt);
-  const asOf = new Date(asOfDate + "T12:00:00");
-  return Math.floor((asOf.getTime() - uploaded.getTime()) / (1000 * 60 * 60 * 24));
+function crawlIsFresh(createdAt: string, asOfDate: string): boolean {
+  const base = new Date(asOfDate + "T12:00:00");
+  const created = new Date(createdAt);
+  const diffDays = (base.getTime() - created.getTime()) / (1000 * 60 * 60 * 24);
+  return diffDays <= SF_FRESHNESS_DAYS;
 }
 
 interface QuarterInfo {
@@ -81,17 +82,6 @@ function inferQuarterClient(dateStr: string): QuarterInfo {
   };
 }
 
-interface SavedReport {
-  id: number;
-  clientId: number;
-  reportName: string;
-  planningQuarter: number;
-  planningYear: number;
-  generatedOn: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
 export default function QbrPrepPage() {
   const { toast } = useToast();
   const rqClient = useQueryClient();
@@ -101,78 +91,46 @@ export default function QbrPrepPage() {
   const [sentiment, setSentiment] = useState("");
   const [hypothesis, setHypothesis] = useState("");
   const [auditNotes, setAuditNotes] = useState("");
-  const [sfActiveId, setSfActiveId] = useState<number | null>(null);
-  const [sfUploading, setSfUploading] = useState(false);
-  const sfFileInputRef = useRef<HTMLInputElement>(null);
+  const [currentCrawlId, setCurrentCrawlId] = useState<number | null>(null);
   const [showAmInputs, setShowAmInputs] = useState(false);
 
   const [reportData, setReportData] = useState<any>(null);
   const [edits, setEdits] = useState<Record<string, string>>({});
-  const [savedReportId, setSavedReportId] = useState<number | null>(null);
-  const [showSavedReports, setShowSavedReports] = useState(false);
 
   const quarter = inferQuarterClient(generationDate);
 
   const { data: clients = [] } = useQuery<Client[]>({ queryKey: ["/api/clients"] });
 
-  const { data: sfReports = [] } = useQuery<SfReport[]>({
-    queryKey: ["/api/clients", clientId, "sf-reports"],
+  const { data: crawlAssets = [] } = useQuery<CrawlAsset[]>({
+    queryKey: [`/api/crawl-assets?clientId=${clientId}`],
     enabled: !!clientId,
   });
 
-  const { data: savedReports = [] } = useQuery<SavedReport[]>({
-    queryKey: [`/api/reports/qbr-prep/saved?clientId=${clientId}`],
-    enabled: !!clientId,
+  const reportSave = useReportSave({
+    reportType: "qbr_prep",
+    clientId: clientId ? Number(clientId) : null,
   });
 
   useEffect(() => {
-    if (sfReports.length > 0 && !sfActiveId) setSfActiveId(sfReports[0].id);
-    if (sfReports.length === 0) setSfActiveId(null);
-  }, [sfReports]);
+    if (crawlAssets.length > 0 && !currentCrawlId) {
+      setCurrentCrawlId(crawlAssets[0].id);
+    }
+    if (crawlAssets.length === 0) setCurrentCrawlId(null);
+  }, [crawlAssets]);
 
   useEffect(() => {
-    setSfActiveId(null);
+    setCurrentCrawlId(null);
     setReportData(null);
     setEdits({});
-    setSavedReportId(null);
+    reportSave.setSavedReportId(null);
   }, [clientId]);
 
-  const hasSfCrawl = sfReports.length > 0;
-  const latestSf = sfReports[0];
-  const sfIsFresh = latestSf ? sfDaysOld(latestSf, generationDate) <= SF_FRESHNESS_DAYS : false;
-  const sfReadyForGeneration = hasSfCrawl && sfIsFresh;
+  const selectedCrawl = crawlAssets.find(a => a.id === currentCrawlId);
+  const hasSfCrawl = crawlAssets.length > 0;
+  const sfIsFresh = selectedCrawl ? crawlIsFresh(selectedCrawl.createdAt, generationDate) : false;
+  const sfReadyForGeneration = !!currentCrawlId && sfIsFresh;
 
-  const handleSfUpload = async (file: File) => {
-    if (!clientId) return;
-    setSfUploading(true);
-    try {
-      const text = await file.text();
-      const lines = text.split(/\r?\n/).filter(l => l.trim());
-      if (lines.length < 2) throw new Error("File appears empty");
-      const headers = lines[0].split(",").map(h => h.replace(/^"|"$/g, "").trim());
-      const rows = lines.slice(1).map(line => {
-        const cols = line.match(/(".*?"|[^,]+|(?<=,)(?=,)|(?<=,)$|^(?=,))/g) ?? line.split(",");
-        const obj: Record<string, string> = {};
-        headers.forEach((h, i) => { obj[h] = (cols[i] ?? "").replace(/^"|"$/g, "").trim(); });
-        return obj;
-      });
-      const today = new Date().toISOString().split("T")[0];
-      const res = await fetch(`/api/clients/${clientId}/sf-reports`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reportDate: today, filename: file.name, rowCount: rows.length, headers, data: rows }),
-      });
-      if (!res.ok) throw new Error("Upload failed");
-      const created = await res.json();
-      rqClient.invalidateQueries({ queryKey: ["/api/clients", clientId, "sf-reports"] });
-      if (created?.id) setSfActiveId(created.id);
-      toast({ title: "Crawl uploaded", description: `${rows.length} rows from ${file.name}` });
-    } catch (err: any) {
-      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
-    } finally {
-      setSfUploading(false);
-    }
-  };
+  const clientName = clients.find(c => String(c.id) === clientId)?.name;
 
   const generateMutation = useMutation({
     mutationFn: async () => {
@@ -182,14 +140,25 @@ export default function QbrPrepPage() {
         sentiment: sentiment || undefined,
         hypothesis: hypothesis || undefined,
         auditNotes: auditNotes || undefined,
+        currentCrawlAssetId: currentCrawlId ?? undefined,
       });
       return res.json();
     },
     onSuccess: (data: any) => {
       setReportData(data.reportData);
       setEdits({});
-      if (data.savedId) setSavedReportId(data.savedId);
-      rqClient.invalidateQueries({ queryKey: [`/api/reports/qbr-prep/saved?clientId=${clientId}`] });
+      reportSave.setSavedReportId(null);
+      const periodLabel = quarter.analysisWindowLabel;
+      const meta = {
+        reportPeriodLabel: periodLabel,
+        analysisWindowStart: quarter.analysisStart,
+        analysisWindowEnd: quarter.analysisEnd,
+        planningQuarter: quarter.planningQ,
+        planningYear: quarter.planningYear,
+        currentCrawlAssetId: currentCrawlId,
+      };
+      reportSave.pendingPayloadRef.current = { reportData: data.reportData, edits: {}, meta };
+      reportSave.save(data.reportData, {}, meta);
       toast({ title: "QBR Prep generated", description: "Preview ready — click any text to edit." });
     },
     onError: (err: any) => {
@@ -197,78 +166,30 @@ export default function QbrPrepPage() {
     },
   });
 
-  const saveMutation = useMutation({
-    mutationFn: async (payload: { id: number; data: any; currentEdits: Record<string, string> }) => {
-      const res = await apiRequest("PATCH", `/api/reports/qbr-prep/saved/${payload.id}`, {
-        generatedReportJson: { ...payload.data, edits: payload.currentEdits },
-        htmlSnapshot: null,
-      });
-      return res.json();
-    },
-    onSuccess: () => {
-      toast({ title: "Report saved" });
-      rqClient.invalidateQueries({ queryKey: [`/api/reports/qbr-prep/saved?clientId=${clientId}`] });
-    },
-    onError: (err: any) => {
-      toast({ title: "Save failed", description: err.message, variant: "destructive" });
-    },
-  });
-
   const editsRef = useRef(edits);
   editsRef.current = edits;
   const reportDataRef = useRef(reportData);
   reportDataRef.current = reportData;
-  const savedReportIdRef = useRef(savedReportId);
-  savedReportIdRef.current = savedReportId;
 
-  const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleEdit = useCallback((key: string, value: string) => {
-    setEdits(prev => ({ ...prev, [key]: value }));
-    if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
-    autosaveTimer.current = setTimeout(() => {
-      const id = savedReportIdRef.current;
-      const data = reportDataRef.current;
-      if (id && data) {
-        saveMutation.mutate({ id, data, currentEdits: { ...editsRef.current, [key]: value } });
-      }
-    }, 2000);
-  }, []);
-
-  const loadSavedReport = async (id: number) => {
-    try {
-      const res = await fetch(`/api/reports/qbr-prep/saved/${id}`);
-      if (!res.ok) throw new Error("Failed to load");
-      const data = await res.json();
-      const json = data.generatedReportJson as any;
-      if (json?.edits) {
-        const { edits: savedEdits, ...rest } = json;
-        setReportData(rest);
-        setEdits(savedEdits);
-      } else {
-        setReportData(json);
-        setEdits({});
-      }
-      setSavedReportId(id);
-      toast({ title: "Report loaded" });
-    } catch (err: any) {
-      toast({ title: "Load failed", description: err.message, variant: "destructive" });
-    }
-  };
-
-  const deleteSavedReport = async (id: number) => {
-    try {
-      await apiRequest("DELETE", `/api/reports/qbr-prep/saved/${id}`);
-      rqClient.invalidateQueries({ queryKey: [`/api/reports/qbr-prep/saved?clientId=${clientId}`] });
-      if (savedReportId === id) {
-        setSavedReportId(null);
-        setReportData(null);
-        setEdits({});
-      }
-      toast({ title: "Report deleted" });
-    } catch (err: any) {
-      toast({ title: "Delete failed", description: err.message, variant: "destructive" });
-    }
-  };
+    setEdits(prev => {
+      const next = { ...prev, [key]: value };
+      reportSave.pendingPayloadRef.current = {
+        reportData: reportDataRef.current,
+        edits: next,
+        meta: {
+          reportPeriodLabel: quarter.analysisWindowLabel,
+          analysisWindowStart: quarter.analysisStart,
+          analysisWindowEnd: quarter.analysisEnd,
+          planningQuarter: quarter.planningQ,
+          planningYear: quarter.planningYear,
+          currentCrawlAssetId: currentCrawlId,
+        },
+      };
+      return next;
+    });
+    reportSave.markDirty();
+  }, [currentCrawlId, quarter]);
 
   const [docxDownloading, setDocxDownloading] = useState(false);
   const downloadDocx = async () => {
@@ -362,6 +283,7 @@ export default function QbrPrepPage() {
               <p className="text-xs text-muted-foreground">7-section SEO planning snapshot</p>
             </div>
           </div>
+          {clientId && <div className="mt-1"><SaveStatusIndicator status={reportSave.saveStatus} /></div>}
         </div>
 
         <div className="flex-1 p-4 space-y-4 overflow-y-auto">
@@ -412,55 +334,19 @@ export default function QbrPrepPage() {
                 </span>
               )}
             </p>
-            <input
-              ref={sfFileInputRef}
-              type="file"
-              accept=".csv"
-              className="hidden"
-              onChange={e => { const f = e.target.files?.[0]; if (f) handleSfUpload(f); }}
-              data-testid="input-sf-file"
-            />
             {clientId ? (
-              <Select
-                value={sfActiveId ? String(sfActiveId) : "__none__"}
-                onValueChange={v => {
-                  if (v === "__upload__") { sfFileInputRef.current?.click(); return; }
-                  setSfActiveId(v === "__none__" ? null : Number(v));
-                }}
-              >
-                <SelectTrigger className="h-8 text-xs w-full" data-testid="select-sf-crawl">
-                  <SelectValue placeholder="Select crawl…" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">No crawl selected</SelectItem>
-                  {sfReports.map(r => (
-                    <SelectItem key={r.id} value={String(r.id)} data-testid={`sf-option-${r.id}`}>
-                      {r.reportDate} — {r.filename} ({r.rowCount.toLocaleString()} rows)
-                    </SelectItem>
-                  ))}
-                  <SelectItem value="__upload__" data-testid="sf-upload-option">
-                    {sfUploading ? "Uploading…" : "↑ Upload new crawl CSV…"}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+              <CrawlAssetSelector
+                clientId={clientId ? Number(clientId) : null}
+                clientName={clientName}
+                currentCrawlId={currentCrawlId}
+                onCurrentChange={setCurrentCrawlId}
+                showComparison={false}
+                freshnessLimitDays={SF_FRESHNESS_DAYS}
+                asOfDate={generationDate}
+              />
             ) : (
               <p className="text-[11px] text-muted-foreground">Select a client first</p>
             )}
-            {sfActiveId && sfReports.length > 0 && (() => {
-              const activeSf = sfReports.find(r => r.id === sfActiveId);
-              if (!activeSf) return null;
-              const daysOld = sfDaysOld(activeSf, generationDate);
-              const isStale = daysOld > SF_FRESHNESS_DAYS;
-              return (
-                <div className="mt-1 space-y-0.5">
-                  <p className={`text-[10px] ${isStale ? "text-amber-600 dark:text-amber-400" : "text-green-600 dark:text-green-400"}`} data-testid="text-sf-status">
-                    {isStale
-                      ? `⚠ Crawl is ${daysOld} days old (limit: ${SF_FRESHNESS_DAYS}d) — upload a fresh crawl`
-                      : `✓ ${activeSf.rowCount.toLocaleString()} URLs · ${daysOld} days old`}
-                  </p>
-                </div>
-              );
-            })()}
           </div>
 
           <Separator />
@@ -516,6 +402,34 @@ export default function QbrPrepPage() {
 
           <Separator />
 
+          {clientId && (
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Load Saved</Label>
+              <ReportSaveSelector
+                clientId={clientId ? Number(clientId) : null}
+                reportType="qbr_prep"
+                onLoad={(data, savedEdits, id) => {
+                  setReportData(data);
+                  setEdits(savedEdits);
+                  reportSave.setSavedReportId(id);
+                  reportSave.pendingPayloadRef.current = {
+                    reportData: data,
+                    edits: savedEdits,
+                    meta: {
+                      reportPeriodLabel: quarter.analysisWindowLabel,
+                      planningQuarter: quarter.planningQ,
+                      planningYear: quarter.planningYear,
+                      currentCrawlAssetId: currentCrawlId,
+                    },
+                  };
+                  toast({ title: "Report loaded" });
+                }}
+              />
+            </div>
+          )}
+
+          <Separator />
+
           <Button
             className="w-full"
             onClick={() => generateMutation.mutate()}
@@ -543,64 +457,10 @@ export default function QbrPrepPage() {
               Crawl is too old (over {SF_FRESHNESS_DAYS} days). Upload a fresh crawl to generate.
             </p>
           )}
-
-          {clientId && savedReports.length > 0 && (
-            <>
-              <Separator />
-              <div>
-                <button
-                  className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1 hover:text-foreground transition-colors w-full text-left"
-                  onClick={() => setShowSavedReports(!showSavedReports)}
-                  data-testid="toggle-saved-reports"
-                >
-                  {showSavedReports ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                  Saved Reports ({savedReports.length})
-                </button>
-                {showSavedReports && (
-                  <div className="space-y-1.5">
-                    {savedReports.map(r => (
-                      <div
-                        key={r.id}
-                        className={`text-[11px] rounded px-2 py-1.5 flex items-start gap-1.5 cursor-pointer hover:bg-muted/50 ${savedReportId === r.id ? "bg-muted ring-1 ring-primary/20" : ""}`}
-                        data-testid={`saved-report-${r.id}`}
-                      >
-                        <FileText className="w-3 h-3 mt-0.5 shrink-0 text-muted-foreground" />
-                        <div className="flex-1 min-w-0" onClick={() => loadSavedReport(r.id)}>
-                          <div className="font-medium truncate">{r.reportName}</div>
-                          <div className="text-muted-foreground">{new Date(r.createdAt).toLocaleDateString()}</div>
-                        </div>
-                        <button
-                          className="shrink-0 text-muted-foreground hover:text-destructive"
-                          onClick={(e) => { e.stopPropagation(); deleteSavedReport(r.id); }}
-                          data-testid={`delete-saved-report-${r.id}`}
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </>
-          )}
         </div>
 
         {reportData && (
           <div className="p-4 border-t space-y-2">
-            <Button
-              variant="outline"
-              className="w-full text-xs"
-              onClick={() => {
-                if (savedReportId && reportData) {
-                  saveMutation.mutate({ id: savedReportId, data: reportData, currentEdits: edits });
-                }
-              }}
-              disabled={saveMutation.isPending || !savedReportId}
-              data-testid="button-save-report"
-            >
-              {saveMutation.isPending ? <Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> : <Save className="w-3 h-3 mr-1.5" />}
-              Save Report
-            </Button>
             <Button
               variant="outline"
               className="w-full text-xs"

@@ -15,6 +15,9 @@ import { TrendingUp, Download, CloudUpload, Loader2, RefreshCw } from "lucide-re
 import { useToast } from "@/hooks/use-toast";
 import { PptxPreview } from "@/components/report-preview/pptx-preview";
 import type { Client } from "@shared/schema";
+import { useReportSave } from "@/hooks/useReportSave";
+import { SaveStatusIndicator } from "@/components/reports/SaveStatusIndicator";
+import { ReportSaveSelector } from "@/components/reports/ReportSaveSelector";
 
 const THIS_YEAR = new Date().getFullYear();
 const YEARS = [THIS_YEAR, THIS_YEAR - 1, THIS_YEAR - 2];
@@ -34,6 +37,11 @@ export default function QbrFullPage() {
 
   const { data: clients = [] } = useQuery<Client[]>({ queryKey: ["/api/clients"] });
 
+  const reportSave = useReportSave({
+    reportType: "qbr_full",
+    clientId: clientId ? Number(clientId) : null,
+  });
+
   const generateMut = useMutation({
     mutationFn: async () => {
       if (!clientId) throw new Error("Select a client first");
@@ -48,6 +56,10 @@ export default function QbrFullPage() {
     onSuccess: (data) => {
       setReport(data);
       setEdits({});
+      reportSave.setSavedReportId(null);
+      const periodLabel = `Q${quarter} ${year}`;
+      reportSave.pendingPayloadRef.current = { reportData: data, edits: {}, meta: { reportPeriodLabel: periodLabel, planningQuarter: Number(quarter), planningYear: Number(year) } };
+      reportSave.save(data, {}, { reportPeriodLabel: periodLabel, planningQuarter: Number(quarter), planningYear: Number(year) });
       toast({ title: "QBR generated", description: "Slides ready — click any text to edit." });
     },
     onError: (err: any) => {
@@ -98,7 +110,16 @@ export default function QbrFullPage() {
   }
 
   function handleEdit(key: string, value: string) {
-    setEdits(prev => ({ ...prev, [key]: value }));
+    setEdits(prev => {
+      const next = { ...prev, [key]: value };
+      reportSave.pendingPayloadRef.current = {
+        reportData: report,
+        edits: next,
+        meta: { reportPeriodLabel: `Q${quarter} ${year}`, planningQuarter: Number(quarter), planningYear: Number(year) },
+      };
+      return next;
+    });
+    reportSave.markDirty();
   }
 
   return (
@@ -112,6 +133,7 @@ export default function QbrFullPage() {
               <p className="text-xs text-muted-foreground">Quarterly Business Review Deck (PPTX)</p>
             </div>
           </div>
+          {clientId && <div className="mt-1"><SaveStatusIndicator status={reportSave.saveStatus} /></div>}
         </div>
 
         <div className="flex-1 p-4 space-y-5">
@@ -159,6 +181,25 @@ export default function QbrFullPage() {
               </SelectContent>
             </Select>
           </div>
+
+          <Separator />
+
+          {clientId && (
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Load Saved</Label>
+              <ReportSaveSelector
+                clientId={clientId ? Number(clientId) : null}
+                reportType="qbr_full"
+                onLoad={(data, savedEdits, id) => {
+                  setReport(data);
+                  setEdits(savedEdits);
+                  reportSave.setSavedReportId(id);
+                  reportSave.pendingPayloadRef.current = { reportData: data, edits: savedEdits, meta: { reportPeriodLabel: `Q${quarter} ${year}`, planningQuarter: Number(quarter), planningYear: Number(year) } };
+                  toast({ title: "Report loaded" });
+                }}
+              />
+            </div>
+          )}
 
           <Separator />
 

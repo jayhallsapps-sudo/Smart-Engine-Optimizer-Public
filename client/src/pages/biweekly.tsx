@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -18,15 +18,14 @@ import {
   CloudUpload,
   Loader2,
   RefreshCw,
-  Upload,
-  Trash2,
-  FileText,
-  ChevronDown,
-  ChevronRight,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { DocxPreview } from "@/components/report-preview/docx-preview";
 import type { Client } from "@shared/schema";
+import { useReportSave } from "@/hooks/useReportSave";
+import { SaveStatusIndicator } from "@/components/reports/SaveStatusIndicator";
+import { ReportSaveSelector } from "@/components/reports/ReportSaveSelector";
+import { CrawlAssetSelector } from "@/components/reports/CrawlAssetSelector";
 
 function toYMD(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -50,56 +49,27 @@ function formatWindowLabel(start: string, end: string): string {
   return `${fmt(start)} – ${fmt(end)}`;
 }
 
-function parseCSV(text: string): { headers: string[]; data: Record<string, string>[] } {
-  const lines = text.split(/\r?\n/).filter(l => l.trim());
-  if (lines.length === 0) return { headers: [], data: [] };
-  const splitLine = (line: string): string[] => {
-    const result: string[] = [];
-    let cur = "";
-    let inQuotes = false;
-    for (const ch of line) {
-      if (ch === '"') { inQuotes = !inQuotes; }
-      else if (ch === "," && !inQuotes) { result.push(cur); cur = ""; }
-      else { cur += ch; }
-    }
-    result.push(cur);
-    return result.map(s => s.trim().replace(/^"|"$/g, ""));
-  };
-  const headers = splitLine(lines[0]);
-  const data = lines.slice(1).map(line => {
-    const vals = splitLine(line);
-    const row: Record<string, string> = {};
-    headers.forEach((h, i) => { row[h] = vals[i] ?? ""; });
-    return row;
-  });
-  return { headers, data };
-}
-
 export default function BiweeklyPage() {
   const { toast } = useToast();
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [clientId, setClientId] = useState<string>("");
   const [datePreset, setDatePreset] = useState<"7" | "14" | "30" | "custom">("14");
   const [customStart, setCustomStart] = useState<string>("");
   const [customEnd, setCustomEnd] = useState<string>("");
   const [preparedBy, setPreparedBy] = useState("JAY HALL");
-  const [sfOpen, setSfOpen] = useState(false);
   const [report, setReport] = useState<any>(null);
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [isUploading, setIsUploading] = useState(false);
-  const [sfUploading, setSfUploading] = useState(false);
+  const [currentCrawlId, setCurrentCrawlId] = useState<number | null>(null);
+  const [comparisonCrawlId, setComparisonCrawlId] = useState<number | null>(null);
 
   const { data: clients = [] } = useQuery<Client[]>({ queryKey: ["/api/clients"] });
 
-  const { data: sfReports = [], refetch: refetchSf } = useQuery<any[]>({
-    queryKey: ["/api/clients", clientId, "sf-reports"],
-    queryFn: async () => {
-      if (!clientId) return [];
-      const res = await fetch(`/api/clients/${clientId}/sf-reports`);
-      return res.json();
-    },
-    enabled: !!clientId,
+  const clientName = clients.find(c => String(c.id) === clientId)?.name;
+
+  const reportSave = useReportSave({
+    reportType: "biweekly",
+    clientId: clientId ? Number(clientId) : null,
   });
 
   function getDateRange(): { startDate: string; endDate: string } {
@@ -135,6 +105,16 @@ export default function BiweeklyPage() {
     onSuccess: (data) => {
       setReport(data);
       setEdits({});
+      reportSave.setSavedReportId(null);
+      const meta = {
+        reportPeriodLabel: windowLabel,
+        analysisWindowStart: startDate,
+        analysisWindowEnd: endDate,
+        currentCrawlAssetId: currentCrawlId,
+        comparisonCrawlAssetId: comparisonCrawlId,
+      };
+      reportSave.pendingPayloadRef.current = { reportData: data, edits: {}, meta };
+      reportSave.save(data, {}, meta);
       toast({ title: "Report generated", description: "Preview ready — click any text to edit." });
     },
     onError: (err: any) => {
@@ -205,63 +185,24 @@ export default function BiweeklyPage() {
     }
   }
 
-  async function handleSfUpload(files: FileList | File[]) {
-    if (!clientId || !files || files.length === 0) return;
-    setSfUploading(true);
-    const fileArray = Array.from(files);
-    let successCount = 0;
-    const errors: string[] = [];
-    try {
-      for (const file of fileArray) {
-        try {
-          const text = await file.text();
-          const { headers, data } = parseCSV(text);
-          if (headers.length === 0) throw new Error("CSV appears empty or unreadable.");
-          const reportDate = new Date().toISOString().slice(0, 10);
-          await apiRequest("POST", `/api/clients/${clientId}/sf-reports`, {
-            filename: file.name,
-            reportDate,
-            headers,
-            data,
-            rowCount: data.length,
-          });
-          successCount++;
-        } catch (err: any) {
-          const msg = err?.message || "Unknown error";
-          const hint = file.size > 40 * 1024 * 1024 ? " (file may be too large)" : "";
-          errors.push(`${file.name}: ${msg}${hint}`);
-        }
-      }
-      await refetchSf();
-      if (successCount > 0) {
-        toast({
-          title: successCount === 1 ? "Crawl uploaded" : `${successCount} crawls uploaded`,
-          description: errors.length > 0 ? `${errors.length} file(s) failed: ${errors.join("; ")}` : undefined,
-        });
-      }
-      if (errors.length > 0 && successCount === 0) {
-        toast({ title: "Upload failed", description: errors.join(" | "), variant: "destructive" });
-      }
-    } finally {
-      setSfUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  }
-
-  async function deleteSfReport(id: number) {
-    try {
-      await apiRequest("DELETE", `/api/sf-reports/${id}`, undefined);
-      await refetchSf();
-    } catch (err: any) {
-      toast({ title: "Delete failed", description: err.message, variant: "destructive" });
-    }
-  }
-
   function handleEdit(key: string, value: string) {
-    setEdits(prev => ({ ...prev, [key]: value }));
+    setEdits(prev => {
+      const next = { ...prev, [key]: value };
+      reportSave.pendingPayloadRef.current = {
+        reportData: report,
+        edits: next,
+        meta: {
+          reportPeriodLabel: windowLabel,
+          analysisWindowStart: startDate,
+          analysisWindowEnd: endDate,
+          currentCrawlAssetId: currentCrawlId,
+          comparisonCrawlAssetId: comparisonCrawlId,
+        },
+      };
+      return next;
+    });
+    reportSave.markDirty();
   }
-
-  const displayedSfReports = (sfReports as any[]).slice(0, 10);
 
   return (
     <div className="flex h-full min-h-0" data-testid="biweekly-page">
@@ -274,12 +215,13 @@ export default function BiweeklyPage() {
               <p className="text-xs text-muted-foreground">Live data · click to edit</p>
             </div>
           </div>
+          {clientId && <div className="mt-1"><SaveStatusIndicator status={reportSave.saveStatus} /></div>}
         </div>
 
         <div className="flex-1 p-4 space-y-5">
           <div className="space-y-2">
             <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Client</Label>
-            <Select value={clientId} onValueChange={(v) => { setClientId(v); setReport(null); }}>
+            <Select value={clientId} onValueChange={(v) => { setClientId(v); setReport(null); reportSave.setSavedReportId(null); }}>
               <SelectTrigger data-testid="select-client">
                 <SelectValue placeholder="Select client…" />
               </SelectTrigger>
@@ -362,85 +304,41 @@ export default function BiweeklyPage() {
             />
           </div>
 
-          <div className="space-y-1.5">
-            <button
-              className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground w-full hover:text-foreground transition-colors"
-              onClick={() => setSfOpen(o => !o)}
-              data-testid="toggle-sf-section"
-            >
-              {sfOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-              Screaming Frog
-              {displayedSfReports.length > 0 && (
-                <span className="ml-auto text-[10px] bg-primary/10 text-primary rounded px-1.5 py-0.5 normal-case tracking-normal font-medium">
-                  {displayedSfReports.length} crawl{displayedSfReports.length !== 1 ? "s" : ""}
-                </span>
-              )}
-            </button>
+          {clientId && (
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Screaming Frog</Label>
+              <CrawlAssetSelector
+                clientId={clientId ? Number(clientId) : null}
+                clientName={clientName}
+                currentCrawlId={currentCrawlId}
+                comparisonCrawlId={comparisonCrawlId}
+                onCurrentChange={setCurrentCrawlId}
+                onComparisonChange={setComparisonCrawlId}
+                showComparison
+              />
+            </div>
+          )}
 
-            {sfOpen && (
-              <div className="space-y-2">
-                {!clientId && (
-                  <p className="text-[10px] text-muted-foreground">Select a client first.</p>
-                )}
-                {clientId && (
-                  <>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept=".csv"
-                      multiple
-                      className="hidden"
-                      onChange={e => {
-                        if (e.target.files && e.target.files.length > 0) {
-                          handleSfUpload(e.target.files);
-                        }
-                      }}
-                    />
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full text-xs"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={sfUploading}
-                      data-testid="button-sf-upload"
-                    >
-                      {sfUploading ? (
-                        <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> Uploading…</>
-                      ) : (
-                        <><Upload className="w-3 h-3 mr-1.5" /> Upload CSV</>
-                      )}
-                    </Button>
-                    <p className="text-[10px] text-muted-foreground">
-                      Upload one or more Screaming Frog CSVs. Up to 10 crawls stored per client.
-                    </p>
-                    {displayedSfReports.length === 0 && (
-                      <p className="text-[10px] text-muted-foreground italic">No crawls uploaded yet.</p>
-                    )}
-                    {displayedSfReports.map((r: any) => (
-                      <div
-                        key={r.id}
-                        className="flex items-start gap-1.5 p-1.5 rounded border bg-background text-[10px]"
-                        data-testid={`sf-report-${r.id}`}
-                      >
-                        <FileText className="w-3 h-3 mt-0.5 text-muted-foreground shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium truncate">{r.filename}</p>
-                          <p className="text-muted-foreground">{r.reportDate} · {r.rowCount?.toLocaleString()} rows</p>
-                        </div>
-                        <button
-                          onClick={() => deleteSfReport(r.id)}
-                          className="text-muted-foreground hover:text-destructive transition-colors mt-0.5"
-                          data-testid={`delete-sf-${r.id}`}
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ))}
-                  </>
-                )}
-              </div>
-            )}
-          </div>
+          {clientId && (
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Load Saved</Label>
+              <ReportSaveSelector
+                clientId={clientId ? Number(clientId) : null}
+                reportType="biweekly"
+                onLoad={(data, savedEdits, id) => {
+                  setReport(data);
+                  setEdits(savedEdits);
+                  reportSave.setSavedReportId(id);
+                  reportSave.pendingPayloadRef.current = {
+                    reportData: data,
+                    edits: savedEdits,
+                    meta: { reportPeriodLabel: windowLabel, analysisWindowStart: startDate, analysisWindowEnd: endDate },
+                  };
+                  toast({ title: "Report loaded" });
+                }}
+              />
+            </div>
+          )}
 
           <Separator />
 

@@ -4,6 +4,22 @@ import * as fs from "fs";
 import * as path from "path";
 import { storage } from "./storage";
 import { insertClientSchema } from "@shared/schema";
+import {
+  createSavedReport,
+  updateSavedReport,
+  getSavedReportById,
+  listSavedReportsByClientAndType,
+  listSavedReportsByClient,
+  deleteSavedReport,
+} from "./savedReportService";
+import {
+  buildAssetName,
+  createCrawlAsset,
+  listCrawlAssets,
+  getCrawlAsset,
+  getCrawlAssetWithData,
+  deleteCrawlAsset,
+} from "./crawlAssetService";
 import { parseNaturalQuery, getCommandDescription, getDateRangeLabel } from "./nlRouter";
 import { generateMockResult } from "./mockData";
 import { fetchAirtableWorkLog } from "./airtable";
@@ -797,7 +813,12 @@ export async function registerRoutes(
     if (!parsed.success) {
       return res.status(400).json({ message: "Invalid SF report data", errors: parsed.error.issues });
     }
-    const report = await storage.createSfReport(parsed.data);
+    const client = await storage.getClient(clientId);
+    const assetName = buildAssetName(
+      client?.name ?? "Unknown",
+      parsed.data.reportDate
+    );
+    const report = await storage.createSfReport({ ...parsed.data, assetName });
     const allReports = await storage.getSfReports(clientId);
     const MAX_SF_REPORTS = 24;
     if (allReports.length > MAX_SF_REPORTS) {
@@ -806,7 +827,7 @@ export async function registerRoutes(
         await storage.deleteSfReport(old.id);
       }
     }
-    res.status(201).json({ id: report.id, clientId: report.clientId, reportDate: report.reportDate, filename: report.filename, rowCount: report.rowCount, headers: report.headers, createdAt: report.createdAt });
+    res.status(201).json({ id: report.id, clientId: report.clientId, reportDate: report.reportDate, filename: report.filename, rowCount: report.rowCount, headers: report.headers, assetName: report.assetName, createdAt: report.createdAt });
   });
 
   app.get("/api/sf-reports/summary", async (req, res) => {
@@ -1219,15 +1240,22 @@ export async function registerRoutes(
   const SF_FRESHNESS_DAYS = 90;
 
   app.post("/api/reports/qbr-prep/generate-v2", async (req, res) => {
-    const { clientId, generationDate, sentiment, hypothesis, auditNotes } = req.body;
+    const { clientId, generationDate, sentiment, hypothesis, auditNotes, currentCrawlAssetId } = req.body;
     if (!clientId) return res.status(400).json({ message: "clientId is required" });
 
-    const sfReports = await storage.getSfReports(Number(clientId));
-    if (!sfReports || sfReports.length === 0) {
-      return res.status(400).json({ message: "A Screaming Frog crawl is required before generating a QBR Prep report. Please upload one first." });
+    let latestSf: any;
+    if (currentCrawlAssetId) {
+      const asset = await getCrawlAsset(Number(currentCrawlAssetId));
+      if (!asset) return res.status(400).json({ message: "Specified crawl asset not found." });
+      latestSf = { id: asset.id, createdAt: asset.createdAt, reportDate: asset.reportDate };
+    } else {
+      const sfReports = await storage.getSfReports(Number(clientId));
+      if (!sfReports || sfReports.length === 0) {
+        return res.status(400).json({ message: "A Screaming Frog crawl is required before generating a QBR Prep report. Please upload one first." });
+      }
+      latestSf = sfReports[0];
     }
 
-    const latestSf = sfReports[0];
     const sfUploadedAt = latestSf.createdAt instanceof Date ? latestSf.createdAt : new Date(latestSf.createdAt);
     const asOf = generationDate ? new Date(generationDate + "T12:00:00") : new Date();
     const daysSinceUpload = Math.floor((asOf.getTime() - sfUploadedAt.getTime()) / (1000 * 60 * 60 * 24));
@@ -1955,6 +1983,144 @@ export async function registerRoutes(
         fs.writeFileSync(HEADER_IMAGE_PATH, imgBuf);
       }
       res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── Saved Reports API ────────────────────────────────────────────────────────
+  app.get("/api/saved-reports", async (req, res) => {
+    try {
+      const clientId = Number(req.query.clientId);
+      const reportType = req.query.reportType as string | undefined;
+      if (!clientId || isNaN(clientId)) {
+        return res.status(400).json({ message: "clientId required" });
+      }
+      const reports = reportType
+        ? await listSavedReportsByClientAndType(clientId, reportType)
+        : await listSavedReportsByClient(clientId);
+      res.json(reports);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/saved-reports/:id", async (req, res) => {
+    try {
+      const report = await getSavedReportById(Number(req.params.id));
+      if (!report) return res.status(404).json({ message: "Not found" });
+      res.json(report);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/saved-reports", async (req, res) => {
+    try {
+      const {
+        clientId, reportType, reportName, reportPeriodLabel,
+        analysisWindowStart, analysisWindowEnd, planningQuarter, planningYear,
+        generatedOn, sourceSnapshotJson, generatedReportJson, editsJson,
+        htmlSnapshot, currentCrawlAssetId, comparisonCrawlAssetId, versionLabel,
+      } = req.body;
+      if (!clientId || !reportType || !reportName || !generatedOn) {
+        return res.status(400).json({ message: "clientId, reportType, reportName, generatedOn are required" });
+      }
+      const created = await createSavedReport({
+        clientId: Number(clientId),
+        reportType,
+        reportName,
+        reportPeriodLabel,
+        analysisWindowStart,
+        analysisWindowEnd,
+        planningQuarter: planningQuarter != null ? Number(planningQuarter) : undefined,
+        planningYear: planningYear != null ? Number(planningYear) : undefined,
+        generatedOn,
+        sourceSnapshotJson,
+        generatedReportJson,
+        editsJson,
+        currentCrawlAssetId: currentCrawlAssetId != null ? Number(currentCrawlAssetId) : undefined,
+        comparisonCrawlAssetId: comparisonCrawlAssetId != null ? Number(comparisonCrawlAssetId) : undefined,
+        versionLabel,
+      });
+      res.status(201).json(created);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.patch("/api/saved-reports/:id", async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const updated = await updateSavedReport(id, req.body);
+      if (!updated) return res.status(404).json({ message: "Not found" });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.delete("/api/saved-reports/:id", async (req, res) => {
+    try {
+      const ok = await deleteSavedReport(Number(req.params.id));
+      if (!ok) return res.status(404).json({ message: "Not found" });
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── Crawl Assets API ─────────────────────────────────────────────────────────
+  app.get("/api/crawl-assets", async (req, res) => {
+    try {
+      const clientId = Number(req.query.clientId);
+      if (!clientId || isNaN(clientId)) {
+        return res.status(400).json({ message: "clientId required" });
+      }
+      const assets = await listCrawlAssets(clientId);
+      res.json(assets);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/crawl-assets/:id", async (req, res) => {
+    try {
+      const asset = await getCrawlAsset(Number(req.params.id));
+      if (!asset) return res.status(404).json({ message: "Not found" });
+      res.json(asset);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/crawl-assets", async (req, res) => {
+    try {
+      const { clientId, clientName, filename, reportDate, headers, data, notes } = req.body;
+      if (!clientId || !filename || !headers || !data) {
+        return res.status(400).json({ message: "clientId, filename, headers, data required" });
+      }
+      const date = reportDate ?? new Date().toISOString().split("T")[0];
+      const created = await createCrawlAsset(
+        Number(clientId),
+        clientName ?? "Unknown",
+        filename,
+        date,
+        headers,
+        data,
+        notes
+      );
+      res.status(201).json(created);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.delete("/api/crawl-assets/:id", async (req, res) => {
+    try {
+      const ok = await deleteCrawlAsset(Number(req.params.id));
+      if (!ok) return res.status(404).json({ message: "Not found" });
+      res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

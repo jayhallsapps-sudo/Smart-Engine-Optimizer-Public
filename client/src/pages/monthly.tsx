@@ -15,6 +15,9 @@ import { BarChart3, Download, CloudUpload, Loader2, RefreshCw } from "lucide-rea
 import { useToast } from "@/hooks/use-toast";
 import { PptxPreview } from "@/components/report-preview/pptx-preview";
 import type { Client } from "@shared/schema";
+import { useReportSave } from "@/hooks/useReportSave";
+import { SaveStatusIndicator } from "@/components/reports/SaveStatusIndicator";
+import { ReportSaveSelector } from "@/components/reports/ReportSaveSelector";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -36,6 +39,11 @@ export default function MonthlyPage() {
 
   const { data: clients = [] } = useQuery<Client[]>({ queryKey: ["/api/clients"] });
 
+  const reportSave = useReportSave({
+    reportType: "monthly",
+    clientId: clientId ? Number(clientId) : null,
+  });
+
   const generateMut = useMutation({
     mutationFn: async () => {
       if (!clientId) throw new Error("Select a client first");
@@ -50,6 +58,10 @@ export default function MonthlyPage() {
     onSuccess: (data) => {
       setReport(data);
       setEdits({});
+      reportSave.setSavedReportId(null);
+      const periodLabel = `${MONTHS[Number(month) - 1]} ${year}`;
+      reportSave.pendingPayloadRef.current = { reportData: data, edits: {}, meta: { reportPeriodLabel: periodLabel, planningYear: Number(year) } };
+      reportSave.save(data, {}, { reportPeriodLabel: periodLabel, planningYear: Number(year) });
       toast({ title: "Report generated", description: "Slides ready — click any text to edit." });
     },
     onError: (err: any) => {
@@ -121,7 +133,16 @@ export default function MonthlyPage() {
   }
 
   function handleEdit(key: string, value: string) {
-    setEdits(prev => ({ ...prev, [key]: value }));
+    setEdits(prev => {
+      const next = { ...prev, [key]: value };
+      reportSave.pendingPayloadRef.current = {
+        reportData: report,
+        edits: next,
+        meta: { reportPeriodLabel: `${MONTHS[Number(month) - 1]} ${year}`, planningYear: Number(year) },
+      };
+      return next;
+    });
+    reportSave.markDirty();
   }
 
   return (
@@ -135,6 +156,7 @@ export default function MonthlyPage() {
               <p className="text-xs text-muted-foreground">SEO Performance Deck (PPTX)</p>
             </div>
           </div>
+          {clientId && <div className="mt-1"><SaveStatusIndicator status={reportSave.saveStatus} /></div>}
         </div>
 
         <div className="flex-1 p-4 space-y-5">
@@ -181,6 +203,25 @@ export default function MonthlyPage() {
               </SelectContent>
             </Select>
           </div>
+
+          <Separator />
+
+          {clientId && (
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Load Saved</Label>
+              <ReportSaveSelector
+                clientId={clientId ? Number(clientId) : null}
+                reportType="monthly"
+                onLoad={(data, savedEdits, id) => {
+                  setReport(data);
+                  setEdits(savedEdits);
+                  reportSave.setSavedReportId(id);
+                  reportSave.pendingPayloadRef.current = { reportData: data, edits: savedEdits, meta: { reportPeriodLabel: `${MONTHS[Number(month) - 1]} ${year}`, planningYear: Number(year) } };
+                  toast({ title: "Report loaded" });
+                }}
+              />
+            </div>
+          )}
 
           <Separator />
 

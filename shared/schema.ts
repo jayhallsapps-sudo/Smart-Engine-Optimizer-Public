@@ -70,6 +70,8 @@ export const sfReports = pgTable("sf_reports", {
   rowCount: integer("row_count").notNull().default(0),
   headers: text("headers").array(),
   data: jsonb("data"),
+  assetName: text("asset_name"),
+  notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -141,6 +143,42 @@ export const insertQbrPrepReportSchema = createInsertSchema(qbrPrepReports).omit
 
 export type QbrPrepReport = typeof qbrPrepReports.$inferSelect;
 export type InsertQbrPrepReport = z.infer<typeof insertQbrPrepReportSchema>;
+
+export const savedReports = pgTable("saved_reports", {
+  id: serial("id").primaryKey(),
+  clientId: integer("client_id").notNull(),
+  reportType: text("report_type").notNull(),
+  reportName: text("report_name").notNull(),
+  reportPeriodLabel: text("report_period_label"),
+  analysisWindowStart: text("analysis_window_start"),
+  analysisWindowEnd: text("analysis_window_end"),
+  planningQuarter: integer("planning_quarter"),
+  planningYear: integer("planning_year"),
+  generatedOn: text("generated_on").notNull(),
+  sourceSnapshotJson: jsonb("source_snapshot_json"),
+  generatedReportJson: jsonb("generated_report_json"),
+  editsJson: jsonb("edits_json"),
+  htmlSnapshot: text("html_snapshot"),
+  currentCrawlAssetId: integer("current_crawl_asset_id"),
+  comparisonCrawlAssetId: integer("comparison_crawl_asset_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  lastSavedAt: timestamp("last_saved_at").defaultNow().notNull(),
+  versionLabel: text("version_label"),
+}, (t) => [
+  index("saved_reports_client_type_idx").on(t.clientId, t.reportType),
+  index("saved_reports_client_id_idx").on(t.clientId),
+]);
+
+export const insertSavedReportSchema = createInsertSchema(savedReports).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  lastSavedAt: true,
+});
+
+export type SavedReport = typeof savedReports.$inferSelect;
+export type InsertSavedReport = z.infer<typeof insertSavedReportSchema>;
 
 export const insertApiCredentialSchema = createInsertSchema(apiCredentials).omit({
   id: true,

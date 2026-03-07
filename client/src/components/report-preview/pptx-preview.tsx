@@ -5,7 +5,7 @@ import { ReportBarChart, ReportLineChart, MetricCard } from "./report-chart";
 
 export interface Slide {
   id: string;
-  type: "title" | "metrics" | "table" | "chart-bar" | "chart-line" | "bullets" | "two-col";
+  type: "title" | "divider" | "metrics" | "table" | "chart-bar" | "chart-line" | "bullets" | "two-col";
   title?: string;
   subtitle?: string;
   commentary?: string;
@@ -96,7 +96,7 @@ export function PptxPreview({ slides, edits, onEdit }: PptxPreviewProps) {
               key={s.id}
               onClick={() => setCurrent(i)}
               className={`relative w-full rounded border-2 overflow-hidden transition-all ${i === current ? "border-red-400" : "border-gray-600 hover:border-gray-400"}`}
-              style={{ paddingTop: "56.25%", background: s.type === "title" ? NAVY : "#F8FAFC" }}
+              style={{ paddingTop: "56.25%", background: (s.type === "title" || s.type === "divider") ? NAVY : "#F8FAFC" }}
               data-testid={`thumb-slide-${i}`}
               title={s.title ?? `Slide ${i + 1}`}
             >
@@ -161,6 +161,30 @@ export function SlideRenderer({ slide, edits, onEdit }: { slide: Slide; edits: R
         </div>
         <div style={{ color: "#93C5FD", fontSize: 10 }}>{slide.date}</div>
         <div style={{ position: "absolute", bottom: 18, left: 40, color: "#BFD7FF", fontSize: 7 }}>Webserv  |  webserv.io</div>
+      </div>
+    );
+  }
+
+  if (slide.type === "divider") {
+    return (
+      <div style={{ position: "absolute", inset: 0, background: `linear-gradient(135deg, ${NAVY} 55%, #162d57)`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "32px 48px" }}>
+        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 4, background: RED }} />
+        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 4, background: RED }} />
+        <div style={{ position: "absolute", left: 0, top: "30%", bottom: "30%", width: 4, background: RED, borderRadius: 2 }} />
+        <div style={{ textAlign: "center" }}>
+          <div style={{ color: "#93C5FD", fontSize: 9, fontWeight: 600, letterSpacing: 3, textTransform: "uppercase", marginBottom: 12 }}>
+            Section
+          </div>
+          <div style={{ color: "white", fontSize: 22, fontWeight: "bold", lineHeight: 1.25, maxWidth: 520 }}>
+            <EditableSection editKey={`${slide.id}_title`} value={slide.title ?? ""} edits={edits} onEdit={onEdit} as="div" />
+          </div>
+          {slide.subtitle && (
+            <div style={{ color: "#BFD7FF", fontSize: 11, marginTop: 10 }}>
+              <EditableSection editKey={`${slide.id}_subtitle`} value={slide.subtitle} edits={edits} onEdit={onEdit} as="div" />
+            </div>
+          )}
+        </div>
+        <div style={{ position: "absolute", bottom: 14, right: 20, color: "#BFD7FF", fontSize: 7 }}>Webserv  |  webserv.io</div>
       </div>
     );
   }

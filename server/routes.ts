@@ -37,7 +37,7 @@ import { generateQbrPrep } from "./qbrPrepGenerator";
 import type { QbrPrepJson } from "./qbrPrepGenerator";
 import { generateBiweekly } from "./biweeklyGenerator";
 import { generateMonthly } from "./monthlyGenerator";
-import { generateQbrFull } from "./qbrGenerator";
+import { generateQbrFull } from "./qbrFullGenerator";
 import { queryGsc, handlesGscCommand } from "./gscClient";
 import { queryGa4, handlesGa4Command } from "./ga4Client";
 import { queryCallRail, handlesCallRailCommand } from "./callrailClient";
@@ -1652,10 +1652,18 @@ export async function registerRoutes(
   });
 
   app.post("/api/reports/qbr-full/generate", async (req, res) => {
-    const { clientId, quarter, year, timezone } = req.body;
+    const { clientId, quarter, year, timezone, amInputs, currentCrawlAssetId, comparisonCrawlAssetId } = req.body;
     if (!clientId || !quarter || !year) return res.status(400).json({ message: "clientId, quarter, year are required" });
     try {
-      const output = await generateQbrFull({ clientId: Number(clientId), quarter: Number(quarter), year: Number(year), timezone: timezone ?? "America/Los_Angeles" });
+      const output = await generateQbrFull({
+        clientId: Number(clientId),
+        quarter: Number(quarter),
+        year: Number(year),
+        timezone: timezone ?? "America/Los_Angeles",
+        amInputs: amInputs ?? {},
+        currentCrawlAssetId: currentCrawlAssetId ?? null,
+        comparisonCrawlAssetId: comparisonCrawlAssetId ?? null,
+      });
       res.json(output);
     } catch (err: any) {
       console.error("QBR Full generation error:", err);
@@ -1667,40 +1675,56 @@ export async function registerRoutes(
     const { json, edits } = req.body as { json: any; edits?: Record<string, string> };
     if (!json) return res.status(400).json({ message: "json is required" });
     try {
-      const sections: SectionData[] = (json.slides ?? []).filter((s: any) => s.type !== "title").map((s: any, idx: number) => {
-        const items: any[] = [];
-        if (s.metrics?.length) items.push({ summary: s.metrics.map((m: any) => ({ label: m.label, current: m.current, previous: m.previous ?? "—", deltaPercent: m.delta ?? "—", isPositive: m.isPositive ?? true })) });
-        if (s.table) items.push({ tables: [{ title: s.subtitle ?? "", headers: s.table.headers, rows: s.table.rows }] });
-        if (s.bullets) items.push({ manualText: (s.bullets as string[]).join("\n") });
-        if (s.leftContent?.table) items.push({ tables: [{ title: "", headers: s.leftContent.table.headers, rows: s.leftContent.table.rows }] });
-        return { sectionId: `slide_${idx}`, title: edits?.[`${s.id}_title`] ?? s.title ?? "", items };
-      });
-      const buffer = await generatePptx(json.client_name, json.report_title, new Date(json.generated_at).toLocaleDateString("en-US"), sections);
-      const slug = json.client_name.toLowerCase().replace(/\s+/g, "_");
+      const sections: SectionData[] = (json.slides ?? [])
+        .filter((s: any) => s.type !== "title" && s.type !== "divider")
+        .map((s: any, idx: number) => {
+          const items: any[] = [];
+          if (s.metrics?.length) items.push({ summary: s.metrics.map((m: any) => ({ label: m.label, current: m.current, previous: m.previous ?? "—", deltaPercent: m.delta ?? "—", isPositive: m.isPositive ?? true })) });
+          const commentary = edits?.[`${s.id}_commentary`] ?? s.commentary;
+          if (commentary) items.push({ manualText: commentary });
+          if (s.table) items.push({ tables: [{ title: edits?.[`${s.id}_subtitle`] ?? s.subtitle ?? "", headers: s.table.headers, rows: (s.table.rows as any[][]).map((row: any[], ri: number) => row.map((cell: any, ci: number) => edits?.[`${s.id}_cell_${ri}_${ci}`] ?? String(cell))) }] });
+          if (s.bullets) items.push({ manualText: (s.bullets as string[]).map((b: string, bi: number) => edits?.[`${s.id}_bullet_${bi}`] ?? b).join("\n") });
+          if (s.leftContent?.table) items.push({ tables: [{ title: "", headers: s.leftContent.table.headers, rows: s.leftContent.table.rows }] });
+          return { sectionId: `slide_${idx}`, title: edits?.[`${s.id}_title`] ?? s.title ?? "", items };
+        });
+      const clientName = edits?.["s01_title_client"] ?? json.client_name ?? "Client";
+      const reportTitle = edits?.["s01_title_title"] ?? json.report_title ?? "QBR Report";
+      const generatedAt = json.generated_at ? new Date(json.generated_at).toLocaleDateString("en-US") : new Date().toLocaleDateString("en-US");
+      const buffer = await generatePptx(clientName, reportTitle, generatedAt, sections);
+      const slug = clientName.toLowerCase().replace(/\s+/g, "_");
+      const qtrSlug = (json.quarter_label ?? "qbr").replace(/\s/g, "_");
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
-      res.setHeader("Content-Disposition", `attachment; filename="${slug}_qbr_${json.quarter_label.replace(/\s/g, "_")}.pptx"`);
+      res.setHeader("Content-Disposition", `attachment; filename="${slug}_QBR_${qtrSlug}.pptx"`);
       res.send(buffer);
     } catch (err: any) {
-      console.error("QBR PPTX error:", err);
+      console.error("QBR Full PPTX error:", err);
       res.status(500).json({ message: "Failed to generate PPTX: " + err.message });
     }
   });
 
   app.post("/api/reports/qbr-full/upload-to-drive", async (req, res) => {
-    const { json } = req.body as { json: any };
+    const { json, edits } = req.body as { json: any; edits?: Record<string, string> };
     if (!json) return res.status(400).json({ message: "json is required" });
     try {
-      const sections: SectionData[] = (json.slides ?? []).filter((s: any) => s.type !== "title").map((s: any, idx: number) => {
-        const items: any[] = [];
-        if (s.metrics?.length) items.push({ summary: s.metrics.map((m: any) => ({ label: m.label, current: m.current, previous: m.previous ?? "—", deltaPercent: m.delta ?? "—", isPositive: m.isPositive ?? true })) });
-        if (s.table) items.push({ tables: [{ title: s.subtitle ?? "", headers: s.table.headers, rows: s.table.rows }] });
-        if (s.bullets) items.push({ manualText: (s.bullets as string[]).join("\n") });
-        return { sectionId: `slide_${idx}`, title: s.title ?? "", items };
-      });
-      const buffer = await generatePptx(json.client_name, json.report_title, new Date(json.generated_at).toLocaleDateString("en-US"), sections);
+      const sections: SectionData[] = (json.slides ?? [])
+        .filter((s: any) => s.type !== "title" && s.type !== "divider")
+        .map((s: any, idx: number) => {
+          const items: any[] = [];
+          if (s.metrics?.length) items.push({ summary: s.metrics.map((m: any) => ({ label: m.label, current: m.current, previous: m.previous ?? "—", deltaPercent: m.delta ?? "—", isPositive: m.isPositive ?? true })) });
+          const driveCommentary = edits?.[`${s.id}_commentary`] ?? s.commentary;
+          if (driveCommentary) items.push({ manualText: driveCommentary });
+          if (s.table) items.push({ tables: [{ title: edits?.[`${s.id}_subtitle`] ?? s.subtitle ?? "", headers: s.table.headers, rows: (s.table.rows as any[][]).map((row: any[], ri: number) => row.map((cell: any, ci: number) => edits?.[`${s.id}_cell_${ri}_${ci}`] ?? String(cell))) }] });
+          if (s.bullets) items.push({ manualText: (s.bullets as string[]).map((b: string, bi: number) => edits?.[`${s.id}_bullet_${bi}`] ?? b).join("\n") });
+          if (s.leftContent?.table) items.push({ tables: [{ title: "", headers: s.leftContent.table.headers, rows: s.leftContent.table.rows }] });
+          return { sectionId: `slide_${idx}`, title: edits?.[`${s.id}_title`] ?? s.title ?? "", items };
+        });
+      const driveClientName = edits?.["s01_title_client"] ?? json.client_name ?? "Client";
+      const driveReportTitle = edits?.["s01_title_title"] ?? json.report_title ?? "QBR Report";
+      const driveGeneratedAt = json.generated_at ? new Date(json.generated_at).toLocaleDateString("en-US") : new Date().toLocaleDateString("en-US");
+      const buffer = await generatePptx(driveClientName, driveReportTitle, driveGeneratedAt, sections);
       const { ReplitConnectors } = await import("@replit/connectors-sdk");
       const connectors = new ReplitConnectors();
-      const filename = `${json.client_name} QBR ${json.quarter_label}.pptx`;
+      const filename = `${driveClientName} QBR ${json.quarter_label ?? "Report"}.pptx`;
       const metadata = JSON.stringify({ name: filename });
       const boundary = "-------smarteo_qbrf_boundary";
       const CRLF = "\r\n";

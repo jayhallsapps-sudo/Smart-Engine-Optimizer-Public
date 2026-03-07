@@ -117,6 +117,23 @@ export function dateRangeToGoogleDates(dateRange: string): {
     };
   }
 
+  // calendar_quarter:Q-YYYY — full calendar quarter vs prior calendar quarter
+  // e.g. "calendar_quarter:1-2026" → Q1 2026 (Jan–Mar) vs Q4 2025 (Oct–Dec)
+  if (dateRange.startsWith("calendar_quarter:")) {
+    const parts = dateRange.replace("calendar_quarter:", "").split("-");
+    const q = Number(parts[0]);
+    const y = Number(parts[1]);
+    const qStartMonth = (q - 1) * 3; // 0-indexed: Q1→0, Q2→3, Q3→6, Q4→9
+    const qStart = new Date(y, qStartMonth, 1);
+    const qEnd = new Date(y, qStartMonth + 3, 0);
+    const prevQStartMonthRaw = qStartMonth - 3;
+    const prevQYear = prevQStartMonthRaw < 0 ? y - 1 : y;
+    const prevQStartMonth = prevQStartMonthRaw < 0 ? prevQStartMonthRaw + 12 : prevQStartMonthRaw;
+    const prevQStart = new Date(prevQYear, prevQStartMonth, 1);
+    const prevQEnd = new Date(qStart.getTime() - 86400000);
+    return { startDate: fmt(qStart), endDate: fmt(qEnd), prevStartDate: fmt(prevQStart), prevEndDate: fmt(prevQEnd) };
+  }
+
   // default: last_90_vs_prev_90
   const startDate = fmt(sub(now, 90));
   const prevEndDate = fmt(sub(now, 91));

@@ -34,7 +34,7 @@ server/
   encryption.ts        - AES-256-GCM encryption for credentials
   nlRouter.ts          - NL query parser with weighted source-priority scoring (37 commands)
   mockData.ts          - Demo data generator with addiction-space content (37 mock generators)
-  googleToken.ts       - Shared Google OAuth token exchange + date utilities
+  googleToken.ts       - Shared Google OAuth token exchange + date utilities (calendar_month, calendar_qtd, calendar_quarter keys)
   gscClient.ts         - Live Google Search Console API (gsc_top_queries, gsc_qoq_queries/pages, query_to_page, high_imp_low_ctr)
   ga4Client.ts         - Live GA4 Data API (funnel, landing pages, session movers, QTD, YoY)
   callrailClient.ts    - Live CallRail v3 API (calls, landing pages, summary)
@@ -45,12 +45,13 @@ server/
   airtable.ts          - Live Airtable REST API for work log
   asanaClient.ts       - Asana API via Replit connector (tasks by section → New Content/Technical SEO/Local SEO)
   reportGenerators.ts  - .docx (biweekly) and .pptx (monthly/QBR) generators
+  monthlyGenerator.ts  - Monthly 9-slide PPTX generator (true calendar month, AM inputs → commentary + audit bullets)
+  qbrFullGenerator.ts  - QBR Full 20-slide PPTX generator (true calendar quarter, 8 AM inputs, no paid media, MNE fallbacks)
   qbrPrepGenerator.ts  - Legacy QBR Prep engine (v1)
   qbrPrepSectionGenerator.ts - QBR Prep v2 section engine: 7-section generator pulling GSC, GA4, NSM Tracker, Airtable, Asana, SF crawl data
   qbrPrepDocxGenerator.ts - QBR Prep DOCX export generator (branded red header, 7-section tables)
   qbrPrepTypes.ts      - TypeScript types for QBR Prep report data model (sections 1-7, meta, source snapshot)
   qbrPrepHelpers.ts    - Quarter logic, branded query classifier, page type classifier, tier diagnosis engine
-  monthlyGenerator.ts  - Monthly report engine: 9 guaranteed slides, calendar_month: date windows, QTD KPI slide
   googleAuth.ts        - Google OAuth flow (GSC, GA4, GBP, Sheets scopes)
   seed.ts              - Seeds 8 recovery centre clients
 shared/

@@ -10,9 +10,13 @@ export default function MonthlyPrint() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const token = new URLSearchParams(window.location.search).get("token");
-    if (!token) { setError("No token in URL."); return; }
-    fetch(`/api/print-cache/${token}`)
+    const cacheToken = new URLSearchParams(window.location.search).get("token");
+    if (!cacheToken) { setError("No token in URL."); return; }
+    fetch("/api/auth/bootstrap")
+      .then((r) => r.json())
+      .then(({ token: authToken }) =>
+        fetch(`/api/print-cache/${cacheToken}`, { headers: { "X-Internal-Token": authToken } })
+      )
       .then((r) => {
         if (!r.ok) throw new Error(`Server returned ${r.status}`);
         return r.json();
@@ -23,8 +27,7 @@ export default function MonthlyPrint() {
 
   useEffect(() => {
     if (!data) return;
-    const t = setTimeout(() => window.print(), 1200);
-    return () => clearTimeout(t);
+    document.fonts.ready.then(() => window.print());
   }, [data]);
 
   if (error) {

@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, isNull } from "drizzle-orm";
 import {
   savedReports,
   type SavedReport,
@@ -69,7 +69,7 @@ export async function updateSavedReport(id: number, input: UpdateSavedReportInpu
       updatedAt: now,
       lastSavedAt: now,
     })
-    .where(eq(savedReports.id, id))
+    .where(and(eq(savedReports.id, id), isNull(savedReports.deletedAt)))
     .returning();
   return updated;
 }
@@ -78,7 +78,7 @@ export async function getSavedReportById(id: number): Promise<SavedReport | unde
   const [row] = await db
     .select()
     .from(savedReports)
-    .where(eq(savedReports.id, id));
+    .where(and(eq(savedReports.id, id), isNull(savedReports.deletedAt)));
   return row;
 }
 
@@ -89,7 +89,13 @@ export async function listSavedReportsByClientAndType(
   return db
     .select()
     .from(savedReports)
-    .where(and(eq(savedReports.clientId, clientId), eq(savedReports.reportType, reportType)))
+    .where(
+      and(
+        eq(savedReports.clientId, clientId),
+        eq(savedReports.reportType, reportType),
+        isNull(savedReports.deletedAt)
+      )
+    )
     .orderBy(desc(savedReports.createdAt));
 }
 
@@ -97,14 +103,15 @@ export async function listSavedReportsByClient(clientId: number): Promise<SavedR
   return db
     .select()
     .from(savedReports)
-    .where(eq(savedReports.clientId, clientId))
+    .where(and(eq(savedReports.clientId, clientId), isNull(savedReports.deletedAt)))
     .orderBy(desc(savedReports.createdAt));
 }
 
-export async function deleteSavedReport(id: number): Promise<boolean> {
+export async function softDeleteSavedReport(id: number): Promise<boolean> {
   const result = await db
-    .delete(savedReports)
-    .where(eq(savedReports.id, id))
+    .update(savedReports)
+    .set({ deletedAt: new Date() })
+    .where(and(eq(savedReports.id, id), isNull(savedReports.deletedAt)))
     .returning({ id: savedReports.id });
   return result.length > 0;
 }

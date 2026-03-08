@@ -580,10 +580,6 @@ function ClientForm({ initial, onSubmit, isPending }: { initial: ClientFormData;
               <Input id="ahrefs" value={form.ahrefsProjectUrl} onChange={e => update("ahrefsProjectUrl", e.target.value)} placeholder="https://example.com" data-testid="input-ahrefs-url" />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="semrush" className="flex items-center gap-1.5"><LineChart className="w-3 h-3" /> SEMrush Project ID</Label>
-              <Input id="semrush" value={form.semrushProjectId} onChange={e => update("semrushProjectId", e.target.value)} placeholder="proj-abc-123" data-testid="input-semrush-id" />
-            </div>
-            <div className="space-y-2">
               <Label htmlFor="screamingfrog" className="flex items-center gap-1.5"><Bug className="w-3 h-3" /> Screaming Frog Profile</Label>
               <Input id="screamingfrog" value={form.screamingFrogProfile} onChange={e => update("screamingFrogProfile", e.target.value)} placeholder="Profile name" data-testid="input-sf-profile" />
             </div>

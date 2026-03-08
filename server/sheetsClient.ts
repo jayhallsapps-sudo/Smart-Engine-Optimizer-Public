@@ -98,6 +98,8 @@ function formatPercent(val: any): string {
   return s;
 }
 
+const XLSX_MAX_BYTES = 10 * 1024 * 1024;
+
 async function downloadWorkbook(spreadsheetId: string): Promise<XLSX.WorkBook | null> {
   try {
     const connectors = new ReplitConnectors();
@@ -107,8 +109,18 @@ async function downloadWorkbook(spreadsheetId: string): Promise<XLSX.WorkBook | 
     );
     if (!resp.ok) return null;
     const buffer = await resp.arrayBuffer();
-    return XLSX.read(buffer, { type: "buffer" });
-  } catch {
+    if (buffer.byteLength > XLSX_MAX_BYTES) {
+      console.error(`[sheetsClient] NSM sheet too large (${buffer.byteLength} bytes > ${XLSX_MAX_BYTES} limit), skipping parse`);
+      return null;
+    }
+    const wb = XLSX.read(buffer, { type: "buffer" });
+    if (!wb || !Array.isArray(wb.SheetNames) || wb.SheetNames.length === 0) {
+      console.error("[sheetsClient] XLSX parse returned empty/invalid workbook");
+      return null;
+    }
+    return wb;
+  } catch (err) {
+    console.error("[sheetsClient] Failed to download/parse NSM workbook:", err);
     return null;
   }
 }

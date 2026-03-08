@@ -1,12 +1,24 @@
-import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "crypto";
+import { createCipheriv, createDecipheriv, createHmac, randomBytes, scryptSync } from "crypto";
 
 const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 16;
 const TAG_LENGTH = 16;
 
+function getRequiredEnv(key: string): string {
+  const val = process.env[key];
+  if (!val) throw new Error(`[startup] Required environment variable ${key} is not set. Server cannot start without it.`);
+  return val;
+}
+
 function getKey(): Buffer {
-  const secret = process.env.SESSION_SECRET || "smarteo-default-encryption-key-change-me";
-  return scryptSync(secret, "smarteo-salt", 32);
+  const secret = getRequiredEnv("SESSION_SECRET");
+  const salt = process.env.ENCRYPTION_SALT || "smarteo-salt-v1";
+  return scryptSync(secret, salt, 32);
+}
+
+export function deriveInternalToken(): string {
+  const secret = getRequiredEnv("SESSION_SECRET");
+  return createHmac("sha256", secret).update("smarteo-internal-token-v1").digest("hex").slice(0, 40);
 }
 
 export function encrypt(plaintext: string): string {

@@ -1,5 +1,22 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
+let internalToken: string | null = null;
+
+async function getToken(): Promise<string> {
+  if (!internalToken) {
+    const res = await fetch("/api/auth/bootstrap");
+    if (!res.ok) throw new Error("Failed to fetch internal token");
+    const data = await res.json();
+    internalToken = data.token;
+  }
+  return internalToken!;
+}
+
+export async function getAuthHeaders(): Promise<Record<string, string>> {
+  const token = await getToken();
+  return { "X-Internal-Token": token };
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
@@ -12,9 +29,13 @@ export async function apiRequest(
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
+  const token = await getToken();
   const res = await fetch(url, {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
+    headers: {
+      ...(data ? { "Content-Type": "application/json" } : {}),
+      "X-Internal-Token": token,
+    },
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
   });
@@ -29,8 +50,10 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
+    const token = await getToken();
     const res = await fetch(queryKey.join("/") as string, {
       credentials: "include",
+      headers: { "X-Internal-Token": token },
     });
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {

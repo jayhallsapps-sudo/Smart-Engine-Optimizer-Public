@@ -96,6 +96,20 @@ export function useReportSave({
         `${reportType} — ${meta.reportPeriodLabel ?? generatedOn}`;
 
       const currentId = savedReportIdRef.current;
+      const sourceSnapshot = {
+        clientId,
+        reportType,
+        reportPeriodLabel: meta.reportPeriodLabel ?? null,
+        analysisWindowStart: meta.analysisWindowStart ?? null,
+        analysisWindowEnd: meta.analysisWindowEnd ?? null,
+        planningQuarter: meta.planningQuarter ?? null,
+        planningYear: meta.planningYear ?? null,
+        currentCrawlAssetId: meta.currentCrawlAssetId ?? null,
+        comparisonCrawlAssetId: meta.comparisonCrawlAssetId ?? null,
+        versionLabel: meta.versionLabel ?? null,
+        capturedAt: new Date().toISOString(),
+      };
+
       if (currentId != null) {
         updateMutation.mutate({
           id: currentId,
@@ -107,6 +121,7 @@ export function useReportSave({
             currentCrawlAssetId: meta.currentCrawlAssetId,
             comparisonCrawlAssetId: meta.comparisonCrawlAssetId,
             versionLabel: meta.versionLabel,
+            sourceSnapshotJson: sourceSnapshot,
           },
         });
       } else {
@@ -125,6 +140,7 @@ export function useReportSave({
           currentCrawlAssetId: meta.currentCrawlAssetId ?? null,
           comparisonCrawlAssetId: meta.comparisonCrawlAssetId ?? null,
           versionLabel: meta.versionLabel ?? null,
+          sourceSnapshotJson: sourceSnapshot,
         });
       }
     },
@@ -146,6 +162,8 @@ export function useReportSave({
       const pending = pendingPayloadRef.current;
       if (pending) {
         executeSave(pending.reportData, pending.edits, pending.meta);
+      } else {
+        setSaveStatus("saved");
       }
     }, debounceMs);
   }, [executeSave, debounceMs]);

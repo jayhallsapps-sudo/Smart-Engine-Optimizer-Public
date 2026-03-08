@@ -168,6 +168,7 @@ export const savedReports = pgTable("saved_reports", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   lastSavedAt: timestamp("last_saved_at").defaultNow().notNull(),
   versionLabel: text("version_label"),
+  deletedAt: timestamp("deleted_at"),
 }, (t) => [
   index("saved_reports_client_type_idx").on(t.clientId, t.reportType),
   index("saved_reports_client_id_idx").on(t.clientId),

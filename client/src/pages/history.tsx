@@ -72,7 +72,7 @@ export default function HistoryPage() {
     <div className="p-6 max-w-4xl mx-auto">
       <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
         <div>
-          <h1 className="text-xl font-semibold" data-testid="text-history-title">Query History</h1>
+          <h1 className="text-xl font-semibold" data-testid="text-history-title">Query Log</h1>
           <p className="text-sm text-muted-foreground">Review past queries and their results.</p>
         </div>
         <div className="w-48">

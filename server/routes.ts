@@ -1,7 +1,9 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import * as fs from "fs";
 import * as path from "path";
+import { randomUUID } from "crypto";
+import rateLimit from "express-rate-limit";
 import { storage } from "./storage";
 import { insertClientSchema } from "@shared/schema";
 import {
@@ -10,7 +12,7 @@ import {
   getSavedReportById,
   listSavedReportsByClientAndType,
   listSavedReportsByClient,
-  deleteSavedReport,
+  softDeleteSavedReport,
 } from "./savedReportService";
 import {
   buildAssetName,
@@ -22,10 +24,9 @@ import {
   deleteCrawlAsset,
 } from "./crawlAssetService";
 import { parseNaturalQuery, getCommandDescription, getDateRangeLabel } from "./nlRouter";
-import { generateMockResult } from "./mockData";
 import { fetchAirtableWorkLog } from "./airtable";
 import { seedDatabase } from "./seed";
-import { encrypt, decrypt } from "./encryption";
+import { encrypt, decrypt, deriveInternalToken } from "./encryption";
 import { buildGoogleAuthUrl, exchangeCodeForToken, callbackHtml, isGoogleConfigured } from "./googleAuth";
 import { testCredential } from "./connectionTest";
 import { insertSfReportSchema, insertCallTrackingReportSchema } from "@shared/schema";
@@ -94,14 +95,58 @@ setInterval(() => {
   for (const [k, v] of printCache) if (v.ts < cutoff) printCache.delete(k);
 }, 60_000);
 
+const heavyLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many requests, please wait a minute before trying again." },
+  skip: (_req) => process.env.NODE_ENV === "test",
+});
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
   await seedDatabase();
 
+  const INTERNAL_TOKEN = deriveInternalToken();
+
+  app.get("/api/auth/bootstrap", (_req, res) => {
+    res.json({ token: INTERNAL_TOKEN });
+  });
+
+  app.use("/api", (req: Request, res: Response, next: NextFunction) => {
+    if (req.path === "/auth/bootstrap") return next();
+    const provided = req.headers["x-internal-token"];
+    if (provided !== INTERNAL_TOKEN) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    next();
+  });
+
+  app.use("/api/reports", heavyLimiter);
+
+  const LARGE_BODY_ROUTES = [
+    "/crawl-assets", "/sf-reports", "/call-tracking-reports", "/print-cache",
+    "/reports/export", "/reports/upload-to-drive",
+  ];
+  const EXPORT_PATH_PATTERNS = ["/docx", "/pptx", "/docx-v2", "/upload-to-drive", "/preview-pdf", "/export"];
+  app.use("/api", (req: Request, res: Response, next: NextFunction) => {
+    const contentLength = Number(req.headers["content-length"] ?? 0);
+    if (!contentLength) return next();
+    const isLargeRoute =
+      LARGE_BODY_ROUTES.some((r) => req.path.startsWith(r)) ||
+      EXPORT_PATH_PATTERNS.some((p) => req.path.endsWith(p));
+    const limitBytes = isLargeRoute ? 50 * 1024 * 1024 : 2 * 1024 * 1024;
+    if (contentLength > limitBytes) {
+      return res.status(413).json({ message: `Request body too large (max ${isLargeRoute ? "50" : "2"}MB for this endpoint)` });
+    }
+    next();
+  });
+
   app.post("/api/print-cache", (req, res) => {
-    const id = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    const id = randomUUID();
     printCache.set(id, { data: req.body, ts: Date.now() });
     res.json({ id });
   });
@@ -545,11 +590,16 @@ export async function registerRoutes(
         if (result) liveSource = "gbp";
       }
     } catch (liveErr: any) {
-      console.warn(`[Live] ${intent.command} failed (${liveErr.message}) — falling back to mock`);
+      console.warn(`[Live] ${intent.command} failed: ${liveErr.message}`);
     }
 
     if (!result) {
-      result = generateMockResult(intent.command, client.name, intent.dateRange);
+      return res.status(503).json({
+        success: false,
+        message: `Data unavailable for "${intent.command}". Check that the required service credentials are connected for this client.`,
+        command: intent.command,
+        dataUnavailable: true,
+      });
     }
 
     await storage.createQueryLog({
@@ -823,9 +873,20 @@ export async function registerRoutes(
   });
 
   app.delete("/api/sf-reports/:id", async (req, res) => {
-    const ok = await storage.deleteSfReport(Number(req.params.id));
-    if (!ok) return res.status(404).json({ message: "Not found" });
-    res.json({ success: true });
+    try {
+      const id = Number(req.params.id);
+      const report = await storage.getSfReport(id);
+      if (!report) return res.status(404).json({ message: "Not found" });
+      const requestedClientId = Number(req.query.clientId || req.body?.clientId);
+      if (requestedClientId && report.clientId !== requestedClientId) {
+        return res.status(403).json({ message: "Forbidden: report does not belong to this client" });
+      }
+      const ok = await storage.deleteSfReport(id);
+      if (!ok) return res.status(404).json({ message: "Not found" });
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
   });
 
   app.get("/api/clients/:id/sf-diff", async (req, res) => {
@@ -935,9 +996,20 @@ export async function registerRoutes(
   });
 
   app.delete("/api/call-tracking-reports/:id", async (req, res) => {
-    const ok = await storage.deleteCallTrackingReport(Number(req.params.id));
-    if (!ok) return res.status(404).json({ message: "Not found" });
-    res.json({ success: true });
+    try {
+      const id = Number(req.params.id);
+      const report = await storage.getCallTrackingReport(id);
+      if (!report) return res.status(404).json({ message: "Not found" });
+      const requestedClientId = Number(req.query.clientId || req.body?.clientId);
+      if (requestedClientId && report.clientId !== requestedClientId) {
+        return res.status(403).json({ message: "Forbidden: report does not belong to this client" });
+      }
+      const ok = await storage.deleteCallTrackingReport(id);
+      if (!ok) return res.status(404).json({ message: "Not found" });
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
   });
 
   app.post("/api/reports/export", async (req, res) => {
@@ -1094,112 +1166,12 @@ export async function registerRoutes(
       if (!result && handlesSemrushCommand(command as any)) { result = await querySemrush(command as any, client, dateRange); if (result) liveSource = "semrush"; }
       if (!result && handlesAhrefsCommand(command)) { result = await queryAhrefs(command, client, dateRange); if (result) liveSource = "ahrefs"; }
       if (!result && command === "gbp_local_summary") { result = await queryGbp(command as any, client, dateRange); if (result) liveSource = "gbp"; }
-    } catch { /* fall through to mock */ }
-    if (!result) result = generateMockResult(command as any, client.name, dateRange);
-    return { result, liveSource, description: getCommandDescription(command as any), dateRangeLabel: getDateRangeLabel(dateRange) };
+    } catch { /* live fetch failed — result stays null */ }
+    return { result, liveSource, description: getCommandDescription(command as any), dateRangeLabel: getDateRangeLabel(dateRange), dataUnavailable: !result };
   }
 
-  app.post("/api/reports/qbr-prep/generate", async (req, res) => {
-    const {
-      clientId,
-      pastQuarter,
-      futureQuarter,
-      includeContent = true,
-      includeTechnical = true,
-      includeLocal = true,
-      includeCro = true,
-      includeAuthority = true,
-      includeTracking = true,
-      opportunityCapPerCategory = 10,
-      timezone = "America/Los_Angeles",
-      sfReportId,
-    } = req.body;
+  // V1 QBR Prep generate route removed — use /generate-v2 instead
 
-    if (!clientId || !pastQuarter || !futureQuarter) {
-      return res.status(400).json({ message: "clientId, pastQuarter, and futureQuarter are required" });
-    }
-
-    try {
-      const output = await generateQbrPrep({
-        clientId: Number(clientId),
-        pastQuarter,
-        futureQuarter,
-        includeContent: Boolean(includeContent),
-        includeTechnical: Boolean(includeTechnical),
-        includeLocal: Boolean(includeLocal),
-        includeCro: Boolean(includeCro),
-        includeAuthority: Boolean(includeAuthority),
-        includeTracking: Boolean(includeTracking),
-        opportunityCapPerCategory: Number(opportunityCapPerCategory),
-        timezone: String(timezone),
-        sfReportId: sfReportId ? Number(sfReportId) : undefined,
-      });
-      res.json(output);
-    } catch (err: any) {
-      console.error("QBR Prep generation error:", err);
-      res.status(500).json({ message: "Failed to generate QBR Prep: " + err.message });
-    }
-  });
-
-  app.post("/api/reports/qbr-prep/docx", async (req, res) => {
-    const { json } = req.body as { json: QbrPrepJson };
-    if (!json) return res.status(400).json({ message: "json is required" });
-    try {
-      const buffer = await generateQbrPrepDocx(json);
-      const slug = json.client_name.toLowerCase().replace(/\s+/g, "_");
-      const filename = `${slug}_qbr_prep_${json.past_window_label.replace(/\s+/g, "_")}.docx`;
-      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
-      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-      res.send(buffer);
-    } catch (err: any) {
-      console.error("QBR Prep DOCX generation error:", err);
-      res.status(500).json({ message: "Failed to generate DOCX: " + err.message });
-    }
-  });
-
-  app.post("/api/reports/qbr-prep/upload-to-drive", async (req, res) => {
-    const { json, reportTitle, clientId } = req.body as { json: QbrPrepJson; reportTitle?: string; clientId?: number };
-    if (!json) return res.status(400).json({ message: "json is required" });
-
-    try {
-      const docxBuffer = await generateQbrPrepDocx(json);
-
-      const { ReplitConnectors } = await import("@replit/connectors-sdk");
-      const connectors = new ReplitConnectors();
-
-      const filename = (reportTitle ?? "QBR Prep Report") + ".docx";
-      const metadata = JSON.stringify({ name: filename });
-      const boundary = "-------smarteo_qbr_boundary";
-      const CRLF = "\r\n";
-
-      const metaBuf = Buffer.from(`--${boundary}${CRLF}Content-Type: application/json; charset=UTF-8${CRLF}${CRLF}${metadata}${CRLF}`, "utf8");
-      const filePrefixBuf = Buffer.from(`--${boundary}${CRLF}Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document${CRLF}${CRLF}`, "utf8");
-      const closeBuf = Buffer.from(`${CRLF}--${boundary}--`, "utf8");
-      const bodyBuffer = Buffer.concat([metaBuf, filePrefixBuf, docxBuffer, closeBuf]);
-
-      const uploadRes = await connectors.proxy(
-        "google-drive",
-        "/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink",
-        {
-          method: "POST",
-          headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
-          body: bodyBuffer,
-        }
-      );
-
-      if (!uploadRes.ok) {
-        const errBody = await uploadRes.json().catch(() => ({})) as any;
-        const msg = errBody?.error?.message || uploadRes.statusText;
-        return res.status(uploadRes.status).json({ message: `Google Drive upload failed: ${msg}` });
-      }
-
-      const driveFile = await uploadRes.json() as { id: string; name: string; webViewLink: string };
-      res.json({ success: true, fileId: driveFile.id, fileName: driveFile.name, webViewLink: driveFile.webViewLink });
-    } catch (err: any) {
-      console.error("QBR Prep Drive upload error:", err);
-      res.status(500).json({ message: "Upload failed: " + err.message });
-    }
-  });
 
   const SF_FRESHNESS_DAYS = 90;
 
@@ -1245,51 +1217,6 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("QBR Prep V2 generation error:", err);
       res.status(500).json({ message: "Failed to generate QBR Prep: " + err.message });
-    }
-  });
-
-  app.get("/api/reports/qbr-prep/saved", async (req, res) => {
-    const { clientId } = req.query;
-    try {
-      if (clientId) {
-        const reports = await storage.getQbrPrepReports(Number(clientId));
-        res.json(reports);
-      } else {
-        const reports = await storage.getAllQbrPrepReports();
-        res.json(reports);
-      }
-    } catch (err: any) {
-      res.status(500).json({ message: err.message });
-    }
-  });
-
-  app.get("/api/reports/qbr-prep/saved/:id", async (req, res) => {
-    try {
-      const report = await storage.getQbrPrepReport(Number(req.params.id));
-      if (!report) return res.status(404).json({ message: "Report not found" });
-      res.json(report);
-    } catch (err: any) {
-      res.status(500).json({ message: err.message });
-    }
-  });
-
-  app.patch("/api/reports/qbr-prep/saved/:id", async (req, res) => {
-    try {
-      const updated = await storage.updateQbrPrepReport(Number(req.params.id), req.body);
-      if (!updated) return res.status(404).json({ message: "Report not found" });
-      res.json(updated);
-    } catch (err: any) {
-      res.status(500).json({ message: err.message });
-    }
-  });
-
-  app.delete("/api/reports/qbr-prep/saved/:id", async (req, res) => {
-    try {
-      const deleted = await storage.deleteQbrPrepReport(Number(req.params.id));
-      if (!deleted) return res.status(404).json({ message: "Report not found" });
-      res.json({ success: true });
-    } catch (err: any) {
-      res.status(500).json({ message: err.message });
     }
   });
 
@@ -1710,6 +1637,8 @@ export async function registerRoutes(
     const { clientId, currentCrawlAssetId, comparisonCrawlAssetId, amInputs } = req.body;
     if (!clientId) return res.status(400).json({ message: "clientId is required" });
     try {
+      const client = await storage.getClient(Number(clientId));
+      if (!client) return res.status(404).json({ message: "Client not found" });
       const { generateMidStrategy } = await import("./midStrategyGenerator");
       const output = await generateMidStrategy({
         clientId: Number(clientId),
@@ -1717,6 +1646,9 @@ export async function registerRoutes(
         comparisonCrawlAssetId: comparisonCrawlAssetId ?? null,
         amInputs: amInputs ?? {},
       });
+      if (!output || !Array.isArray(output.slides) || output.slides.length < 1) {
+        return res.status(500).json({ message: "Mid-Strategy generator produced no slides. Ensure at least one data source or manual input is provided." });
+      }
       res.json(output);
     } catch (err: any) {
       console.error("Mid-Strategy generation error:", err);
@@ -1886,10 +1818,7 @@ export async function registerRoutes(
           result = await querySemrush(command, client, dateRange);
         }
       } catch (err: any) {
-        console.warn(`[Dashboard] ${command} live fetch failed: ${err.message} — using mock`);
-      }
-      if (!result) {
-        result = generateMockResult(command as any, client.name, dateRange);
+        console.warn(`[Dashboard] ${command} live fetch failed: ${err.message}`);
       }
       return result;
     }
@@ -1933,7 +1862,8 @@ export async function registerRoutes(
     if (client.ga4PropertyId) connectedServices.push("ga4");
     if (client.callrailCompanyId) connectedServices.push("callrail");
     if (client.ctmAccountId) connectedServices.push("ctm");
-    if (client.semrushProjectId) connectedServices.push("semrush");
+    const semrushCreds = await storage.getApiCredentialsByService("semrush").catch(() => []);
+    if (semrushCreds.length > 0) connectedServices.push("semrush");
     if (client.ahrefsProjectUrl) connectedServices.push("ahrefs");
     if (client.gbpLocationName) connectedServices.push("gbp");
     if (client.airtableBaseId) connectedServices.push("airtable");
@@ -2135,7 +2065,14 @@ export async function registerRoutes(
   app.patch("/api/saved-reports/:id", async (req, res) => {
     try {
       const id = Number(req.params.id);
-      const updated = await updateSavedReport(id, req.body);
+      const existing = await getSavedReportById(id);
+      if (!existing) return res.status(404).json({ message: "Not found" });
+      const requestedClientId = Number(req.body.clientId ?? existing.clientId);
+      if (requestedClientId && existing.clientId !== requestedClientId) {
+        return res.status(403).json({ message: "Forbidden: report does not belong to this client" });
+      }
+      const { clientId: _drop, ...rest } = req.body;
+      const updated = await updateSavedReport(id, rest);
       if (!updated) return res.status(404).json({ message: "Not found" });
       res.json(updated);
     } catch (err: any) {
@@ -2145,7 +2082,14 @@ export async function registerRoutes(
 
   app.delete("/api/saved-reports/:id", async (req, res) => {
     try {
-      const ok = await deleteSavedReport(Number(req.params.id));
+      const id = Number(req.params.id);
+      const existing = await getSavedReportById(id);
+      if (!existing) return res.status(404).json({ message: "Not found" });
+      const requestedClientId = Number(req.query.clientId || req.body?.clientId);
+      if (requestedClientId && existing.clientId !== requestedClientId) {
+        return res.status(403).json({ message: "Forbidden: report does not belong to this client" });
+      }
+      const ok = await softDeleteSavedReport(id);
       if (!ok) return res.status(404).json({ message: "Not found" });
       res.json({ success: true });
     } catch (err: any) {
@@ -2204,7 +2148,14 @@ export async function registerRoutes(
 
   app.delete("/api/crawl-assets/:id", async (req, res) => {
     try {
-      const ok = await deleteCrawlAsset(Number(req.params.id));
+      const id = Number(req.params.id);
+      const asset = await getCrawlAsset(id);
+      if (!asset) return res.status(404).json({ message: "Not found" });
+      const requestedClientId = Number(req.query.clientId || req.body?.clientId);
+      if (requestedClientId && asset.clientId !== requestedClientId) {
+        return res.status(403).json({ message: "Forbidden: asset does not belong to this client" });
+      }
+      const ok = await deleteCrawlAsset(id);
       if (!ok) return res.status(404).json({ message: "Not found" });
       res.json({ success: true });
     } catch (err: any) {

@@ -97,7 +97,7 @@ setInterval(() => {
 
 const heavyLimiter = rateLimit({
   windowMs: 60_000,
-  max: 10,
+  max: 60,
   standardHeaders: true,
   legacyHeaders: false,
   message: { message: "Too many requests, please wait a minute before trying again." },
@@ -112,7 +112,28 @@ export async function registerRoutes(
 
   const INTERNAL_TOKEN = deriveInternalToken();
 
-  app.get("/api/auth/bootstrap", (_req, res) => {
+  app.get("/api/auth/bootstrap", (req: Request, res: Response) => {
+    const isDev = process.env.NODE_ENV !== "production";
+    if (!isDev) {
+      const origin  = (req.headers["origin"]  as string | undefined) ?? "";
+      const referer = (req.headers["referer"] as string | undefined) ?? "";
+      const host    = (req.headers["host"]    as string | undefined) ?? "";
+      const source  = origin || referer;
+      if (!source) {
+        return res.status(403).json({ message: "Forbidden: bootstrap requires a same-origin browser request" });
+      }
+      let sourceHost: string;
+      try {
+        sourceHost = new URL(source).host;
+      } catch {
+        return res.status(403).json({ message: "Forbidden: invalid Origin/Referer header" });
+      }
+      if (sourceHost !== host) {
+        return res.status(403).json({
+          message: `Forbidden: cross-origin bootstrap rejected (expected ${host}, got ${sourceHost})`,
+        });
+      }
+    }
     res.json({ token: INTERNAL_TOKEN });
   });
 

@@ -1,0 +1,337 @@
+Run a full read-only security and functionality audit of the entire SmartEO app.
+
+Do not fix anything.
+Do not refactor anything.
+Do not install or remove packages unless absolutely required just to run a scanner in read-only mode.
+Do not change code, configs, schemas, routes, or UI behavior.
+Your only job is to inspect, test, validate, and return a comprehensive gap report.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Perform a full audit of the entire app and deliver a report that tells me:
+
+1. security vulnerabilities
+2. broken or weak functionality
+3. reliability risks
+4. data integrity risks
+5. save/load/export risks
+6. report-generation risks
+7. UI/UX breakpoints
+8. integration gaps
+9. technical debt likely to cause breakage
+10. anything I should QC manually before launch
+
+This is a pre-final-QC audit.
+Assume I want the truth, not reassurance.
+
+==================================================
+IMPORTANT OPERATING RULES
+==================================================
+
+- Read-only audit only.
+- Do not make code changes.
+- Do not “quietly fix” things before reporting them.
+- Do not optimize anything.
+- Do not clean up anything.
+- Do not add defensive code.
+- Do not change dependencies.
+- If you must create temporary test artifacts, clearly label them and do not alter app behavior.
+- Report issues exactly as found.
+- If something cannot be validated, say so explicitly.
+
+==================================================
+AUDIT SCOPE
+==================================================
+
+Audit the full SmartEO app, including:
+
+1. Application security
+2. Authentication / token handling
+3. API routes
+4. Database reads/writes
+5. Saved report persistence
+6. Autosave / manual save behavior
+7. Crawl asset upload / selection / comparison
+8. Report generation pipelines
+9. Export pipelines
+10. Google Drive upload flows
+11. Shared components and hooks
+12. Error handling
+13. Validation and fallback behavior
+14. Frontend route coverage
+15. Any code paths likely to fail in production
+
+Include all report types currently in the app:
+- Bi-Weekly
+- Monthly
+- QBR Full
+- QBR Prep
+- Mid-Strategy SEO Report
+
+Also inspect shared infrastructure used by all reports.
+
+==================================================
+SECURITY AUDIT REQUIREMENTS
+==================================================
+
+Check for and report:
+
+- exposed secrets or insecure token handling
+- unsafe environment variable usage
+- insecure API patterns
+- missing auth / authorization checks
+- unvalidated inputs
+- unsafe file upload handling
+- CSV / file parsing risks
+- injection risks
+- XSS risks
+- unsafe HTML / content rendering
+- insecure temp storage / print cache usage
+- open endpoints that should be protected
+- over-permissive Google Drive / external API usage
+- dependency vulnerabilities
+- package audit issues
+- insecure error leakage
+- path / file handling issues
+- SSRF-style risks if any external fetches are dynamic
+- denial-of-service or resource exhaustion risks
+- missing rate limiting where it matters
+- missing size limits on uploads / payloads
+- persistence of sensitive data that should not be stored
+- anything else that would concern a serious engineer doing a launch audit
+
+For every security issue found, include:
+- severity: Critical / High / Medium / Low
+- exact file(s)
+- exact route(s) or component(s)
+- why it matters
+- realistic impact
+- whether it is definitely vulnerable or just risky / worth reviewing
+
+==================================================
+FUNCTIONALITY AUDIT REQUIREMENTS
+==================================================
+
+Test and report on:
+
+1. Routing / page load
+- every report page loads
+- navigation works
+- shared components render
+- empty states work
+- missing-data states work
+
+2. Saved report system
+- create
+- autosave
+- manual save
+- reload
+- selector listing
+- edited content persistence
+- crawl ID persistence
+- naming consistency
+
+3. Crawl asset system
+- list prior crawls
+- upload new crawl
+- naming convention
+- select current crawl
+- select comparison crawl
+- stale / freshness logic where applicable
+- mismatched crawl risks
+
+4. Report generation
+For each report type:
+- generate successfully
+- missing data falls back cleanly
+- no silent slide/section drops
+- all required structures render
+- editable fields work
+- save after edit works
+- reload restores state
+
+5. Export flows
+For each report type that supports export:
+- export request works
+- file output is valid
+- edited content survives export
+- Drive upload works where supported
+- export errors are handled clearly
+
+6. Workbook-backed logic
+Especially for Mid-Strategy:
+- workbook build / refresh logic
+- workbook-backed state persistence
+- workbook status reporting
+- missing workbook fields handling
+
+7. Comparison crawl logic
+Especially where supported:
+- current-only behavior
+- current + comparison behavior
+- delta logic
+- weird-crawl mismatch behavior
+
+8. Fallback quality
+Check whether the app:
+- uses “Manual entry needed” consistently
+- leaves unresolved fields visible instead of guessing
+- avoids silently dropping expected slides/sections
+- behaves coherently when integrations are missing
+
+==================================================
+TESTING EXPECTATIONS
+==================================================
+
+Do real testing wherever possible.
+
+Use:
+- route testing
+- API calls
+- DB inspection
+- generated output inspection
+- save/reload testing
+- export validation
+- UI interaction checks
+- dependency audit tools
+- static code inspection
+- realistic edge-case reasoning
+
+Where possible, validate with actual requests and outputs.
+Do not rely only on reading code.
+
+==================================================
+REPORT OUTPUT FORMAT
+==================================================
+
+Return one structured audit report with these sections:
+
+1. Executive Summary
+- overall readiness assessment
+- top launch blockers
+- top non-blockers
+- recommendation: Ready / Not Ready / Ready with fixes
+
+2. Security Findings
+For each issue:
+- ID
+- severity
+- title
+- files / routes affected
+- evidence
+- impact
+- recommended fix direction
+- confidence level
+
+3. Functionality Findings
+For each issue:
+- ID
+- severity
+- title
+- affected report / component / route
+- reproduction steps
+- expected vs actual
+- impact
+- recommended fix direction
+- confidence level
+
+4. Integration Gaps
+- Google integrations
+- SEMrush / Ahrefs gaps
+- call tracking gaps
+- crawl upload / parsing limitations
+- sheet/workbook dependencies
+- anything environment-dependent
+
+5. Report-by-Report QA Matrix
+For each report type:
+- page load
+- generate
+- edit
+- autosave
+- manual save
+- reload
+- export
+- drive upload
+- crawl selection
+- comparison crawl
+- missing data fallback
+Mark each as:
+- PASS
+- PARTIAL
+- FAIL
+with a short reason
+
+6. Shared Infrastructure QA Matrix
+- saved_reports
+- useReportSave
+- ReportSaveSelector
+- CrawlAssetSelector
+- save status
+- export pipelines
+- print / preview routes
+- workbook-backed persistence where applicable
+
+7. Technical Debt / Watchlist
+List things that are not broken yet but are likely future problems.
+
+8. Final QC Checklist For Me
+Give me a clean checklist of what I should manually test before launch.
+
+==================================================
+PRIORITIZATION RULES FOR FINDINGS
+==================================================
+
+Use this issue severity logic:
+
+Critical
+- security exposure
+- data corruption risk
+- broken save/load persistence
+- broken exports on core reports
+- app-breaking routes
+- broken auth or token leakage
+
+High
+- report generation failures
+- incorrect data mapping in client-facing reports
+- broken crawl selection/comparison where required
+- silent data loss
+- missing or misleading fallback behavior
+
+Medium
+- degraded UX
+- incomplete but usable flows
+- weak edge-case handling
+- non-blocking integration gaps
+- inconsistent edit persistence
+
+Low
+- polish issues
+- minor wording inconsistencies
+- visual misalignment
+- small technical debt with low short-term risk
+
+==================================================
+TRUTHFULNESS RULE
+==================================================
+
+Do not say “everything works” unless everything actually works.
+Do not soften issues.
+Do not hide uncertainty.
+If something was not testable, say:
+- not testable in current environment
+- why
+- what evidence was available instead
+
+==================================================
+FINAL DELIVERABLE
+==================================================
+
+Give me the full audit report only.
+Do not make fixes.
+Do not propose a rewrite.
+Do not change code.
+Just tell me where the gaps are before I do my final QC.

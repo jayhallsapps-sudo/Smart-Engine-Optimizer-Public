@@ -5,6 +5,7 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -284,68 +285,66 @@ export function CrawlAssetSelector({
 
   return (
     <div className="space-y-2">
-      {/* Current Crawl Row */}
-      <div className="flex items-end gap-2">
-        <div className="flex-1 space-y-1">
-          <Label className="text-xs font-medium text-muted-foreground">Current Crawl</Label>
-          <Select
-            value={currentCrawlId != null ? String(currentCrawlId) : ""}
-            onValueChange={v => onCurrentChange(v ? Number(v) : null)}
-            disabled={isLoading}
-          >
-            <SelectTrigger data-testid="select-current-crawl" className="h-8 text-xs">
-              <SelectValue placeholder={isLoading ? "Loading..." : "Select crawl session..."} />
-            </SelectTrigger>
-            <SelectContent>
-              {sessions.map(s => (
-                <SelectItem key={s.primaryFileId} value={String(s.primaryFileId)} data-testid={`option-crawl-${s.primaryFileId}`}>
-                  {sessionLabel(s)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {currentSession && currentSession.files.length > 1 && (
-            <p className="text-[10px] text-muted-foreground pl-0.5">
-              {currentSession.files.map(f => {
-                const type = f.fileType ?? detectFileType(f.filename);
-                return FILE_TYPE_LABEL[type] ?? f.filename.replace(/\.csv$/i, "");
-              }).join(" · ")}
-            </p>
-          )}
-        </div>
+      {/* Hidden file input — triggered by the Upload option inside the dropdown */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".csv"
+        multiple
+        className="hidden"
+        onChange={handleFilesSelected}
+      />
 
-        <div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".csv"
-            multiple
-            className="hidden"
-            onChange={handleFilesSelected}
-          />
-          <Button
-            data-testid="btn-upload-crawl"
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs"
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <Upload className="w-3 h-3 mr-1" />
-            Upload CSV
-          </Button>
-        </div>
+      {/* Current Crawl */}
+      <div className="space-y-1">
+        <Label className="text-xs font-medium text-muted-foreground">Current Crawl</Label>
+        <Select
+          value={currentCrawlId != null ? String(currentCrawlId) : ""}
+          onValueChange={v => {
+            if (v === "__upload__") { fileInputRef.current?.click(); return; }
+            onCurrentChange(v ? Number(v) : null);
+          }}
+          disabled={isLoading}
+        >
+          <SelectTrigger data-testid="select-current-crawl" className="h-8 text-xs w-full">
+            <SelectValue placeholder={isLoading ? "Loading..." : "Select crawl session..."} />
+          </SelectTrigger>
+          <SelectContent>
+            {sessions.map(s => (
+              <SelectItem key={s.primaryFileId} value={String(s.primaryFileId)} data-testid={`option-crawl-${s.primaryFileId}`}>
+                {sessionLabel(s)}
+              </SelectItem>
+            ))}
+            <SelectSeparator />
+            <SelectItem value="__upload__" data-testid="btn-upload-crawl" className="text-muted-foreground">
+              <Upload className="w-3 h-3 mr-1.5 inline-block" />
+              Upload new crawl...
+            </SelectItem>
+          </SelectContent>
+        </Select>
+        {currentSession && currentSession.files.length > 1 && (
+          <p className="text-[10px] text-muted-foreground pl-0.5">
+            {currentSession.files.map(f => {
+              const type = f.fileType ?? detectFileType(f.filename);
+              return FILE_TYPE_LABEL[type] ?? f.filename.replace(/\.csv$/i, "");
+            }).join(" · ")}
+          </p>
+        )}
       </div>
 
-      {/* Comparison Crawl Row */}
+      {/* Comparison Crawl */}
       {showComparison && onComparisonChange && (
-        <div className="flex-1 space-y-1">
+        <div className="space-y-1">
           <Label className="text-xs font-medium text-muted-foreground">Comparison Crawl</Label>
           <Select
             value={comparisonCrawlId != null ? String(comparisonCrawlId) : ""}
-            onValueChange={v => onComparisonChange(v ? Number(v) : null)}
+            onValueChange={v => {
+              if (v === "__upload__") { fileInputRef.current?.click(); return; }
+              onComparisonChange(v ? Number(v) : null);
+            }}
             disabled={isLoading}
           >
-            <SelectTrigger data-testid="select-comparison-crawl" className="h-8 text-xs">
+            <SelectTrigger data-testid="select-comparison-crawl" className="h-8 text-xs w-full">
               <SelectValue placeholder="Select comparison session..." />
             </SelectTrigger>
             <SelectContent>
@@ -354,6 +353,11 @@ export function CrawlAssetSelector({
                   {sessionLabel(s)}
                 </SelectItem>
               ))}
+              <SelectSeparator />
+              <SelectItem value="__upload__" className="text-muted-foreground">
+                <Upload className="w-3 h-3 mr-1.5 inline-block" />
+                Upload new crawl...
+              </SelectItem>
             </SelectContent>
           </Select>
           {comparisonSession && comparisonSession.files.length > 1 && (

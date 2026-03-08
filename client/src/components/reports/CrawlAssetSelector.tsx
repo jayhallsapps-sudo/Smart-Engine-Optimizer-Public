@@ -100,15 +100,30 @@ function defaultSessionName(): string {
   return new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" });
 }
 
+function formatReportDate(yyyymmdd: string): string {
+  // Parse YYYY-MM-DD directly to avoid UTC-to-local offset issues
+  const parts = yyyymmdd.split("-");
+  const month = parseInt(parts[1] ?? "1", 10);
+  const day = parseInt(parts[2] ?? "1", 10);
+  const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return `${monthNames[month - 1]} ${day}`;
+}
+
 function sessionLabel(session: CrawlSession): string {
   const date = formatSessionDate(session.createdAt);
   if (session.sessionId) {
+    // Named session (new-style upload)
     if (session.files.length > 1) {
       return `${session.sessionName} · ${session.files.length} files · ${date}`;
     }
     return `${session.sessionName} · ${date}`;
   }
-  // Legacy crawl — show filename without extension + date
+  // Legacy — grouped by reportDate
+  if (session.files.length > 1) {
+    const reportDate = formatReportDate(session.sessionName); // sessionName = "YYYY-MM-DD"
+    return `${reportDate} Crawl · ${session.files.length} files`;
+  }
+  // Single legacy file — show filename without extension + date
   const fname = session.files[0]?.filename?.replace(/\.csv$/i, "") ?? session.sessionName;
   return `${fname} · ${date}`;
 }

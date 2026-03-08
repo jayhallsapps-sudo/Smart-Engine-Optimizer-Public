@@ -108,7 +108,7 @@ export async function listCrawlSessions(clientId: number): Promise<CrawlSession[
     .orderBy(desc(sfReports.createdAt));
 
   const sessionMap = new Map<string, CrawlSession>();
-  const legacySessions: CrawlSession[] = [];
+  const legacyByDate = new Map<string, CrawlSession>();
 
   for (const row of rows) {
     const file: CrawlSessionFile = {
@@ -131,22 +131,32 @@ export async function listCrawlSessions(clientId: number): Promise<CrawlSession[
         });
       }
     } else {
-      legacySessions.push({
-        sessionId: null,
-        sessionName: row.assetName ?? buildAssetName("Unknown", row.reportDate),
-        createdAt: row.createdAt,
-        files: [file],
-        primaryFileId: row.id,
-      });
+      // Group legacy files by reportDate so uploads from the same day become one entry
+      const dateKey = row.reportDate;
+      if (legacyByDate.has(dateKey)) {
+        legacyByDate.get(dateKey)!.files.push(file);
+      } else {
+        legacyByDate.set(dateKey, {
+          sessionId: null,
+          sessionName: row.reportDate,
+          createdAt: row.createdAt,
+          files: [file],
+          primaryFileId: row.id,
+        });
+      }
     }
   }
 
-  const grouped = Array.from(sessionMap.values()).map(s => ({
+  const namedSessions = Array.from(sessionMap.values()).map(s => ({
+    ...s,
+    primaryFileId: pickPrimaryFile(s.files),
+  }));
+  const legacySessions = Array.from(legacyByDate.values()).map(s => ({
     ...s,
     primaryFileId: pickPrimaryFile(s.files),
   }));
 
-  return [...grouped, ...legacySessions].sort(
+  return [...namedSessions, ...legacySessions].sort(
     (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
   );
 }

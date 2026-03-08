@@ -1,166 +1,35 @@
 # SmartEO - Smart Engine Optimization
 
 ## Overview
-SmartEO is a QBR (Quarterly Business Review) copilot for SEO professionals serving the **recovery and addiction centre space**. It provides a natural language interface to query SEO data from 7 data sources and returns QBR-ready results with metric cards, data tables, and CSV export.
+SmartEO is a QBR (Quarterly Business Review) copilot designed for SEO professionals working with recovery and addiction treatment centers. It offers a natural language interface to query SEO data from multiple sources, generating QBR-ready results with metric cards, data tables, and CSV export capabilities. The project aims to streamline reporting, enhance strategic planning, and provide competitive intelligence within this specialized niche.
 
-## Tech Stack
-- **Frontend**: React + TypeScript + Vite + Tailwind CSS + shadcn/ui
-- **Backend**: Express.js + TypeScript
-- **Database**: PostgreSQL with Drizzle ORM
-- **Routing**: wouter (frontend), Express (backend)
-- **State Management**: TanStack React Query
+## User Preferences
+I prefer iterative development with a focus on clear, maintainable code. Before making any major architectural changes or implementing complex features, please discuss the approach with me. I value detailed explanations for significant decisions.
 
-## Architecture
-```
-client/src/
-  App.tsx              - Main app with sidebar layout
-  components/
-    app-sidebar.tsx    - Navigation sidebar (Reports, Clients, History, Setup)
-    theme-provider.tsx - Dark/light mode
-    theme-toggle.tsx   - Theme switcher
-  pages/
-    dashboard.tsx      - Homepage: client card grid with live KPI metrics (GSC, GA4, Calls) + manual refresh
-    reports.tsx        - Main Reports page (3-panel: selectors top, chat left, checklist right)
-    qbr-prep.tsx       - QBR Prep v2 generator (7-section quarterly SEO planning snapshot with inline editing)
-    mid-strategy.tsx   - Mid-Strategy SEO Report (14-slide PPTX, workbook status panel, crawl selectors, inline editing)
-    qbr-prep-print.tsx - QBR Prep PDF render page (puppeteer-navigated for PDF export)
-    clients.tsx        - Client CRUD management (tabbed form: Data Sources, SEO Tools, Config)
-    setup.tsx          - Multi-account credential management for 7 services
-    history.tsx        - Query log history
-server/
-  index.ts             - Express server entry
-  routes.ts            - API routes with live data dispatcher (priority: Google→SF→CallRail→CTM→SEMrush→GBP→mock)
-  storage.ts           - Database CRUD operations
-  db.ts                - Database connection
-  encryption.ts        - AES-256-GCM encryption for credentials
-  nlRouter.ts          - NL query parser with weighted source-priority scoring (37 commands)
-  mockData.ts          - Demo data generator with addiction-space content (37 mock generators)
-  googleToken.ts       - Shared Google OAuth token exchange + date utilities (calendar_month, calendar_qtd, calendar_quarter keys)
-  gscClient.ts         - Live Google Search Console API (gsc_top_queries, gsc_qoq_queries/pages, query_to_page, high_imp_low_ctr)
-  ga4Client.ts         - Live GA4 Data API (funnel, landing pages, session movers, QTD, YoY)
-  callrailClient.ts    - Live CallRail v3 API (calls, landing pages, summary)
-  ctmClient.ts         - Live CallTrackingMetrics API (calls, landing pages)
-  semrushClient.ts     - Live SEMrush API (organic overview, keyword rankings, distribution, competitors)
-  gbpClient.ts         - Live Google Business Profile API (reviews, star rating)
-  sfClient.ts          - Screaming Frog stored data reader (technical health, new pages diff)
-  airtable.ts          - Live Airtable REST API for work log
-  asanaClient.ts       - Asana API via Replit connector (tasks by section → New Content/Technical SEO/Local SEO)
-  reportGenerators.ts  - .docx (biweekly) and .pptx (monthly/QBR) generators
-  monthlyGenerator.ts  - Monthly 9-slide PPTX generator (true calendar month, AM inputs → commentary + audit bullets)
-  qbrFullGenerator.ts  - QBR Full 20-slide PPTX generator (true calendar quarter, 8 AM inputs, no paid media, MNE fallbacks)
-  midStrategyGenerator.ts - Mid-Strategy 14-slide PPTX generator (3-layer: source norm → workbook builder → slide gen)
-  qbrPrepGenerator.ts  - Legacy QBR Prep engine (v1)
-  qbrPrepSectionGenerator.ts - QBR Prep v2 section engine: 7-section generator pulling GSC, GA4, NSM Tracker, Airtable, Asana, SF crawl data
-  qbrPrepDocxGenerator.ts - QBR Prep DOCX export generator (branded red header, 7-section tables)
-  qbrPrepTypes.ts      - TypeScript types for QBR Prep report data model (sections 1-7, meta, source snapshot)
-  qbrPrepHelpers.ts    - Quarter logic, branded query classifier, page type classifier, tier diagnosis engine
-  googleAuth.ts        - Google OAuth flow (GSC, GA4, GBP, Sheets scopes)
-  seed.ts              - Seeds 8 recovery centre clients
-shared/
-  schema.ts            - Drizzle schema, types, SERVICE_CONFIGS (10 services incl. GBP), COMMANDS (37)
-```
+## System Architecture
+SmartEO utilizes a React, TypeScript, and Vite frontend with Tailwind CSS and shadcn/ui for a modern and responsive user interface. The backend is built with Express.js and TypeScript, connected to a PostgreSQL database via Drizzle ORM. State management is handled by TanStack React Query.
 
-## Data Model
-- **clients**: Recovery centre accounts with GSC, GA4, CallRail, CTM, SEMrush, Screaming Frog, Nimbata, Airtable, GBP configs; brand terms, lead events, money pages, organic source terms, gbpLocationName
-- **query_logs**: History of NL queries with parsed commands and results
-- **api_credentials**: Encrypted API keys/tokens with `accountLabel` for multi-account support per service
-- **sf_reports**: Screaming Frog crawl CSVs stored per client. Supports crawl sessions: `sessionId` (UUID) groups multiple CSV exports (Internal, Page Titles, H1, H2, Images, Canonicals, Outlinks, Rendered) into one named session (e.g. "March 2026"). `fileType` identifies each file's SF export type. `sessionName` is the user-given label. Legacy uploads (no sessionId) appear as individual entries. `GET /api/clients/:id/crawl-sessions` returns grouped sessions with a `primaryFileId` (the internal file, or most rows). Dropdowns show `"sessionName · N files · date"` for sessions or `"filename · date"` for legacy files. No freshness badge — date is shown directly.
+The application features a modular structure, separating concerns into client-side components for navigation, theme management, and distinct page views (Dashboard, Reports, QBR Prep, Mid-Strategy, Clients, Setup, History).
 
-## Data Source Priority
-When multiple sources can answer a query, the system picks the highest-priority one:
-1. Google (GSC, GA4) — Tier 1
-2. Screaming Frog — Tier 2
-3. Call tracking (CallRail, CTM, Nimbata) — Tier 3
-4. Airtable — Tier 4
-5. SEMrush — Tier 5
-6. Ahrefs — Tier 6 (blocked, MCP/Connect only)
+Key architectural decisions include:
+- **UI/UX**: Consistent branding with `#C0392B` red and `#1B3A6B` navy, Calibri font, and a focus on intuitive layouts for data presentation and report generation.
+- **Reporting Engines**: Dedicated generators for Bi-Weekly, Monthly (9-slide PPTX with true calendar month logic, AM inputs, and inline editing), QBR Prep (7-section quarterly snapshot with inline editing and PDF/DOCX export), and Mid-Strategy SEO (14-slide PPTX competitive intelligence deck with a 3-layer architecture: source normalization, workbook builder, slide generator).
+- **Data Handling**: A live data dispatcher prioritizes data sources (Google > Screaming Frog > Call Tracking > Airtable > SEMrush) and includes mock fallbacks for unconfigured or errored clients. All stored API credentials are encrypted using AES-256-GCM.
+- **Client Management**: Supports CRUD operations for recovery center clients, including configuration of various data sources and SEO tools. Multi-account credential management is available for services.
+- **Screaming Frog Integration**: Handles storage and retrieval of Screaming Frog crawl CSVs, grouping multiple exports into named sessions for comprehensive technical health analysis.
+- **Natural Language Processing**: An NL query parser with weighted source-priority scoring supports 37 distinct commands across various data sources.
 
-## Data Sources (10)
-1. Google Search Console (OAuth) — LIVE
-2. Google Analytics 4 (OAuth) — LIVE
-3. Google Business Profile (OAuth, scope: business.manage) — LIVE
-4. CallRail (API key) — LIVE
-5. CallTrackingMetrics (API key + secret) — LIVE
-6. SEMrush (API key) — LIVE
-7. Screaming Frog (desktop CSV import) — LIVE (reads stored crawl data)
-8. Nimbata (API key) — mock fallback
-9. Airtable (PAT) — LIVE
-10. Ahrefs — BLOCKED (MCP/Connect only)
+## External Dependencies
+SmartEO integrates with the following external services and APIs:
 
-## Live vs Mock fallback
-Each live client returns `null` if the client is not configured (no siteUrl, propertyId, etc.) or if no credential is stored. Routes dispatcher falls back to mock in that case with a console warning. If the live client throws (API error), it also falls back to mock.
-
-## Available Commands (37)
-GSC: gsc_top_queries, gsc_qoq_queries, gsc_qoq_pages, gsc_query_to_page_map, gsc_high_impressions_low_ctr, gsc_high_traffic_low_cvr, gsc_indexation_stability
-GA4: ga4_combined_funnel, ga4_qoq_organic_funnel, ga4_landing_pages_by_sessions, ga4_qoq_organic_landing_pages, ga4_landing_pages_by_conversions, ga4_qtd_totals, ga4_session_movers, ga4_conversion_movers, ga4_yoy_comparison
-CallRail: callrail_summary, callrail_qoq_organic_calls, callrail_qoq_top_landing_pages
-CTM: ctm_qoq_organic_calls, ctm_qoq_top_landing_pages
-SEMrush: semrush_organic_overview, semrush_keyword_rankings, semrush_keyword_distribution, semrush_competitor_visibility
-Ahrefs (blocked): ahrefs_backlink_overview, ahrefs_keyword_rankings, ahrefs_competitor_visibility
-Other: gbp_local_summary, content_output_summary, technical_health_summary, core_web_vitals, new_pages_tracker, tracking_anomaly_check, monthly_trendline, quarterly_forecast, airtable_work_log
-
-## Reports Page Layout
-- Top bar: Toggle prompts panel button + Client dropdown + Report type buttons (Bi-Weekly | Monthly | QBR)
-- Left panel (w-64, collapsible): Prompts library — type-specific prompts (12 bi-weekly, 15 monthly, 18 QBR). Clicking a prompt fills the textarea. Toggle button in top bar shows/hides.
-- Center panel (flex-1): Chat/query interface. Send button is outside the textarea (flex sibling, not absolutely positioned). Each result card has a "Commit to Report" button.
-- Right panel (w-72): Checklist of required sections for the selected report type. Manual sections have "+ Add manually" for freetext entry. Progress bar shows % complete. "Generate Report" button outputs formatted report.
-- Report types and sections:
-  - Bi-Weekly (14d): Topline Snapshot, What We Shipped, What Changed & Why, Risks & Blocks, Next Two Weeks
-  - Monthly (30d): Executive Summary KPIs, Visibility & Demand, Conversion Performance, Work Completed, Next Month Priorities
-  - QBR (90d): QBR Scorecard, What Worked/Didn't, Strategic Insights, Risks & Constraints, Next Quarter Roadmap, Appendix
-- "Generate Report" compiles all committed data into a formatted text report (downloadable as .txt) with a trusted advisor narrative instruction block at the top (what happened / why / next steps / what we need from the client — tied to leads/VOBs/admissions)
-
-## Monthly Report Feature (v2 — Rebuilt)
-A 9-slide monthly SEO deck generator (PPTX) with true calendar-month date windows, inline editing, and AM inputs.
-- **Slides (locked order)**: 1) Title, 2) Monthly Performance Overview (metrics), 3) Top Organic Queries (table), 4) QTD KPI (table — goals always "Manual entry needed"), 5) Top Landing Pages (table), 6) Top Pages by Clicks (chart/table), 7) Keyword Visibility Distribution (table), 8) Work Completed (table), 9) Next Month Priorities (bullets)
-- **Date logic**: Uses `calendar_month:YYYY-MM` for true calendar windows (e.g. March = 2026-03-01 to 2026-03-31); QTD uses `calendar_qtd:YYYY-MM`; NOT rolling 30-day
-- **AM Inputs**: 6 optional fields (progressFeeling, hypothesis, auditNotes, contextAnomalies, leadershipNote, focusNextMonth) — injected into slide commentary
-- **Crawl Assets**: Current + comparison SF crawl selectors enrich priorities slide with technical context
-- **Inline editing**: All table cells (`{slide_id}_cell_{ri}_{ci}`) and bullets (`{slide_id}_bullet_{i}`) editable; applied at PPTX and Drive export time
-- **Persistence**: Reports saved via `useReportSave` hook (2s autosave debounce); crawl IDs stored in `savedReport.currentCrawlAssetId` / `comparisonCrawlAssetId` and restored on load
-- **Save name format**: `Monthly - {Client Name} - {Month} {Year} - Generated {YYYY-MM-DD}`
-- **Missing data rule**: "Manual entry needed" — never invents data, never drops slides
-- **Brand**: #C0392B red, #1B3A6B navy, Calibri font, header/footer on every slide
-- **Export**: Download PPTX, Save to Google Drive (edits applied before both)
-- **DB table**: `saved_reports` (shared with biweekly) — reportType = "monthly"
-
-## QBR Prep Feature (v2)
-A 7-section quarterly SEO planning snapshot generator that inherits the Monthly report visual design system (red #C0392B accent, Calibri font, branded header). Key details:
-- **Sections**: 1) Goals, 2) Conversions, 3) Traffic, 4) Services, 5) SEO Tier Diagnosis, 6) Priorities (5-7 items), 7) Tracking (5-7 items)
-- **Data sources**: GSC, GA4, NSM Tracker (Google Sheets), Airtable work log, Asana tasks, Screaming Frog crawl data, CallRail/CTM
-- **Requirements**: Fresh SF crawl upload is required before generation (enforced UI + backend)
-- **Editing**: All cells/text are inline editable; edits are autosaved (2s debounce) to DB
-- **Persistence**: Reports saved in `qbr_prep_reports` table with full JSON snapshot
-- **Export**: PDF (via Puppeteer at /qbr-prep-print), DOCX (docx library), Google Drive upload
-- **DB table**: `qbr_prep_reports` (id, clientId, reportType, reportName, analysisWindowStart/End, planningQuarter/Year, generatedOn, generatedReportJson, sourceSnapshotJson, htmlSnapshot, createdAt, updatedAt, lastSavedAt, versionLabel)
-- **API routes**: generate-v2, saved CRUD (list/get/update/delete), docx-v2, upload-to-drive-v2, preview-pdf
-- **Missing data rule**: Shows "Manual entry needed" in light italic — never invents data
-
-## Mid-Strategy SEO Report Feature (14-slide PPTX)
-A mid-strategy competitive intelligence deck generator for behavioral health clients. Built on a 3-layer architecture: source normalization → workbook builder → slide generator.
-- **Slides (14)**: s01_title, s02_agenda, s03_checkpoint, s04_competitive_authority, s05_competitive_visibility, s06_competitive_ai, s07_competitive_scorecard, s08_immediate_focus, s09_nav_structure, s10_cannibalization_intro, s11_cannibalization_data, s12_january_action, s13_whats_next_detail, s14_next_steps
-- **Data sources**: SEMrush (domain_ranks + domain_organic_competitors), GA4 (landing pages), GSC (QoQ queries), Screaming Frog crawl (URL audit + cannibalization detection)
-- **Workbook**: competitorBenchmark (clientRow + competitorRows, clientRank, percentile), urlAudit (thin < 200 words, low traffic < 5 sessions, duplicate title similarity > 70%), buildStatus (completedFields, missingFields, dataSourcesUsed)
-- **Slide types**: title, bullets, table, scorecard (client row highlighted red + right metrics panel), two-col
-- **Workbook Status Panel**: Real-time build status card on the left panel showing completed fields, missing data alerts, data sources used
-- **AM Inputs**: strategyMonth, navRestructureNote, cannibalizationNote
-- **Persistence**: Saved in saved_reports table with reportType = "mid_strategy_seo"
-- **Export**: Download PPTX, Save to Google Drive
-- **API routes**: POST /api/reports/mid-strategy/generate, /pptx, /upload-to-drive
-- **Missing data rule**: "Manual entry needed" — never invents, never drops slides
-- **Brand**: #C0392B red, #1B3A6B navy, Calibri font
-- **Generator**: server/midStrategyGenerator.ts | **Frontend**: client/src/pages/mid-strategy.tsx
-
-## Industry Focus
-Recovery and addiction treatment centres. Seed clients: Anchored Tides Recovery, Bliss Recovery, Horseshoe Ridge Recovery, Heartland Healing Center, Iris Healing, New Day Recovery, Sol Womens Treatment, Williamsburg House. Mock data uses addiction treatment keywords (detox, residential, PHP/IOP, dual diagnosis, insurance verification, admissions).
-
-## Multi-Account Design
-Setup page supports connecting multiple accounts per service. Each credential has an `accountLabel` field to identify it (e.g., "Main Agency Account"). SERVICE_CONFIGS in shared/schema.ts drives the Setup page UI.
-
-## Security
-- AES-256-GCM encryption for all stored credentials (server/encryption.ts)
-- Encryption key derived from SESSION_SECRET via scrypt
-
-## Environment Variables
-- `DATABASE_URL` - PostgreSQL connection
-- `SESSION_SECRET` - Session/encryption key
+-   **Google Search Console** (OAuth) - LIVE
+-   **Google Analytics 4** (OAuth) - LIVE
+-   **Google Business Profile** (OAuth) - LIVE
+-   **CallRail** (API key) - LIVE
+-   **CallTrackingMetrics** (API key + secret) - LIVE
+-   **SEMrush** (API key) - LIVE
+-   **Screaming Frog** (desktop CSV import) - LIVE (reads stored crawl data)
+-   **Nimbata** (API key) - Mock fallback
+-   **Airtable** (PAT) - LIVE
+-   **Asana API** (via Replit connector)
+-   **PostgreSQL** (Database)

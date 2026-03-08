@@ -306,7 +306,10 @@ export function CrawlAssetSelector({
           </Select>
           {currentSession && currentSession.files.length > 1 && (
             <p className="text-[10px] text-muted-foreground pl-0.5">
-              {currentSession.files.map(f => FILE_TYPE_LABEL[f.fileType ?? ""] ?? f.fileType ?? "file").join(" · ")}
+              {currentSession.files.map(f => {
+                const type = f.fileType ?? detectFileType(f.filename);
+                return FILE_TYPE_LABEL[type] ?? f.filename.replace(/\.csv$/i, "");
+              }).join(" · ")}
             </p>
           )}
         </div>
@@ -355,7 +358,10 @@ export function CrawlAssetSelector({
           </Select>
           {comparisonSession && comparisonSession.files.length > 1 && (
             <p className="text-[10px] text-muted-foreground pl-0.5">
-              {comparisonSession.files.map(f => FILE_TYPE_LABEL[f.fileType ?? ""] ?? f.fileType ?? "file").join(" · ")}
+              {comparisonSession.files.map(f => {
+                const type = f.fileType ?? detectFileType(f.filename);
+                return FILE_TYPE_LABEL[type] ?? f.filename.replace(/\.csv$/i, "");
+              }).join(" · ")}
             </p>
           )}
         </div>

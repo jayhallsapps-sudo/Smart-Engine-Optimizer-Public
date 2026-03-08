@@ -64,6 +64,7 @@ shared/
 - **clients**: Recovery centre accounts with GSC, GA4, CallRail, CTM, SEMrush, Screaming Frog, Nimbata, Airtable, GBP configs; brand terms, lead events, money pages, organic source terms, gbpLocationName
 - **query_logs**: History of NL queries with parsed commands and results
 - **api_credentials**: Encrypted API keys/tokens with `accountLabel` for multi-account support per service
+- **sf_reports**: Screaming Frog crawl CSVs stored per client. Supports crawl sessions: `sessionId` (UUID) groups multiple CSV exports (Internal, Page Titles, H1, H2, Images, Canonicals, Outlinks, Rendered) into one named session (e.g. "March 2026"). `fileType` identifies each file's SF export type. `sessionName` is the user-given label. Legacy uploads (no sessionId) appear as individual entries. `GET /api/clients/:id/crawl-sessions` returns grouped sessions with a `primaryFileId` (the internal file, or most rows). Dropdowns show `"sessionName · N files · date"` for sessions or `"filename · date"` for legacy files. No freshness badge — date is shown directly.
 
 ## Data Source Priority
 When multiple sources can answer a query, the system picks the highest-priority one:

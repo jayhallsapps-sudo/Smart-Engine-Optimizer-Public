@@ -72,6 +72,9 @@ export const sfReports = pgTable("sf_reports", {
   data: jsonb("data"),
   assetName: text("asset_name"),
   notes: text("notes"),
+  sessionId: text("session_id"),
+  sessionName: text("session_name"),
+  fileType: text("file_type"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

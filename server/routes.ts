@@ -16,6 +16,7 @@ import {
   buildAssetName,
   createCrawlAsset,
   listCrawlAssets,
+  listCrawlSessions,
   getCrawlAsset,
   getCrawlAssetWithData,
   deleteCrawlAsset,
@@ -804,7 +805,7 @@ export async function registerRoutes(
   app.get("/api/clients/:id/sf-reports", async (req, res) => {
     const clientId = Number(req.params.id);
     const reports = await storage.getSfReports(clientId);
-    res.json(reports.map(r => ({ id: r.id, clientId: r.clientId, reportDate: r.reportDate, filename: r.filename, rowCount: r.rowCount, headers: r.headers, createdAt: r.createdAt })));
+    res.json(reports.map(r => ({ id: r.id, clientId: r.clientId, reportDate: r.reportDate, filename: r.filename, rowCount: r.rowCount, headers: r.headers, assetName: r.assetName, sessionId: r.sessionId, sessionName: r.sessionName, fileType: r.fileType, createdAt: r.createdAt })));
   });
 
   app.post("/api/clients/:id/sf-reports", async (req, res) => {
@@ -827,7 +828,18 @@ export async function registerRoutes(
         await storage.deleteSfReport(old.id);
       }
     }
-    res.status(201).json({ id: report.id, clientId: report.clientId, reportDate: report.reportDate, filename: report.filename, rowCount: report.rowCount, headers: report.headers, assetName: report.assetName, createdAt: report.createdAt });
+    res.status(201).json({ id: report.id, clientId: report.clientId, reportDate: report.reportDate, filename: report.filename, rowCount: report.rowCount, headers: report.headers, assetName: report.assetName, sessionId: report.sessionId, sessionName: report.sessionName, fileType: report.fileType, createdAt: report.createdAt });
+  });
+
+  app.get("/api/clients/:id/crawl-sessions", async (req, res) => {
+    try {
+      const clientId = Number(req.params.id);
+      if (!clientId || isNaN(clientId)) return res.status(400).json({ message: "Invalid clientId" });
+      const sessions = await listCrawlSessions(clientId);
+      res.json(sessions);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
   });
 
   app.get("/api/sf-reports/summary", async (req, res) => {
@@ -2214,7 +2226,7 @@ export async function registerRoutes(
 
   app.post("/api/crawl-assets", async (req, res) => {
     try {
-      const { clientId, clientName, filename, reportDate, headers, data, notes } = req.body;
+      const { clientId, clientName, filename, reportDate, headers, data, notes, sessionId, sessionName, fileType } = req.body;
       if (!clientId || !filename || !headers || !data) {
         return res.status(400).json({ message: "clientId, filename, headers, data required" });
       }
@@ -2226,7 +2238,10 @@ export async function registerRoutes(
         date,
         headers,
         data,
-        notes
+        notes,
+        sessionId ?? null,
+        sessionName ?? null,
+        fileType ?? null,
       );
       res.status(201).json(created);
     } catch (err: any) {

@@ -44,17 +44,13 @@ import { queryGa4, handlesGa4Command } from "./ga4Client";
 import { queryCallRail, handlesCallRailCommand } from "./callrailClient";
 import { queryCtm, handlesCtmCommand } from "./ctmClient";
 import { querySemrush, handlesSemrushCommand } from "./semrushClient";
+import { queryAhrefs, handlesAhrefsCommand } from "./ahrefsClient";
 import { queryGbp } from "./gbpClient";
 import { querySfReport, handlesSfCommand } from "./sfClient";
 import { getGoogleAccessToken } from "./googleToken";
 import { generateQbrPrepReport } from "./qbrPrepSectionGenerator";
 import { generateQbrPrepV2Docx } from "./qbrPrepDocxGenerator";
 
-const AHREFS_COMMANDS = new Set([
-  "ahrefs_backlink_overview",
-  "ahrefs_keyword_rankings",
-  "ahrefs_competitor_visibility",
-]);
 
 const SECTION_COMMANDS_AUTO: Record<string, Record<string, string[]>> = {
   biweekly: {
@@ -80,31 +76,6 @@ const COMMAND_DATE_OVERRIDES: Record<string, string> = {
   ga4_qtd_totals: "qtd",
 };
 
-const AHREFS_BLOCKED_DOMAIN = "api.ahrefs.com";
-
-function guardAhrefsOutbound(url: string): void {
-  try {
-    const host = new URL(url).hostname;
-    if (host === AHREFS_BLOCKED_DOMAIN || host.endsWith("." + AHREFS_BLOCKED_DOMAIN)) {
-      throw new Error(
-        `[GUARDRAIL] Outbound request to ${AHREFS_BLOCKED_DOMAIN} is blocked. ` +
-        "Ahrefs data is only available via Ahrefs Connect / MCP integration on this plan."
-      );
-    }
-  } catch (e: any) {
-    if (e.message.startsWith("[GUARDRAIL]")) throw e;
-  }
-}
-
-interface AhrefsUsageEntry {
-  clientId: number;
-  clientName: string;
-  command: string;
-  requestedAt: string;
-  blockedReason: string;
-}
-
-const ahrefsUsageLog: AhrefsUsageEntry[] = [];
 
 // Simple in-memory cache for expensive Google API calls
 const apiCache: Record<string, { data: any; expiresAt: number }> = {};
@@ -536,22 +507,7 @@ export async function registerRoutes(
       });
     }
 
-    if (AHREFS_COMMANDS.has(intent.command)) {
-      ahrefsUsageLog.push({
-        clientId: intent.clientId,
-        clientName: client.name,
-        command: intent.command,
-        requestedAt: new Date().toISOString(),
-        blockedReason: "Ahrefs Connect / MCP integration not available on this plan",
-      });
-      return res.json({
-        success: false,
-        error: "Ahrefs not connected via integrations on this plan. Ahrefs data is only available through Ahrefs Connect / MCP — not via direct API. Please contact your plan administrator.",
-        ahrefsBlocked: true,
-      });
-    }
-
-    // Live data dispatch — priority: Google → Screaming Frog → CallRail/CTM → SEMrush → GBP → mock
+    // Live data dispatch — priority: Google → Screaming Frog → CallRail/CTM → SEMrush → Ahrefs → GBP → mock
     let result: any = null;
     let liveSource: string | null = null;
 
@@ -579,6 +535,10 @@ export async function registerRoutes(
       if (!result && handlesSemrushCommand(intent.command)) {
         result = await querySemrush(intent.command, client, intent.dateRange);
         if (result) liveSource = "semrush";
+      }
+      if (!result && handlesAhrefsCommand(intent.command)) {
+        result = await queryAhrefs(intent.command, client, intent.dateRange);
+        if (result) liveSource = "ahrefs";
       }
       if (!result && intent.command === "gbp_local_summary") {
         result = await queryGbp(intent.command, client, intent.dateRange);
@@ -654,14 +614,6 @@ export async function registerRoutes(
     res.json(logs);
   });
 
-  app.get("/api/ahrefs/usage", (_req, res) => {
-    res.json({
-      status: "blocked",
-      reason: "Ahrefs Connect / MCP integration is not available on this Replit plan. Direct API access to api.ahrefs.com is disabled by guardrail.",
-      totalBlockedRequests: ahrefsUsageLog.length,
-      entries: ahrefsUsageLog.slice(-50),
-    });
-  });
 
   app.get("/api/credentials", async (_req, res) => {
     const creds = await storage.getApiCredentials();
@@ -1101,7 +1053,6 @@ export async function registerRoutes(
     client: any,
     defaultDateRange: string
   ): Promise<{ result: any; liveSource: string | null; description: string; dateRangeLabel: string } | null> {
-    if (AHREFS_COMMANDS.has(command as any)) return null;
     const dateRange = COMMAND_DATE_OVERRIDES[command] ?? defaultDateRange;
 
     if (command === "airtable_work_log") {
@@ -1141,6 +1092,7 @@ export async function registerRoutes(
       if (!result && handlesCallRailCommand(command as any)) { result = await queryCallRail(command as any, client, dateRange); if (result) liveSource = "callrail"; }
       if (!result && handlesCtmCommand(command as any)) { result = await queryCtm(command as any, client, dateRange); if (result) liveSource = "ctm"; }
       if (!result && handlesSemrushCommand(command as any)) { result = await querySemrush(command as any, client, dateRange); if (result) liveSource = "semrush"; }
+      if (!result && handlesAhrefsCommand(command)) { result = await queryAhrefs(command, client, dateRange); if (result) liveSource = "ahrefs"; }
       if (!result && command === "gbp_local_summary") { result = await queryGbp(command as any, client, dateRange); if (result) liveSource = "gbp"; }
     } catch { /* fall through to mock */ }
     if (!result) result = generateMockResult(command as any, client.name, dateRange);
@@ -1982,6 +1934,7 @@ export async function registerRoutes(
     if (client.callrailCompanyId) connectedServices.push("callrail");
     if (client.ctmAccountId) connectedServices.push("ctm");
     if (client.semrushProjectId) connectedServices.push("semrush");
+    if (client.ahrefsProjectUrl) connectedServices.push("ahrefs");
     if (client.gbpLocationName) connectedServices.push("gbp");
     if (client.airtableBaseId) connectedServices.push("airtable");
 

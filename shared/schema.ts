@@ -336,11 +336,13 @@ export const SERVICE_CONFIGS: ServiceConfig[] = [
   {
     id: "ahrefs",
     name: "Ahrefs",
-    description: "Backlink analysis, keyword rankings, domain rating. Available only via Ahrefs Connect / MCP integration — not via direct API key.",
-    authType: "mcp_only" as any,
+    description: "Backlink analysis, keyword rankings, domain rating, and competitor visibility via the Ahrefs API.",
+    authType: "api_key",
     color: "bg-indigo-600",
     supportsMultiple: false,
-    credentialFields: [],
+    credentialFields: [
+      { key: "api_key", label: "API Token", placeholder: "Enter Ahrefs API token", type: "password" },
+    ],
   },
   {
     id: "semrush",

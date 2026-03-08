@@ -1,0 +1,67 @@
+Good. Now show proof for each completed item.
+
+Return your answer in this structure:
+
+1. Files changed
+For each task T001–T005, list every file changed and what changed in each file.
+
+2. Security proof
+Show the exact code for:
+- X-Internal-Token enforcement
+- bootstrap endpoint that provides the token
+- SESSION_SECRET startup validation
+- ownership validation on DELETE/PATCH routes
+- rate limiting on report generation routes
+- content-length / body-size guards
+
+For each one, include:
+- exact route or middleware
+- request/response behavior
+- one example request that passes
+- one example request that fails
+
+3. Data integrity proof
+Show the exact schema/migration/code for:
+- deletedAt on saved_reports
+- soft-delete behavior
+- sourceSnapshotJson population on save/update
+- XLSX parser 10MB cap and explicit error logging
+
+4. Legacy cleanup proof
+Show:
+- exactly which QBR Prep v1 routes were removed
+- proof that 7 orphaned qbr_prep_reports rows were deleted
+- where SEMrush project ID was removed from the UI
+- where the connected-state logic now checks for real API credentials
+
+5. Generator fix proof
+Show:
+- NL query behavior before vs after when mock data would have been used
+- dashboard fallback behavior before vs after
+- mid-strategy route validation for slide output
+- proof monthly still returns Manual entry needed rather than dropping content
+
+6. Frontend fix proof
+Show:
+- autosave unsaved-state fix
+- document.fonts.ready print fix
+- History page label change
+- raw fetch header fixes in QBR Prep and print pages
+
+7. Regression proof
+Show that the following still work after the changes:
+- Bi-Weekly generate/save/export
+- Monthly generate/save/export
+- QBR Prep generate/save/export
+- Full QBR generate/save/export
+- Mid-Strategy generate/save/export
+
+8. Known risks
+List anything still questionable, especially around:
+- bootstrap token exposure
+- internal-token model
+- rate-limit thresholds
+- upload size limits
+- anything that may block normal app usage
+
+Do not summarize. Show code, migrations, DB proof, request/response proof, and actual outputs.

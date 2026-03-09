@@ -544,6 +544,7 @@ function generateSection2(
       page: shortUrl(row.page),
       conversionSource: `${fmtNum(row.conversions)} conversions (GA4 organic)`,
       notes: getConversionNote(pageType, row.conversions, row.sessions),
+      dataSource: "GA4",
     });
   }
 
@@ -564,6 +565,7 @@ function generateSection2(
         page: shortP,
         conversionSource: `${fmtNum(row.calls)} organic calls (CallRail)`,
         notes: getConversionNote(pageType, row.calls, 0),
+        dataSource: "CallRail",
       });
       seenPages.add(shortP);
     }
@@ -579,6 +581,7 @@ function generateSection2(
         page: shortUrl(mp),
         conversionSource: "Priority service page surfaced as a likely conversion target; direct page-level attribution unavailable",
         notes: getConversionNote(pageType, 0, 0),
+        dataSource: "Manual entry needed",
       });
     }
   }
@@ -596,6 +599,7 @@ function generateSection2(
         page: shortUrl(pageUrl),
         conversionSource: `${fmtNum(row.clicks ?? 0)} organic clicks (GSC — conversion data unavailable)`,
         notes: getConversionNote(pageType, 0, 0),
+        dataSource: "GSC",
       });
     }
   }
@@ -607,6 +611,7 @@ function generateSection2(
       page: ME,
       conversionSource: `${ME}: no conversion data available from GA4, CallRail, or GSC`,
       notes: ME,
+      dataSource: "Manual entry needed",
     });
   }
 
@@ -630,6 +635,7 @@ function generateSection2(
         notes: classifyAdmitConnection(source, data.conversions, totalGa4Conversions) === "Direct"
           ? "Directly tied to admission pathway"
           : "Supports conversion through content/awareness",
+        dataSource: "GA4",
       });
     }
   }
@@ -646,6 +652,7 @@ function generateSection2(
         source: src.source,
         whatsConverting: `${fmtNum(src.calls)} organic calls (${pct}% of tracked calls)`,
         notes: "Call tracking source — confirm with admissions team",
+        dataSource: "CallRail",
       });
       existingSources.add(src.source);
     }
@@ -670,6 +677,7 @@ function generateSection2(
         notes: classifyAdmitConnection(pageType, data.calls, callLandingPages.reduce((s, r) => s + r.calls, 0)) === "Direct"
           ? "Directly tied to admission pathway"
           : "Supports conversion through content/awareness",
+        dataSource: "CallRail",
       });
     }
   }
@@ -688,6 +696,7 @@ function generateSection2(
         notes: classifyAdmitConnection(pt, 0, 0) === "Direct"
           ? "Directly tied to admission pathway"
           : "Supports conversion through content/awareness",
+        dataSource: "Manual entry needed",
       });
     }
   }
@@ -698,6 +707,7 @@ function generateSection2(
       source: ME,
       whatsConverting: `${ME}: no source attribution available from GA4, CallRail, or config`,
       notes: ME,
+      dataSource: "Manual entry needed",
     });
   }
 
@@ -765,6 +775,7 @@ function generateSection3(
         exampleQueries: ts.examples.join(", "),
         connectionToAdmits: connection,
         insight,
+        dataSource: "GSC",
       });
     }
   }
@@ -787,6 +798,7 @@ function generateSection3(
         ctr: fmtPct(row.ctr ?? 0),
         connectionToAdmits: connection,
         insight: pageType !== "Other" ? `${pageType} page` : "",
+        dataSource: "GSC",
       });
     }
   }
@@ -797,6 +809,7 @@ function generateSection3(
       exampleQueries: ME,
       connectionToAdmits: ME,
       insight: `${ME}: GSC query data unavailable`,
+      dataSource: "Manual entry needed",
     });
   }
 
@@ -807,6 +820,7 @@ function generateSection3(
       ctr: "—",
       connectionToAdmits: ME,
       insight: `${ME}: GSC page data unavailable`,
+      dataSource: "Manual entry needed",
     });
   }
 
@@ -905,6 +919,7 @@ function generateSection6(
           tier: "Tier 1",
           action: "Refresh and consolidate primary detox and residential intent so Google sees one clear service path per treatment level",
           reason: "Core service pages are the foundation for search trust — without clear primary URLs, nothing else compounds",
+          source: "Screaming Frog",
         });
       }
     }
@@ -916,6 +931,7 @@ function generateSection6(
           tier: "Tier 1",
           action: "Strengthen Verify Insurance and admissions entry points to reduce friction on high-intent traffic",
           reason: "VOB and contact pages are the primary conversion mechanism — unclear pathways lose admits",
+          source: "Screaming Frog",
         });
       }
     }
@@ -929,6 +945,7 @@ function generateSection6(
         tier: "Tier 2",
         action: "Build a conditions hub to support authority flow into existing service pages",
         reason: "Hub structure lets Google understand topical relationships and pass authority to conversion pages",
+        source: "Screaming Frog",
       });
     }
     if (!tierInput.hasTherapiesHub && !isAlreadyDone("therapies hub") && !isAlreadyDone("therapy hub")) {
@@ -938,6 +955,7 @@ function generateSection6(
         tier: "Tier 2",
         action: "Organize treatment modalities into a therapies hub that reinforces service page authority",
         reason: "Therapy pages support E-E-A-T and differentiate the program in competitive searches",
+        source: "Screaming Frog",
       });
     }
   }
@@ -950,6 +968,7 @@ function generateSection6(
         tier: "Tier 3",
         action: `Resolve ${tierInput.errors4xx5xx} error pages (4xx/5xx) and clean up redirect chains suppressing crawl efficiency`,
         reason: "Error pages create structural drag — cleaning them improves crawl budget allocation to revenue pages",
+        source: "Screaming Frog",
       });
     }
     if (tierInput.overlapGeoPages > 5 && !isAlreadyDone("geo") && !isAlreadyDone("location")) {
@@ -959,6 +978,7 @@ function generateSection6(
         tier: "Tier 3",
         action: "Retire overlapping near-me and legacy geo pages into the primary location architecture",
         reason: "Duplicate geo pages dilute authority and confuse Google about the primary service area",
+        source: "Screaming Frog",
       });
     }
   }
@@ -970,6 +990,7 @@ function generateSection6(
       tier: `Tier ${section5.tier}`,
       action: hypothesis,
       reason: "Account manager identified this as a priority based on client relationship and strategic context",
+      source: "Manual entry needed",
     });
   }
 
@@ -983,6 +1004,7 @@ function generateSection6(
         tier: `Tier ${Math.min(section5.tier + 1, 5)}`,
         action: note.trim(),
         reason: "Identified during manual audit review",
+        source: "Manual entry needed",
       });
     }
   }
@@ -995,7 +1017,7 @@ function generateSection6(
   const topTrafficTopic = section3.topTrafficTopics.find(t => t.connectionToAdmits === "Unclear" || t.connectionToAdmits === "Assisted");
   const thinPagesNote = hasThinPages ? ` (${tierInput.thinPages} thin pages detected in crawl)` : "";
 
-  const evidenceFillers: Array<{ initiative: string; tier: string; action: string; reason: string; condition: boolean }> = [
+  const evidenceFillers: Array<{ initiative: string; tier: string; action: string; reason: string; condition: boolean; source: string }> = [
     {
       initiative: "Internal Linking — High-Traffic to Conversion",
       tier: `Tier ${Math.min(section5.tier, 3)}`,
@@ -1006,6 +1028,7 @@ function generateSection6(
         ? `${topUnclearPage.clicks} organic clicks land on a page with no clear path to admissions — linking directly to service pages converts that existing traffic`
         : "Traffic data shows high-volume pages with unclear admit connection — internal linking is the lowest-cost conversion lever",
       condition: unclearTrafficPages.length > 0 && !priorities.find(p => p.initiative.includes("Internal Link")),
+      source: "GSC",
     },
     {
       initiative: "Conversion Path Audit",
@@ -1017,6 +1040,7 @@ function generateSection6(
         ? `Organic sessions are behind Q pace — improving conversion rate on existing traffic is higher ROI than acquiring new traffic`
         : "Conversion path gaps compound slowly; fixing them now avoids a larger gap by end of quarter (lower confidence without GA4 data)",
       condition: !priorities.find(p => p.initiative.includes("Conversion")),
+      source: "GA4",
     },
     {
       initiative: "Content Refresh — Highest-Traffic Assisted Pages",
@@ -1028,6 +1052,7 @@ function generateSection6(
         ? `The "${topTrafficTopic.topic}" topic drives meaningful traffic but shows ${topTrafficTopic.connectionToAdmits.toLowerCase()} admit connection — refreshed content with stronger CTAs and internal links captures more value from existing impressions`
         : `Existing high-traffic pages${hasThinPages ? ` and ${tierInput.thinPages} detected thin pages` : ""} are the fastest path to improving organic conversion without new content investment`,
       condition: !priorities.find(p => p.initiative.includes("Content Refresh")) && !isAlreadyDone("content refresh"),
+      source: "GSC",
     },
     {
       initiative: "Title & Meta Optimization",
@@ -1039,6 +1064,7 @@ function generateSection6(
         ? `Crawl shows ${tierInput.missingH1s} pages without H1 tags — these pages are structurally weak and likely suppressed in rankings; fixing them requires low effort for potentially high impact`
         : "CTR improvements on existing impression volume require no new traffic — they are free growth on what the site already earns",
       condition: !priorities.find(p => p.initiative.includes("Title") || p.initiative.includes("Meta")),
+      source: "Screaming Frog",
     },
   ];
 
@@ -1051,6 +1077,7 @@ function generateSection6(
         tier: f.tier,
         action: f.action,
         reason: f.reason,
+        source: f.source,
       });
     }
   }
@@ -1062,6 +1089,7 @@ function generateSection6(
       tier: `Tier ${section5.tier}`,
       action: "Review organic channel baseline metrics QoQ to identify acceleration or decay signals before setting Q3 strategy",
       reason: "Establishing a clean QoQ baseline is prerequisite to any growth investment — without it, directional decisions are made without evidence",
+      source: "GA4",
     });
   }
 

@@ -28,12 +28,14 @@ export interface ConvertingPageRow {
   page: string;
   conversionSource: string;
   notes: string;
+  dataSource?: string;
 }
 
 export interface ConvertingSourceRow {
   source: string;
   whatsConverting: string;
   notes: string;
+  dataSource?: string;
 }
 
 export interface Section2Conversions {
@@ -46,6 +48,7 @@ export interface TrafficTopicRow {
   exampleQueries: string;
   connectionToAdmits: string;
   insight: string;
+  dataSource?: string;
 }
 
 export interface TrafficPageRow {
@@ -54,6 +57,7 @@ export interface TrafficPageRow {
   ctr: string;
   connectionToAdmits: string;
   insight: string;
+  dataSource?: string;
 }
 
 export interface Section3Traffic {
@@ -82,6 +86,7 @@ export interface PriorityRow {
   tier: string;
   action: string;
   reason: string;
+  source?: string;
 }
 
 export interface Section6Priorities {

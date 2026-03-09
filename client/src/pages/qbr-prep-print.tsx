@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import swoopHeaderFallback from "@assets/HEADER_IMAGE_1773063127856.png";
-import { ReportTable } from "../components/report-preview/report-table";
+import { ReportTable, SourceBadge } from "../components/report-preview/report-table";
 
 const ACCENT = "#C0392B";
 const FOOTER_TEXT = "Webserv  |  32 Discovery Suite 130, Irvine, CA 92618  |  webserv.io";
@@ -23,6 +23,30 @@ function DataTable({ headers, rows }: { headers: string[]; rows: string[][] }) {
     )
   );
   return <ReportTable headers={headers} rows={nodeRows} />;
+}
+
+function cell(val: string): ReactNode {
+  return val?.includes("Manual entry needed")
+    ? <span style={{ fontStyle: "italic", color: "#9CA3AF" }}>{val}</span>
+    : val;
+}
+
+function badgeCell(val: string, dataSource?: string): ReactNode {
+  if (!dataSource) return cell(val);
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+      {cell(val)}
+      <SourceBadge source={dataSource} />
+    </span>
+  );
+}
+
+function parseS7Sources(source: string): string[] {
+  return source.split(" + ").map(s => {
+    if (s === "Google Search Console") return "GSC";
+    if (s === "Call Tracking") return "CallRail";
+    return s;
+  });
 }
 
 function applyEdits(value: string, key: string, edits: Record<string, string>): string {
@@ -99,26 +123,46 @@ export default function QbrPrepPrint() {
 
           <SectionHeading num={2} title="Where Conversions Actually Happen" />
           <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Converting Pages</div>
-          <DataTable
+          <ReportTable
             headers={["Type", "Page / Pattern", "Conversion Source", "Notes / What We're Learning"]}
-            rows={s2.topConvertingPages.map((r: any, ri: number) => [e(`s2a_${ri}_0`, r.type), e(`s2a_${ri}_1`, r.page), e(`s2a_${ri}_2`, r.conversionSource), e(`s2a_${ri}_3`, r.notes)])}
+            rows={s2.topConvertingPages.map((r: any, ri: number) => [
+              cell(e(`s2a_${ri}_0`, r.type)),
+              cell(e(`s2a_${ri}_1`, r.page)),
+              badgeCell(e(`s2a_${ri}_2`, r.conversionSource), r.dataSource),
+              cell(e(`s2a_${ri}_3`, r.notes)),
+            ])}
           />
           <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Converting Sources</div>
-          <DataTable
+          <ReportTable
             headers={["Source", "What's Converting", "Notes / What We're Learning"]}
-            rows={s2.topConvertingSources.map((r: any, ri: number) => [e(`s2b_${ri}_0`, r.source), e(`s2b_${ri}_1`, r.whatsConverting), e(`s2b_${ri}_2`, r.notes)])}
+            rows={s2.topConvertingSources.map((r: any, ri: number) => [
+              badgeCell(e(`s2b_${ri}_0`, r.source), r.dataSource),
+              cell(e(`s2b_${ri}_1`, r.whatsConverting)),
+              cell(e(`s2b_${ri}_2`, r.notes)),
+            ])}
           />
 
           <SectionHeading num={3} title="Top Organic Traffic Drivers" />
           <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Traffic Topics</div>
-          <DataTable
+          <ReportTable
             headers={["Topic", "Example Queries", "Connection to Admits", "Insight"]}
-            rows={s3.topTrafficTopics.map((r: any, ri: number) => [e(`s3a_${ri}_0`, r.topic), e(`s3a_${ri}_1`, r.exampleQueries), e(`s3a_${ri}_2`, r.connectionToAdmits), e(`s3a_${ri}_3`, r.insight)])}
+            rows={s3.topTrafficTopics.map((r: any, ri: number) => [
+              cell(e(`s3a_${ri}_0`, r.topic)),
+              cell(e(`s3a_${ri}_1`, r.exampleQueries)),
+              cell(e(`s3a_${ri}_2`, r.connectionToAdmits)),
+              badgeCell(e(`s3a_${ri}_3`, r.insight), r.dataSource),
+            ])}
           />
           <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Traffic Pages</div>
-          <DataTable
+          <ReportTable
             headers={["Page", "Clicks", "CTR", "Connection to Admits", "Insight"]}
-            rows={s3.topTrafficPages.map((r: any, ri: number) => [e(`s3b_${ri}_0`, r.page), e(`s3b_${ri}_1`, r.clicks), e(`s3b_${ri}_2`, r.ctr), e(`s3b_${ri}_3`, r.connectionToAdmits), e(`s3b_${ri}_4`, r.insight)])}
+            rows={s3.topTrafficPages.map((r: any, ri: number) => [
+              cell(e(`s3b_${ri}_0`, r.page)),
+              cell(e(`s3b_${ri}_1`, r.clicks)),
+              cell(e(`s3b_${ri}_2`, r.ctr)),
+              cell(e(`s3b_${ri}_3`, r.connectionToAdmits)),
+              badgeCell(e(`s3b_${ri}_4`, r.insight), r.dataSource),
+            ])}
           />
 
           <SectionHeading num={4} title="Site Service Overview" />
@@ -136,15 +180,30 @@ export default function QbrPrepPrint() {
           </div>
 
           <SectionHeading num={6} title="What We Need to Do Next" />
-          <DataTable
+          <ReportTable
             headers={["#", "Initiative", "Tier", "Action", "Reason"]}
-            rows={s6.priorities.map((r: any, ri: number) => [e(`s6_${ri}_0`, String(r.priority)), e(`s6_${ri}_1`, r.initiative), e(`s6_${ri}_2`, r.tier), e(`s6_${ri}_3`, r.action), e(`s6_${ri}_4`, r.reason)])}
+            rows={s6.priorities.map((r: any, ri: number) => [
+              cell(e(`s6_${ri}_0`, String(r.priority))),
+              badgeCell(e(`s6_${ri}_1`, r.initiative), r.source),
+              cell(e(`s6_${ri}_2`, r.tier)),
+              cell(e(`s6_${ri}_3`, r.action)),
+              cell(e(`s6_${ri}_4`, r.reason)),
+            ])}
           />
 
           <SectionHeading num={7} title="What We Track" />
-          <DataTable
+          <ReportTable
             headers={["Focus Area", "Metric", "Source", "Why It Matters"]}
-            rows={s7.tracking.map((r: any, ri: number) => [e(`s7_${ri}_0`, r.focusArea), e(`s7_${ri}_1`, r.metric), e(`s7_${ri}_2`, r.source), e(`s7_${ri}_3`, r.whyItMatters)])}
+            rows={s7.tracking.map((r: any, ri: number) => [
+              cell(e(`s7_${ri}_0`, r.focusArea)),
+              cell(e(`s7_${ri}_1`, r.metric)),
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 3, flexWrap: "wrap" }}>
+                {parseS7Sources(e(`s7_${ri}_2`, r.source)).map((src: string, si: number) => (
+                  <SourceBadge key={si} source={src} />
+                ))}
+              </span>,
+              cell(e(`s7_${ri}_3`, r.whyItMatters)),
+            ])}
           />
 
           {genMeta && (

@@ -147,7 +147,6 @@ export default function QbrPrepPage() {
     onSuccess: (data: any) => {
       setReportData(data.reportData);
       setEdits({});
-      reportSave.setSavedReportId(null);
       const periodLabel = quarter.analysisWindowLabel;
       const meta = {
         reportPeriodLabel: periodLabel,

@@ -1441,6 +1441,22 @@ function AutoBuildLivePanel({
   );
 }
 
+function sfFileTypeLabel(fileType: string | null | undefined): string {
+  switch (fileType) {
+    case "issues":        return "⚠ [Issues] ";
+    case "internal":     return "[Internal] ";
+    case "h1":           return "[H1] ";
+    case "h2":           return "[H2] ";
+    case "meta_keywords":   return "[Meta KW] ";
+    case "meta_description": return "[Meta Desc] ";
+    case "page_titles":  return "[Page Titles] ";
+    case "canonicals":   return "[Canonicals] ";
+    case "images":       return "[Images] ";
+    case "outlinks":     return "[Outlinks] ";
+    default:             return "";
+  }
+}
+
 export default function ReportsPage() {
   const [selectedClientId, setSelectedClientId] = useState<string>("");
   const [reportType, setReportType] = useState<ReportType>("qbr");
@@ -1534,7 +1550,8 @@ export default function ReportsPage() {
   const handleSfUpload = async (file: File) => {
     setSfUploading(true);
     try {
-      const text = await file.text();
+      const rawText = await file.text();
+      const text = rawText.replace(/^\uFEFF/, "");
       const lines = text.split(/\r?\n/).filter(l => l.trim());
       if (lines.length < 2) throw new Error("File appears empty");
       const headers = lines[0].split(",").map(h => h.replace(/^"|"$/g, "").trim());
@@ -1544,9 +1561,23 @@ export default function ReportsPage() {
         headers.forEach((h, i) => { obj[h] = (cols[i] ?? "").replace(/^"|"$/g, "").trim(); });
         return obj;
       });
-      const isIssuesReport =
-        headers.some(h => /^issue(\s*(name|type))?$/i.test(h)) &&
-        headers.some(h => /priority/i.test(h));
+      const fn = file.name.toLowerCase();
+      const detectedFileType = (() => {
+        const isIssuesByHeader =
+          headers.some(h => /^issue(\s*(name|type))?$/i.test(h)) &&
+          headers.some(h => /priority/i.test(h));
+        if (isIssuesByHeader || fn.includes("issues")) return "issues";
+        if (fn.includes("internal_all")) return "internal";
+        if (fn.includes("h1_all")) return "h1";
+        if (fn.includes("h2_all")) return "h2";
+        if (fn.includes("meta_keywords")) return "meta_keywords";
+        if (fn.includes("meta_description")) return "meta_description";
+        if (fn.includes("page_titles")) return "page_titles";
+        if (fn.includes("canonicals")) return "canonicals";
+        if (fn.includes("images_all")) return "images";
+        if (fn.includes("outlinks")) return "outlinks";
+        return null;
+      })();
       const today = new Date().toISOString().split("T")[0];
       const body = {
         reportDate: today,
@@ -1554,7 +1585,7 @@ export default function ReportsPage() {
         rowCount: rows.length,
         headers,
         data: rows,
-        fileType: isIssuesReport ? "issues" : null,
+        fileType: detectedFileType,
       };
       const { getAuthHeaders } = await import("@/lib/queryClient");
       const authHeaders = await getAuthHeaders();
@@ -1567,9 +1598,10 @@ export default function ReportsPage() {
       const created = await res.json();
       rqClient.invalidateQueries({ queryKey: ["/api/clients", selectedClientId, "sf-reports"] });
       if (created?.id) setSfActiveId(created.id);
+      const typeLabel = detectedFileType === "issues" ? "Issues report" : detectedFileType ? `${detectedFileType} crawl` : "Crawl";
       toast({
-        title: isIssuesReport ? "Issues report uploaded" : "Crawl uploaded",
-        description: `${rows.length} ${isIssuesReport ? "issues" : "rows"} from ${file.name}`,
+        title: `${typeLabel} uploaded`,
+        description: `${rows.length} rows from ${file.name}`,
       });
     } catch (err: any) {
       toast({ title: "Upload failed", description: err.message, variant: "destructive" });
@@ -1902,7 +1934,7 @@ export default function ReportsPage() {
                 <SelectItem value="__none__">No crawl selected</SelectItem>
                 {sfReports.map(r => (
                   <SelectItem key={r.id} value={String(r.id)} data-testid={`sf-active-option-${r.id}`}>
-                    {r.fileType === "issues" ? "⚠ " : ""}{r.reportDate} — {r.fileType === "issues" ? "[Issues] " : ""}{r.filename}
+                    {sfFileTypeLabel(r.fileType)}{r.reportDate} — {r.filename}
                   </SelectItem>
                 ))}
                 <SelectItem value="__upload__" data-testid="sf-upload-option">
@@ -1934,7 +1966,7 @@ export default function ReportsPage() {
                   <SelectItem value="__none__">No crawl selected</SelectItem>
                   {sfReports.map(r => (
                     <SelectItem key={r.id} value={String(r.id)} data-testid={`sf-compare-option-${r.id}`}>
-                      {r.fileType === "issues" ? "⚠ " : ""}{r.reportDate} — {r.fileType === "issues" ? "[Issues] " : ""}{r.filename}
+                      {sfFileTypeLabel(r.fileType)}{r.reportDate} — {r.filename}
                     </SelectItem>
                   ))}
                 </SelectContent>

@@ -1,10 +1,11 @@
 import { storage } from "./storage";
-import { queryGsc, handlesGscCommand } from "./gscClient";
-import { queryGa4, handlesGa4Command } from "./ga4Client";
+import { queryGsc, handlesGscCommand, fetchGscQueryRowsForTopicClustering, fetchGscDailyTrend } from "./gscClient";
+import { queryGa4, handlesGa4Command, fetchGa4DailyTrend } from "./ga4Client";
 import { queryCallRail, handlesCallRailCommand } from "./callrailClient";
 import { querySemrush, handlesSemrushCommand } from "./semrushClient";
 import { fetchAirtableWorkLog } from "./airtable";
 import { fetchAsanaWorkLog, asanaSectionToCategory, groupAsanaTasks } from "./asanaClient";
+import { clusterQueriesByTopic, topicAdmitConnection } from "./qbrPrepHelpers";
 import type { Slide } from "../client/src/components/report-preview/pptx-preview";
 
 export interface MonthlyAmInputs {
@@ -130,6 +131,10 @@ export async function generateMonthly(input: {
     asanaResult,
     ga4FunnelQtd,
     ctResultQtd,
+    gscQueryPageMap,
+    gscTopicClusterData,
+    gscDailyTrend,
+    ga4DailyTrend,
   ] = await Promise.allSettled([
     handlesGscCommand("gsc_qoq_queries" as any)
       ? queryGsc("gsc_qoq_queries" as any, client, calMonthRange)
@@ -163,6 +168,12 @@ export async function generateMonthly(input: {
     handlesCallRailCommand("callrail_qoq_organic_calls" as any)
       ? queryCallRail("callrail_qoq_organic_calls" as any, client, calQtdRange)
       : Promise.resolve(null),
+    handlesGscCommand("gsc_query_to_page_map" as any)
+      ? queryGsc("gsc_query_to_page_map" as any, client, calMonthRange)
+      : Promise.resolve(null),
+    fetchGscQueryRowsForTopicClustering(client, calMonthRange),
+    fetchGscDailyTrend(client, calMonthRange),
+    fetchGa4DailyTrend(client, calMonthRange),
   ]);
 
   const slides: Slide[] = [];
@@ -274,6 +285,81 @@ export async function generateMonthly(input: {
     });
   }
 
+  // ─── SLIDE 3b: Query Groups (Topic-Level Aggregation with % Deltas) ──
+  if (gscTopicClusterData.status === "fulfilled" && gscTopicClusterData.value) {
+    const { currentRows, previousRows } = gscTopicClusterData.value as { currentRows: any[]; previousRows: any[] };
+    if (currentRows.length > 0) {
+      const currQueryData = currentRows.map(r => ({
+        query: r.keys?.[0] ?? "",
+        clicks: r.clicks ?? 0,
+        impressions: r.impressions ?? 0,
+        ctr: r.ctr ?? 0,
+        position: r.position ?? 0,
+      }));
+      const clusters = clusterQueriesByTopic(currQueryData, client);
+
+      const prevClusters = new Map<string, { queryCount: number; impressions: number }>();
+      if (previousRows.length > 0) {
+        const prevQueryData = previousRows.map(r => ({
+          query: r.keys?.[0] ?? "",
+          clicks: r.clicks ?? 0,
+          impressions: r.impressions ?? 0,
+          ctr: r.ctr ?? 0,
+          position: r.position ?? 0,
+        }));
+        const prevTopicClusters = clusterQueriesByTopic(prevQueryData, client);
+        for (const [topic, queries] of prevTopicClusters.entries()) {
+          prevClusters.set(topic, {
+            queryCount: queries.length,
+            impressions: queries.reduce((s, q) => s + q.impressions, 0),
+          });
+        }
+      }
+
+      const pctDelta = (curr: number, prev: number): string => {
+        if (prev === 0 && curr === 0) return "0%";
+        if (prev === 0) return "+100%";
+        const d = ((curr - prev) / prev) * 100;
+        return `${d >= 0 ? "+" : ""}${d.toFixed(1)}%`;
+      };
+
+      const topicRows = [...clusters.entries()]
+        .map(([topic, queries]) => ({
+          topic,
+          queryCount: queries.length,
+          totalImpressions: queries.reduce((s, q) => s + q.impressions, 0),
+          connection: topicAdmitConnection(topic),
+        }))
+        .sort((a, b) => b.queryCount - a.queryCount)
+        .slice(0, 10);
+
+      const prevMonthLabel = new Date(input.year, input.month - 2, 1).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+
+      const tableRows = topicRows.map(t => {
+        const prev = prevClusters.get(t.topic);
+        return [
+          t.topic,
+          String(t.queryCount),
+          prev ? pctDelta(t.queryCount, prev.queryCount) : "—",
+          t.totalImpressions.toLocaleString("en-US"),
+          prev ? pctDelta(t.totalImpressions, prev.impressions) : "—",
+          t.connection,
+        ];
+      });
+
+      slides.push({
+        id: "query_groups",
+        type: "table",
+        title: "Query Groups",
+        subtitle: `${label} vs ${prevMonthLabel} — Topic-Level Aggregation`,
+        table: {
+          headers: ["Query Group", "# Queries", "Δ Queries", "Impressions", "Δ Impressions", "Admit Connection"],
+          rows: tableRows,
+        },
+      });
+    }
+  }
+
   // ─── SLIDE 4: QTD Key Performance Indicators ─────────────────────
   // Primary: GA4 QTD organic sessions + conversions, CallRail QTD calls.
   // Goals require NSM Tracker integration (not connected) — shown as "Manual entry needed".
@@ -316,14 +402,58 @@ export async function generateMonthly(input: {
     },
   });
 
-  // ─── SLIDE 5: Top Landing Pages ───────────────────────────────────
-  if (ga4Landing.status === "fulfilled" && ga4Landing.value) {
+  // ─── SLIDE 5: Top Landing Pages (enhanced with multi-metric deltas) ─
+  const queryPageMapData =
+    gscQueryPageMap.status === "fulfilled" && gscQueryPageMap.value
+      ? ((gscQueryPageMap.value as any).tables?.[0]?.rows ?? [])
+      : [];
+  const queryCountByPageMonthly = new Map<string, number>();
+  for (const row of queryPageMapData) {
+    const page = String(row[1] ?? "");
+    queryCountByPageMonthly.set(page, (queryCountByPageMonthly.get(page) ?? 0) + 1);
+  }
+
+  if (gscPages.status === "fulfilled" && gscPages.value) {
+    const tables = (gscPages.value as any).tables ?? [];
+    if (tables.length > 0) {
+      const enhancedHeaders = ["Page", "Clicks", "Δ Clicks", "Impressions", "Δ Impressions", "# Queries", "CTR", "Avg Position"];
+      const enhancedRows = tables[0].rows.map((row: any[]) => {
+        const page = String(row[0] ?? "");
+        const clicks = row[1] ?? "—";
+        const deltaClicks = row[2] ?? "—";
+        const impressions = row[3] ?? "—";
+        const deltaImpressions = row[4] ?? "—";
+        const ctr = row[5] ?? "—";
+        const pos = row[6] ?? "—";
+        const queryCount = queryCountByPageMonthly.get(page) ?? queryCountByPageMonthly.get(page.startsWith("/") ? `${client.gscSiteUrl?.replace(/\/$/, "")}${page}` : page) ?? 0;
+        return [page, clicks, deltaClicks, impressions, deltaImpressions, queryCount > 0 ? String(queryCount) : "—", ctr, pos];
+      });
+      slides.push({
+        id: "landing_pages",
+        type: "table",
+        title: "Top Landing Pages",
+        subtitle: `${label} — GSC Organic Performance with Deltas`,
+        table: { headers: enhancedHeaders, rows: enhancedRows },
+      });
+    } else {
+      slides.push({
+        id: "landing_pages",
+        type: "table",
+        title: "Top Landing Pages",
+        subtitle: `${label} — Organic Clicks`,
+        table: {
+          headers: ["Page", "Clicks", "Δ Clicks", "Impressions", "Δ Impressions", "# Queries", "CTR", "Avg Position"],
+          rows: [["Manual entry needed", "—", "—", "—", "—", "—", "—", "—"]],
+        },
+      });
+    }
+  } else if (ga4Landing.status === "fulfilled" && ga4Landing.value) {
     const tables = (ga4Landing.value as any).tables ?? [];
     slides.push({
       id: "landing_pages",
       type: "table",
       title: "Top Landing Pages",
-      subtitle: `${label} — Organic Sessions`,
+      subtitle: `${label} — Organic Sessions (GA4)`,
       table:
         tables.length > 0
           ? { headers: tables[0].headers, rows: tables[0].rows }
@@ -332,31 +462,15 @@ export async function generateMonthly(input: {
               rows: [["Manual entry needed", "—", "—", "—"]],
             },
     });
-  } else if (gscPages.status === "fulfilled" && gscPages.value) {
-    // Fallback: use GSC pages when GA4 landing page data is unavailable
-    const tables = (gscPages.value as any).tables ?? [];
-    slides.push({
-      id: "landing_pages",
-      type: "table",
-      title: "Top Landing Pages",
-      subtitle: `${label} — Organic Clicks (GSC fallback; GA4 landing page data unavailable)`,
-      table:
-        tables.length > 0
-          ? { headers: tables[0].headers, rows: tables[0].rows }
-          : {
-              headers: ["Page", "Clicks", "Impressions", "CTR"],
-              rows: [["Manual entry needed", "—", "—", "—"]],
-            },
-    });
   } else {
     slides.push({
       id: "landing_pages",
       type: "table",
       title: "Top Landing Pages",
-      subtitle: `${label} — Organic Sessions`,
+      subtitle: `${label} — Organic Performance`,
       table: {
-        headers: ["Page", "Sessions", "Conversions", "CVR"],
-        rows: [["Manual entry needed", "—", "—", "—"]],
+        headers: ["Page", "Clicks", "Δ Clicks", "Impressions", "Δ Impressions", "# Queries", "CTR", "Avg Position"],
+        rows: [["Manual entry needed", "—", "—", "—", "—", "—", "—", "—"]],
       },
     });
   }
@@ -367,8 +481,8 @@ export async function generateMonthly(input: {
     if (tables.length > 0) {
       const chartData = tables[0].rows.slice(0, 10).map((row: any[]) => ({
         label: cleanPageLabel(String(row[0] ?? "")),
-        Clicks: Number(row[1] ?? 0),
-        Impressions: Number(row[2] ?? 0),
+        Clicks: parseInt(String(row[1] ?? "0").replace(/,/g, ""), 10) || 0,
+        Impressions: parseInt(String(row[3] ?? "0").replace(/,/g, ""), 10) || 0,
       }));
       slides.push({
         id: "pages_chart",
@@ -585,6 +699,58 @@ export async function generateMonthly(input: {
       subtitle: "Account Manager Context & Priorities",
       bullets: amInputsBullets,
     });
+  }
+
+  if (gscDailyTrend.status === "fulfilled" && gscDailyTrend.value) {
+    const { current: gscCurr, previous: gscPrev } = gscDailyTrend.value as { current: any[]; previous: any[] };
+    if (gscCurr.length > 0) {
+      const maxLen = Math.max(gscCurr.length, gscPrev.length);
+      const chartData = [];
+      for (let i = 0; i < maxLen; i++) {
+        const dayLabel = `Day ${i + 1}`;
+        chartData.push({
+          label: dayLabel,
+          "Clicks": gscCurr[i]?.clicks ?? 0,
+          "Clicks (prev)": gscPrev[i]?.clicks ?? 0,
+          "Impressions": gscCurr[i]?.impressions ?? 0,
+          "Impressions (prev)": gscPrev[i]?.impressions ?? 0,
+        });
+      }
+      slides.push({
+        id: "gsc_daily_trend",
+        type: "chart-line",
+        title: "GSC Daily Trend — Clicks & Impressions",
+        subtitle: `${label} vs Previous Period`,
+        chartData,
+        chartKeys: ["Clicks", "Clicks (prev)", "Impressions", "Impressions (prev)"],
+      });
+    }
+  }
+
+  if (ga4DailyTrend.status === "fulfilled" && ga4DailyTrend.value) {
+    const { current: ga4Curr, previous: ga4Prev } = ga4DailyTrend.value as { current: any[]; previous: any[] };
+    if (ga4Curr.length > 0) {
+      const maxLen = Math.max(ga4Curr.length, ga4Prev.length);
+      const chartData = [];
+      for (let i = 0; i < maxLen; i++) {
+        const dayLabel = `Day ${i + 1}`;
+        chartData.push({
+          label: dayLabel,
+          "Sessions": ga4Curr[i]?.sessions ?? 0,
+          "Sessions (prev)": ga4Prev[i]?.sessions ?? 0,
+          "Engaged": ga4Curr[i]?.engagedSessions ?? 0,
+          "Engaged (prev)": ga4Prev[i]?.engagedSessions ?? 0,
+        });
+      }
+      slides.push({
+        id: "ga4_daily_trend",
+        type: "chart-line",
+        title: "GA4 Organic Daily Trend — Sessions",
+        subtitle: `${label} vs Previous Period`,
+        chartData,
+        chartKeys: ["Sessions", "Sessions (prev)", "Engaged", "Engaged (prev)"],
+      });
+    }
   }
 
   return {

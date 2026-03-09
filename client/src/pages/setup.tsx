@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, getAuthHeaders } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -250,6 +250,10 @@ export default function SetupPage() {
   const [testStates, setTestStates] = useState<Record<number, TestState>>({});
   const [sheetUrlInput, setSheetUrlInput] = useState("");
   const [sheetsConnecting, setSheetsConnecting] = useState(false);
+  const [qssbDocInput, setQssbDocInput] = useState("");
+  const [strategyBankInput, setStrategyBankInput] = useState("");
+  const [qssbTesting, setQssbTesting] = useState(false);
+  const [strategyTesting, setStrategyTesting] = useState(false);
   const { toast } = useToast();
 
   const { data: googleStatus } = useQuery<{ configured: boolean }>({
@@ -264,12 +268,7 @@ export default function SetupPage() {
 
   const saveSheetUrlMutation = useMutation({
     mutationFn: async (url: string) => {
-      const res = await fetch("/api/settings/google_sheet_url", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ value: url }),
-      });
-      if (!res.ok) throw new Error("Failed to save");
+      await apiRequest("PUT", "/api/settings/google_sheet_url", { value: url });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
@@ -278,6 +277,71 @@ export default function SetupPage() {
     },
     onError: () => toast({ title: "Failed to save", variant: "destructive" }),
   });
+
+  const savedQssbDocId = appSettings["qssb_document_id"] ?? "";
+  const savedStrategyBankId = appSettings["strategy_bank_page_id"] ?? "";
+
+  const saveQssbMutation = useMutation({
+    mutationFn: async (docUrl: string) => {
+      const match = docUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
+      const docId = match ? match[1] : docUrl.trim();
+      await apiRequest("PUT", "/api/settings/qssb_document_id", { value: docId });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
+      toast({ title: "QSSB Document ID saved" });
+      setQssbDocInput("");
+    },
+    onError: () => toast({ title: "Failed to save", variant: "destructive" }),
+  });
+
+  const saveStrategyBankMutation = useMutation({
+    mutationFn: async (pageUrl: string) => {
+      const match = pageUrl.match(/([a-f0-9]{32})$/);
+      const pageId = match ? match[1] : pageUrl.trim().replace(/-/g, "");
+      await apiRequest("PUT", "/api/settings/strategy_bank_page_id", { value: pageId });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
+      toast({ title: "Strategy Bank ID saved" });
+      setStrategyBankInput("");
+    },
+    onError: () => toast({ title: "Failed to save", variant: "destructive" }),
+  });
+
+  const testQssbConnection = async () => {
+    setQssbTesting(true);
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch("/api/qssb/test", { headers });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        toast({ title: `QSSB connected: ${data.insights} insights, ${data.opportunities} opportunities` });
+      } else {
+        toast({ title: data.message || "QSSB connection failed", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "QSSB test failed", variant: "destructive" });
+    }
+    setQssbTesting(false);
+  };
+
+  const testStrategyBankConnection = async () => {
+    setStrategyTesting(true);
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch("/api/strategy-bank/test", { headers });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        toast({ title: `Strategy Bank connected: ${data.entries} entries` });
+      } else {
+        toast({ title: data.message || "Strategy Bank connection failed", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Strategy Bank test failed", variant: "destructive" });
+    }
+    setStrategyTesting(false);
+  };
 
   const { data: credentials = [], isLoading } = useQuery<CredentialSafe[]>({
     queryKey: ["/api/credentials"],
@@ -622,6 +686,115 @@ export default function SetupPage() {
                 </div>
               );
             })()}
+          </Card>
+        </div>
+
+        <Separator className="my-4" />
+
+        <div className="space-y-3">
+          <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">QSSB & Strategy Bank</h2>
+          <Card className="p-4">
+            <div className="space-y-4">
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <FileSpreadsheet className="w-4 h-4 text-muted-foreground" />
+                  <h3 className="font-medium text-sm">QSSB Google Document</h3>
+                  {savedQssbDocId && (
+                    <Badge variant="default" className="text-[10px]">
+                      <CheckCircle className="w-3 h-3 mr-1" /> Configured
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Paste the Google Docs URL or document ID for the QSSB document. This powers the "Client Insights" and "Additional Opportunities" sections in QBR reports.
+                </p>
+                {savedQssbDocId && (
+                  <div className="flex items-center gap-2 p-1.5 rounded bg-muted/50 mb-2">
+                    <Link className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    <span className="text-xs text-muted-foreground truncate" data-testid="text-qssb-doc-id">{savedQssbDocId}</span>
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="https://docs.google.com/document/d/… or document ID"
+                    value={qssbDocInput}
+                    onChange={e => setQssbDocInput(e.target.value)}
+                    className="text-xs h-8"
+                    data-testid="input-qssb-doc"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={() => saveQssbMutation.mutate(qssbDocInput.trim())}
+                    disabled={!qssbDocInput.trim() || saveQssbMutation.isPending}
+                    data-testid="button-save-qssb"
+                  >
+                    {savedQssbDocId ? "Update" : "Save"}
+                  </Button>
+                  {savedQssbDocId && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={testQssbConnection}
+                      disabled={qssbTesting}
+                      data-testid="button-test-qssb"
+                    >
+                      {qssbTesting ? <Loader2 className="w-3 h-3 animate-spin" /> : "Test"}
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              <Separator />
+
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <Globe className="w-4 h-4 text-muted-foreground" />
+                  <h3 className="font-medium text-sm">Notion SEO Strategy Bank</h3>
+                  {savedStrategyBankId && (
+                    <Badge variant="default" className="text-[10px]">
+                      <CheckCircle className="w-3 h-3 mr-1" /> Configured
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Paste the Notion page URL or page ID for the SEO Strategy Bank. Strategy entries are merged into the "Additional Opportunities" section.
+                </p>
+                {savedStrategyBankId && (
+                  <div className="flex items-center gap-2 p-1.5 rounded bg-muted/50 mb-2">
+                    <Link className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    <span className="text-xs text-muted-foreground truncate" data-testid="text-strategy-bank-id">{savedStrategyBankId}</span>
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="https://www.notion.so/… or page ID"
+                    value={strategyBankInput}
+                    onChange={e => setStrategyBankInput(e.target.value)}
+                    className="text-xs h-8"
+                    data-testid="input-strategy-bank"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={() => saveStrategyBankMutation.mutate(strategyBankInput.trim())}
+                    disabled={!strategyBankInput.trim() || saveStrategyBankMutation.isPending}
+                    data-testid="button-save-strategy-bank"
+                  >
+                    {savedStrategyBankId ? "Update" : "Save"}
+                  </Button>
+                  {savedStrategyBankId && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={testStrategyBankConnection}
+                      disabled={strategyTesting}
+                      data-testid="button-test-strategy-bank"
+                    >
+                      {strategyTesting ? <Loader2 className="w-3 h-3 animate-spin" /> : "Test"}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
           </Card>
         </div>
 

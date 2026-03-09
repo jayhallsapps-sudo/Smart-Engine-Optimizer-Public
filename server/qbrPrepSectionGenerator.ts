@@ -4,6 +4,8 @@ import { fetchNsmGoals } from "./sheetsClient";
 import { fetchAirtableWorkLog } from "./airtable";
 import { fetchAsanaWorkLog } from "./asanaClient";
 import { queryCallRail } from "./callrailClient";
+import { fetchQssbData } from "./qssbClient";
+import { fetchStrategyBank } from "./notionClient";
 import type { Client } from "@shared/schema";
 import type {
   QbrPrepReportData,
@@ -15,6 +17,7 @@ import type {
   Section5Diagnosis,
   Section6Priorities,
   Section7Tracking,
+  SectionQssb,
   SourceSnapshot,
   GenerationMeta,
   GoalRow,
@@ -144,6 +147,12 @@ import {
 
 const ME = "Manual entry needed";
 
+function pctDeltaLocal(current: number, previous: number): string {
+  if (previous === 0) return current > 0 ? "+∞%" : "—";
+  const pct = ((current - previous) / previous) * 100;
+  return `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`;
+}
+
 function fmtNum(n: number): string {
   return Math.round(n).toLocaleString("en-US");
 }
@@ -265,12 +274,24 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
   let gscQueryRows: any[] = [];
   let gscPageRows: any[] = [];
   let gscQueryPageRows: any[] = [];
+  let gscPrevQueryRows: any[] = [];
+  let gscPrevPageRows: any[] = [];
+  let gscPrevQueryPageRows: any[] = [];
   const gscAvailable = !!(gscToken && client.gscSiteUrl);
   if (gscAvailable) {
-    [gscQueryRows, gscPageRows, gscQueryPageRows] = await Promise.all([
+    const analysisDays = Math.round((new Date(quarter.analysisEnd).getTime() - new Date(quarter.analysisStart).getTime()) / 86400000);
+    const prevEnd = new Date(new Date(quarter.analysisStart).getTime() - 86400000);
+    const prevStart = new Date(prevEnd.getTime() - analysisDays * 86400000);
+    const prevStartStr = prevStart.toISOString().slice(0, 10);
+    const prevEndStr = prevEnd.toISOString().slice(0, 10);
+
+    [gscQueryRows, gscPageRows, gscQueryPageRows, gscPrevQueryRows, gscPrevPageRows, gscPrevQueryPageRows] = await Promise.all([
       gscFetch(gscToken!, client.gscSiteUrl!, quarter.analysisStart, quarter.analysisEnd, ["query"], 200),
       gscFetch(gscToken!, client.gscSiteUrl!, quarter.analysisStart, quarter.analysisEnd, ["page"], 200),
       gscFetch(gscToken!, client.gscSiteUrl!, quarter.analysisStart, quarter.analysisEnd, ["query", "page"], 100),
+      gscFetch(gscToken!, client.gscSiteUrl!, prevStartStr, prevEndStr, ["query"], 200),
+      gscFetch(gscToken!, client.gscSiteUrl!, prevStartStr, prevEndStr, ["page"], 200),
+      gscFetch(gscToken!, client.gscSiteUrl!, prevStartStr, prevEndStr, ["query", "page"], 100),
     ]);
     if (gscQueryRows.length > 0) dataSources.push("Google Search Console");
     else missingData.push("GSC");
@@ -392,7 +413,7 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
 
   const section1 = generateSection1(nsmData, ga4FunnelCurr, quarter, client, callTrackingSources);
   const section2 = generateSection2(ga4LandingRows, gscPageRows, sfData, sfHeaders, client, callTrackingLandingPages, callTrackingSources);
-  const section3 = generateSection3(gscQueryRows, gscPageRows, ga4LandingRows, client);
+  const section3 = generateSection3(gscQueryRows, gscPageRows, ga4LandingRows, client, gscPrevQueryRows, gscPrevPageRows, gscQueryPageRows, gscPrevQueryPageRows);
   const section4 = generateSection4(sfData, sfHeaders, client);
 
   const sfTierInput = analyzeSfForTierInput(sfData, sfHeaders);
@@ -442,6 +463,28 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
   };
   const section7 = generateSection7(section6, section5, section7Evidence);
 
+  let sectionQssb: SectionQssb | undefined;
+  try {
+    const [qssbData, strategyBank] = await Promise.all([
+      fetchQssbData(),
+      fetchStrategyBank(),
+    ]);
+    if (qssbData.clientInsights.length > 0 || qssbData.additionalOpportunities.length > 0 || strategyBank.entries.length > 0) {
+      sectionQssb = {
+        clientInsights: qssbData.clientInsights.map(q => ({ question: q })),
+        additionalOpportunities: [
+          ...qssbData.additionalOpportunities.map(o => ({ service: o.service, description: o.description, source: "QSSB" })),
+          ...strategyBank.entries.map(e => ({ service: e.service, description: e.description, source: "Strategy Bank" })),
+        ],
+      };
+      dataSources.push("QSSB");
+      if (strategyBank.entries.length > 0) dataSources.push("Strategy Bank");
+      console.log(`[QBR Prep] QSSB: ${sectionQssb.clientInsights.length} insights, ${sectionQssb.additionalOpportunities.length} opportunities`);
+    }
+  } catch (qssbErr: any) {
+    console.warn("[QBR Prep] QSSB/Strategy Bank fetch failed:", qssbErr.message);
+  }
+
   const sourceSnapshot: SourceSnapshot = {
     smartSeoClientMeta: { name: client.name, domain, brandTerms: client.brandTerms },
     nsmTracker: nsmData,
@@ -472,6 +515,7 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
     section5Diagnosis: section5,
     section6Priorities: section6,
     section7Tracking: section7,
+    sectionQssb,
     sourceSnapshot,
     generationMeta: {
       generatedAt: new Date().toISOString(),
@@ -1217,11 +1261,23 @@ function buildTrafficPageInsight(pageType: string, url: string, clicksStr: strin
   }
 }
 
+function pctDeltaStr(current: number, previous: number): string {
+  if (previous === 0 && current === 0) return "0%";
+  if (previous === 0) return "+100%";
+  const delta = ((current - previous) / previous) * 100;
+  const sign = delta >= 0 ? "+" : "";
+  return `${sign}${delta.toFixed(1)}%`;
+}
+
 function generateSection3(
   gscQueries: any[],
   gscPages: any[],
   ga4Landing: any[],
-  client: Client
+  client: Client,
+  gscPrevQueries: any[] = [],
+  prevGscPages?: any[],
+  gscQueryPageRows?: any[],
+  prevGscQueryPageRows?: any[]
 ): Section3Traffic {
   const topTrafficTopics: TrafficTopicRow[] = [];
   const topTrafficPages: TrafficPageRow[] = [];
@@ -1236,15 +1292,35 @@ function generateSection3(
     }));
 
     const clusters = clusterQueriesByTopic(queryData, client);
+
+    const prevClusters = new Map<string, { queryCount: number; impressions: number }>();
+    if (gscPrevQueries.length > 0) {
+      const prevQueryData = gscPrevQueries.map(r => ({
+        query: r.keys?.[0] ?? "",
+        clicks: r.clicks ?? 0,
+        impressions: r.impressions ?? 0,
+        ctr: r.ctr ?? 0,
+        position: r.position ?? 0,
+      }));
+      const prevTopicClusters = clusterQueriesByTopic(prevQueryData, client);
+      for (const [topic, queries] of prevTopicClusters.entries()) {
+        prevClusters.set(topic, {
+          queryCount: queries.length,
+          impressions: queries.reduce((s, q) => s + q.impressions, 0),
+        });
+      }
+    }
+
     const topicSummaries = [...clusters.entries()]
       .map(([topic, queries]) => ({
         topic,
+        queryCount: queries.length,
         totalClicks: queries.reduce((s, q) => s + q.clicks, 0),
         totalImpressions: queries.reduce((s, q) => s + q.impressions, 0),
         avgCtr: queries.length > 0 ? queries.reduce((s, q) => s + q.ctr, 0) / queries.length : 0,
         examples: queries.sort((a, b) => b.clicks - a.clicks).slice(0, 3).map(q => q.query),
       }))
-      .sort((a, b) => b.totalClicks - a.totalClicks)
+      .sort((a, b) => b.queryCount - a.queryCount)
       .slice(0, 8);
 
     const totalClicks = gscQueries.reduce((s: number, r: any) => s + (r.clicks ?? 0), 0);
@@ -1263,12 +1339,20 @@ function generateSection3(
         insight = `${clickShare}% of clicks. Low admit connection — mostly informational.`;
       }
 
+      const prev = prevClusters.get(ts.topic);
+      const queryCountDelta = prev ? pctDeltaStr(ts.queryCount, prev.queryCount) : undefined;
+      const impressionsDelta = prev ? pctDeltaStr(ts.totalImpressions, prev.impressions) : undefined;
+
       topTrafficTopics.push({
         topic: ts.topic,
         exampleQueries: ts.examples.join(", "),
         connectionToAdmits: connection,
         insight,
         dataSource: "GSC",
+        queryCount: ts.queryCount,
+        queryCountDelta,
+        impressions: ts.totalImpressions,
+        impressionsDelta,
       });
     }
   }
@@ -1280,6 +1364,29 @@ function generateSection3(
 
     const totalConversions = ga4Landing.reduce((s, r) => s + (r.conversions ?? 0), 0);
 
+    const prevPageMap = new Map<string, any>();
+    if (prevGscPages && prevGscPages.length > 0) {
+      for (const r of prevGscPages) {
+        const key = r.keys?.[0] ?? "";
+        prevPageMap.set(key, r);
+      }
+    }
+
+    const queryCountByPage = new Map<string, number>();
+    if (gscQueryPageRows && gscQueryPageRows.length > 0) {
+      for (const r of gscQueryPageRows) {
+        const pg = r.keys?.[1] ?? "";
+        queryCountByPage.set(pg, (queryCountByPage.get(pg) ?? 0) + 1);
+      }
+    }
+    const prevQueryCountByPage = new Map<string, number>();
+    if (prevGscQueryPageRows && prevGscQueryPageRows.length > 0) {
+      for (const r of prevGscQueryPageRows) {
+        const pg = r.keys?.[1] ?? "";
+        prevQueryCountByPage.set(pg, (prevQueryCountByPage.get(pg) ?? 0) + 1);
+      }
+    }
+
     for (const row of topPages) {
       const page = row.keys?.[0] ?? "";
       const pageType = classifyPageType(page);
@@ -1287,9 +1394,25 @@ function generateSection3(
       const connection = classifyTrafficPageConnection(pageType, page);
       const insight = buildTrafficPageInsight(pageType, page, clicksFormatted);
 
+      const prev = prevPageMap.get(page);
+      const prevClicks = prev?.clicks ?? 0;
+      const prevImpressions = prev?.impressions ?? 0;
+      const currImpressions = row.impressions ?? 0;
+      const currQueries = queryCountByPage.get(page) ?? 0;
+      const prevQueries = prevQueryCountByPage.get(page) ?? 0;
+
+      const clicksDelta = prevClicks > 0 ? pctDeltaLocal(row.clicks ?? 0, prevClicks) : undefined;
+      const impressionsDelta = prevImpressions > 0 ? pctDeltaLocal(currImpressions, prevImpressions) : undefined;
+      const queriesDelta = prevQueries > 0 ? pctDeltaLocal(currQueries, prevQueries) : undefined;
+
       topTrafficPages.push({
         page: shortUrl(page),
         clicks: clicksFormatted,
+        clicksDelta,
+        impressions: fmtNum(currImpressions),
+        impressionsDelta,
+        queries: currQueries > 0 ? String(currQueries) : undefined,
+        queriesDelta,
         ctr: fmtPct(row.ctr ?? 0),
         connectionToAdmits: connection,
         insight,

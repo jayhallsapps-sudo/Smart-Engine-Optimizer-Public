@@ -70,6 +70,21 @@ SmartEO integrates with the following external services and APIs:
 - **CLIENT_SENTIMENT_OPTIONS**: `["Happy", "Neutral", "Concerned", "Frustrated"]`
 - **Routes use validated/normalized amInputs**: All generate endpoints pass `amValidation.amInputs` (not raw body) to generators
 
+## QSSB & Strategy Bank Integration (March 2026)
+- **QSSB Google Doc**: `server/qssbClient.ts` fetches and parses QSSB document via Google Docs connector; extracts "Client Insights" (questions for client) and "Additional Opportunities" (upsells/cross-sells); 1hr cache TTL
+- **Notion Strategy Bank**: `server/notionClient.ts` queries Notion SEO Strategy Bank via Notion connector; Strategy Bank entries merged into "Additional Opportunities"
+- **Report Integration**: QSSB sections added to QBR Prep (Section 8/9), QBR Full (slides), Mid-Strategy (slides); all with inline editing support
+- **Export Support**: QSSB sections included in DOCX export (qbrPrepDocxGenerator.ts) and print view (qbr-prep-print.tsx)
+- **Settings UI**: Setup page has QSSB Doc URL and Notion Strategy Bank URL inputs with "Test Connection" buttons
+- **Test Routes**: `GET /api/qssb/test` and `GET /api/strategy-bank/test` verify document access
+- **Settings Keys**: `qssb_document_id`, `strategy_bank_page_id`
+
+## Looker Studio-Style Data Views (March 2026)
+- **Query Groups Table**: Topic-level aggregation with % deltas (# Queries Δ, Impressions Δ) in QBR Prep Section 3 and Monthly report
+- **Landing Page Table**: Multi-metric deltas (Clicks Δ, Impressions Δ, # Queries Δ) in QBR Prep Section 3 and Monthly report
+- **Daily Trend Charts**: GSC (Clicks + Impressions) and GA4 (Sessions + Engaged Sessions) daily line charts comparing current vs previous period in Monthly report
+- **Data Functions**: `fetchGscDailyTrend()` in gscClient.ts, `fetchGa4DailyTrend()` in ga4Client.ts, `fetchGscQueryRowsForTopicClustering()` in gscClient.ts
+
 ## Removed / Legacy
 - QBR Prep v1 routes (`/generate`, `/docx`, `/upload-to-drive`, `/saved/*`) — removed; use v2 routes only
 - SEMrush Project ID input field removed from client setup UI (field still in DB; connectedServices now checks actual API credential existence)

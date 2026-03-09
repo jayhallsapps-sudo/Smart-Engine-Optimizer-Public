@@ -5,6 +5,8 @@ import { queryCallRail, handlesCallRailCommand } from "./callrailClient";
 import { querySemrush, handlesSemrushCommand } from "./semrushClient";
 import { fetchAirtableWorkLog } from "./airtable";
 import { fetchAsanaWorkLog, groupAsanaTasks } from "./asanaClient";
+import { fetchQssbData } from "./qssbClient";
+import { fetchStrategyBank } from "./notionClient";
 import type { Slide } from "../client/src/components/report-preview/pptx-preview";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -874,6 +876,34 @@ export async function generateQbrFull(input: {
       subtitle: "Account Manager Context & Priorities",
       bullets: amInputsBullets,
     });
+  }
+
+  try {
+    const [qssbData, strategyBank] = await Promise.all([fetchQssbData(), fetchStrategyBank()]);
+    if (qssbData.clientInsights.length > 0) {
+      slides.push({
+        id: "qssb_insights",
+        type: "bullets",
+        title: "Client Insights",
+        subtitle: "Questions to Ask the Client",
+        bullets: qssbData.clientInsights.slice(0, 10),
+      });
+    }
+    const opps = [
+      ...qssbData.additionalOpportunities.map(o => `${o.service}${o.description ? ": " + o.description : ""}`),
+      ...strategyBank.entries.map(e => `${e.service}${e.description ? ": " + e.description : ""}`),
+    ];
+    if (opps.length > 0) {
+      slides.push({
+        id: "qssb_opportunities",
+        type: "bullets",
+        title: "Additional Opportunities",
+        subtitle: "Cross-sell & Upsell Recommendations",
+        bullets: opps.slice(0, 12),
+      });
+    }
+  } catch (qssbErr: any) {
+    console.warn("[QBR Full] QSSB/Strategy Bank fetch failed:", qssbErr.message);
   }
 
   return {

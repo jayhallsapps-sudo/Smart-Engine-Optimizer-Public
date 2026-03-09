@@ -3,6 +3,8 @@ import { queryGsc } from "./gscClient";
 import { queryGa4 } from "./ga4Client";
 import { decrypt } from "./encryption";
 import { extractDomain } from "./googleToken";
+import { fetchQssbData } from "./qssbClient";
+import { fetchStrategyBank } from "./notionClient";
 import type { Slide } from "../client/src/components/report-preview/pptx-preview";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -917,6 +919,34 @@ export async function generateMidStrategy({
   const sources = await normalizeSources(clientId, currentCrawlAssetId ?? null, comparisonCrawlAssetId ?? null);
   const workbook = await buildWorkbook(sources, normalizedAmInputs);
   const slides = generateSlides(workbook, sources.client.name, fmtDate(sources.today), normalizedAmInputs);
+
+  try {
+    const [qssbData, strategyBank] = await Promise.all([fetchQssbData(), fetchStrategyBank()]);
+    if (qssbData.clientInsights.length > 0) {
+      slides.push({
+        id: "qssb_insights",
+        type: "bullets",
+        title: "Client Insights",
+        subtitle: "Questions to Ask the Client",
+        bullets: qssbData.clientInsights.slice(0, 10),
+      });
+    }
+    const opps = [
+      ...qssbData.additionalOpportunities.map(o => `${o.service}${o.description ? ": " + o.description : ""}`),
+      ...strategyBank.entries.map(e => `${e.service}${e.description ? ": " + e.description : ""}`),
+    ];
+    if (opps.length > 0) {
+      slides.push({
+        id: "qssb_opportunities",
+        type: "bullets",
+        title: "Additional Opportunities",
+        subtitle: "Cross-sell & Upsell Recommendations",
+        bullets: opps.slice(0, 12),
+      });
+    }
+  } catch (qssbErr: any) {
+    console.warn("[Mid-Strategy] QSSB/Strategy Bank fetch failed:", qssbErr.message);
+  }
 
   return {
     report_title: "Content & SEO Mid-Strategy Check-in",

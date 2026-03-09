@@ -242,23 +242,50 @@ export async function generateQbrPrepV2Docx(
   const s3 = reportData.section3Traffic;
   docChildren.push(sectionHeading(3, "Top Organic Traffic Drivers"));
   docChildren.push(subHeading("Top Traffic Topics"));
-  const s3aRows = s3.topTrafficTopics.map((r: any, ri: number) => [
-    resolveCell(`s3a_${ri}_0`, r.topic, edits),
-    resolveCell(`s3a_${ri}_1`, r.exampleQueries, edits),
-    resolveCell(`s3a_${ri}_2`, r.connectionToAdmits, edits),
-    resolveCell(`s3a_${ri}_3`, r.insight, edits),
-  ]);
-  docChildren.push(makeTable(["Topic", "Example Queries", "Connection to Admits", "Insight"], s3aRows));
+  const hasTopicDeltas = s3.topTrafficTopics.some((r: any) => r.queryCount != null);
+  const s3aRows = s3.topTrafficTopics.map((r: any, ri: number) => {
+    const cells = [resolveCell(`s3a_${ri}_0`, r.topic, edits)];
+    if (hasTopicDeltas) {
+      cells.push(
+        String(r.queryCount ?? "—"),
+        r.queryCountDelta ?? "—",
+        r.impressions != null ? r.impressions.toLocaleString("en-US") : "—",
+        r.impressionsDelta ?? "—",
+      );
+    }
+    cells.push(
+      resolveCell(`s3a_${ri}_1`, r.exampleQueries, edits),
+      resolveCell(`s3a_${ri}_2`, r.connectionToAdmits, edits),
+      resolveCell(`s3a_${ri}_3`, r.insight, edits),
+    );
+    return cells;
+  });
+  const s3aHeaders = hasTopicDeltas
+    ? ["Topic", "# Queries", "Δ Queries", "Impressions", "Δ Impressions", "Example Queries", "Connection to Admits", "Insight"]
+    : ["Topic", "Example Queries", "Connection to Admits", "Insight"];
+  docChildren.push(makeTable(s3aHeaders, s3aRows));
 
   docChildren.push(subHeading("Top Traffic Pages"));
-  const s3bRows = s3.topTrafficPages.map((r: any, ri: number) => [
-    resolveCell(`s3b_${ri}_0`, r.page, edits),
-    resolveCell(`s3b_${ri}_1`, r.clicks, edits),
-    resolveCell(`s3b_${ri}_2`, r.ctr, edits),
-    resolveCell(`s3b_${ri}_3`, r.connectionToAdmits, edits),
-    resolveCell(`s3b_${ri}_4`, r.insight, edits),
-  ]);
-  docChildren.push(makeTable(["Page", "Clicks", "CTR", "Connection to Admits", "Insight"], s3bRows));
+  const hasPageDeltas = s3.topTrafficPages.some((r: any) => r.clicksDelta || r.impressions || r.queries);
+  const s3bRows = s3.topTrafficPages.map((r: any, ri: number) => {
+    const cells = [
+      resolveCell(`s3b_${ri}_0`, r.page, edits),
+      resolveCell(`s3b_${ri}_1`, r.clicks, edits),
+    ];
+    if (hasPageDeltas) {
+      cells.push(r.clicksDelta ?? "—", r.impressions ?? "—", r.impressionsDelta ?? "—", r.queries ?? "—", r.queriesDelta ?? "—");
+    }
+    cells.push(
+      resolveCell(`s3b_${ri}_2`, r.ctr, edits),
+      resolveCell(`s3b_${ri}_3`, r.connectionToAdmits, edits),
+      resolveCell(`s3b_${ri}_4`, r.insight, edits),
+    );
+    return cells;
+  });
+  const s3bHeaders = hasPageDeltas
+    ? ["Page", "Clicks", "Δ Clicks", "Impressions", "Δ Impressions", "# Queries", "Δ Queries", "CTR", "Connection to Admits", "Insight"]
+    : ["Page", "Clicks", "CTR", "Connection to Admits", "Insight"];
+  docChildren.push(makeTable(s3bHeaders, s3bRows));
 
   const s4 = reportData.section4Services;
   docChildren.push(sectionHeading(4, "Site Service Overview"));
@@ -327,6 +354,35 @@ export async function generateQbrPrepV2Docx(
     resolveCell(`s7_${ri}_4`, r.whyItMatters, edits),
   ]);
   docChildren.push(makeTable(["Focus Area", "Metric", "Source", "Status", "Why It Matters"], s7Rows));
+
+  const qssb = reportData.sectionQssb;
+  if (qssb?.clientInsights?.length > 0) {
+    docChildren.push(sectionHeading(8, "Client Insights"));
+    for (let i = 0; i < qssb.clientInsights.length; i++) {
+      const q = qssb.clientInsights[i];
+      docChildren.push(
+        new Paragraph({
+          spacing: { before: 40, after: 40 },
+          indent: { left: convertInchesToTwip(0.25) },
+          border: { left: { color: ACCENT.replace("#", ""), size: 6, style: "single" as any, space: 4 } },
+          children: [
+            new TextRun({ text: resolveCell(`qssb_insight_${i}`, q.question, edits), size: 20, color: "374151", font: "Calibri" }),
+          ],
+        })
+      );
+    }
+  }
+
+  if (qssb?.additionalOpportunities?.length > 0) {
+    const oppNum = qssb?.clientInsights?.length > 0 ? 9 : 8;
+    docChildren.push(sectionHeading(oppNum, "Additional Opportunities"));
+    const oppRows = qssb.additionalOpportunities.map((o: any, i: number) => [
+      resolveCell(`qssb_opp_${i}_0`, o.service, edits),
+      resolveCell(`qssb_opp_${i}_1`, o.description, edits),
+      o.source ?? "",
+    ]);
+    docChildren.push(makeTable(["Service", "Description", "Source"], oppRows));
+  }
 
   if (reportData.generationMeta) {
     docChildren.push(

@@ -49,11 +49,20 @@ export interface TrafficTopicRow {
   connectionToAdmits: string;
   insight: string;
   dataSource?: string;
+  queryCount?: number;
+  queryCountDelta?: string;
+  impressions?: number;
+  impressionsDelta?: string;
 }
 
 export interface TrafficPageRow {
   page: string;
   clicks: string;
+  clicksDelta?: string;
+  impressions?: string;
+  impressionsDelta?: string;
+  queries?: string;
+  queriesDelta?: string;
   ctr: string;
   connectionToAdmits: string;
   insight: string;
@@ -105,6 +114,21 @@ export interface Section7Tracking {
   tracking: TrackingRow[];
 }
 
+export interface QssbInsight {
+  question: string;
+}
+
+export interface QssbOpportunity {
+  service: string;
+  description: string;
+  source: string;
+}
+
+export interface SectionQssb {
+  clientInsights: QssbInsight[];
+  additionalOpportunities: QssbOpportunity[];
+}
+
 export interface SourceSnapshot {
   smartSeoClientMeta: Record<string, any> | null;
   nsmTracker: Record<string, any> | null;
@@ -137,6 +161,7 @@ export interface QbrPrepReportData {
   section5Diagnosis: Section5Diagnosis;
   section6Priorities: Section6Priorities;
   section7Tracking: Section7Tracking;
+  sectionQssb?: SectionQssb;
   sourceSnapshot: SourceSnapshot;
   generationMeta: GenerationMeta;
 }

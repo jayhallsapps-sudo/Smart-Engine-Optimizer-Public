@@ -134,24 +134,54 @@ export default function QbrPrepPrint() {
     ...customRowsAsNodes(edits, "s2b"),
   ];
 
+  const hasTopicDeltas = s3.topTrafficTopics.some((r: any) => r.queryCount != null);
+
   const s3aRows: ReactNode[][] = [
-    ...s3.topTrafficTopics.map((r: any, ri: number) => [
-      cell(e(`s3a_${ri}_0`, r.topic)),
-      cell(e(`s3a_${ri}_1`, r.exampleQueries)),
-      cell(e(`s3a_${ri}_2`, r.connectionToAdmits)),
-      badgeCell(e(`s3a_${ri}_3`, r.insight), r.dataSource),
-    ]),
+    ...s3.topTrafficTopics.map((r: any, ri: number) => {
+      const baseCells = [cell(e(`s3a_${ri}_0`, r.topic))];
+      if (hasTopicDeltas) {
+        baseCells.push(
+          cell(String(r.queryCount ?? "—")),
+          cell(r.queryCountDelta ?? "—"),
+          cell(r.impressions != null ? r.impressions.toLocaleString("en-US") : "—"),
+          cell(r.impressionsDelta ?? "—"),
+        );
+      }
+      baseCells.push(
+        cell(e(`s3a_${ri}_1`, r.exampleQueries)),
+        cell(e(`s3a_${ri}_2`, r.connectionToAdmits)),
+        badgeCell(e(`s3a_${ri}_3`, r.insight), r.dataSource),
+      );
+      return baseCells;
+    }),
     ...customRowsAsNodes(edits, "s3a"),
   ];
 
+  const hasPageDeltas = s3.topTrafficPages.some((r: any) => r.clicksDelta || r.impressions || r.queries);
+
   const s3bRows: ReactNode[][] = [
-    ...s3.topTrafficPages.map((r: any, ri: number) => [
-      cell(e(`s3b_${ri}_0`, r.page)),
-      cell(e(`s3b_${ri}_1`, r.clicks)),
-      cell(e(`s3b_${ri}_2`, r.ctr)),
-      cell(e(`s3b_${ri}_3`, r.connectionToAdmits)),
-      badgeCell(e(`s3b_${ri}_4`, r.insight), r.dataSource),
-    ]),
+    ...s3.topTrafficPages.map((r: any, ri: number) => {
+      const cells: ReactNode[] = [
+        cell(e(`s3b_${ri}_0`, r.page)),
+        cell(e(`s3b_${ri}_1`, r.clicks)),
+      ];
+      if (hasPageDeltas) {
+        const deltaStyle = (v: string) => ({ color: v?.startsWith("-") ? "#DC2626" : "#16A34A", fontSize: "10px" });
+        cells.push(
+          <span key="cld" style={deltaStyle(r.clicksDelta ?? "")}>{r.clicksDelta ?? "—"}</span>,
+          <span key="imp" style={{ fontSize: "10px" }}>{r.impressions ?? "—"}</span>,
+          <span key="impd" style={deltaStyle(r.impressionsDelta ?? "")}>{r.impressionsDelta ?? "—"}</span>,
+          <span key="qr" style={{ fontSize: "10px" }}>{r.queries ?? "—"}</span>,
+          <span key="qrd" style={deltaStyle(r.queriesDelta ?? "")}>{r.queriesDelta ?? "—"}</span>,
+        );
+      }
+      cells.push(
+        cell(e(`s3b_${ri}_2`, r.ctr)),
+        cell(e(`s3b_${ri}_3`, r.connectionToAdmits)),
+        badgeCell(e(`s3b_${ri}_4`, r.insight), r.dataSource),
+      );
+      return cells;
+    }),
     ...customRowsAsNodes(edits, "s3b"),
   ];
 
@@ -254,12 +284,16 @@ export default function QbrPrepPrint() {
           <SectionHeading num={3} title="Top Organic Traffic Drivers" />
           <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Traffic Topics</div>
           <ReportTable
-            headers={["Topic", "Example Queries", "Connection to Admits", "Insight"]}
+            headers={hasTopicDeltas
+              ? ["Topic", "# Queries", "Δ Queries", "Impressions", "Δ Impressions", "Example Queries", "Connection to Admits", "Insight"]
+              : ["Topic", "Example Queries", "Connection to Admits", "Insight"]}
             rows={s3aRows}
           />
           <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Traffic Pages</div>
           <ReportTable
-            headers={["Page", "Clicks", "CTR", "Connection to Admits", "Insight"]}
+            headers={hasPageDeltas
+              ? ["Page", "Clicks", "Δ Clicks", "Impressions", "Δ Impressions", "# Queries", "Δ Queries", "CTR", "Connection to Admits", "Insight"]
+              : ["Page", "Clicks", "CTR", "Connection to Admits", "Insight"]}
             rows={s3bRows}
           />
 
@@ -288,6 +322,33 @@ export default function QbrPrepPrint() {
             headers={["Focus Area", "Metric", "Source", "Status", "Why It Matters"]}
             rows={s7Rows}
           />
+
+          {reportData.sectionQssb?.clientInsights?.length > 0 && (
+            <>
+              <SectionHeading num={8} title="Client Insights" />
+              <div style={{ fontSize: "11px", color: "#374151", marginBottom: 12 }} data-testid="qssb-insights-print">
+                {reportData.sectionQssb.clientInsights.map((insight: any, i: number) => (
+                  <div key={i} style={{ marginBottom: 6, paddingLeft: 12, borderLeft: `3px solid ${ACCENT}44` }}>
+                    {e(`qssb_insight_${i}`, insight.question)}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {reportData.sectionQssb?.additionalOpportunities?.length > 0 && (
+            <>
+              <SectionHeading num={reportData.sectionQssb?.clientInsights?.length > 0 ? 9 : 8} title="Additional Opportunities" />
+              <ReportTable
+                headers={["Service", "Description", "Source"]}
+                rows={reportData.sectionQssb.additionalOpportunities.map((opp: any, i: number) => [
+                  cell(e(`qssb_opp_${i}_0`, opp.service)),
+                  cell(e(`qssb_opp_${i}_1`, opp.description)),
+                  <SourceBadge key={`src-${i}`} source={opp.source} />,
+                ])}
+              />
+            </>
+          )}
 
           {genMeta && (
             <div style={{ fontSize: "9px", color: "#9CA3AF", marginTop: 16 }}>

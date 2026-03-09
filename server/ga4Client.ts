@@ -284,6 +284,57 @@ export async function queryGa4(
   }
 }
 
+export interface Ga4DailyTrendPoint {
+  date: string;
+  sessions: number;
+  engagedSessions: number;
+}
+
+export async function fetchGa4DailyTrend(
+  client: Client,
+  dateRange: string
+): Promise<{ current: Ga4DailyTrendPoint[]; previous: Ga4DailyTrendPoint[] }> {
+  if (!client.ga4PropertyId) return { current: [], previous: [] };
+  const accessToken = await getGoogleAccessToken("google_analytics_4");
+  if (!accessToken) return { current: [], previous: [] };
+
+  const { startDate, endDate, prevStartDate, prevEndDate } = dateRangeToGoogleDates(dateRange);
+  const propertyId = client.ga4PropertyId;
+
+  try {
+    const [currData, prevData] = await Promise.all([
+      runReport(accessToken, propertyId, {
+        dateRanges: [{ startDate, endDate }],
+        dimensions: [{ name: "date" }],
+        metrics: [{ name: "sessions" }, { name: "engagedSessions" }],
+        dimensionFilter: organicFilter(),
+        orderBys: [{ dimension: { dimensionName: "date" } }],
+        limit: 500,
+      }),
+      runReport(accessToken, propertyId, {
+        dateRanges: [{ startDate: prevStartDate, endDate: prevEndDate }],
+        dimensions: [{ name: "date" }],
+        metrics: [{ name: "sessions" }, { name: "engagedSessions" }],
+        dimensionFilter: organicFilter(),
+        orderBys: [{ dimension: { dimensionName: "date" } }],
+        limit: 500,
+      }),
+    ]);
+
+    const toPoints = (data: any): Ga4DailyTrendPoint[] =>
+      extractRows(data).map(r => ({
+        date: r.dimensions[0],
+        sessions: r.metrics[0],
+        engagedSessions: r.metrics[1],
+      })).sort((a, b) => a.date.localeCompare(b.date));
+
+    return { current: toPoints(currData), previous: toPoints(prevData) };
+  } catch (err: any) {
+    console.error("[GA4] fetchGa4DailyTrend error:", err.message);
+    return { current: [], previous: [] };
+  }
+}
+
 export function handlesGa4Command(command: Command): boolean {
   return [
     "ga4_combined_funnel",

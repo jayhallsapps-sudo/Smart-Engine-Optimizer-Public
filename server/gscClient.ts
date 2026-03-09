@@ -117,6 +117,7 @@ export async function queryGsc(
           formatNum(r.clicks),
           prev ? fmtDelta(r.clicks, prev.clicks) : "new",
           formatNum(r.impressions),
+          prev ? pctDelta(r.impressions, prev.impressions) : "new",
           `${(r.ctr * 100).toFixed(1)}%`,
           r.position.toFixed(1),
         ];
@@ -126,7 +127,7 @@ export async function queryGsc(
         clientName: client.name,
         dateRange,
         summary: [],
-        tables: [{ title: "Top Pages by Clicks", headers: ["Page", "Clicks", "Δ Clicks", "Impressions", "CTR", "Avg Position"], rows }],
+        tables: [{ title: "Top Pages by Clicks", headers: ["Page", "Clicks", "Δ Clicks", "Impressions", "Δ Impressions", "CTR", "Avg Position"], rows }],
       };
     }
 
@@ -175,6 +176,61 @@ export async function queryGsc(
   } catch (err: any) {
     console.error(`[GSC] ${command} error:`, err.message);
     throw err;
+  }
+}
+
+export async function fetchGscQueryRowsForTopicClustering(
+  client: Client,
+  dateRange: string
+): Promise<{ currentRows: any[]; previousRows: any[] }> {
+  if (!client.gscSiteUrl) return { currentRows: [], previousRows: [] };
+  const accessToken = await getGoogleAccessToken("google_search_console");
+  if (!accessToken) return { currentRows: [], previousRows: [] };
+
+  const { startDate, endDate, prevStartDate, prevEndDate } = dateRangeToGoogleDates(dateRange);
+  const siteUrl = client.gscSiteUrl;
+
+  try {
+    const [currRows, prevRows] = await Promise.all([
+      gscQuery(accessToken, siteUrl, startDate, endDate, ["query"], 200),
+      gscQuery(accessToken, siteUrl, prevStartDate, prevEndDate, ["query"], 200),
+    ]);
+    return { currentRows: currRows, previousRows: prevRows };
+  } catch (err: any) {
+    console.error(`[GSC] fetchGscQueryRowsForTopicClustering error:`, err.message);
+    return { currentRows: [], previousRows: [] };
+  }
+}
+
+export interface DailyTrendPoint {
+  date: string;
+  clicks: number;
+  impressions: number;
+}
+
+export async function fetchGscDailyTrend(
+  client: Client,
+  dateRange: string
+): Promise<{ current: DailyTrendPoint[]; previous: DailyTrendPoint[] }> {
+  if (!client.gscSiteUrl) return { current: [], previous: [] };
+  const accessToken = await getGoogleAccessToken("google_search_console");
+  if (!accessToken) return { current: [], previous: [] };
+
+  const { startDate, endDate, prevStartDate, prevEndDate } = dateRangeToGoogleDates(dateRange);
+  const siteUrl = client.gscSiteUrl;
+
+  try {
+    const [currRows, prevRows] = await Promise.all([
+      gscQuery(accessToken, siteUrl, startDate, endDate, ["date"], 5000),
+      gscQuery(accessToken, siteUrl, prevStartDate, prevEndDate, ["date"], 5000),
+    ]);
+    const toPoints = (rows: any[]): DailyTrendPoint[] =>
+      rows.map(r => ({ date: r.keys[0], clicks: r.clicks ?? 0, impressions: r.impressions ?? 0 }))
+        .sort((a, b) => a.date.localeCompare(b.date));
+    return { current: toPoints(currRows), previous: toPoints(prevRows) };
+  } catch (err: any) {
+    console.error("[GSC] fetchGscDailyTrend error:", err.message);
+    return { current: [], previous: [] };
   }
 }
 

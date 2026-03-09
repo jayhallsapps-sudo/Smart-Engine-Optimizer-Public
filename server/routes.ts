@@ -926,6 +926,26 @@ export async function registerRoutes(
     res.json(setting);
   });
 
+  app.get("/api/qssb/test", async (_req, res) => {
+    try {
+      const { fetchQssbData } = await import("./qssbClient");
+      const data = await fetchQssbData();
+      res.json({ success: true, insights: data.clientInsights.length, opportunities: data.additionalOpportunities.length });
+    } catch (err: any) {
+      res.json({ success: false, message: err.message });
+    }
+  });
+
+  app.get("/api/strategy-bank/test", async (_req, res) => {
+    try {
+      const { fetchStrategyBank } = await import("./notionClient");
+      const data = await fetchStrategyBank();
+      res.json({ success: true, entries: data.entries.length });
+    } catch (err: any) {
+      res.json({ success: false, message: err.message });
+    }
+  });
+
   app.get("/api/clients/:id/sf-reports", async (req, res) => {
     const clientId = Number(req.params.id);
     const reports = await storage.getSfReports(clientId);

@@ -566,6 +566,7 @@ export default function QbrPrepPage() {
             section5Diagnosis={reportData.section5Diagnosis}
             section6Priorities={reportData.section6Priorities}
             section7Tracking={reportData.section7Tracking}
+            sectionQssb={reportData.sectionQssb}
             edits={edits}
             onEdit={handleEdit}
             generationMeta={reportData.generationMeta}

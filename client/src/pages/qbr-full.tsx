@@ -480,7 +480,7 @@ export default function QbrFullPage() {
               </p>
               {clientId && (
                 <p className="text-xs text-muted-foreground">
-                  Tip: upload a Screaming Frog crawl to enrich technical slides.
+                  Tip: upload a site crawl to enrich technical slides.
                 </p>
               )}
             </div>

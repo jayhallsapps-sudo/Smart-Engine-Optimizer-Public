@@ -1,0 +1,146 @@
+Improve QBR Prep Section 3 — Top Traffic Pages.
+
+Keep this table traffic-first. Do NOT redesign it into a conversion-first table.
+
+Problem:
+The table is correctly showing top traffic pages, but the interpretation layer is weak:
+- “Connection to Admits” is resolving to “Unclear” for nearly every row
+- “Insight” is too shallow and repetitive
+- page classification is being used as the insight instead of actual interpretation
+- source badges are placed awkwardly inside the insight cell
+
+==================================================
+GOAL
+==================================================
+
+Keep the table as a Top Traffic Pages table, but improve its analytical value.
+
+The table should still show high-traffic pages, but it should better explain:
+1. how each page relates to admits
+2. what role the page plays in the user journey
+3. whether the page is direct, assisted, trust-building, or mostly informational
+
+==================================================
+KEEP THESE PARTS
+==================================================
+
+Do NOT change:
+- the traffic-first nature of the table
+- the raw slug/path presentation
+- the overall table structure unless required for the fixes below
+
+==================================================
+FIX 1 — CONNECTION TO ADMITS
+==================================================
+
+Current problem:
+Almost every row shows “Unclear,” which makes the column useless.
+
+Replace the current logic with a more useful classification model.
+
+Use one of these values:
+- Direct
+- Assisted
+- Trust / Evaluation
+- Informational
+- Limited attribution
+
+Decision guidance:
+- Direct:
+  page is clearly tied to conversion behavior, admissions, contact, VOB, or high-intent service action
+- Assisted:
+  page likely supports the conversion path but is not the final action point
+- Trust / Evaluation:
+  page supports credibility/research before action, e.g. staff/team/about style pages
+- Informational:
+  page drives awareness/education traffic with weak direct admit linkage
+- Limited attribution:
+  page may matter, but the available data cannot confidently connect it to admits
+
+Do NOT overuse “Limited attribution.”
+Use it only when the page truly cannot be interpreted more specifically.
+
+==================================================
+FIX 2 — INSIGHT COLUMN
+==================================================
+
+Current problem:
+The Insight column is mostly just page classification, e.g.:
+- Substance-Specific page
+- Homepage page
+- Conditions page
+
+That is not enough.
+
+Replace it with a real interpretation of the page’s role.
+
+Examples of better insight logic:
+- High-volume informational entry point with weak direct admit linkage
+- Awareness-stage content that may support later service-page exploration
+- Trust-building page that can influence late-stage decision-making
+- Branded/local entry page with likely assisted conversion role
+- Condition-specific page that should route users toward appropriate service pages
+- Service-adjacent page with stronger support value than direct conversion value
+
+Rules:
+1. Insight should explain the page’s role, not just its category
+2. It should vary meaningfully row to row
+3. It should be client-readable and useful
+4. Avoid repetitive low-value phrasing
+
+==================================================
+FIX 3 — SOURCE BADGE PLACEMENT
+==================================================
+
+If source attribution is shown, do not dump the GSC badge awkwardly inside the Insight text.
+
+Instead:
+- render source badge(s) consistently in a cleaner way
+- ideally attach the badge near the page/row label or in a consistent small attribution area
+- do not let the badge interrupt the sentence flow of the Insight
+
+Since this table is GSC-driven, the badge may be redundant if every row is GSC.
+If every row is from GSC, it is acceptable to remove the repeated GSC badge from each row instead of rendering it awkwardly.
+
+==================================================
+ANALYSIS RULES
+==================================================
+
+Build “Connection to Admits” and “Insight” using:
+- page type classification
+- service/admissions relevance
+- URL intent
+- known funnel role
+- relationship to service pages
+- relationship to trust-building behavior
+- whether it is homepage / staff / informational / condition / service-adjacent
+- any available conversion-path context from the broader report
+
+Examples:
+- homepage → Assisted or Limited attribution, with insight about branded/local entry behavior
+- team/staff page → Trust / Evaluation
+- substance-specific educational article → Informational
+- condition-style page → Assisted or Informational, depending on the page’s route-to-service value
+- admissions/service-adjacent page → Direct or Assisted, depending on evidence
+
+==================================================
+DO NOT DO
+==================================================
+
+- do not remove the top-traffic nature of the table
+- do not change raw slug display
+- do not force every row to sound conversion-heavy
+- do not leave every row as “Unclear”
+- do not use page classification alone as the insight
+
+==================================================
+PROOF REQUIRED
+==================================================
+
+Return:
+1. files changed
+2. the new Connection to Admits classification logic
+3. the new Insight generation logic
+4. before/after examples for at least 5 rows
+5. proof that “Unclear” is no longer the default for nearly every row
+6. proof that the Insight column now contains actual interpretation instead of just page category labels

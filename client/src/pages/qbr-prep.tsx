@@ -330,7 +330,7 @@ export default function QbrPrepPage() {
 
           <div>
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
-              <Bug className="w-3 h-3" /> Screaming Frog Crawl
+              <Bug className="w-3 h-3" /> Multi-source Crawl
               {clientId && !hasSfCrawl && (
                 <span className="ml-auto text-destructive flex items-center gap-0.5 normal-case font-medium">
                   <AlertTriangle className="w-3 h-3" /> Required
@@ -455,7 +455,7 @@ export default function QbrPrepPage() {
           {clientId && !hasSfCrawl && (
             <p className="text-[11px] text-destructive flex items-center gap-1" data-testid="text-sf-required-warning">
               <AlertTriangle className="w-3 h-3 shrink-0" />
-              Upload a Screaming Frog crawl before generating.
+              Upload a site crawl before generating.
             </p>
           )}
           {clientId && hasSfCrawl && !sfIsFresh && (
@@ -509,7 +509,7 @@ export default function QbrPrepPage() {
               <Sparkles className="w-12 h-12 text-muted-foreground mx-auto" />
               <h2 className="font-semibold text-lg" data-testid="text-empty-state-title">QBR Prep Report</h2>
               <p className="text-sm text-muted-foreground">
-                Select a client, upload a Screaming Frog crawl, then click Generate. The preview renders your 7-section planning snapshot — click any text to edit before exporting.
+                Select a client, upload a site crawl, then click Generate. The preview renders your 7-section planning snapshot — click any text to edit before exporting.
               </p>
             </div>
           </div>

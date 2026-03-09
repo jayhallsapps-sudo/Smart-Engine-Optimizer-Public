@@ -438,7 +438,7 @@ function ResultDisplay({
   const LIVE_SOURCE_LABELS: Record<string, string> = {
     gsc: "Live · GSC",
     ga4: "Live · GA4",
-    screaming_frog: "Live · Screaming Frog",
+    screaming_frog: "Live · Multi-source",
     callrail: "Live · CallRail",
     ctm: "Live · CTM",
     semrush: "Live · SEMrush",

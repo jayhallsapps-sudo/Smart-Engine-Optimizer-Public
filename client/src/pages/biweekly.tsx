@@ -306,7 +306,7 @@ export default function BiweeklyPage() {
 
           {clientId && (
             <div className="space-y-2">
-              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Screaming Frog</Label>
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Multi-source</Label>
               <CrawlAssetSelector
                 clientId={clientId ? Number(clientId) : null}
                 clientName={clientName}

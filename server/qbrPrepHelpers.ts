@@ -110,22 +110,57 @@ export function classifyAdmitConnection(
 }
 
 const TOPIC_PATTERNS: Array<{ pattern: RegExp; topic: string }> = [
-  { pattern: /detox|detoxification|withdrawal/i, topic: "Detox" },
-  { pattern: /residential|inpatient|rehab\b(?!.*near)/i, topic: "Residential Treatment" },
-  { pattern: /women|woman|female/i, topic: "Women's Rehab" },
-  { pattern: /men(?:'s)?\s+rehab|male\s+rehab/i, topic: "Men's Rehab" },
+  // High-intent treatment + service pages (evaluated before educational)
+  { pattern: /\bnear me\b|rehab\s+in\s+\w+|treatment\s+(center\s+)?in\s+\w+|\bfind\s+(a\s+)?(rehab|treatment|detox|center)\b/i, topic: "Local Intent" },
+  { pattern: /detox|detoxification|alcohol\s+withdrawal|drug\s+withdrawal/i, topic: "Detox" },
+  { pattern: /residential|inpatient|rehab(?!\s+near|\s+in\s+[a-z])/i, topic: "Residential Treatment" },
+  { pattern: /women(?:'s)?\s+(rehab|treatment|program|center)|female\s+(rehab|treatment)|women\s+only/i, topic: "Women's Rehab" },
+  { pattern: /men(?:'s)?\s+(rehab|treatment|program|center)|male\s+(rehab|treatment)|men\s+only/i, topic: "Men's Rehab" },
   { pattern: /dual.?diagnosis|co.?occurring/i, topic: "Dual Diagnosis" },
-  { pattern: /insurance|verify|vob|coverage/i, topic: "Insurance / Admissions" },
-  { pattern: /php|iop|partial|intensive.?outpatient/i, topic: "PHP / IOP" },
-  { pattern: /\bnear me\b|rehab\s+in\s+\w+|treatment\s+in\s+\w+|treatment\s+center\s+in\b/i, topic: "Local Intent" },
-  { pattern: /review|testimonial|accreditation|rating|outcome/i, topic: "Trust / Evaluation" },
-  { pattern: /about\s+us|our\s+team|meet\s+(the|our)|staff|leadership|who\s+we\s+are/i, topic: "Trust / Evaluation" },
-  { pattern: /what is|how to|signs of|symptoms|effects|can you|does \w+ cause|is \w+ addictive/i, topic: "Informational / Education" },
-  { pattern: /alcohol|drug|heroin|opioid|cocaine|meth|fentanyl|benzo|substance/i, topic: "Substance-Specific Education" },
-  { pattern: /therap|cbt|dbt|emdr|holistic/i, topic: "Therapies" },
-  { pattern: /depression|anxiety|ptsd|trauma|bipolar|mental.?health/i, topic: "Mental Health / Conditions" },
-  { pattern: /sober.?living|aftercare|alumni|recovery\s+support/i, topic: "Aftercare / Continuum" },
-  { pattern: /cost|pay|price|afford|financing/i, topic: "Insurance / Admissions" },
+  { pattern: /insurance|verify\s+insurance|vob|coverage|in.?network|out.?of.?pocket|pay\s+for\s+rehab|cost|price|afford|financing/i, topic: "Insurance / Admissions" },
+  { pattern: /php|iop|partial\s+hospitalization|intensive\s+outpatient/i, topic: "PHP / IOP" },
+
+  // Reviews, credentials, about pages
+  { pattern: /review|testimonial|accreditation|rating|outcome|success\s+rate|jcaho|carf/i, topic: "Trust / Evaluation" },
+  { pattern: /about\s+us|our\s+team|meet\s+(the|our)|staff|leadership|who\s+we\s+are|our\s+story|our\s+approach/i, topic: "Trust / Evaluation" },
+
+  // Condition + mental health specific
+  { pattern: /depression|anxiety|ptsd|trauma|bipolar|mental\s+health|schizophrenia|eating\s+disorder|adhd/i, topic: "Mental Health / Conditions" },
+  { pattern: /therap|cbt|dbt|emdr|holistic|mindfulness|somatic|12.step|motivational\s+interview/i, topic: "Therapies" },
+
+  // Substance / drug specific — cast a wide net
+  { pattern: /alcohol(?:ism|ic)?|alcoholic|drinking|drunk|binge|liquor/i, topic: "Substance-Specific Education" },
+  { pattern: /heroin|opioid|opiate|fentanyl|oxycontin|hydrocodone|tramadol|morphine/i, topic: "Substance-Specific Education" },
+  { pattern: /cocaine|crack|meth(?:amphetamine)?|stimulant|adderall|amphetamine/i, topic: "Substance-Specific Education" },
+  { pattern: /benzo|benzodiazepine|xanax|valium|ativan|klonopin|lorazepam/i, topic: "Substance-Specific Education" },
+  { pattern: /marijuana|cannabis|weed|thc|pot\b/i, topic: "Substance-Specific Education" },
+  { pattern: /substance\s+(abuse|use\s+disorder|addiction)|drug\s+(abuse|use|addiction|problem)/i, topic: "Substance-Specific Education" },
+
+  // Informational / educational — broad educational intent
+  { pattern: /what\s+is|how\s+to|signs\s+of|symptoms\s+of|effects\s+of|causes?\s+of|stages?\s+of/i, topic: "Informational / Education" },
+  { pattern: /can\s+you|is\s+\w+\s+(addictive|dangerous)|does\s+\w+\s+cause|why\s+(is|do|does)/i, topic: "Informational / Education" },
+  { pattern: /how\s+long|how\s+many\s+days|how\s+much|how\s+often/i, topic: "Informational / Education" },
+  { pattern: /am\s+i\s+(an?\s+)?(alcoholic|addict|dependent)|do\s+i\s+(have|need)|should\s+i/i, topic: "Informational / Education" },
+  { pattern: /quiz|test\s+for|self.?assessment|screening|audit\s+test/i, topic: "Informational / Education" },
+  { pattern: /quit\s+(drinking|using|drugs?)|stop\s+(drinking|using)|get\s+sober|get\s+clean|going\s+sober/i, topic: "Informational / Education" },
+  { pattern: /shame|guilt|stigma|forgiveness|relapse|recovery\s+(story|journey|tips?|resource)/i, topic: "Informational / Education" },
+  { pattern: /brain|body|health|harm|liver|organ|damage|overdose\s+(what|how)/i, topic: "Informational / Education" },
+  { pattern: /statistics?|facts?\s+(about|on)|research|study|studies/i, topic: "Informational / Education" },
+
+  // Aftercare / continuum
+  { pattern: /sober\s+living|halfway\s+house|aftercare|alumni|step.?down|continuing\s+care|iop\s+after/i, topic: "Aftercare / Continuum" },
+
+  // Admissions + contact intent (late-funnel non-local)
+  { pattern: /admissions|get\s+help|need\s+help|call\s+us|contact|intake|talk\s+to\s+(someone|a\s+counselor)/i, topic: "Insurance / Admissions" },
+
+  // Second-pass broad catch-alls — run after all specific patterns to minimize Other
+  { pattern: /\bwomen\b|\bwoman\b|\bfemale\b/i, topic: "Women's Rehab" },
+  { pattern: /\bmen\b|\bmale\b/i, topic: "Men's Rehab" },
+  { pattern: /\brecovery\b|\bsobriety\b|\bsober\b/i, topic: "Informational / Education" },
+  { pattern: /hometown|brain|body\s+(and|after|during)|physical|mental\s+(effects|impact|toll)/i, topic: "Informational / Education" },
+  { pattern: /leave|leaving|work(ing)?\s+(while|in)|job|career|family|relationship|marriage|divorce/i, topic: "Informational / Education" },
+  { pattern: /never|always|every\s+day|daily\s+drinking|binge|weekend/i, topic: "Informational / Education" },
+  { pattern: /program|center\b|clinic|facility|residential|outpatient/i, topic: "Residential Treatment" },
 ];
 
 export function classifyQueryTopic(query: string, client: Client): string {

@@ -27,31 +27,84 @@ import type {
   TrackingRow,
 } from "./qbrPrepTypes";
 
+const JUNK_UNICODE_RE = /[\uFFFD\uFFFE\uFFFF\uF8FF\u00AD\u2060]/g;
+
 function sanitizeString(s: string): string {
   if (!s || typeof s !== "string") return s;
   let out = s;
-  out = out.replace(/\u2028|\u2029/g, " ");
+
+  // A) Replace junk unicode separators with hyphens (covers slug and label cases)
+  out = out.replace(JUNK_UNICODE_RE, "-");
+  // Collapse consecutive hyphens introduced by the above (but preserve URL paths)
+  out = out.replace(/([^/])-{2,}([^/])/g, "$1-$2");
+
+  // B) Remove zero-width / control chars and BOM
   out = out.replace(/[\u200B-\u200D\uFEFF]/g, "");
+  // C) Remove line/paragraph separators
+  out = out.replace(/\u2028|\u2029/g, " ");
+  // D) Remove percent-encoded junk
   out = out.replace(/%E2%80%[0-9A-Fa-f]{2}/g, "");
+
+  // E) Specific known broken patterns — fix before whitespace normalization
+  out = out.replace(/\bSource pending confirmation via\s+\w{0,8}\.?\s*$/gi, "Source pending confirmation.");
+  out = out.replace(/\s+via\s+\w{1,8}\.?\s*$/gi, ".");
+  out = out.replace(/\s+via\s*\.?\s*$/gi, ".");
+  out = out.replace(/\bnot\s*\.\s*$/gi, "");
+  out = out.replace(/\balready\s+\w{1,5}\.?\s*$/gi, "");
+  out = out.replace(/\bunde\w{0,6}\.?\s*$/gi, "");
+
+  // F) Whitespace/punctuation normalization
   out = out.replace(/\s{2,}/g, " ");
   out = out.replace(/\s+([.,;:!?])/g, "$1");
   out = out.replace(/([.!?])\s*\.\s*$/g, "$1");
-  out = out.replace(/\b\w+\.\s*$/g, (match) => {
-    if (/^[A-Z][a-z]+\.$/.test(match)) return match;
-    if (/\d+\.$/.test(match)) return match;
-    if (match.endsWith(". ") || match.endsWith(".")) {
-      const word = match.replace(/\.\s*$/, "");
-      if (word.length < 4 && !/^(the|and|for|not|but|are|was|has|had|can|may|new|old|big|few|our|own)$/i.test(word)) {
-        return "";
+  out = out.trim();
+
+  return out;
+}
+
+const SOURCE_NORMALIZE_MAP: [RegExp, string][] = [
+  [/\bga4\b|\bgoogle analytics 4\b|\bgoogle analytics\b/i, "GA4"],
+  [/\bgoogle search console\b|\bgsc\b/i, "GSC"],
+  [/\bcallrail\b|\bcall rail\b/i, "CallRail"],
+  [/\bcall tracking metrics\b|\bctm\b/i, "CTM"],
+  [/\bscreaming frog\b/i, "Screaming Frog"],
+  [/\bmulti.?source\b/i, "Multi-source"],
+  [/\bgbp\b|\bgoogle business profile\b/i, "GBP"],
+  [/\bairtable\b/i, "Airtable"],
+];
+
+function normalizeSrcName(raw: string): string {
+  const lower = raw.toLowerCase().trim();
+  for (const [re, normalized] of SOURCE_NORMALIZE_MAP) {
+    if (re.test(lower)) return normalized;
+  }
+  return raw;
+}
+
+function extractUsedSourcesFromReport(report: QbrPrepReportData): Set<string> {
+  const used = new Set<string>();
+  const SOURCE_FIELD_KEYS = new Set(["source", "measurementSource", "dataSource"]);
+
+  const walk = (obj: any): void => {
+    if (!obj || typeof obj !== "object") return;
+    if (Array.isArray(obj)) { obj.forEach(walk); return; }
+    for (const key of Object.keys(obj)) {
+      if (SOURCE_FIELD_KEYS.has(key) && typeof obj[key] === "string") {
+        const val = obj[key];
+        for (const [re, normalized] of SOURCE_NORMALIZE_MAP) {
+          if (re.test(val)) used.add(normalized);
+        }
+      } else if (typeof obj[key] === "object") {
+        walk(obj[key]);
       }
     }
-    return match;
-  });
-  out = out.replace(/\bnot\s*\.\s*$/gi, "");
-  out = out.replace(/\balready\s+\w{1,4}\.\s*$/gi, "");
-  out = out.replace(/\s{2,}/g, " ");
-  out = out.trim();
-  return out;
+  };
+  walk(report.section1Goals);
+  walk(report.section2Conversions);
+  walk(report.section3Traffic);
+  walk(report.section4Services);
+  walk(report.section7Tracking);
+  return used;
 }
 
 function sanitizeReport(report: QbrPrepReportData): void {
@@ -368,7 +421,13 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
     section1, section2, section3, section4, section5, tierInput,
     completedWork, input.sentiment, input.hypothesis, input.auditNotes
   );
-  const section7 = generateSection7(section6, section5, dataSources);
+  const section7Evidence: Section7EvidenceFlags = {
+    ga4Active: ga4LandingRows.length > 0 || ga4FunnelCurr !== null,
+    gscActive: gscQueryRows.length > 0 || gscPageRows.length > 0,
+    callActive: callTrackingLandingPages.length > 0 || callTrackingSources.length > 0,
+    gbpActive: false,
+  };
+  const section7 = generateSection7(section6, section5, section7Evidence);
 
   const sourceSnapshot: SourceSnapshot = {
     smartSeoClientMeta: { name: client.name, domain, brandTerms: client.brandTerms },
@@ -387,15 +446,6 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
     },
   };
 
-  const cleanMissing = missingData.filter(m => !dataSources.some(ds => {
-    const mLower = m.toLowerCase();
-    const dsLower = ds.toLowerCase();
-    if (mLower === "ga4" && dsLower.includes("google analytics")) return true;
-    if (mLower === "gsc" && dsLower.includes("google search console")) return true;
-    if (mLower === dsLower) return true;
-    return false;
-  }));
-
   const report: QbrPrepReportData = {
     meta,
     section1Goals: section1,
@@ -409,11 +459,21 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
     generationMeta: {
       generatedAt: new Date().toISOString(),
       dataSources,
-      missingData: cleanMissing,
+      missingData: missingData,
     },
   };
 
+  // Sanitize all string fields first
   sanitizeReport(report);
+
+  // After full assembly + sanitization, scan every source field in the report
+  // to build the true set of used sources, then suppress them from missingData.
+  const usedInContent = extractUsedSourcesFromReport(report);
+  const finalMissing = missingData.filter(m => {
+    const norm = normalizeSrcName(m);
+    return !usedInContent.has(norm);
+  });
+  report.generationMeta!.missingData = finalMissing;
 
   return report;
 }
@@ -528,16 +588,19 @@ function inferProgram(sfData: Record<string, any>[], sfHeaders: string[]): strin
   const hasWomens = urls.some(u => /women|woman|female/i.test(u.url) || /women|woman|female/i.test(u.title));
   const hasMens = urls.some(u => /\bmen\b|male/i.test(u.url) || /\bmen\b|male/i.test(u.title));
   const hasDualDiagnosis = urls.some(u => /dual.?diagnosis|co.?occurring/i.test(u.url));
-  const hasDetox = urls.some(u => /detox/i.test(u.url));
+
+  // Derive gender qualifier — avoid "Women's Men's" combined label
+  let genderPrefix = "";
+  if (hasWomens && hasMens) genderPrefix = "Co-ed";
+  else if (hasWomens) genderPrefix = "Women's";
+  else if (hasMens) genderPrefix = "Men's";
 
   const parts: string[] = [];
-  if (hasWomens) parts.push("Women's");
-  if (hasMens) parts.push("Men's");
-  if (hasDetox) parts.push("Detox");
+  if (genderPrefix) parts.push(genderPrefix);
   parts.push("Addiction Treatment");
   if (hasDualDiagnosis) parts.push("& Dual Diagnosis");
 
-  return parts.length > 1 ? parts.join(" ") : ME;
+  return parts.join(" ");
 }
 
 function detectCallTrackingProvider(client: Client): string | null {
@@ -557,47 +620,58 @@ function generateSection1(nsmData: any, ga4Funnel: any, quarter: QuarterInfo, cl
   console.log(`[Section1] nsmData present=${!!nsmData}, ga4Funnel present=${!!ga4Funnel}`);
 
   // ── Primary Goal: Admits ────────────────────────────────────────────────
-  // Admits source is pending confirmation until a true downstream admits source is wired in.
+  // STATE A: NSM Tracker has real numeric mvpGoal + mvpActual → confirmed source, show value + shift
+  // STATE B: No confirmed admits source → no number, no shift, static reason
   // Do NOT fabricate admits from CallRail call counts.
-  let admitsRecommended: string = ME;
-  let admitsShift = "Maintain";
-  let admitsReason = "Source pending confirmation";
-  const admitsSource = "Source pending confirmation";
+  let admitsGoalDisplay: string = "Admits";
+  let admitsShift = "—";
+  let admitsReason = "Admits is the strategic primary KPI. Reporting source is not yet confirmed — this goal will be updated once an admits tracking source is connected.";
+  let admitsSource = "Source pending confirmation";
+
+  let nsmMvpActNum: number | null = null;
+  let nsmMvpGoalNum: number | null = null;
 
   if (nsmData) {
     const mvpGoal = nsmData.mvpGoal !== "—" ? nsmData.mvpGoal : null;
     const mvpActual = nsmData.mvpActual !== "—" ? nsmData.mvpActual : null;
-
     if (mvpGoal && mvpActual) {
-      const mvpActNum = parseInt(String(mvpActual).replace(/[^0-9]/g, ""), 10);
-      const mvpGoalNum = parseInt(String(mvpGoal).replace(/[^0-9]/g, ""), 10);
-      if (!isNaN(mvpActNum) && !isNaN(mvpGoalNum) && mvpGoalNum > 0) {
-        admitsRecommended = fmtNum(mvpGoalNum);
-        const pacing = mvpActNum / mvpGoalNum;
-        if (pacing >= 0.9) {
-          admitsRecommended = fmtNum(Math.round(mvpGoalNum * 1.05));
-          admitsShift = "+5%";
-          admitsReason = `Admits on pace (${mvpActual}/${mvpGoal}). Slight increase is achievable given current trajectory. Source pending confirmation via ADR.`;
-        } else if (pacing >= 0.7) {
-          admitsRecommended = fmtNum(mvpGoalNum);
-          admitsShift = "Maintain";
-          admitsReason = `Admits tracking at ${mvpActual}/${mvpGoal}. Maintaining goal while improving conversion paths. Source pending confirmation via ADR.`;
-        } else {
-          admitsRecommended = fmtNum(Math.round(mvpGoalNum * 0.95));
-          admitsShift = "-5%";
-          admitsReason = `Admits behind pace (${mvpActual}/${mvpGoal}). Modest adjustment reflects realistic expectations. Source pending confirmation via ADR.`;
-        }
-      } else {
-        admitsRecommended = mvpGoal ?? ME;
+      const actN = parseInt(String(mvpActual).replace(/[^0-9]/g, ""), 10);
+      const goalN = parseInt(String(mvpGoal).replace(/[^0-9]/g, ""), 10);
+      if (!isNaN(actN) && !isNaN(goalN) && goalN > 0) {
+        nsmMvpActNum = actN;
+        nsmMvpGoalNum = goalN;
       }
     }
   }
 
-  console.log(`[Section1] Primary Goal=Admits, target=${admitsRecommended}, source=${admitsSource}, shift=${admitsShift}`);
+  if (nsmMvpGoalNum !== null && nsmMvpActNum !== null) {
+    // STATE A — confirmed source via NSM Tracker
+    admitsSource = "NSM Tracker";
+    const pacing = nsmMvpActNum / nsmMvpGoalNum!;
+    if (pacing >= 0.9) {
+      const target = fmtNum(Math.round(nsmMvpGoalNum! * 1.05));
+      admitsGoalDisplay = `${target} admits`;
+      admitsShift = "+5%";
+      admitsReason = `Admits on pace (${nsmMvpActNum}/${nsmMvpGoalNum}). Slight increase is achievable given current trajectory.`;
+    } else if (pacing >= 0.7) {
+      const target = fmtNum(nsmMvpGoalNum!);
+      admitsGoalDisplay = `${target} admits`;
+      admitsShift = "Maintain";
+      admitsReason = `Admits tracking at ${nsmMvpActNum}/${nsmMvpGoalNum}. Maintaining goal while improving conversion paths.`;
+    } else {
+      const target = fmtNum(Math.round(nsmMvpGoalNum! * 0.95));
+      admitsGoalDisplay = `${target} admits`;
+      admitsShift = "-5%";
+      admitsReason = `Admits behind pace (${nsmMvpActNum}/${nsmMvpGoalNum}). Modest adjustment reflects realistic expectations given current trajectory.`;
+    }
+  }
+  // else: STATE B — source/value/shift remain as defaults above
+
+  console.log(`[Section1] Primary Goal=Admits, goal=${admitsGoalDisplay}, source=${admitsSource}, shift=${admitsShift}`);
 
   rows.push({
     goalType: "Primary Goal",
-    goal: admitsRecommended !== ME ? `${admitsRecommended} admits` : ME,
+    goal: admitsGoalDisplay,
     measurementSource: admitsSource,
     goalShift: admitsShift,
     reason: admitsReason,
@@ -1787,18 +1861,23 @@ function generateSection6(
   return { priorities: priorities.slice(0, 7) };
 }
 
-function generateSection7(section6: Section6Priorities, section5: Section5Diagnosis, dataSources: string[]): Section7Tracking {
+interface Section7EvidenceFlags {
+  ga4Active: boolean;   // GA4 returned usable data (landing rows OR funnel)
+  gscActive: boolean;   // GSC returned usable query/page rows
+  callActive: boolean;  // Call tracking (CallRail/CTM) returned usable rows
+  gbpActive: boolean;   // GBP data available
+}
+
+function generateSection7(section6: Section6Priorities, section5: Section5Diagnosis, evidence: Section7EvidenceFlags): Section7Tracking {
   const tracking: TrackingRow[] = [];
 
-  const hasGA4 = dataSources.some(ds => ds.toLowerCase().includes("ga4") || ds.toLowerCase().includes("google analytics"));
-  const hasCallTracking = dataSources.some(ds => ds.toLowerCase().includes("call"));
-  const hasGSC = dataSources.some(ds => ds.toLowerCase().includes("search console") || ds.toLowerCase().includes("gsc"));
+  const { ga4Active, gscActive, callActive } = evidence;
 
   function inferStatus(source: string): string {
     const s = source.toLowerCase();
-    if (s.includes("ga4") || s.includes("google analytics")) return hasGA4 ? "Live" : "Missing Setup";
-    if (s.includes("call tracking") || s.includes("callrail") || s.includes("ctm") || s.includes("nimbata")) return hasCallTracking ? "Live" : "Missing Setup";
-    if (s.includes("gsc") || s.includes("google search console") || s.includes("search console")) return hasGSC ? "Live" : "Missing Setup";
+    if (s.includes("ga4") || s.includes("google analytics")) return ga4Active ? "Live" : "Missing Setup";
+    if (s.includes("call tracking") || s.includes("callrail") || s.includes("ctm") || s.includes("nimbata")) return callActive ? "Live" : "Missing Setup";
+    if (s.includes("gsc") || s.includes("google search console") || s.includes("search console")) return gscActive ? "Live" : "Missing Setup";
     if (s.includes("multi-source")) return "Needs Verification";
     if (s.includes("gbp")) return "Needs Verification";
     return "Needs Verification";
@@ -1809,7 +1888,7 @@ function generateSection7(section6: Section6Priorities, section5: Section5Diagno
       focusArea: "Admissions Conversions",
       metric: "VOB submissions + qualified organic calls",
       source: "GA4 / Call Tracking",
-      status: hasGA4 && hasCallTracking ? "Needs Verification" : "Missing Setup",
+      status: ga4Active && callActive ? "Needs Verification" : "Missing Setup",
       whyItMatters: "Directly measures admission-driving actions from organic traffic",
     },
     "Core Service Page Foundation": {
@@ -1823,7 +1902,7 @@ function generateSection7(section6: Section6Priorities, section5: Section5Diagno
       focusArea: "Admissions Conversions",
       metric: "VOB submissions + qualified organic calls",
       source: "GA4 + Call Tracking",
-      status: hasGA4 && hasCallTracking ? "Live" : "Missing Setup",
+      status: ga4Active && callActive ? "Live" : "Missing Setup",
       whyItMatters: "Directly measures admission-driving actions from organic traffic",
     },
     "Conditions Hub Structure": {
@@ -1858,21 +1937,21 @@ function generateSection7(section6: Section6Priorities, section5: Section5Diagno
       focusArea: "Conversion Rate",
       metric: "Organic conversion rate on top landing pages",
       source: "GA4",
-      status: hasGA4 ? "Live" : "Missing Setup",
+      status: ga4Active ? "Live" : "Missing Setup",
       whyItMatters: "Higher CVR on existing traffic is the most capital-efficient growth lever",
     },
     "Conversion Path Optimization": {
       focusArea: "Conversion Rate",
       metric: "Organic conversion rate on top landing pages",
       source: "GA4",
-      status: hasGA4 ? "Live" : "Missing Setup",
+      status: ga4Active ? "Live" : "Missing Setup",
       whyItMatters: "Higher CVR on existing traffic is the most capital-efficient growth lever",
     },
     "Internal Linking — High-Traffic to Conversion": {
       focusArea: "Internal Link Effectiveness",
       metric: "Click-through from informational pages to service/VOB pages",
       source: "GA4",
-      status: hasGA4 ? "Inferred Only" : "Missing Setup",
+      status: ga4Active ? "Inferred Only" : "Missing Setup",
       whyItMatters: "Measures whether internal linking strategy converts existing traffic to admissions pages",
     },
     "Content Refresh — Highest-Traffic Assisted Pages": {
@@ -1903,14 +1982,14 @@ function generateSection7(section6: Section6Priorities, section5: Section5Diagno
       focusArea: "Organic Sessions",
       metric: "Total organic sessions (QoQ)",
       source: "GA4",
-      status: hasGA4 ? "Live" : "Missing Setup",
+      status: ga4Active ? "Live" : "Missing Setup",
       whyItMatters: "Primary volume indicator for organic channel health",
     },
     {
       focusArea: "Qualified Calls",
       metric: "Organic phone calls (answered, 60s+)",
       source: "Call Tracking",
-      status: hasCallTracking ? "Live" : "Missing Setup",
+      status: callActive ? "Live" : "Missing Setup",
       whyItMatters: "Strongest proxy for admits when direct admit tracking is unavailable",
     },
   ];

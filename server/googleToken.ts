@@ -5,7 +5,14 @@ export async function getGoogleAccessToken(service: string): Promise<string | nu
   const creds = await storage.getApiCredentialsByService(service);
   if (!creds.length) return null;
 
-  const refreshToken = decrypt(creds[0].encryptedValue);
+  let refreshToken: string;
+  try {
+    refreshToken = decrypt(creds[0].encryptedValue);
+  } catch (err) {
+    console.warn(`[googleToken] Failed to decrypt ${service} credential — re-authorization required in Setup:`, (err as Error).message);
+    return null;
+  }
+
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
   if (!clientId || !clientSecret) return null;

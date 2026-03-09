@@ -416,7 +416,12 @@ export async function registerRoutes(
       if (!creds.length) {
         return res.status(401).json({ message: "CallRail is not connected. Connect it in Setup → Analytics & Search." });
       }
-      const apiKey = decrypt(creds[0].encryptedValue);
+      let apiKey: string;
+      try {
+        apiKey = decrypt(creds[0].encryptedValue);
+      } catch {
+        return res.status(401).json({ message: "CallRail credential is corrupted. Please re-connect it in Setup → Analytics & Search." });
+      }
       const crHeaders = { Authorization: `Token token="${apiKey}"` };
 
       // Fetch all accounts (paginated)
@@ -767,7 +772,12 @@ export async function registerRoutes(
       if (!sheetsCreds.length) return res.status(401).json({ message: "Google Sheets not authorized. Please authorize in Setup." });
 
       const { decrypt } = await import("./encryption");
-      const refreshToken = decrypt(sheetsCreds[0].encryptedValue);
+      let refreshToken: string;
+      try {
+        refreshToken = decrypt(sheetsCreds[0].encryptedValue);
+      } catch {
+        return res.status(401).json({ message: "Google Sheets credential is corrupted. Please re-authorize in Setup." });
+      }
 
       const tokenResp = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",

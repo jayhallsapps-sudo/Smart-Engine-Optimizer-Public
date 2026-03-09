@@ -102,6 +102,15 @@ export default function QbrPrepPrint() {
 
   const e = (key: string, val: string) => applyEdits(val, key, edits);
 
+  const s7Tracking = s7.tracking ?? [];
+  for (let ri = 0; ri < s7Tracking.length; ri++) {
+    const hasStatus = s7Tracking[ri]?.status;
+    if (!hasStatus && edits[`s7_${ri}_3`] && !edits[`s7_${ri}_4`]) {
+      edits[`s7_${ri}_4`] = edits[`s7_${ri}_3`];
+      delete edits[`s7_${ri}_3`];
+    }
+  }
+
   const s1Rows = [
     ...s1.rows.map((r: any, ri: number) => [e(`s1_${ri}_0`, r.goalType), e(`s1_${ri}_1`, r.goal), e(`s1_${ri}_2`, r.measurementSource), e(`s1_${ri}_3`, r.goalShift), e(`s1_${ri}_4`, r.reason)]),
     ...getCustomRows(edits, "s1"),
@@ -162,6 +171,7 @@ export default function QbrPrepPrint() {
     ...customRowsAsNodes(edits, "s6"),
   ];
 
+  const statusColor = (st: string) => st === "Live" ? "#27ae60" : st === "Missing Setup" ? "#c0392b" : st === "Inferred Only" ? "#8e44ad" : "#e67e22";
   const s7Rows: ReactNode[][] = [
     ...s7.tracking.map((r: any, ri: number) => [
       cell(e(`s7_${ri}_0`, r.focusArea)),
@@ -171,7 +181,10 @@ export default function QbrPrepPrint() {
           <SourceBadge key={si} source={src} />
         ))}
       </span>,
-      cell(e(`s7_${ri}_3`, r.whyItMatters)),
+      <span style={{ fontWeight: 600, fontSize: "0.75rem", color: statusColor(e(`s7_${ri}_3`, r.status ?? "Needs Verification")) }}>
+        {e(`s7_${ri}_3`, r.status ?? "Needs Verification")}
+      </span>,
+      cell(e(`s7_${ri}_4`, r.whyItMatters)),
     ]),
     ...customRowsAsNodes(edits, "s7"),
   ];
@@ -218,6 +231,11 @@ export default function QbrPrepPrint() {
             headers={["Source", "What's Converting", "Notes / What We're Learning"]}
             rows={s2bRows}
           />
+          {s2.trackingDisclaimer && (
+            <div style={{ fontSize: "9px", fontStyle: "italic", color: "#6b7280", marginTop: 4, marginBottom: 8 }}>
+              {s2.trackingDisclaimer}
+            </div>
+          )}
 
           <SectionHeading num={3} title="Top Organic Traffic Drivers" />
           <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Traffic Topics</div>
@@ -253,7 +271,7 @@ export default function QbrPrepPrint() {
 
           <SectionHeading num={7} title="What We Track" />
           <ReportTable
-            headers={["Focus Area", "Metric", "Source", "Why It Matters"]}
+            headers={["Focus Area", "Metric", "Source", "Status", "Why It Matters"]}
             rows={s7Rows}
           />
 

@@ -49,6 +49,10 @@ SmartEO integrates with the following external services and APIs:
 - `server/savedReportService.ts` - Saved report CRUD with soft delete
 - `server/monthlyGenerator.ts` - Monthly 15-slide PPTX generator
 - `server/midStrategyGenerator.ts` - 14-slide mid-strategy generator
+- `server/qbrPrepSectionGenerator.ts` - QBR Prep v2 section generator (7 sections with tracking gaps, topic clustering, sanitization)
+- `server/qbrPrepHelpers.ts` - QBR Prep helpers (topic patterns, tier diagnosis, source normalization)
+- `server/qbrPrepTypes.ts` - QBR Prep types (TrackingRow with status field, Section2Conversions with trackingDisclaimer)
+- `server/qbrPrepDocxGenerator.ts` - QBR Prep DOCX export (5-col Section 7 with Status, tracking disclaimer, S7 edit migration)
 - `server/ahrefsClient.ts` - Ahrefs v3 API client
 - `server/sheetsClient.ts` - NSM Google Sheet XLSX parser (10MB size cap)
 - `client/src/lib/queryClient.ts` - TanStack Query client + auth token bootstrap

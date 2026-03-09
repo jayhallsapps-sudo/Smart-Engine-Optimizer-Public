@@ -206,6 +206,17 @@ export async function generateQbrPrepV2Docx(
   ]);
   docChildren.push(makeTable(["Source", "What's Converting", "Notes"], s2bRows));
 
+  if (s2.trackingDisclaimer) {
+    docChildren.push(
+      new Paragraph({
+        spacing: { before: 80, after: 80 },
+        children: [
+          new TextRun({ text: s2.trackingDisclaimer, italics: true, size: 16, color: GRAY, font: "Calibri" }),
+        ],
+      })
+    );
+  }
+
   const s3 = reportData.section3Traffic;
   docChildren.push(sectionHeading(3, "Top Organic Traffic Drivers"));
   docChildren.push(subHeading("Top Traffic Topics"));
@@ -276,13 +287,24 @@ export async function generateQbrPrepV2Docx(
 
   const s7 = reportData.section7Tracking;
   docChildren.push(sectionHeading(7, "What We Track"));
+  if (edits) {
+    const trackingLen = s7.tracking?.length ?? 0;
+    for (let ri = 0; ri < trackingLen; ri++) {
+      const hasStatus = s7.tracking[ri]?.status;
+      if (!hasStatus && edits[`s7_${ri}_3`] && !edits[`s7_${ri}_4`]) {
+        edits[`s7_${ri}_4`] = edits[`s7_${ri}_3`];
+        delete edits[`s7_${ri}_3`];
+      }
+    }
+  }
   const s7Rows = s7.tracking.map((r: any, ri: number) => [
     resolveCell(`s7_${ri}_0`, r.focusArea, edits),
     resolveCell(`s7_${ri}_1`, r.metric, edits),
     resolveCell(`s7_${ri}_2`, r.source, edits),
-    resolveCell(`s7_${ri}_3`, r.whyItMatters, edits),
+    resolveCell(`s7_${ri}_3`, r.status ?? "Needs Verification", edits),
+    resolveCell(`s7_${ri}_4`, r.whyItMatters, edits),
   ]);
-  docChildren.push(makeTable(["Focus Area", "Metric", "Source", "Why It Matters"], s7Rows));
+  docChildren.push(makeTable(["Focus Area", "Metric", "Source", "Status", "Why It Matters"], s7Rows));
 
   if (reportData.generationMeta) {
     docChildren.push(

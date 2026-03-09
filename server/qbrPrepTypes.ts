@@ -40,6 +40,7 @@ export interface ConvertingSourceRow {
 export interface Section2Conversions {
   topConvertingPages: ConvertingPageRow[];
   topConvertingSources: ConvertingSourceRow[];
+  trackingDisclaimer?: string;
 }
 
 export interface TrafficTopicRow {
@@ -96,6 +97,7 @@ export interface TrackingRow {
   focusArea: string;
   metric: string;
   source: string;
+  status?: string;
   whyItMatters: string;
 }
 

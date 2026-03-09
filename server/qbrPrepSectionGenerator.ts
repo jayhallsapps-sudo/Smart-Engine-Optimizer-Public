@@ -26,6 +26,55 @@ import type {
   PriorityRow,
   TrackingRow,
 } from "./qbrPrepTypes";
+
+function sanitizeString(s: string): string {
+  if (!s || typeof s !== "string") return s;
+  let out = s;
+  out = out.replace(/\u2028|\u2029/g, " ");
+  out = out.replace(/[\u200B-\u200D\uFEFF]/g, "");
+  out = out.replace(/%E2%80%[0-9A-Fa-f]{2}/g, "");
+  out = out.replace(/\s{2,}/g, " ");
+  out = out.replace(/\s+([.,;:!?])/g, "$1");
+  out = out.replace(/([.!?])\s*\.\s*$/g, "$1");
+  out = out.replace(/\b\w+\.\s*$/g, (match) => {
+    if (/^[A-Z][a-z]+\.$/.test(match)) return match;
+    if (/\d+\.$/.test(match)) return match;
+    if (match.endsWith(". ") || match.endsWith(".")) {
+      const word = match.replace(/\.\s*$/, "");
+      if (word.length < 4 && !/^(the|and|for|not|but|are|was|has|had|can|may|new|old|big|few|our|own)$/i.test(word)) {
+        return "";
+      }
+    }
+    return match;
+  });
+  out = out.replace(/\bnot\s*\.\s*$/gi, "");
+  out = out.replace(/\balready\s+\w{1,4}\.\s*$/gi, "");
+  out = out.replace(/\s{2,}/g, " ");
+  out = out.trim();
+  return out;
+}
+
+function sanitizeReport(report: QbrPrepReportData): void {
+  const walk = (obj: any): void => {
+    if (!obj || typeof obj !== "object") return;
+    if (Array.isArray(obj)) { obj.forEach(walk); return; }
+    for (const key of Object.keys(obj)) {
+      if (typeof obj[key] === "string") {
+        obj[key] = sanitizeString(obj[key]);
+      } else if (typeof obj[key] === "object") {
+        walk(obj[key]);
+      }
+    }
+  };
+  walk(report.section1Goals);
+  walk(report.section2Conversions);
+  walk(report.section3Traffic);
+  walk(report.section4Services);
+  walk(report.section5Diagnosis);
+  walk(report.section6Priorities);
+  walk(report.section7Tracking);
+  if (report.meta) walk(report.meta);
+}
 import {
   inferQuarter,
   isBrandedQuery,
@@ -275,7 +324,7 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
     generatedOn: input.generationDate,
   };
 
-  const section1 = generateSection1(nsmData, ga4FunnelCurr, quarter, client);
+  const section1 = generateSection1(nsmData, ga4FunnelCurr, quarter, client, callTrackingSources);
   const section2 = generateSection2(ga4LandingRows, gscPageRows, sfData, sfHeaders, client, callTrackingLandingPages, callTrackingSources);
   const section3 = generateSection3(gscQueryRows, gscPageRows, ga4LandingRows, client);
   const section4 = generateSection4(sfData, sfHeaders, client);
@@ -319,7 +368,7 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
     section1, section2, section3, section4, section5, tierInput,
     completedWork, input.sentiment, input.hypothesis, input.auditNotes
   );
-  const section7 = generateSection7(section6, section5);
+  const section7 = generateSection7(section6, section5, dataSources);
 
   const sourceSnapshot: SourceSnapshot = {
     smartSeoClientMeta: { name: client.name, domain, brandTerms: client.brandTerms },
@@ -338,7 +387,16 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
     },
   };
 
-  return {
+  const cleanMissing = missingData.filter(m => !dataSources.some(ds => {
+    const mLower = m.toLowerCase();
+    const dsLower = ds.toLowerCase();
+    if (mLower === "ga4" && dsLower.includes("google analytics")) return true;
+    if (mLower === "gsc" && dsLower.includes("google search console")) return true;
+    if (mLower === dsLower) return true;
+    return false;
+  }));
+
+  const report: QbrPrepReportData = {
     meta,
     section1Goals: section1,
     section2Conversions: section2,
@@ -351,9 +409,13 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
     generationMeta: {
       generatedAt: new Date().toISOString(),
       dataSources,
-      missingData,
+      missingData: cleanMissing,
     },
   };
+
+  sanitizeReport(report);
+
+  return report;
 }
 
 const INSURANCE_BLACKLIST = [
@@ -485,67 +547,97 @@ function detectCallTrackingProvider(client: Client): string | null {
   return null;
 }
 
-function generateSection1(nsmData: any, ga4Funnel: any, quarter: QuarterInfo, client: Client): Section1Goals {
+function generateSection1(nsmData: any, ga4Funnel: any, quarter: QuarterInfo, client: Client, callTrackingSources: Array<{ source: string; calls: number }> = []): Section1Goals {
   const rows: GoalRow[] = [];
 
-  // Determine active call tracking provider for client-facing source label
   const callTrackingProvider = detectCallTrackingProvider(client);
-  const admitsSource = callTrackingProvider ?? ME;
 
   console.log(`[Section1] client=${client.name}`);
-  console.log(`[Section1] callTrackingProvider=${callTrackingProvider ?? "none"} → admitsSource=${admitsSource}`);
+  console.log(`[Section1] callTrackingProvider=${callTrackingProvider ?? "none"}`);
   console.log(`[Section1] nsmData present=${!!nsmData}, ga4Funnel present=${!!ga4Funnel}`);
 
+  // ── Primary Goal: Admits ────────────────────────────────────────────────
+  // Admits source is pending confirmation until a true downstream admits source is wired in.
+  // Do NOT fabricate admits from CallRail call counts.
+  let admitsRecommended: string = ME;
+  let admitsShift = "Maintain";
+  let admitsReason = "Source pending confirmation";
+  const admitsSource = "Source pending confirmation";
+
   if (nsmData) {
-    // ── Primary Goal: Admits ──────────────────────────────────────────────
-    // Use NSM MVP data (calls/leads) internally for targets — never expose NSM label client-facing
     const mvpGoal = nsmData.mvpGoal !== "—" ? nsmData.mvpGoal : null;
     const mvpActual = nsmData.mvpActual !== "—" ? nsmData.mvpActual : null;
-
-    let admitsRecommended: string = mvpGoal ?? ME;
-    let admitsShift = "Maintain";
-    let admitsReason = ME;
 
     if (mvpGoal && mvpActual) {
       const mvpActNum = parseInt(String(mvpActual).replace(/[^0-9]/g, ""), 10);
       const mvpGoalNum = parseInt(String(mvpGoal).replace(/[^0-9]/g, ""), 10);
       if (!isNaN(mvpActNum) && !isNaN(mvpGoalNum) && mvpGoalNum > 0) {
+        admitsRecommended = fmtNum(mvpGoalNum);
         const pacing = mvpActNum / mvpGoalNum;
         if (pacing >= 0.9) {
           admitsRecommended = fmtNum(Math.round(mvpGoalNum * 1.05));
           admitsShift = "+5%";
-          admitsReason = `Admits on pace (${mvpActual}/${mvpGoal}). Slight increase is achievable given current trajectory.`;
+          admitsReason = `Admits on pace (${mvpActual}/${mvpGoal}). Slight increase is achievable given current trajectory. Source pending confirmation via ADR.`;
         } else if (pacing >= 0.7) {
           admitsRecommended = fmtNum(mvpGoalNum);
           admitsShift = "Maintain";
-          admitsReason = `Admits tracking at ${mvpActual}/${mvpGoal}. Maintaining goal while improving conversion paths.`;
+          admitsReason = `Admits tracking at ${mvpActual}/${mvpGoal}. Maintaining goal while improving conversion paths. Source pending confirmation via ADR.`;
         } else {
           admitsRecommended = fmtNum(Math.round(mvpGoalNum * 0.95));
           admitsShift = "-5%";
-          admitsReason = `Admits behind pace (${mvpActual}/${mvpGoal}). Modest adjustment reflects realistic expectations while focusing on site fundamentals.`;
+          admitsReason = `Admits behind pace (${mvpActual}/${mvpGoal}). Modest adjustment reflects realistic expectations. Source pending confirmation via ADR.`;
         }
+      } else {
+        admitsRecommended = mvpGoal ?? ME;
       }
     }
+  }
 
-    console.log(`[Section1] Primary Goal=Admits, target=${admitsRecommended}, source=${admitsSource}, shift=${admitsShift}`);
+  console.log(`[Section1] Primary Goal=Admits, target=${admitsRecommended}, source=${admitsSource}, shift=${admitsShift}`);
 
-    rows.push({
-      goalType: "Primary Goal",
-      goal: `${admitsRecommended} admits`,
-      measurementSource: admitsSource,
-      goalShift: admitsShift,
-      reason: admitsReason,
-    });
+  rows.push({
+    goalType: "Primary Goal",
+    goal: admitsRecommended !== ME ? `${admitsRecommended} admits` : ME,
+    measurementSource: admitsSource,
+    goalShift: admitsShift,
+    reason: admitsReason,
+  });
 
-    // ── Secondary Goal: Organic Sessions ─────────────────────────────────
-    // Use NSM sessions data for targets — always display "GA4 / GSC" as the client-facing source
+  // ── Secondary Goal: Calls ──────────────────────────────────────────────
+  const callsSource = callTrackingProvider ?? ME;
+  let callsGoal: string = ME;
+  let callsShift = "Maintain";
+  let callsReason = callTrackingProvider
+    ? `Qualified organic calls tracked via ${callTrackingProvider}. Calls serve as the primary operational proxy for admits until a direct admits source is confirmed.`
+    : `${ME}: Call tracking provider not configured`;
+
+  if (callTrackingSources.length > 0) {
+    const totalCalls = callTrackingSources.reduce((s, r) => s + r.calls, 0);
+    callsGoal = `${fmtNum(totalCalls)} tracked calls (QTD)`;
+    callsReason = `${fmtNum(totalCalls)} organic calls tracked via ${callTrackingProvider ?? "call tracking"} this quarter. Calls are the primary measurable operational proxy for admits.`;
+  }
+
+  console.log(`[Section1] Secondary Goal=Calls, source=${callsSource}, shift=${callsShift}`);
+
+  rows.push({
+    goalType: "Secondary Goal",
+    goal: callsGoal,
+    measurementSource: callsSource,
+    goalShift: callsShift,
+    reason: callsReason,
+  });
+
+  // ── Tertiary Goal: Organic Sessions ────────────────────────────────────
+  let sessRecommended: string = ME;
+  let sessShift = "Maintain";
+  let sessReason = ME;
+
+  if (nsmData) {
     const sessGoal = nsmData.sessionsGoal !== "—" ? nsmData.sessionsGoal : null;
     const sessActual = nsmData.sessionsActual !== "—" ? nsmData.sessionsActual : null;
     const sessPct = nsmData.sessionsPercent !== "—" ? nsmData.sessionsPercent : null;
 
-    let sessRecommended: string = sessGoal ?? ME;
-    let sessShift = "Maintain";
-    let sessReason = ME;
+    sessRecommended = sessGoal ?? ME;
 
     if (sessGoal && sessActual && sessPct) {
       const actualNum = parseInt(String(sessActual).replace(/[^0-9]/g, ""), 10);
@@ -567,43 +659,45 @@ function generateSection1(nsmData: any, ga4Funnel: any, quarter: QuarterInfo, cl
         }
       }
     }
-
-    console.log(`[Section1] Secondary Goal=Organic Sessions, target=${sessRecommended}, source=GA4 / GSC, shift=${sessShift}`);
-
-    rows.push({
-      goalType: "Secondary Goal",
-      goal: `${sessRecommended} organic sessions`,
-      measurementSource: "GA4 / GSC",
-      goalShift: sessShift,
-      reason: sessReason,
-    });
   } else if (ga4Funnel) {
-    // No NSM data — fall back to GA4 QTD baseline for sessions; admits needs manual entry
-    console.log(`[Section1] No NSM — using GA4 fallback. admitsSource=${admitsSource}`);
-    rows.push({
-      goalType: "Primary Goal",
-      goal: ME,
-      measurementSource: admitsSource,
-      goalShift: ME,
-      reason: `${ME}: Admits target requires call tracking data — please enter manually`,
-    });
-    rows.push({
-      goalType: "Secondary Goal",
-      goal: `${fmtNum(ga4Funnel.sessions)} organic sessions (QTD baseline)`,
-      measurementSource: "GA4 / GSC",
-      goalShift: ME,
-      reason: `${ME}: Goal target needs manual validation against prior quarter`,
-    });
+    sessRecommended = `${fmtNum(ga4Funnel.sessions)} organic sessions (QTD baseline)`;
+    sessReason = `${ME}: Goal target needs manual validation against prior quarter`;
   } else {
-    console.log(`[Section1] No data sources available`);
-    rows.push(
-      { goalType: "Primary Goal", goal: ME, measurementSource: admitsSource !== ME ? admitsSource : ME, goalShift: ME, reason: `${ME}: no data sources available` },
-      { goalType: "Secondary Goal", goal: ME, measurementSource: "GA4 / GSC", goalShift: ME, reason: `${ME}: no data sources available` },
-    );
+    sessReason = `${ME}: no data sources available`;
   }
+
+  console.log(`[Section1] Tertiary Goal=Organic Sessions, target=${sessRecommended}, source=GA4 / GSC, shift=${sessShift}`);
+
+  rows.push({
+    goalType: "Tertiary Goal",
+    goal: sessRecommended !== ME ? `${sessRecommended} organic sessions` : ME,
+    measurementSource: "GA4 / GSC",
+    goalShift: sessShift,
+    reason: sessReason,
+  });
 
   return { rows };
 }
+
+const TRACKING_GAP_PHRASES = [
+  "no direct conversion tracking detected yet",
+  "verify form tracking is active",
+  "event tracking here would directly measure",
+  "track user engagement and exits",
+  "confirm with admissions team",
+  "conversion tracking needed",
+  "tracking validation recommended",
+  "add form tracking",
+  "add call or form tracking",
+  "add event tracking",
+];
+
+const ADMIT_CONNECTION_DEFINITIONS: Record<string, string> = {
+  "Direct": "Service/admissions/VOB/contact pages or clearly treatment-intent traffic likely closest to conversion",
+  "Assisted": "Educational, branded, or mid-journey traffic that supports later conversion but is not a direct admit action",
+  "Informational": "Awareness-stage traffic with weak commercial/admissions intent",
+  "Trust / Evaluation": "Pages used to evaluate credibility before conversion, such as team, reviews, accreditations, about, outcomes",
+};
 
 function generateSection2(
   ga4Landing: any[],
@@ -787,7 +881,8 @@ function generateSection2(
     }
   }
 
-  // Priority 2: CallRail organic sources (call volume by source)
+  // Priority 2: CallRail sources (call volume by source)
+  const PPC_KEYWORDS = /\bppc\b|\bpaid\b|\bcpc\b|\badwords\b|\bgoogle\s*ads\b|\bbing\s*ads\b/i;
   if (callSources.length > 0 && topConvertingSources.length < 5) {
     const existingSources = new Set(topConvertingSources.map(s => s.source));
     const totalCalls = callSources.reduce((s, r) => s + r.calls, 0);
@@ -795,10 +890,14 @@ function generateSection2(
       if (topConvertingSources.length >= 5) break;
       if (existingSources.has(src.source)) continue;
       const pct = totalCalls > 0 ? Math.round(src.calls / totalCalls * 100) : 0;
+      const isPPC = PPC_KEYWORDS.test(src.source);
+      const channelLabel = isPPC ? "tracked calls" : "organic calls";
       topConvertingSources.push({
         source: src.source,
-        whatsConverting: `${fmtNum(src.calls)} organic calls (${pct}% of tracked calls)`,
-        notes: "Call tracking source — confirm with admissions team",
+        whatsConverting: `${fmtNum(src.calls)} ${channelLabel} (${pct}% of tracked calls)`,
+        notes: isPPC
+          ? "Paid source — tracked calls, not organic attribution"
+          : "Call tracking source — confirm with admissions team",
         dataSource: "CallRail",
       });
       existingSources.add(src.source);
@@ -858,7 +957,13 @@ function generateSection2(
     });
   }
 
-  return { topConvertingPages, topConvertingSources };
+  const allNotes = [...topConvertingPages.map(p => p.notes), ...topConvertingSources.map(s => s.notes)].join(" ").toLowerCase();
+  const hasGaps = TRACKING_GAP_PHRASES.some(phrase => allNotes.includes(phrase));
+  const trackingDisclaimer = hasGaps
+    ? "Due to missing tracking data, connection to admits is inferred from page intent and journey position."
+    : undefined;
+
+  return { topConvertingPages, topConvertingSources, trackingDisclaimer };
 }
 
 function clientReadableType(internalType: string): string {
@@ -1438,6 +1543,40 @@ function addNetNewAmPriorities(
   }
 }
 
+function hasTrackingGaps(section2: Section2Conversions): boolean {
+  const allNotes = [
+    ...section2.topConvertingPages.map(p => p.notes),
+    ...section2.topConvertingSources.map(s => s.notes),
+  ].join(" ").toLowerCase();
+  return TRACKING_GAP_PHRASES.some(phrase => allNotes.includes(phrase));
+}
+
+const S6_BUSINESS_ORDER: string[] = [
+  "Tracking & Attribution Setup",
+  "Admissions Pathway Clarity",
+  "Core Service Page Foundation",
+  "Conversion Path Audit",
+  "Internal Linking — High-Traffic to Conversion",
+  "Content Refresh — Highest-Traffic Assisted Pages",
+  "Title & Meta Optimization",
+  "Conditions Hub Structure",
+  "Therapies Architecture",
+  "Technical Cleanup",
+  "Location Consolidation",
+  "Organic Channel Health Review",
+];
+
+function sortByBusinessOrder(priorities: PriorityRow[]): void {
+  priorities.sort((a, b) => {
+    const ai = S6_BUSINESS_ORDER.indexOf(a.initiative);
+    const bi = S6_BUSINESS_ORDER.indexOf(b.initiative);
+    const aIdx = ai >= 0 ? ai : S6_BUSINESS_ORDER.length;
+    const bIdx = bi >= 0 ? bi : S6_BUSINESS_ORDER.length;
+    return aIdx - bIdx;
+  });
+  priorities.forEach((p, i) => { p.priority = i + 1; });
+}
+
 function generateSection6(
   section1: Section1Goals,
   section2: Section2Conversions,
@@ -1457,11 +1596,22 @@ function generateSection6(
     return completedLower.some(w => w.includes(keyword.toLowerCase()));
   }
 
+  if (hasTrackingGaps(section2) && !isAlreadyDone("tracking") && !isAlreadyDone("attribution")) {
+    priorities.push({
+      priority: 1,
+      initiative: "Tracking & Attribution Setup",
+      tier: "Tier 1",
+      action: "Implement or verify GA4 and call-tracking instrumentation on key admissions-path pages, starting with Contact, Verify Insurance, and highest-intent service pages.",
+      reason: "Reporting confidence is limited where conversion tracking is missing. Instrumentation must be in place before page-level admit connection can be quantified reliably.",
+      source: "Multi-source",
+    });
+  }
+
   if (section5.tier <= 1) {
     if (!tierInput.hasDetoxPage || !tierInput.hasResidentialPage) {
       if (!isAlreadyDone("service page") && !isAlreadyDone("detox") && !isAlreadyDone("residential")) {
         priorities.push({
-          priority: 1,
+          priority: priorities.length + 1,
           initiative: "Core Service Page Foundation",
           tier: "Tier 1",
           action: "Refresh and consolidate primary detox and residential intent so Google sees one clear service path per treatment level",
@@ -1632,61 +1782,111 @@ function generateSection6(
     }
   }
 
-  priorities.forEach((p, i) => { p.priority = i + 1; });
+  sortByBusinessOrder(priorities);
 
   return { priorities: priorities.slice(0, 7) };
 }
 
-function generateSection7(section6: Section6Priorities, section5: Section5Diagnosis): Section7Tracking {
+function generateSection7(section6: Section6Priorities, section5: Section5Diagnosis, dataSources: string[]): Section7Tracking {
   const tracking: TrackingRow[] = [];
 
+  const hasGA4 = dataSources.some(ds => ds.toLowerCase().includes("ga4") || ds.toLowerCase().includes("google analytics"));
+  const hasCallTracking = dataSources.some(ds => ds.toLowerCase().includes("call"));
+  const hasGSC = dataSources.some(ds => ds.toLowerCase().includes("search console") || ds.toLowerCase().includes("gsc"));
+
+  function inferStatus(source: string): string {
+    const s = source.toLowerCase();
+    if (s.includes("ga4") || s.includes("google analytics")) return hasGA4 ? "Live" : "Missing Setup";
+    if (s.includes("call tracking") || s.includes("callrail") || s.includes("ctm") || s.includes("nimbata")) return hasCallTracking ? "Live" : "Missing Setup";
+    if (s.includes("gsc") || s.includes("google search console") || s.includes("search console")) return hasGSC ? "Live" : "Missing Setup";
+    if (s.includes("multi-source")) return "Needs Verification";
+    if (s.includes("gbp")) return "Needs Verification";
+    return "Needs Verification";
+  }
+
   const metricMap: Record<string, TrackingRow> = {
+    "Tracking & Attribution Setup": {
+      focusArea: "Admissions Conversions",
+      metric: "VOB submissions + qualified organic calls",
+      source: "GA4 / Call Tracking",
+      status: hasGA4 && hasCallTracking ? "Needs Verification" : "Missing Setup",
+      whyItMatters: "Directly measures admission-driving actions from organic traffic",
+    },
     "Core Service Page Foundation": {
       focusArea: "Service Page Visibility",
       metric: "GSC clicks to primary service pages (detox, residential, PHP/IOP)",
       source: "Google Search Console",
+      status: inferStatus("Google Search Console"),
       whyItMatters: "Measures whether core pages are capturing high-intent search demand",
     },
     "Admissions Pathway Clarity": {
       focusArea: "Admissions Conversions",
       metric: "VOB submissions + qualified organic calls",
       source: "GA4 + Call Tracking",
+      status: hasGA4 && hasCallTracking ? "Live" : "Missing Setup",
       whyItMatters: "Directly measures admission-driving actions from organic traffic",
     },
     "Conditions Hub Structure": {
       focusArea: "Authority Coverage",
       metric: "Organic sessions to conditions hub pages",
       source: "GA4",
+      status: inferStatus("GA4"),
       whyItMatters: "Tracks whether hub structure is attracting topical authority traffic",
     },
     "Therapies Architecture": {
       focusArea: "Therapy Page Performance",
       metric: "GSC impressions and clicks for therapy-related queries",
       source: "Google Search Console",
+      status: inferStatus("Google Search Console"),
       whyItMatters: "Measures whether therapy content is capturing differentiation searches",
     },
     "Technical Cleanup": {
       focusArea: "Crawl Health",
       metric: "Reduction in 4xx/5xx errors and redirect chains",
       source: "Multi-source",
+      status: "Live",
       whyItMatters: "Fewer errors = better crawl budget allocation to revenue pages",
     },
     "Location Consolidation": {
       focusArea: "Local Visibility",
       metric: "GBP calls + direction requests + local organic sessions",
       source: "GBP + GA4",
+      status: "Needs Verification",
       whyItMatters: "Validates that location consolidation improves local conversion signals",
+    },
+    "Conversion Path Audit": {
+      focusArea: "Conversion Rate",
+      metric: "Organic conversion rate on top landing pages",
+      source: "GA4",
+      status: hasGA4 ? "Live" : "Missing Setup",
+      whyItMatters: "Higher CVR on existing traffic is the most capital-efficient growth lever",
     },
     "Conversion Path Optimization": {
       focusArea: "Conversion Rate",
       metric: "Organic conversion rate on top landing pages",
       source: "GA4",
+      status: hasGA4 ? "Live" : "Missing Setup",
       whyItMatters: "Higher CVR on existing traffic is the most capital-efficient growth lever",
+    },
+    "Internal Linking — High-Traffic to Conversion": {
+      focusArea: "Internal Link Effectiveness",
+      metric: "Click-through from informational pages to service/VOB pages",
+      source: "GA4",
+      status: hasGA4 ? "Inferred Only" : "Missing Setup",
+      whyItMatters: "Measures whether internal linking strategy converts existing traffic to admissions pages",
+    },
+    "Content Refresh — Highest-Traffic Assisted Pages": {
+      focusArea: "Content Performance",
+      metric: "CTR improvement on high-impression non-brand queries",
+      source: "Google Search Console",
+      status: inferStatus("Google Search Console"),
+      whyItMatters: "CTR gains on existing impressions drive incremental traffic without new content",
     },
     "Content Refresh — Highest-Value Pages": {
       focusArea: "Content Performance",
       metric: "CTR improvement on high-impression non-brand queries",
       source: "Google Search Console",
+      status: inferStatus("Google Search Console"),
       whyItMatters: "CTR gains on existing impressions drive incremental traffic without new content",
     },
   };
@@ -1703,12 +1903,14 @@ function generateSection7(section6: Section6Priorities, section5: Section5Diagno
       focusArea: "Organic Sessions",
       metric: "Total organic sessions (QoQ)",
       source: "GA4",
+      status: hasGA4 ? "Live" : "Missing Setup",
       whyItMatters: "Primary volume indicator for organic channel health",
     },
     {
       focusArea: "Qualified Calls",
       metric: "Organic phone calls (answered, 60s+)",
       source: "Call Tracking",
+      status: hasCallTracking ? "Live" : "Missing Setup",
       whyItMatters: "Strongest proxy for admits when direct admit tracking is unavailable",
     },
   ];

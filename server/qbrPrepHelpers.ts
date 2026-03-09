@@ -111,17 +111,21 @@ export function classifyAdmitConnection(
 
 const TOPIC_PATTERNS: Array<{ pattern: RegExp; topic: string }> = [
   { pattern: /detox|detoxification|withdrawal/i, topic: "Detox" },
-  { pattern: /residential|inpatient|rehab(?!.*near)/i, topic: "Residential Treatment" },
+  { pattern: /residential|inpatient|rehab\b(?!.*near)/i, topic: "Residential Treatment" },
   { pattern: /women|woman|female/i, topic: "Women's Rehab" },
-  { pattern: /men(?:'s)?\s+rehab|male/i, topic: "Men's Rehab" },
+  { pattern: /men(?:'s)?\s+rehab|male\s+rehab/i, topic: "Men's Rehab" },
   { pattern: /dual.?diagnosis|co.?occurring/i, topic: "Dual Diagnosis" },
   { pattern: /insurance|verify|vob|coverage/i, topic: "Insurance / Admissions" },
   { pattern: /php|iop|partial|intensive.?outpatient/i, topic: "PHP / IOP" },
-  { pattern: /near me|in\s+\w+|city|county/i, topic: "Local Treatment Intent" },
-  { pattern: /what is|how to|signs of|symptoms|effects/i, topic: "Informational / Education" },
-  { pattern: /alcohol|drug|heroin|opioid|cocaine|meth|fentanyl|benzo/i, topic: "Substance-Specific" },
+  { pattern: /\bnear me\b|rehab\s+in\s+\w+|treatment\s+in\s+\w+|treatment\s+center\s+in\b/i, topic: "Local Intent" },
+  { pattern: /review|testimonial|accreditation|rating|outcome/i, topic: "Trust / Evaluation" },
+  { pattern: /about\s+us|our\s+team|meet\s+(the|our)|staff|leadership|who\s+we\s+are/i, topic: "Trust / Evaluation" },
+  { pattern: /what is|how to|signs of|symptoms|effects|can you|does \w+ cause|is \w+ addictive/i, topic: "Informational / Education" },
+  { pattern: /alcohol|drug|heroin|opioid|cocaine|meth|fentanyl|benzo|substance/i, topic: "Substance-Specific Education" },
   { pattern: /therap|cbt|dbt|emdr|holistic/i, topic: "Therapies" },
-  { pattern: /depression|anxiety|ptsd|trauma|mental.?health/i, topic: "Mental Health / Conditions" },
+  { pattern: /depression|anxiety|ptsd|trauma|bipolar|mental.?health/i, topic: "Mental Health / Conditions" },
+  { pattern: /sober.?living|aftercare|alumni|recovery\s+support/i, topic: "Aftercare / Continuum" },
+  { pattern: /cost|pay|price|afford|financing/i, topic: "Insurance / Admissions" },
 ];
 
 export function classifyQueryTopic(query: string, client: Client): string {
@@ -146,15 +150,17 @@ export function clusterQueriesByTopic(
 }
 
 export function topicAdmitConnection(topic: string): string {
-  const directTopics = ["Detox", "Residential Treatment", "Insurance / Admissions", "PHP / IOP", "Local Treatment Intent"];
-  const assistedTopics = ["Women's Rehab", "Men's Rehab", "Dual Diagnosis", "Substance-Specific", "Therapies", "Mental Health / Conditions"];
+  const directTopics = ["Detox", "Residential Treatment", "Insurance / Admissions", "PHP / IOP", "Local Intent"];
+  const assistedTopics = ["Women's Rehab", "Men's Rehab", "Dual Diagnosis", "Substance-Specific Education", "Therapies", "Mental Health / Conditions", "Aftercare / Continuum"];
+  const trustTopics = ["Trust / Evaluation"];
   const weakTopics = ["Informational / Education"];
 
   if (directTopics.includes(topic)) return "Direct";
   if (assistedTopics.includes(topic)) return "Assisted";
-  if (weakTopics.includes(topic)) return "Weak";
+  if (trustTopics.includes(topic)) return "Trust / Evaluation";
+  if (weakTopics.includes(topic)) return "Informational";
   if (topic === "Branded Navigation") return "Assisted";
-  return "Unclear";
+  return "Informational";
 }
 
 export interface TierDiagnosisInput {
@@ -206,7 +212,7 @@ export function diagnoseTier(input: TierDiagnosisInput): TierDiagnosis {
     tier1Issues.push("Core service pages (detox, residential) appear missing or weak");
   }
   if (!input.hasVobPage) {
-    tier1Issues.push("Verify Insurance / VOB page is missing or not clearly accessible");
+    tier1Issues.push("Verify Insurance / VOB page is missing — a dedicated VOB page is critical for admissions conversion");
   }
   if (!input.hasContactPage) {
     tier1Issues.push("Contact / admissions pathway is unclear or hard to reach");
@@ -329,7 +335,7 @@ export function analyzeSfForTierInput(
 
   const urls = sfData.map(r => String(r[urlCol] ?? "").toLowerCase());
 
-  const hasVobPage = urls.some(u => /verify.?insurance|vob|verification.?of.?benefits/i.test(u));
+  const hasVobPage = urls.some(u => /verify.?insurance|vob|verification.?of.?benefits|insurance.?verif|check.?insur|\/insurance\b/i.test(u));
   const hasContactPage = urls.some(u => /contact|admissions|get.?help|intake/i.test(u));
   const hasDetoxPage = urls.some(u => /detox/i.test(u));
   const hasResidentialPage = urls.some(u => /residential|inpatient/i.test(u));

@@ -1,0 +1,232 @@
+QBR PREP PDF EXPORT BUG LIST — FIXES IN PRIORITY ORDER
+
+Context:
+This is for the internal QBR Prep PDF export, not the client-facing deck.
+Keep the section title “Where Conversions Actually Happen” as-is.
+Prioritize correctness, consistency, and clean export quality over matching the old static report 1:1.
+
+P0 — CRITICAL FIXES
+
+1) TURN TRACKING GAPS INTO ACTION ITEMS
+Problem:
+Section 2 correctly identifies missing or incomplete tracking on key pages, but section 6 does not add any initiative to fix that.
+Required fix:
+If any row in “Where Conversions Actually Happen” contains language like:
+- no direct conversion tracking detected yet
+- verify form tracking is active
+- event tracking here would directly measure
+- track user engagement and exits
+- confirm with admissions team
+the generator must automatically add a Tier 1 initiative in section 6.
+
+New initiative:
+Initiative name: Tracking & Attribution Setup
+Tier: Tier 1
+Source: Multi-source
+Action:
+Implement or verify GA4 and call-tracking instrumentation on key admissions-path pages, starting with Contact, Verify Insurance, and highest-intent service pages.
+Reason:
+Reporting confidence is limited where conversion tracking is missing. Instrumentation must be in place before page-level admit connection can be quantified reliably.
+
+Acceptance criteria:
+- If section 2 mentions missing tracking anywhere, section 6 must include a tracking/setup initiative.
+- Initiative should appear near the top, not buried below lower-priority SEO actions.
+
+2) CHANGE SECTION 1 GOAL STACK
+Problem:
+Primary goal is currently shown as admits with CallRail as source, which overstates certainty.
+Required fix:
+Update section 1 to use 3 goals in this order:
+- Primary Goal: Admits
+- Secondary Goal: Calls
+- Tertiary Goal: Organic Sessions
+
+Source rules:
+- Admits: use placeholder source until confirmed by ADR. Do not fabricate admits from CallRail.
+- Calls: CallRail
+- Organic Sessions: GA4 / GSC
+
+Temporary admits handling:
+Until the admits source is confirmed, render:
+Primary Goal | Admits | Source pending confirmation | [value if available, otherwise blank or placeholder]
+Do not map admits directly from call counts unless a true downstream admits source is wired in.
+
+Acceptance criteria:
+- Section 1 always shows 3 rows.
+- “Admits” exists as primary goal even if source is pending.
+- Calls becomes the secondary measurable operational proxy.
+- Organic sessions becomes tertiary.
+
+3) FIX SOURCE LEGEND / FOOTER LOGIC
+Problem:
+The export says “Missing: GA4” even though GA4 is clearly used in the report.
+Required fix:
+Keep the “Sources used” line, but remove false missing-source flags.
+Render sources like:
+Sources used: Google Sheets NSM Tracker, Google Search Console, GA4, CallRail, Multi-source (Screaming Frog)
+
+Rules:
+- Only show “Missing: [source]” if the source is actually unavailable to the export.
+- If GA4 contributes to any rendered section, it cannot appear as missing.
+- Keep the Webserv footer branding/footer separate from this source legend.
+
+4) FIX VERIFY INSURANCE CONTRADICTION
+Problem:
+The report says Verify Insurance exists in the service overview and in section 2, but tier diagnosis says it is missing.
+Required fix:
+Unify wording across sections 2, 4, 5, and 6.
+
+Logic:
+- If /insurance-verification/ exists in crawl/service overview, do NOT say “missing.”
+- Use one of these approved alternatives instead:
+  - exists but is not clearly accessible
+  - exists but lacks prominence in the admissions path
+  - exists but is not conversion-ready
+  - exists but is weakly surfaced in navigation/internal linking
+
+Acceptance criteria:
+- No contradiction between service overview, conversion table, tier diagnosis, and next steps.
+
+5) ADD FINAL EXPORT SANITIZATION
+Problem:
+Generated PDF has broken sentences, malformed labels, bad unicode characters, and slug encoding artifacts.
+Required fix:
+Before PDF render, run a final cleanup pass on all generated strings.
+
+Must catch:
+- truncated sentence endings like “not .” or “already unde.”
+- malformed section values like “Women’s Men’s Detox Addiction Treatment & Dual Diagnosis”
+- broken unicode separators in URLs/slugs
+- double spaces, orphan punctuation, broken line joins
+- grammar/spelling issues from stitched generation
+
+Acceptance criteria:
+- No broken words or half-sentences in final PDF
+- Slugs render cleanly
+- Labels render as readable English
+- PDF should look reviewed, not raw-generated
+
+P1 — HIGH PRIORITY FIXES
+
+6) REORDER SECTION 6 PRIORITIES
+Problem:
+Location consolidation is too high when tracking and admissions-path clarity are still unresolved.
+Required fix:
+Priority order in section 6 should follow business logic:
+1. Tracking & Attribution Setup
+2. Admissions Pathway Clarity
+3. Conversion Path Audit
+4. Internal Linking — High-Traffic to Conversion
+5. Content Refresh — Highest-Traffic Assisted Pages
+6. Location Consolidation
+
+Rule:
+Instrumentation and admissions-path friction come before broader architecture cleanup when conversion visibility is weak.
+
+7) DEFINE “CONNECTION TO ADMITS” LABELS
+Problem:
+Direct, Assisted, Informational, Trust / Evaluation are useful, but not defined.
+Required fix:
+Add fixed definitions to generator logic and optionally include a note below the table.
+
+Definitions:
+- Direct: service/admissions/VOB/contact pages or clearly treatment-intent traffic likely closest to conversion
+- Assisted: educational, branded, or mid-journey traffic that supports later conversion but is not a direct admit action
+- Informational: awareness-stage traffic with weak commercial/admissions intent
+- Trust / Evaluation: pages used to evaluate credibility before conversion, such as team, reviews, accreditations, about, outcomes
+
+Tracking disclaimer rule:
+If page-level conversion tracking is incomplete, add a note below the relevant table:
+“Due to missing tracking data, connection to admits is inferred from page intent and journey position.”
+
+Acceptance criteria:
+- Labels are defined consistently in logic
+- Missing-tracking note appears automatically when attribution is inferred
+
+8) TIGHTEN TOPIC CLUSTERING
+Problem:
+Clusters are too loose. “Local Treatment Intent” currently contains mixed-intent or clearly informational queries.
+Required fix:
+Improve clustering rules so topics better reflect actual search intent.
+
+Rules:
+- Keep treatment/service intent separate from informational symptom/research content
+- Reduce size of “Other” by assigning more queries to explicit buckets where possible
+- Do not place clearly informational or non-local queries into “Local Treatment Intent”
+- Prefer buckets such as:
+  - Branded Navigation
+  - Service / Treatment Intent
+  - Substance-Specific Education
+  - Mental Health / Conditions
+  - Trust / Evaluation
+  - Local Intent
+  - Informational / Education
+  - Other (small remainder only)
+
+Acceptance criteria:
+- “Other” should be minimized
+- Topic names should make intuitive strategic sense
+- Mixed-intent queries should not distort business interpretation
+
+9) FIX SOURCE / CHANNEL NORMALIZATION
+Problem:
+“National PPC Static” is listed as producing “organic calls,” which is a channel mismatch.
+Required fix:
+Normalize source naming and channel labeling before render.
+
+Rules:
+- Paid-labeled sources cannot be tagged as organic unless there is a verified normalization rule
+- If source/channel mapping is uncertain, mark as “tracked calls” rather than “organic calls”
+- Keep channel terminology consistent across all tables
+
+Acceptance criteria:
+- No PPC source is described as organic without explicit justification
+- Source/channel wording matches the underlying data source
+
+P2 — NICE-TO-HAVE BUT IMPORTANT
+
+10) MAKE SECTION 7 MORE OPERATIONAL
+Problem:
+“What We Track” is directionally good, but it does not clearly say what is already instrumented versus missing.
+Required fix:
+Add a status column or note to section 7.
+
+Recommended columns:
+- Focus Area
+- Metric
+- Source
+- Status
+- Why It Matters
+
+Status values:
+- Live
+- Needs Verification
+- Missing Setup
+- Inferred Only
+
+Example:
+Admissions Conversions | VOB submissions + qualified organic calls | GA4 / CallRail | Missing Setup | Directly measures admission-driving actions from organic traffic
+
+Acceptance criteria:
+- Reader can tell immediately which reporting inputs are trustworthy and which are not yet ready
+
+IMPLEMENTATION RULES
+
+A) Do not remove the internal section title “Where Conversions Actually Happen.”
+B) Do not fabricate admits from CallRail data.
+C) Keep “Sources used” line, but make it accurate.
+D) Where attribution is inferred rather than measured, say so explicitly.
+E) PDF export quality should pass a final spell/grammar/sanitization step before render.
+F) Prioritize business-outcome clarity over decorative completeness.
+
+TEST CASES TO PASS
+
+1. If section 2 contains missing tracking notes, section 6 must include a tracking initiative.
+2. If GA4 appears in any rendered section, footer/source line must not say “Missing: GA4.”
+3. If /insurance-verification/ exists in service overview, tier diagnosis must not call it missing.
+4. If admits source is unknown, section 1 must still show admits as primary goal with source pending confirmation.
+5. If connection-to-admits labels are shown while tracking is incomplete, inference note must appear under the table.
+6. Final PDF must contain no broken unicode slug characters, no truncated sentences, and no malformed program/positioning labels.
+
+Deliverable:
+Update the QBR Prep export generator so these rules are enforced automatically and consistently across future exports.

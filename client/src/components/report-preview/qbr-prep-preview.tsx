@@ -78,7 +78,7 @@ interface TrackingRow {
 export interface QbrPrepPreviewProps {
   meta: QbrPrepMeta;
   section1Goals: { rows: GoalRow[] };
-  section2Conversions: { topConvertingPages: ConvertingPageRow[]; topConvertingSources: ConvertingSourceRow[] };
+  section2Conversions: { topConvertingPages: ConvertingPageRow[]; topConvertingSources: ConvertingSourceRow[]; trackingDisclaimer?: string };
   section3Traffic: { topTrafficTopics: TrafficTopicRow[]; topTrafficPages: TrafficPageRow[] };
   section4Services: { services: ServiceRow[] };
   section5Diagnosis: { tier: number; tierName: string; diagnosis: string };
@@ -240,11 +240,18 @@ export function QbrPrepPreview({
     <EditableCell key="f" editKey={`s7_${ri}_0`} value={r.focusArea} edits={edits} onEdit={onEdit} />,
     <EditableCell key="m" editKey={`s7_${ri}_1`} value={r.metric} edits={edits} onEdit={onEdit} />,
     <span key="s" style={{ display: "inline-flex", alignItems: "center", gap: 3, flexWrap: "wrap" }}>
-      {parseS7Sources(r.source).map((src, si) => (
+      {parseS7Sources(edits[`s7_${ri}_2`] ?? r.source).map((src, si) => (
         <SourceBadge key={si} source={src} />
       ))}
     </span>,
-    <EditableCell key="w" editKey={`s7_${ri}_3`} value={r.whyItMatters} edits={edits} onEdit={onEdit} />,
+    <EditableCell key="st" editKey={`s7_${ri}_3`} value={(r as any).status ?? "Needs Verification"} edits={edits} onEdit={onEdit}
+      style={{
+        fontWeight: 600,
+        fontSize: "0.75rem",
+        color: ((r as any).status === "Live" ? "#27ae60" : (r as any).status === "Missing Setup" ? "#c0392b" : (r as any).status === "Inferred Only" ? "#8e44ad" : "#e67e22"),
+      }}
+    />,
+    <EditableCell key="w" editKey={`s7_${ri}_4`} value={r.whyItMatters} edits={edits} onEdit={onEdit} />,
   ]);
 
   return (
@@ -322,6 +329,11 @@ export function QbrPrepPreview({
               edits={edits}
               onEdit={onEdit}
             />
+            {section2Conversions.trackingDisclaimer && (
+              <div style={{ fontSize: "9px", fontStyle: "italic", color: "#6b7280", marginTop: 4, marginBottom: 8 }} data-testid="tracking-disclaimer">
+                {section2Conversions.trackingDisclaimer}
+              </div>
+            )}
 
             <SectionHeading num={3} title="Top Organic Traffic Drivers" />
             <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Traffic Topics</div>
@@ -387,7 +399,7 @@ export function QbrPrepPreview({
             <SectionHeading num={7} title="What We Track" />
             <AddableReportTable
               tableId="s7"
-              headers={["Focus Area", "Metric", "Source", "Why It Matters"]}
+              headers={["Focus Area", "Metric", "Source", "Status", "Why It Matters"]}
               sourceRows={s7SourceRows}
               edits={edits}
               onEdit={onEdit}

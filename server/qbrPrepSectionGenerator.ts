@@ -275,7 +275,7 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
     generatedOn: input.generationDate,
   };
 
-  const section1 = generateSection1(nsmData, ga4FunnelCurr, quarter);
+  const section1 = generateSection1(nsmData, ga4FunnelCurr, quarter, client);
   const section2 = generateSection2(ga4LandingRows, gscPageRows, sfData, sfHeaders, client, callTrackingLandingPages, callTrackingSources);
   const section3 = generateSection3(gscQueryRows, gscPageRows, ga4LandingRows, client);
   const section4 = generateSection4(sfData, sfHeaders, client);
@@ -356,7 +356,30 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
   };
 }
 
+const INSURANCE_BLACKLIST = [
+  "blue-shield", "blue-cross", "blue-cross-blue-shield", "anthem",
+  "aetna", "cigna", "geha", "highmark", "horizon", "humana",
+  "kaiser", "magellan", "optum", "tricare", "unitedhealthcare",
+  "uhc", "health-net", "molina", "medicare", "medicaid",
+  "bcbs", "bcbsca", "united-health", "united-healthcare",
+  "coventry", "medi-cal", "champva", "champ-va",
+];
+
+function isInsuranceTerm(text: string): boolean {
+  const lower = text.toLowerCase();
+  return INSURANCE_BLACKLIST.some(term => lower.includes(term));
+}
+
 function inferLocation(sfData: Record<string, any>[], sfHeaders: string[], client: Client): string {
+  const candidates: Array<{ location: string; source: string }> = [];
+  const rejected: Array<{ candidate: string; reason: string }> = [];
+
+  // Priority 0: Client canonical location (gbpLocationName) — most reliable
+  if (client.gbpLocationName && client.gbpLocationName.trim()) {
+    console.log(`[Location] Using canonical gbpLocationName: ${client.gbpLocationName}`);
+    return client.gbpLocationName.trim();
+  }
+
   const urlCol = sfHeaders.find(h => /^address$/i.test(h) || /^url$/i.test(h)) ?? sfHeaders[0] ?? "";
   const urls = sfData.map(r => String(r[urlCol] ?? "").toLowerCase());
 
@@ -365,6 +388,8 @@ function inferLocation(sfData: Record<string, any>[], sfHeaders: string[], clien
     "laguna-niguel", "newport-beach", "anaheim", "san-diego", "los-angeles",
     "orange-county", "santa-ana", "long-beach", "torrance", "pasadena",
     "santa-monica", "culver-city", "burbank", "glendale", "pomona",
+    "san-francisco", "san-jose", "sacramento", "fresno", "riverside",
+    "bakersfield", "stockton", "chula-vista", "fremont", "modesto",
   ];
 
   const exactCityPattern = new RegExp(`\\/(${knownCities.join("|")})(?:\\/|$|-ca\\b|-california\\b)`, "i");
@@ -375,22 +400,58 @@ function inferLocation(sfData: Record<string, any>[], sfHeaders: string[], clien
   ];
 
   for (const url of urls) {
+    // Priority 1: Exact known-city match
     const exact = url.match(exactCityPattern);
     if (exact) {
-      return exact[1].split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ") + ", CA";
-    }
-    for (const p of generalPatterns) {
-      const m = url.match(p);
-      if (m) {
-        const words = m[1].split("-").filter(w => w.length >= 2);
-        if (words.length > 0) {
-          return words.map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ") + ", CA";
-        }
+      const raw = exact[1];
+      if (isInsuranceTerm(raw)) {
+        rejected.push({ candidate: raw, reason: "Blacklisted insurance/payer term in known-city match" });
+        continue;
       }
+      const location = raw.split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ") + ", CA";
+      candidates.push({ location, source: `exact-url-match: ${url}` });
+      break;
     }
   }
 
-  if (client.gbpLocationName) return client.gbpLocationName;
+  if (candidates.length === 0) {
+    // Priority 2: General -california / -ca pattern (with blacklist)
+    for (const url of urls) {
+      for (const p of generalPatterns) {
+        const m = url.match(p);
+        if (m) {
+          const raw = m[1];
+          if (isInsuranceTerm(raw)) {
+            rejected.push({ candidate: raw, reason: "Blacklisted insurance/payer term in general pattern" });
+            continue;
+          }
+          // Additional guard: reject if the segment looks like a service-area or brand slug
+          if (raw.length > 40 || raw.split("-").length > 4) {
+            rejected.push({ candidate: raw, reason: "Candidate too long — likely a service-area slug, not a city" });
+            continue;
+          }
+          const words = m[1].split("-").filter(w => w.length >= 2);
+          if (words.length > 0) {
+            const location = words.map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ") + ", CA";
+            candidates.push({ location, source: `general-pattern: ${url}` });
+            break;
+          }
+        }
+      }
+      if (candidates.length > 0) break;
+    }
+  }
+
+  if (rejected.length > 0) {
+    console.log(`[Location] Rejected candidates: ${rejected.map(r => `${r.candidate} (${r.reason})`).join("; ")}`);
+  }
+
+  if (candidates.length > 0) {
+    console.log(`[Location] Selected: ${candidates[0].location} from ${candidates[0].source}`);
+    return candidates[0].location;
+  }
+
+  console.log(`[Location] No URL match found — returning Manual entry needed`);
   return ME;
 }
 
@@ -417,55 +478,33 @@ function inferProgram(sfData: Record<string, any>[], sfHeaders: string[]): strin
   return parts.length > 1 ? parts.join(" ") : ME;
 }
 
-function generateSection1(nsmData: any, ga4Funnel: any, quarter: QuarterInfo): Section1Goals {
+function detectCallTrackingProvider(client: Client): string | null {
+  if (client.callrailCompanyId) return "CallRail";
+  if (client.ctmAccountId) return "CallTrackingMetrics";
+  if (client.nimbataAccountId) return "Nimbata";
+  return null;
+}
+
+function generateSection1(nsmData: any, ga4Funnel: any, quarter: QuarterInfo, client: Client): Section1Goals {
   const rows: GoalRow[] = [];
 
+  // Determine active call tracking provider for client-facing source label
+  const callTrackingProvider = detectCallTrackingProvider(client);
+  const admitsSource = callTrackingProvider ?? ME;
+
+  console.log(`[Section1] client=${client.name}`);
+  console.log(`[Section1] callTrackingProvider=${callTrackingProvider ?? "none"} → admitsSource=${admitsSource}`);
+  console.log(`[Section1] nsmData present=${!!nsmData}, ga4Funnel present=${!!ga4Funnel}`);
+
   if (nsmData) {
-    const sessGoal = nsmData.sessionsGoal !== "—" ? nsmData.sessionsGoal : null;
-    const sessActual = nsmData.sessionsActual !== "—" ? nsmData.sessionsActual : null;
-    const sessPct = nsmData.sessionsPercent !== "—" ? nsmData.sessionsPercent : null;
-    const sessOnTrack = nsmData.sessionsOnTrack !== "—" ? nsmData.sessionsOnTrack : null;
-
-    let recommendedGoal = sessGoal ?? ME;
-    let goalShift = "Maintain";
-    let reason = ME;
-
-    if (sessGoal && sessActual && sessPct) {
-      const actualNum = parseInt(String(sessActual).replace(/[^0-9]/g, ""), 10);
-      const goalNum = parseInt(String(sessGoal).replace(/[^0-9]/g, ""), 10);
-      if (!isNaN(actualNum) && !isNaN(goalNum) && goalNum > 0) {
-        const pacing = actualNum / goalNum;
-        if (pacing >= 0.9) {
-          recommendedGoal = fmtNum(Math.round(goalNum * 1.05));
-          goalShift = "+5%";
-          reason = `On pace at ${sessPct} through current quarter. Modest increase is realistic given current trajectory.`;
-        } else if (pacing >= 0.7) {
-          recommendedGoal = fmtNum(goalNum);
-          goalShift = "Maintain";
-          reason = `Tracking at ${sessPct} — maintaining current goal is realistic while addressing site improvements.`;
-        } else {
-          recommendedGoal = fmtNum(Math.round(goalNum * 0.95));
-          goalShift = "-5%";
-          reason = `Behind pace at ${sessPct}. Slight reduction reflects realistic expectations while focusing on site fundamentals.`;
-        }
-      }
-    }
-
-    rows.push({
-      goalType: "Primary Goal",
-      goal: `${recommendedGoal} organic sessions`,
-      measurementSource: "Google Sheets NSM + GA4",
-      goalShift,
-      reason,
-    });
-
-    const mvpType = nsmData.mvpType !== "—" ? nsmData.mvpType : "Calls";
+    // ── Primary Goal: Admits ──────────────────────────────────────────────
+    // Use NSM MVP data (calls/leads) internally for targets — never expose NSM label client-facing
     const mvpGoal = nsmData.mvpGoal !== "—" ? nsmData.mvpGoal : null;
     const mvpActual = nsmData.mvpActual !== "—" ? nsmData.mvpActual : null;
 
-    let mvpRecommended = mvpGoal ?? ME;
-    let mvpShift = "Maintain";
-    let mvpReason = ME;
+    let admitsRecommended: string = mvpGoal ?? ME;
+    let admitsShift = "Maintain";
+    let admitsReason = ME;
 
     if (mvpGoal && mvpActual) {
       const mvpActNum = parseInt(String(mvpActual).replace(/[^0-9]/g, ""), 10);
@@ -473,43 +512,93 @@ function generateSection1(nsmData: any, ga4Funnel: any, quarter: QuarterInfo): S
       if (!isNaN(mvpActNum) && !isNaN(mvpGoalNum) && mvpGoalNum > 0) {
         const pacing = mvpActNum / mvpGoalNum;
         if (pacing >= 0.9) {
-          mvpRecommended = fmtNum(Math.round(mvpGoalNum * 1.05));
-          mvpShift = "+5%";
-          mvpReason = `${mvpType} on pace. Slight increase is achievable.`;
+          admitsRecommended = fmtNum(Math.round(mvpGoalNum * 1.05));
+          admitsShift = "+5%";
+          admitsReason = `Admits on pace (${mvpActual}/${mvpGoal}). Slight increase is achievable given current trajectory.`;
+        } else if (pacing >= 0.7) {
+          admitsRecommended = fmtNum(mvpGoalNum);
+          admitsShift = "Maintain";
+          admitsReason = `Admits tracking at ${mvpActual}/${mvpGoal}. Maintaining goal while improving conversion paths.`;
         } else {
-          mvpRecommended = fmtNum(mvpGoalNum);
-          mvpShift = "Maintain";
-          mvpReason = `${mvpType} tracking at ${mvpActual}/${mvpGoal}. Maintaining goal while improving conversion paths.`;
+          admitsRecommended = fmtNum(Math.round(mvpGoalNum * 0.95));
+          admitsShift = "-5%";
+          admitsReason = `Admits behind pace (${mvpActual}/${mvpGoal}). Modest adjustment reflects realistic expectations while focusing on site fundamentals.`;
         }
       }
     }
 
-    rows.push({
-      goalType: "Secondary Goal",
-      goal: `${mvpRecommended} ${mvpType.toLowerCase()}`,
-      measurementSource: `Google Sheets NSM + ${mvpType === "Calls" || mvpType === "Leads" ? "Call Tracking" : "GA4"}`,
-      goalShift: mvpShift,
-      reason: mvpReason,
-    });
-  } else if (ga4Funnel) {
+    console.log(`[Section1] Primary Goal=Admits, target=${admitsRecommended}, source=${admitsSource}, shift=${admitsShift}`);
+
     rows.push({
       goalType: "Primary Goal",
-      goal: `${fmtNum(ga4Funnel.sessions)} organic sessions (QTD baseline)`,
-      measurementSource: "GA4",
+      goal: `${admitsRecommended} admits`,
+      measurementSource: admitsSource,
+      goalShift: admitsShift,
+      reason: admitsReason,
+    });
+
+    // ── Secondary Goal: Organic Sessions ─────────────────────────────────
+    // Use NSM sessions data for targets — always display "GA4 / GSC" as the client-facing source
+    const sessGoal = nsmData.sessionsGoal !== "—" ? nsmData.sessionsGoal : null;
+    const sessActual = nsmData.sessionsActual !== "—" ? nsmData.sessionsActual : null;
+    const sessPct = nsmData.sessionsPercent !== "—" ? nsmData.sessionsPercent : null;
+
+    let sessRecommended: string = sessGoal ?? ME;
+    let sessShift = "Maintain";
+    let sessReason = ME;
+
+    if (sessGoal && sessActual && sessPct) {
+      const actualNum = parseInt(String(sessActual).replace(/[^0-9]/g, ""), 10);
+      const goalNum = parseInt(String(sessGoal).replace(/[^0-9]/g, ""), 10);
+      if (!isNaN(actualNum) && !isNaN(goalNum) && goalNum > 0) {
+        const pacing = actualNum / goalNum;
+        if (pacing >= 0.9) {
+          sessRecommended = fmtNum(Math.round(goalNum * 1.05));
+          sessShift = "+5%";
+          sessReason = `On pace at ${sessPct} through current quarter. Modest increase is realistic given current trajectory.`;
+        } else if (pacing >= 0.7) {
+          sessRecommended = fmtNum(goalNum);
+          sessShift = "Maintain";
+          sessReason = `Tracking at ${sessPct} — maintaining current goal is realistic while addressing site improvements.`;
+        } else {
+          sessRecommended = fmtNum(Math.round(goalNum * 0.95));
+          sessShift = "-5%";
+          sessReason = `Behind pace at ${sessPct}. Slight reduction reflects realistic expectations while focusing on site fundamentals.`;
+        }
+      }
+    }
+
+    console.log(`[Section1] Secondary Goal=Organic Sessions, target=${sessRecommended}, source=GA4 / GSC, shift=${sessShift}`);
+
+    rows.push({
+      goalType: "Secondary Goal",
+      goal: `${sessRecommended} organic sessions`,
+      measurementSource: "GA4 / GSC",
+      goalShift: sessShift,
+      reason: sessReason,
+    });
+  } else if (ga4Funnel) {
+    // No NSM data — fall back to GA4 QTD baseline for sessions; admits needs manual entry
+    console.log(`[Section1] No NSM — using GA4 fallback. admitsSource=${admitsSource}`);
+    rows.push({
+      goalType: "Primary Goal",
+      goal: ME,
+      measurementSource: admitsSource,
       goalShift: ME,
-      reason: `${ME}: NSM tracker not available. Using GA4 QTD sessions as baseline.`,
+      reason: `${ME}: Admits target requires call tracking data — please enter manually`,
     });
     rows.push({
       goalType: "Secondary Goal",
-      goal: ga4Funnel.conversions > 0 ? `${fmtNum(ga4Funnel.conversions)} conversions (QTD baseline)` : ME,
-      measurementSource: "GA4",
+      goal: `${fmtNum(ga4Funnel.sessions)} organic sessions (QTD baseline)`,
+      measurementSource: "GA4 / GSC",
       goalShift: ME,
-      reason: `${ME}: conversion goal needs manual validation`,
+      reason: `${ME}: Goal target needs manual validation against prior quarter`,
     });
   } else {
+    console.log(`[Section1] No data sources available`);
     rows.push(
-      { goalType: "Primary Goal", goal: ME, measurementSource: ME, goalShift: ME, reason: `${ME}: no data sources available` },
-      { goalType: "Secondary Goal", goal: ME, measurementSource: ME, goalShift: ME, reason: `${ME}: no data sources available` },
+      { goalType: "Primary Goal", goal: ME, measurementSource: admitsSource !== ME ? admitsSource : ME, goalShift: ME, reason: `${ME}: no data sources available` },
+      { goalType: "Secondary Goal", goal: ME, measurementSource: "GA4 / GSC", goalShift: ME, reason: `${ME}: no data sources available` },
     );
   }
 

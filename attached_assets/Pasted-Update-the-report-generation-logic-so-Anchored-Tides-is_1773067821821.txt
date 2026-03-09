@@ -1,0 +1,169 @@
+Update the report generation logic so Anchored Tides is identified as Huntington Beach, CA, not “Blue Shield, CA.”
+
+Problem:
+The current extraction logic appears to be using a loose text match for City, State or X CA patterns and is incorrectly reading insurance/provider text like “Blue Shield CA” as a geographic location. The real business location is Huntington Beach, CA. Fix the parser so insurer names, carrier names, and logo text can never be interpreted as a city.
+
+What I need changed:
+
+Replace any loose “first city/state-looking text” logic with a strict location extraction hierarchy.
+
+Use this order of precedence:
+
+schema.org / JSON-LD business address fields:
+
+addressLocality
+
+addressRegion
+
+streetAddress
+
+postalCode
+
+visible NAP block or footer address
+
+explicit location phrases in page copy such as:
+
+“Located in Huntington Beach”
+
+“in Huntington Beach, CA”
+
+“facility in Huntington Beach”
+
+trusted business-location source if we already store one for the client
+
+only as a final fallback, use page-text heuristics
+
+Add a hard exclusion list so insurance names can never be treated as locations.
+
+Blacklist phrases and related tokens such as:
+
+Blue Shield
+
+Blue Cross
+
+Blue Cross Blue Shield
+
+Anthem
+
+Aetna
+
+Cigna
+
+GEHA
+
+Highmark
+
+Horizon
+
+Humana
+
+Kaiser
+
+Magellan
+
+Optum
+
+Tricare
+
+UnitedHealthcare
+
+UHC
+
+Health Net
+
+Molina
+
+Medicare
+
+Medicaid
+
+If a matched phrase contains one of those terms, reject it as a location candidate.
+
+Tighten the fallback heuristic.
+
+If fallback text extraction is still needed:
+
+prefer matches near labels like:
+
+address
+
+location
+
+contact
+
+located in
+
+our facility
+
+treatment center
+
+ignore matches found inside insurance sections, logo blocks, benefits sections, or payer lists
+
+ignore uppercase brand-like phrases followed by CA
+
+require the city candidate to look like a real city, not a brand or company name
+
+Add a validation step after extraction.
+
+After a location candidate is found:
+
+confirm it is not in the insurance/provider blacklist
+
+confirm it is not identical to a carrier/brand token
+
+if multiple candidates exist, prefer the one repeated in schema, footer, and contact page copy
+
+if the result fails validation, keep searching instead of accepting the bad value
+
+Add a client override / canonical location setting.
+
+For each client, allow a canonical office location field in config or client settings.
+For Anchored Tides, set:
+
+city: Huntington Beach
+
+state: CA
+
+Use this canonical value when:
+
+the client has one real physical location
+
+page text is noisy or ambiguous
+
+service area pages mention nearby cities
+
+Add logging so I can debug this quickly next time.
+
+For each report run, log:
+
+which source produced the chosen location
+
+all candidate locations found
+
+which candidates were rejected
+
+why they were rejected
+
+final selected location
+
+Acceptance criteria:
+
+Anchored Tides resolves to Huntington Beach, CA
+
+“Blue Shield, CA” can never appear as a business location
+
+insurer/logo text is ignored for location extraction
+
+service area pages do not override the real facility location
+
+the chosen location source is visible in debug logs
+
+If possible, also add a unit test with sample page text that includes both:
+
+“Located in Huntington Beach”
+
+“Blue Shield CA”
+and verify the output is Huntington Beach, CA.
+
+Expected result for this client:
+Anchored Tides Recovery → Huntington Beach, CA

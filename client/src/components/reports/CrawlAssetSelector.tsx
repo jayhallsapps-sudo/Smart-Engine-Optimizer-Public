@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { getAuthHeaders } from "@/lib/queryClient";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
@@ -214,17 +215,25 @@ export function CrawlAssetSelector({
       queuedFiles.map(async (qf, idx) => {
         setQueuedFiles(prev => prev.map((f, i) => i === idx ? { ...f, status: "uploading" } : f));
         const text = await qf.file.text();
-        const rows = parseCSV(text);
+        const cleanText = text.replace(/^\uFEFF/, "");
+        const rows = parseCSV(cleanText);
         if (rows.length < 1) throw new Error("Empty CSV");
         const headers = rows[0];
-        const data = rows.slice(1).map(cells => {
+        const MAX_ROWS: Record<string, number> = {
+          internal: 15000, h1: 10000, h2: 10000,
+          meta_description: 10000, meta_keywords: 10000, page_titles: 10000,
+          canonicals: 10000, images: 5000, outlinks: 5000, issues: 500,
+        };
+        const cap = MAX_ROWS[qf.fileType] ?? 10000;
+        const data = rows.slice(1, cap + 1).map(cells => {
           const row: Record<string, string> = {};
           headers.forEach((h, i) => { row[h] = cells[i] ?? ""; });
           return row;
         });
+        const authHeaders = await getAuthHeaders();
         const res = await fetch("/api/crawl-assets", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...authHeaders },
           body: JSON.stringify({
             clientId,
             clientName: clientName ?? "Unknown",

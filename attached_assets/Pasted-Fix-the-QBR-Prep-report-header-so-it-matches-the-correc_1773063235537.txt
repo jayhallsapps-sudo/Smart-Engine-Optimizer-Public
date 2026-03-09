@@ -1,0 +1,108 @@
+Fix the QBR Prep report header so it matches the correct branded swoop header used in the approved report design.
+
+I am attaching the exact swoop header image/reference. Use that attached asset as the source of truth for the QBR Prep header.
+
+Problem:
+The QBR Prep preview/export is showing the wrong header:
+- a flat red bar
+- random W / Webserv treatment
+- visible gap/padding at the top, left, and right
+
+Expected:
+Use the same curved red swoop header style as the approved report design:
+- curved/swooping red top shape
+- no gap on the top
+- no gap on the left
+- no gap on the right
+- header should sit flush to the page edges
+- the rest of the report content should begin below it correctly
+
+This is the same header style already solved elsewhere in the app. Reuse that exact implementation instead of approximating it again.
+
+==================================================
+REQUIRED FIX
+==================================================
+
+Replace the current QBR Prep header implementation with the correct swoop header.
+
+Requirements:
+1. Remove the flat bar header from QBR Prep.
+2. Remove the random W / Webserv header treatment from QBR Prep.
+3. Reuse the same swoop header implementation used in the approved report/page where it already renders correctly, or reuse the attached swoop asset directly if that is the cleanest approach.
+4. Ensure the swoop has:
+   - no top gap
+   - no left gap
+   - no right gap
+   - no parent padding/margin causing inset rendering
+5. Ensure the preview and export use the same correct header treatment.
+6. Do not change the rest of the report layout unless needed to support the correct header fit.
+
+==================================================
+LAYOUT RULES
+==================================================
+
+Check all possible sources of the gap:
+- outer page/container padding
+- slide/report wrapper margin
+- overflow clipping
+- border radius on parent container
+- internal header wrapper padding
+- print/export wrapper margin
+- white page background inset
+- max-width container centering styles
+
+The swoop must render flush to the page edges inside the report canvas.
+
+If needed:
+- set the report page wrapper to overflow: hidden
+- remove top/left/right padding from the immediate report canvas
+- ensure the swoop header element is positioned at 0,0 relative to the report page
+- ensure border radius does not clip or inset it incorrectly unless the approved design uses it
+
+==================================================
+SOURCE OF TRUTH
+==================================================
+
+Use the approved swoop header shown in the reference report as the exact design reference.
+
+Use the attached PNG/image as the exact header reference.
+- Match its shape, positioning, and edge-to-edge fit.
+- Do not redraw a simplified approximation if the attached asset can be reused directly.
+- Do not approximate it with a simple red rectangle.
+- Do not substitute another branded header.
+
+==================================================
+APPLY TO
+==================================================
+
+Fix this specifically for:
+- QBR Prep preview
+- QBR Prep export / print render if it has a separate component
+
+If QBR Prep has both:
+- editable preview component
+- print/export component
+
+then both must use the same corrected swoop header.
+
+==================================================
+DO NOT DO
+==================================================
+
+- do not redesign the whole report
+- do not change typography unnecessarily
+- do not alter section spacing beyond what is needed for the header
+- do not patch with random negative margins unless the structure is correct
+- do not leave the export header different from the preview
+
+==================================================
+PROOF REQUIRED
+==================================================
+
+Return:
+1. files changed
+2. which existing header implementation you reused or matched
+3. exact cause of the left/top/right gap
+4. exact code/CSS change that removed the gap
+5. proof that QBR Prep preview now shows the swoop flush to the edges
+6. proof that QBR Prep export/print also uses the corrected swoop header

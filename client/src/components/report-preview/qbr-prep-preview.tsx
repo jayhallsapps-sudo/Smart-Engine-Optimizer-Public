@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Pencil, Check, X } from "lucide-react";
 import { EditableSection } from "./editable-section";
+import swoopHeaderFallback from "@assets/HEADER_IMAGE_1773063127856.png";
 
 const ACCENT = "#C0392B";
 const TABLE_HEADER_BG = "#111827";
@@ -242,27 +243,11 @@ export function QbrPrepPreview({
         }}
         data-testid="qbr-prep-preview-page"
       >
-        {headerImgUrl ? (
-          <img src={headerImgUrl} alt="Header" style={{ width: "100%", display: "block", flexShrink: 0 }} />
-        ) : (
-          <div
-            style={{
-              width: "100%",
-              height: "120px",
-              flexShrink: 0,
-              background: `linear-gradient(135deg, ${ACCENT} 60%, #a02820)`,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "flex-end",
-              paddingRight: "32px",
-            }}
-          >
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: "26px", fontWeight: 700, color: "white", letterSpacing: "3px", lineHeight: 1 }}>W</div>
-              <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.8)", letterSpacing: "4px" }}>WEBSERV</div>
-            </div>
-          </div>
-        )}
+        <img
+          src={headerImgUrl ?? swoopHeaderFallback}
+          alt="Header"
+          style={{ width: "100%", display: "block", flexShrink: 0 }}
+        />
 
         <div style={{ padding: "24px 56px 0", flex: 1, display: "flex", flexDirection: "column" }}>
           <div style={{ flex: 1 }}>

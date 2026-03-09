@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import swoopHeaderFallback from "@assets/HEADER_IMAGE_1773063127856.png";
 
 const ACCENT = "#C0392B";
 const TABLE_HEADER_BG = "#111827";
@@ -93,16 +94,7 @@ export default function QbrPrepPrint() {
 
       <div style={{ position: "relative", width: "8.5in", margin: "0 auto", padding: 0, background: "#fff", fontFamily: "'Calibri', 'Segoe UI', Arial, sans-serif", fontSize: "11pt", color: "#111827" }}>
         <div style={{ position: "relative", width: "100%", lineHeight: 0 }}>
-          {headerImgUrl ? (
-            <img src={headerImgUrl} alt="" style={{ width: "100%", display: "block" }} />
-          ) : (
-            <div style={{ width: "100%", height: "120px", background: `linear-gradient(135deg, ${ACCENT} 60%, #a02820)`, display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: "32px" }}>
-              <div style={{ textAlign: "right" }}>
-                <div style={{ fontSize: "26px", fontWeight: 700, color: "white", letterSpacing: "3px", lineHeight: 1 }}>W</div>
-                <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.8)", letterSpacing: "4px" }}>WEBSERV</div>
-              </div>
-            </div>
-          )}
+          <img src={headerImgUrl ?? swoopHeaderFallback} alt="" style={{ width: "100%", display: "block" }} />
         </div>
 
         <div style={{ padding: "24px 56px 0" }}>

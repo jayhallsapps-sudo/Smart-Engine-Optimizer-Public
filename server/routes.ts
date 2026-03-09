@@ -142,6 +142,7 @@ export async function registerRoutes(
     "/auth/google/start",
     "/auth/google/callback",
     "/auth/google/configured",
+    "/template/header",
   ];
   app.use("/api", (req: Request, res: Response, next: NextFunction) => {
     if (AUTH_PUBLIC_PATHS.some(p => req.path === p || req.path.startsWith(p + "?"))) return next();

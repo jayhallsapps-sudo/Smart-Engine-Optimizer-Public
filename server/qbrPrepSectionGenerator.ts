@@ -618,7 +618,15 @@ function generateSection2(
   const topConvertingSources: ConvertingSourceRow[] = [];
 
   // --- TOP CONVERTING PAGES ---
-  // Priority 1: GA4 organic conversions
+  // Confidence-scored candidate pool. Higher = stronger conversion evidence.
+  // 5 = GA4-backed, 4 = call-tracking-backed, 3 = SF service page, 2 = GSC high-intent, 1 = GSC informational
+  interface PageCandidate { row: ConvertingPageRow; confidence: number; }
+  const pagePool: PageCandidate[] = [];
+  const seenPageKeys = new Set<string>();
+
+  const callTrackingSource = detectCallTrackingProvider(client) ?? "CallRail";
+
+  // P1 — GA4 conversion-backed rows (confidence 5)
   const ga4WithConversions = ga4Landing
     .filter(r => (r.conversions ?? 0) > 0)
     .sort((a, b) => b.conversions - a.conversions)
@@ -627,80 +635,134 @@ function generateSection2(
   const totalGa4Conversions = ga4Landing.reduce((s, r) => s + (r.conversions ?? 0), 0);
 
   for (const row of ga4WithConversions) {
+    const pageKey = shortUrl(row.page);
+    if (seenPageKeys.has(pageKey)) continue;
+    seenPageKeys.add(pageKey);
     const internalType = classifyPageType(row.page);
-    topConvertingPages.push({
-      type: clientReadableType(internalType),
-      page: buildPagePattern(row.page, internalType, "GA4"),
-      notes: buildConvertingPageNote(internalType, "GA4", row.conversions, row.sessions),
-      dataSource: "GA4",
+    pagePool.push({
+      confidence: 5,
+      row: {
+        type: clientReadableType(internalType),
+        page: buildPagePattern(row.page, internalType, "GA4"),
+        notes: buildConvertingPageNote(internalType, "GA4", row.conversions, row.sessions),
+        dataSource: "GA4",
+      },
     });
   }
 
-  // Priority 2: CallRail top organic call landing pages (fill remaining slots up to 8)
-  const callTrackingSource = detectCallTrackingProvider(client) ?? "CallRail";
+  // P2 — Call tracking landing-page rows (confidence 4)
   if (callLandingPages.length > 0) {
-    const seenPages = new Set(ga4WithConversions.map(r => shortUrl(r.page)));
-    const crRows = callLandingPages
-      .sort((a, b) => b.calls - a.calls)
-      .slice(0, 8);
-    for (const row of crRows) {
-      if (topConvertingPages.length >= 8) break;
+    for (const row of callLandingPages.sort((a, b) => b.calls - a.calls).slice(0, 8)) {
       const normalized = row.page.replace(/^https?:\/\/[^/]+/, "") || "/";
       const shortP = normalized.length > 60 ? normalized.slice(0, 57) + "…" : normalized;
-      if (seenPages.has(shortP)) continue;
+      if (seenPageKeys.has(shortP)) continue;
+      seenPageKeys.add(shortP);
       const internalType = classifyPageType(row.page);
-      topConvertingPages.push({
-        type: clientReadableType(internalType),
-        page: buildPagePattern(row.page, internalType, callTrackingSource),
-        notes: buildConvertingPageNote(internalType, callTrackingSource, row.calls, 0),
-        dataSource: callTrackingSource,
-      });
-      seenPages.add(shortP);
-    }
-  }
-
-  // Priority 3: Client money pages (always configured — inferred signal)
-  const moneyPages: string[] = (client as any).moneyPages ?? [];
-  if (moneyPages.length > 0 && topConvertingPages.length === 0) {
-    for (const mp of moneyPages.slice(0, 6)) {
-      const internalType = classifyPageType(mp);
-      topConvertingPages.push({
-        type: clientReadableType(internalType),
-        page: shortUrl(mp),
-        notes: buildConvertingPageNote(internalType, "GSC", 0, 0),
-        dataSource: "GSC",
+      pagePool.push({
+        confidence: 4,
+        row: {
+          type: clientReadableType(internalType),
+          page: buildPagePattern(row.page, internalType, callTrackingSource),
+          notes: buildConvertingPageNote(internalType, callTrackingSource, row.calls, 0),
+          dataSource: callTrackingSource,
+        },
       });
     }
   }
 
-  // Priority 4: GSC top pages by clicks (visibility proxy when no conversion data)
-  if (topConvertingPages.length === 0 && gscPages.length > 0) {
-    const topGsc = gscPages
-      .sort((a: any, b: any) => (b.clicks ?? 0) - (a.clicks ?? 0))
-      .slice(0, 6);
-    for (const row of topGsc) {
+  // P3 — SF high-intent service pages (confidence 3) — better than GSC blog rows
+  // Ordered by conversion importance: admissions → insurance → detox → residential → PHP → therapies → dual dx → outpatient
+  const sfServicePriority: Array<{ pattern: RegExp; internalType: string }> = [
+    { pattern: /\/contact\b|\/admissions\b|\/get.?help\b|\/admit\b/i, internalType: "Contact / Admissions" },
+    { pattern: /\/verify.?insur|\/vob\b|\/insurance.?verif|\/check.?insur|\/insurance\b/i, internalType: "Verify Insurance" },
+    { pattern: /\/detox/i, internalType: "Detox" },
+    { pattern: /\/residential|\/inpatient/i, internalType: "Residential / Inpatient" },
+    { pattern: /\/php(?!p)|\/iop|\/partial.?hospital|\/intensive.?out/i, internalType: "PHP / IOP" },
+    { pattern: /\/therap(y|ies)\b|\/modalities/i, internalType: "Therapies" },
+    { pattern: /\/dual.?diagnosis|\/co.?occurring/i, internalType: "Dual Diagnosis" },
+    { pattern: /\/outpatient(?!.*intensive)/i, internalType: "Outpatient" },
+  ];
+
+  if (sfData.length > 0) {
+    const urlCol = sfHeaders.find(h => /^address$/i.test(h) || /^url$/i.test(h)) ?? sfHeaders[0] ?? "";
+    const sfPageUrls = sfData.map(r => String(r[urlCol] ?? "")).filter(isValidPageUrl);
+    for (const { pattern, internalType } of sfServicePriority) {
+      const matches = sfPageUrls.filter(u => pattern.test(u));
+      if (matches.length === 0) continue;
+      matches.sort((a, b) => scorePage4Url(b) - scorePage4Url(a));
+      const best = shortUrl(matches[0]);
+      if (seenPageKeys.has(best)) continue;
+      seenPageKeys.add(best);
+      pagePool.push({
+        confidence: 3,
+        row: {
+          type: clientReadableType(internalType),
+          page: best,
+          notes: buildConvertingPageNote(internalType, "Screaming Frog", 0, 0),
+          dataSource: "Screaming Frog",
+        },
+      });
+    }
+  }
+
+  // P4/P5 — GSC pages split into high-intent (2) and informational (1)
+  const HIGH_INTENT_TYPES = new Set(["Verify Insurance", "Contact / Admissions", "Detox", "Residential / Inpatient", "PHP / IOP", "Outpatient", "Dual Diagnosis", "Therapies"]);
+  if (gscPages.length > 0) {
+    const sortedGsc = [...gscPages].sort((a: any, b: any) => (b.clicks ?? 0) - (a.clicks ?? 0));
+    for (const row of sortedGsc) {
       const pageUrl = row.keys?.[0] ?? "";
+      if (!pageUrl) continue;
+      const pageKey = shortUrl(pageUrl);
+      if (seenPageKeys.has(pageKey)) continue;
+      seenPageKeys.add(pageKey);
       const internalType = classifyPageType(pageUrl);
-      topConvertingPages.push({
-        type: clientReadableType(internalType),
-        page: shortUrl(pageUrl),
-        notes: buildConvertingPageNote(internalType, "GSC", 0, 0),
-        dataSource: "GSC",
+      const isHighIntent = HIGH_INTENT_TYPES.has(internalType);
+      pagePool.push({
+        confidence: isHighIntent ? 2 : 1,
+        row: {
+          type: clientReadableType(internalType),
+          page: shortUrl(pageUrl),
+          notes: buildConvertingPageNote(internalType, "GSC", 0, 0),
+          dataSource: "GSC",
+        },
       });
     }
+  }
+
+  // Sort pool by confidence descending, then apply diversity rules and fill up to 5 rows
+  pagePool.sort((a, b) => b.confidence - a.confidence);
+
+  const typeCount = new Map<string, number>();
+  let gscInfoCount = 0;
+
+  for (const { row, confidence } of pagePool) {
+    if (topConvertingPages.length >= 5) break;
+    // Cap purely-informational GSC rows at 2 to prevent them dominating
+    if (confidence <= 1) {
+      if (gscInfoCount >= 2) continue;
+      gscInfoCount++;
+    }
+    // Diversity cap: no more than 2 rows of the same type if confidence < 4
+    const typeKey = row.type;
+    const currentCount = typeCount.get(typeKey) ?? 0;
+    if (currentCount >= 2 && confidence < 4) continue;
+    typeCount.set(typeKey, currentCount + 1);
+    topConvertingPages.push(row);
   }
 
   // Final fallback
   if (topConvertingPages.length === 0) {
-    topConvertingPages.push({
-      type: ME,
-      page: ME,
-      notes: ME,
-      dataSource: undefined,
-    });
+    topConvertingPages.push({ type: ME, page: ME, notes: ME, dataSource: undefined });
+  }
+
+  console.log(`[Section2] Top Converting Pages: ${topConvertingPages.length} rows (pool had ${pagePool.length} candidates; GA4=${pagePool.filter(c=>c.confidence===5).length}, callTracking=${pagePool.filter(c=>c.confidence===4).length}, SF=${pagePool.filter(c=>c.confidence===3).length}, GSC-hi=${pagePool.filter(c=>c.confidence===2).length}, GSC-info=${pagePool.filter(c=>c.confidence===1).length})`);
+  for (const r of topConvertingPages) {
+    console.log(`[Section2]   → [${r.dataSource}] ${r.type} | ${r.page}`);
   }
 
   // --- TOP CONVERTING SOURCES ---
+  const moneyPages: string[] = (client as any).moneyPages ?? [];
+
   // Priority 1: GA4 page-type aggregation (conversions)
   if (ga4WithConversions.length > 0) {
     const sourceMap = new Map<string, { conversions: number; pages: string[] }>();
@@ -836,33 +898,43 @@ function buildPagePattern(page: string, internalType: string, dataSource: string
 }
 
 function buildConvertingPageNote(internalType: string, dataSource: string, conversions: number, sessions: number): string {
-  const isCallTracking = ["CallRail", "CTM", "Nimbata"].includes(dataSource);
+  const isCallTracking = ["CallRail", "CTM", "Nimbata", "CallTrackingMetrics"].includes(dataSource);
   const isGA4 = dataSource === "GA4";
   const isGSC = dataSource === "GSC";
+  const isSF = dataSource === "Screaming Frog";
   const cvr = isGA4 && sessions > 0 ? ` ${(conversions / sessions * 100).toFixed(1)}% CVR.` : "";
 
-  if (isCallTracking) {
-    if (internalType === "Homepage") return "Primary GMB landing page — dominant call driver. Verify organic vs paid attribution segmentation to ensure call quality from this source.";
-    if (internalType === "Staff / Team") return "Trust and credibility research — users evaluating clinical team before committing to an admissions call.";
-    if (internalType === "FAQ") return "Pre-call vetting behavior — high-intent users researching before contacting admissions. Strong signal even without a form conversion.";
-    if (internalType === "Blog / Resource" || internalType === "Substance-Specific" || internalType === "Informational / Education") return "Pre-call research path — informational content is creating awareness that converts to phone contact. Monitor call quality from these pages.";
-    if (internalType === "Verify Insurance") return "Insurance page is driving direct call behavior — users checking coverage before calling admissions. High-intent touchpoint.";
-    if (internalType === "Contact / Admissions") return "Direct admissions page generating phone clicks — users landing here are actively seeking intake contact.";
-    return "Organic phone click-generating page — users landing here are moving toward admissions contact.";
-  }
-
   if (isGA4) {
-    if (internalType === "Verify Insurance") return `Strongest trackable on-site conversion — VOB form activity directly precedes admissions intake.${cvr}`;
+    if (internalType === "Verify Insurance") return `Strongest trackable on-site conversion path — VOB form activity directly precedes admissions intake.${cvr}`;
     if (internalType === "Contact / Admissions") return `Primary on-site form conversion point — users submitting here are actively requesting contact from admissions.${cvr}`;
-    if (internalType === "Homepage") return `Homepage form conversions are typically navigational or GMB-assisted — validate event type in GA4 to confirm admit alignment.${cvr}`;
+    if (internalType === "Homepage") return `Homepage conversion events detected — validate GA4 event type to confirm these are admit-aligned actions vs navigational clicks.${cvr}`;
+    if (internalType === "Staff Page" || internalType === "Staff / Team") return `Conversion event on staff page — users evaluating clinical credibility before taking action. Strong trust signal.${cvr}`;
     return `On-site conversion event detected — confirm the GA4 event name to validate alignment with admissions pathway.${cvr}`;
   }
 
+  if (isCallTracking) {
+    if (internalType === "Homepage") return "Primary call-driver and likely local-entry page — phone intent is concentrated here. Verify organic vs paid attribution segmentation for call quality.";
+    if (internalType === "Staff / Team" || internalType === "Staff Page") return "Trust and credibility research before calling — users evaluating the clinical team as part of their admissions decision.";
+    if (internalType === "FAQ" || internalType === "FAQ Page") return "Pre-call evaluation behavior — users validating fit before committing. Strong intent signal even without a form conversion.";
+    if (internalType === "Blog / Resource" || internalType === "Substance-Specific" || internalType === "Informational / Education") return "Pre-call research path — informational content is generating awareness that converts to phone contact. Monitor call quality to confirm admit alignment.";
+    if (internalType === "Verify Insurance") return "Insurance page is driving direct call behavior — users checking coverage before calling admissions. One of the clearest non-homepage conversion paths.";
+    if (internalType === "Contact / Admissions") return "Direct admissions contact page generating phone clicks — users landing here are actively seeking intake contact.";
+    return "One of the clearest non-homepage conversion paths — users are moving from service evaluation to direct action.";
+  }
+
+  if (isSF) {
+    if (internalType === "Contact / Admissions") return "Priority admissions page confirmed in site crawl — no direct conversion tracking detected yet. Adding form and call tracking here would directly validate admit attribution.";
+    if (internalType === "Verify Insurance") return "Priority VOB/insurance page confirmed in site crawl — highest-value conversion target on the site. Event tracking here would directly measure admissions pipeline activity.";
+    if (internalType === "Detox" || internalType === "Residential / Inpatient" || internalType === "PHP / IOP" || internalType === "Service Page") return "Priority service page confirmed in site crawl — high-intent organic candidate. Track user engagement and exits to identify friction in the admissions path.";
+    return "Strategic page confirmed in site crawl — conversion tracking needed to validate admit contribution.";
+  }
+
   if (isGSC) {
-    if (internalType === "Verify Insurance") return "High-traffic insurance page with strong organic visibility — add form tracking to confirm admit contribution.";
+    if (internalType === "Verify Insurance") return "Insurance page with organic visibility — add form tracking to confirm direct admit contribution.";
     if (internalType === "Contact / Admissions") return "Contact page receiving organic traffic — verify form tracking is active to capture admission-driving events.";
     if (internalType === "Homepage") return "Homepage is the top organic entry point — brand and direct traffic dominate here; validate quality of organic sessions reaching admissions.";
-    return "Organic traffic proxy — conversion role is unconfirmed. Add event tracking to validate whether this page contributes directly to admits.";
+    if (internalType === "Service Page" || ["Detox", "Residential / Inpatient", "PHP / IOP", "Outpatient", "Dual Diagnosis", "Therapies"].includes(internalType)) return "High-visibility service page with likely support value — direct conversion attribution is limited; add call or form tracking to confirm.";
+    return "High-visibility page with likely support value, but direct conversion attribution is limited. Add event tracking to validate whether this page contributes to admits.";
   }
 
   return "Strategic page identified for conversion contribution — manual tracking validation recommended.";

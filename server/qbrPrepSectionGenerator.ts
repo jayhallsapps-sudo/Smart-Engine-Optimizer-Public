@@ -916,6 +916,60 @@ function generateSection3(
   return { topTrafficTopics, topTrafficPages };
 }
 
+// ── Section 4 URL filtering helpers ──────────────────────────────────────────
+
+const S4_REJECT_EXTENSIONS = /\.(jpg|jpeg|png|gif|webp|svg|ico|js|css|json|xml|pdf|zip|woff|woff2|ttf|mp4|mp3|avi|mov|eot|otf|map|txt|csv|rss|atom)(\?|#|$)/i;
+
+const S4_REJECT_PATH_SEGMENTS = [
+  /\/wp-content\//i,
+  /\/wp-includes\//i,
+  /\/wp-admin\//i,
+  /\/wp-json\//i,
+  /\/xmlrpc\.php/i,
+  /\/feed\//i,
+  /\/\?feed=/i,
+  /\/tag\//i,
+  /\/author\//i,
+  /\/page\/\d+/i,
+  /\/attachment\//i,
+  /\?replytocom=/i,
+  /[?&]amp\b/i,
+  /[?&]ver=/i,
+  /\/sitemap/i,
+  /\/robots\.txt/i,
+  /\/cron\.php/i,
+  /\/__trashed\//i,
+  /\/embed\//i,
+  /\/trackback\//i,
+  /\/comment-page-/i,
+];
+
+function isValidPageUrl(url: string): boolean {
+  if (!url || url.trim() === "") return false;
+  // Must look like a URL path (absolute or relative starting with /)
+  const path = url.includes("://") ? (() => { try { return new URL(url).pathname + new URL(url).search; } catch { return url; } })() : url;
+  if (S4_REJECT_EXTENSIONS.test(path)) return false;
+  if (S4_REJECT_PATH_SEGMENTS.some(re => re.test(path))) return false;
+  return true;
+}
+
+function scorePage4Url(url: string): number {
+  // Prefer shorter clean slugs and paths that end with /
+  let score = 0;
+  const path = shortUrl(url);
+  // Penalize very long paths (deep nesting)
+  const depth = (path.match(/\//g) ?? []).length;
+  score -= depth * 2;
+  // Penalize long slugs
+  score -= Math.floor(path.length / 10);
+  // Prefer paths ending with /
+  if (path.endsWith("/")) score += 3;
+  // Prefer paths that are clearly a direct service page (short slug with one keyword)
+  const segments = path.split("/").filter(Boolean);
+  if (segments.length <= 2) score += 5;
+  return score;
+}
+
 function generateSection4(
   sfData: Record<string, any>[],
   sfHeaders: string[],
@@ -927,39 +981,55 @@ function generateSection4(
   const serviceTargets = [
     { service: "Detox", pattern: /\/detox/i },
     { service: "Residential / Inpatient", pattern: /\/residential|\/inpatient/i },
-    { service: "PHP / IOP", pattern: /\/php|\/iop|\/partial|\/intensive/i },
+    { service: "PHP / IOP", pattern: /\/php(?!p)|\/iop|\/partial.?hospital|\/intensive.?out/i },
     { service: "Outpatient", pattern: /\/outpatient(?!.*intensive)/i },
     { service: "Dual Diagnosis", pattern: /\/dual.?diagnosis|\/co.?occurring/i },
-    { service: "Verify Insurance", pattern: /\/verify|\/vob|\/insurance/i },
-    { service: "Contact / Admissions", pattern: /\/contact|\/admissions|\/get.?help/i },
-    { service: "Primary Location", pattern: /\/location|\/campus|\/facility/i },
-    { service: "Therapies", pattern: /\/therap(y|ies)|\/treatment.?modalities/i },
-    { service: "Conditions", pattern: /\/conditions|\/mental.?health|\/disorders/i },
+    { service: "Verify Insurance", pattern: /\/verify.?insur|\/vob\b|\/insurance.?verif|\/check.?insur/i },
+    { service: "Contact / Admissions", pattern: /\/contact\b|\/admissions\b|\/get.?help\b|\/admit\b/i },
+    { service: "Primary Location", pattern: /\/location\b|\/campus\b|\/facility\b|\/our.?location/i },
+    { service: "Therapies", pattern: /\/therap(y|ies)\b|\/treatment.?modalities|\/modalities/i },
+    { service: "Conditions", pattern: /\/conditions\b|\/mental.?health\b|\/disorders\b/i },
   ];
 
+  // Insurance landing pages (common but broad) — allow as fallback for Verify Insurance
+  const insuranceBroadPattern = /\/insurance\b/i;
+
   if (sfData.length > 0 && urlCol) {
-    const urls = sfData.map(r => String(r[urlCol] ?? ""));
+    const allUrls = sfData.map(r => String(r[urlCol] ?? ""));
+    // Filter to only valid page URLs before any matching
+    const pageUrls = allUrls.filter(isValidPageUrl);
+
+    console.log(`[Section4] Total SF URLs: ${allUrls.length}, valid page URLs after filtering: ${pageUrls.length}`);
 
     for (const target of serviceTargets) {
-      const match = urls.find(u => target.pattern.test(u));
-      if (match) {
-        services.push({
-          service: target.service,
-          examplePage: shortUrl(match),
-        });
+      // Collect all candidates for this service
+      let candidates = pageUrls.filter(u => target.pattern.test(u));
+
+      // Fallback for Verify Insurance: allow the broader /insurance/ path if no specific match
+      if (candidates.length === 0 && target.service === "Verify Insurance") {
+        candidates = pageUrls.filter(u => insuranceBroadPattern.test(u));
+      }
+
+      if (candidates.length > 0) {
+        // Sort by score — best candidate first
+        candidates.sort((a, b) => scorePage4Url(b) - scorePage4Url(a));
+        const best = candidates[0];
+        console.log(`[Section4] ${target.service} → ${shortUrl(best)} (${candidates.length} candidates, rejected ${pageUrls.length === 0 ? 0 : allUrls.filter(u => target.pattern.test(u) && !isValidPageUrl(u)).length} assets)`);
+        services.push({ service: target.service, examplePage: shortUrl(best) });
+      } else {
+        const rejectedCount = allUrls.filter(u => target.pattern.test(u) && !isValidPageUrl(u)).length;
+        if (rejectedCount > 0) {
+          console.log(`[Section4] ${target.service} → ${ME} (${rejectedCount} asset matches rejected, no valid page found)`);
+        }
       }
     }
   }
 
-  if (services.length < 5) {
-    for (const target of serviceTargets) {
-      if (!services.find(s => s.service === target.service)) {
-        services.push({
-          service: target.service,
-          examplePage: ME,
-        });
-      }
-      if (services.length >= 8) break;
+  // Fill missing services with ME up to 8 rows
+  for (const target of serviceTargets) {
+    if (services.length >= 8) break;
+    if (!services.find(s => s.service === target.service)) {
+      services.push({ service: target.service, examplePage: ME });
     }
   }
 

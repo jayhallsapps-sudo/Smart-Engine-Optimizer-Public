@@ -1,0 +1,174 @@
+Fix QBR Prep Section 4 — Site Service Overview so it only shows real page URLs and never media files, plugin assets, JS/CSS files, or other non-page paths.
+
+Problem:
+The current Section 4 output is surfacing things like:
+- /wp-content/uploads/...
+- /wp-content/plugins/...
+- .png / .jpeg / .js / .css
+These are not valid example pages for services and they confuse the report.
+
+Expected:
+Section 4 should show only real page URLs that represent actual service or site pages, like the example I attached:
+- /detox/
+- /alcohol-detox-los-angeles/
+- /residential-treatment/
+- /dual-diagnosis/
+- /insurance-verification/
+etc.
+
+==================================================
+GOAL
+==================================================
+
+Section 4 should map services to actual page URLs only.
+
+The “Example Page” column must never show:
+- media/image files
+- JS/CSS assets
+- plugin files
+- uploads paths
+- query-string asset URLs
+- admin paths
+- feed/archive/attachment junk
+- other non-page crawl artifacts
+
+==================================================
+REQUIRED FIX
+==================================================
+
+Update the Section 4 service-page selection logic so it filters crawl candidates aggressively before choosing an example page.
+
+Requirements:
+1. Only allow actual HTML/content page URLs as candidates.
+2. Exclude asset and file paths.
+3. Exclude WordPress infrastructure paths.
+4. Prefer clean service-page URLs that match the intended service.
+5. If a service cannot be mapped confidently to a real page, show “Manual entry needed” instead of a bad path.
+
+==================================================
+FILTERING RULES
+==================================================
+
+Reject any URL candidate that matches any of the following:
+
+WordPress / system paths:
+- /wp-content/
+- /wp-includes/
+- /wp-admin/
+- /xmlrpc.php
+- /feed/
+- /tag/
+- /author/
+- /page/
+- /attachment/
+- /?replytocom=
+- /?amp
+- obvious search/query utility URLs if not canonical content pages
+
+File/asset extensions:
+- .jpg
+- .jpeg
+- .png
+- .gif
+- .webp
+- .svg
+- .js
+- .css
+- .json
+- .xml
+- .pdf
+- .zip
+- .woff
+- .woff2
+- .ttf
+- .ico
+- .mp4
+- any other non-page file extension
+
+Also reject:
+- URLs with obvious asset version params like ?ver=
+- URLs that are clearly plugin resources
+- URLs that are not indexable pages when that data is available from Screaming Frog
+
+==================================================
+POSITIVE PAGE SELECTION RULES
+==================================================
+
+After filtering out junk, choose example pages using this priority:
+
+1. Clean service page whose slug/title/H1 clearly matches the service
+2. Clean level-of-care page closely aligned to the service
+3. Clean admissions / insurance / therapies page where relevant
+4. Strong subservice page only if no broader parent page exists
+5. Manual entry needed if no reliable page exists
+
+Prefer:
+- canonical-looking page URLs
+- short clean slugs
+- real content pages
+- indexable pages
+- URLs with 200 status when available
+- pages that are likely meant for users, not assets or system files
+
+==================================================
+SERVICE MAPPING RULES
+==================================================
+
+For each service row in Section 4:
+- map to the best real example page
+- do not force a bad match
+- do not use a media file just because its filename contains the service keyword
+- do not use a JS file just because its path contains “contact-form”
+- do not use an asset path just because it matches a keyword
+
+Examples of correct behavior:
+- Detox → /detox/
+- Residential / Inpatient → /residential-treatment/ or equivalent
+- PHP / IOP → /php/ or /iop/ or equivalent clean service page
+- Dual Diagnosis → clean dual-diagnosis page
+- Verify Insurance → clean insurance verification page
+- Contact / Admissions → clean contact or admissions page
+- Therapies → clean therapies/modality page
+
+==================================================
+FALLBACK RULE
+==================================================
+
+If no valid real page is found for a service after filtering:
+- do not output a bad path
+- output “Manual entry needed”
+
+A clean unresolved field is better than a misleading asset path.
+
+==================================================
+APPLY TO
+==================================================
+
+Fix this in:
+- QBR Prep Section 4 generation logic
+- preview output
+- export output
+
+If Section 4 JSON is generated upstream, fix it there so both preview and export inherit the correct values.
+
+==================================================
+DO NOT DO
+==================================================
+
+- do not manually patch this one client only
+- do not add hardcoded URLs for just one site
+- do not change the section structure
+- do not remove editability
+- do not leave asset paths in place
+
+==================================================
+PROOF REQUIRED
+==================================================
+
+Return:
+1. files changed
+2. the exact filtering logic added
+3. the exact candidate selection logic for Section 4
+4. before/after examples showing rejected bad URLs and accepted clean page URLs
+5. the final Section 4 JSON for this client after the fix
+6. confirmation that preview and export now only show real page URLs or Manual entry needed

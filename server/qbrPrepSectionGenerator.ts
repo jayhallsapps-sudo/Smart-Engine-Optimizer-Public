@@ -940,6 +940,91 @@ function buildConvertingPageNote(internalType: string, dataSource: string, conve
   return "Strategic page identified for conversion contribution — manual tracking validation recommended.";
 }
 
+function classifyTrafficPageConnection(pageType: string, url: string): string {
+  const path = url.toLowerCase();
+  switch (pageType) {
+    case "Verify Insurance":
+    case "Contact / Admissions":
+    case "Detox":
+    case "Residential / Inpatient":
+    case "PHP / IOP":
+      return "Direct";
+    case "Substance-Specific":
+    case "Conditions":
+    case "Dual Diagnosis":
+    case "Therapies":
+    case "Outpatient":
+    case "Population-Specific":
+    case "Location":
+    case "Aftercare / Alumni":
+    case "Homepage":
+      return "Assisted";
+    case "About / Team":
+      return "Trust / Evaluation";
+    case "Blog / Resource":
+      return "Informational";
+    default:
+      if (/meet|\/team|\/staff|\/about|\/who-we-are|\/leadership/.test(path)) return "Trust / Evaluation";
+      if (/\/review|\/testimonial/.test(path)) return "Trust / Evaluation";
+      return "Informational";
+  }
+}
+
+function buildTrafficPageInsight(pageType: string, url: string, clicksStr: string): string {
+  const path = url.toLowerCase();
+  const clicks = parseInt(clicksStr.replace(/,/g, "")) || 0;
+  const hiVol = clicks > 200;
+
+  switch (pageType) {
+    case "Verify Insurance":
+      return "High-intent admissions entry point — users here are actively seeking insurance verification before intake. Primary conversion surface; friction on this page directly impacts admits.";
+    case "Contact / Admissions":
+      return "Primary admissions contact page. Traffic signals users in final decision-making stage — page clarity and response speed have the highest direct impact on admits.";
+    case "Detox":
+      return "Core service page for high-intent detox-seekers. Visitors are actively evaluating programs — page quality and admissions CTA directly influence intake conversion.";
+    case "Residential / Inpatient":
+      return "Residential treatment service page. Traffic here signals users comparing inpatient programs — differentiation and a clear admissions path are the priority.";
+    case "PHP / IOP":
+      return "Step-down or flexible care service page. Users are weighing level-of-care options — a clear admissions path can improve conversion from this already-evaluated segment.";
+    case "Substance-Specific": {
+      if (/alcohol/.test(path)) return `${hiVol ? "High-volume" : "Moderate-volume"} alcohol-awareness content. Entry-stage traffic that needs a clear route from educational content to detox or treatment program pages.`;
+      if (/opioid|heroin|fentanyl/.test(path)) return "Opioid-specific informational entry point. Early-funnel users researching substances — internal links to detox and residential pages capture the highest conversion value.";
+      if (/meth/.test(path)) return "Methamphetamine-specific awareness content. Mostly early-funnel — route toward detox and dual-diagnosis pages where appropriate.";
+      if (/cocaine|coke/.test(path)) return "Cocaine-specific awareness content. Educational traffic that supports later conversion when paired with clear internal links to service pages.";
+      if (/benzo/.test(path)) return "Benzodiazepine-specific information page. Medical detox intent is elevated for this substance — route users toward detox and residential program pages.";
+      return `${hiVol ? "High-volume" : "Moderate-volume"} substance-specific awareness content. Educational entry point that needs targeted internal links to appropriate service pages to convert traffic.`;
+    }
+    case "Conditions":
+      return "Condition-specific content attracting users researching symptoms or mental health concerns. Should route toward dual-diagnosis or appropriate treatment program pages.";
+    case "Dual Diagnosis":
+      return "Dual diagnosis content attracting users with complex or co-occurring treatment needs. Higher conversion intent than general conditions traffic — route toward program details and admissions.";
+    case "Therapies":
+      return "Therapy and modalities content that supports program differentiation. Trust-building for users actively comparing programs — reinforce with links to service and admissions pages.";
+    case "Population-Specific":
+      if (/women|female/.test(path)) return "Women's program content targeting a defined audience. Evaluation-stage traffic from users assessing program fit — route toward program details and admissions.";
+      if (/men|male/.test(path)) return "Men's program content attracting a specific audience segment. Route toward program details and admissions to capture high-intent users.";
+      return "Audience-segmented content attracting a defined population. Evaluation-stage traffic that needs clear routing to relevant program and admissions pages.";
+    case "About / Team":
+      return "Trust-building page supporting late-stage evaluation. Users here are assessing credibility before committing — strong links to admissions pages can convert this high-consideration intent.";
+    case "Aftercare / Alumni":
+      return "Aftercare and alumni content that demonstrates outcomes and builds credibility. Influences prospective clients and families during program evaluation — trust-building before admissions.";
+    case "Blog / Resource":
+      return `Informational content entry point with ${hiVol ? "high" : "lower"} organic volume. Awareness-stage traffic — targeted internal links toward service and admissions pages are the highest-ROI improvement.`;
+    case "Location":
+      return "Location or facility page attracting geo-targeted traffic. Local intent users searching for nearby treatment — important for admissions volume from the primary service area.";
+    case "Outpatient":
+      return "Outpatient program page attracting users seeking flexible or lower-acuity care. Assisted admission path — users may be open to stepping up to higher levels of care if properly guided.";
+    case "Homepage":
+      return "Primary branded entry point serving a mix of direct, branded, and first-time visitors. Should route efficiently to service pages and the admissions path for maximum conversion.";
+    default: {
+      if (/meet|\/team|\/staff/.test(path)) return "Trust-building page that supports credibility evaluation. Late-stage visitors — internal links to admissions and program pages can convert this research intent.";
+      if (/\/review|\/testimonial|\/alumni/.test(path)) return "Social proof content that builds confidence in the program. Can move hesitant users toward admissions contact when paired with clear CTAs.";
+      if (/\/faq|\/guide/.test(path)) return "FAQ or guide attracting users with specific treatment questions. Informational stage — structured links to relevant service and admissions pages improve conversion.";
+      return `${hiVol ? "High-volume" : "Moderate-volume"} informational entry point with limited direct admit linkage. Awareness-stage content — internal links to service pages are the highest-ROI improvement for this traffic.`;
+    }
+  }
+}
+
 function generateSection3(
   gscQueries: any[],
   gscPages: any[],
@@ -1006,15 +1091,17 @@ function generateSection3(
     for (const row of topPages) {
       const page = row.keys?.[0] ?? "";
       const pageType = classifyPageType(page);
-      const connection = classifyAdmitConnection(pageType, 0, totalConversions);
+      const clicksFormatted = fmtNum(row.clicks ?? 0);
+      const connection = classifyTrafficPageConnection(pageType, page);
+      const insight = buildTrafficPageInsight(pageType, page, clicksFormatted);
 
       topTrafficPages.push({
         page: shortUrl(page),
-        clicks: fmtNum(row.clicks ?? 0),
+        clicks: clicksFormatted,
         ctr: fmtPct(row.ctr ?? 0),
         connectionToAdmits: connection,
-        insight: pageType !== "Other" ? `${pageType} page` : "",
-        dataSource: "GSC",
+        insight,
+        dataSource: "",
       });
     }
   }
@@ -1443,7 +1530,9 @@ function generateSection6(
     }
   }
 
-  const unclearTrafficPages = section3.topTrafficPages.filter(p => p.connectionToAdmits === "Unclear");
+  const unclearTrafficPages = section3.topTrafficPages.filter(p =>
+    p.connectionToAdmits === "Informational" || p.connectionToAdmits === "Trust / Evaluation"
+  );
   const topUnclearPage = unclearTrafficPages[0];
   const goalBehind = section1.rows.some(r => r.goalShift === "-5%");
   const hasMissingH1s = tierInput.missingH1s > 10;
@@ -1456,11 +1545,11 @@ function generateSection6(
       initiative: "Internal Linking — High-Traffic to Conversion",
       tier: `Tier ${Math.min(section5.tier, 3)}`,
       action: topUnclearPage
-        ? `Add internal links from "${topUnclearPage.page}" (${topUnclearPage.clicks} clicks, unclear conversion connection) to primary service and VOB pages`
+        ? `Add internal links from "${topUnclearPage.page}" (${topUnclearPage.clicks} clicks, ${topUnclearPage.connectionToAdmits.toLowerCase()} admit connection) to primary service and VOB pages`
         : "Add internal links from high-traffic informational pages to primary service and VOB pages",
       reason: topUnclearPage
-        ? `${topUnclearPage.clicks} organic clicks land on a page with no clear path to admissions — linking directly to service pages converts that existing traffic`
-        : "Traffic data shows high-volume pages with unclear admit connection — internal linking is the lowest-cost conversion lever",
+        ? `${topUnclearPage.clicks} organic clicks land on a page with limited path to admissions — targeted internal links to service and VOB pages are the lowest-cost lever to convert that existing traffic`
+        : "Traffic data shows high-volume informational pages with weak admit connection — internal linking is the lowest-cost conversion lever",
       condition: unclearTrafficPages.length > 0 && !priorities.find(p => p.initiative.includes("Internal Link")),
       source: "GSC",
     },

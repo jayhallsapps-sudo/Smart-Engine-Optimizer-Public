@@ -63,11 +63,13 @@ const FILE_TYPE_OPTIONS = [
   { value: "internal",         label: "Internal" },
   { value: "page_titles",      label: "Page Titles" },
   { value: "meta_description", label: "Meta Descriptions" },
+  { value: "meta_keywords",    label: "Meta Keywords" },
   { value: "h1",               label: "H1" },
   { value: "h2",               label: "H2" },
   { value: "images",           label: "Images" },
   { value: "canonicals",       label: "Canonicals" },
   { value: "outlinks",         label: "Outlinks" },
+  { value: "issues",           label: "Issues Report" },
   { value: "rendered",         label: "Rendered Page" },
   { value: "other",            label: "Other" },
 ];
@@ -80,8 +82,10 @@ const FILE_TYPE_LABEL: Record<string, string> = Object.fromEntries(
 
 function detectFileType(filename: string): string {
   const lower = filename.toLowerCase();
+  if (lower.includes("issues")) return "issues";
   if (lower.includes("internal") || lower.includes("all_inlink")) return "internal";
   if (lower.includes("page_title") || lower.includes("pagetitle")) return "page_titles";
+  if (lower.includes("meta_keyword") || lower.includes("metakeyword")) return "meta_keywords";
   if (lower.includes("meta_desc") || lower.includes("metadesc")) return "meta_description";
   if (/\bh1\b/.test(lower) || lower.startsWith("h1") || lower.includes("_h1") || lower.includes("-h1")) return "h1";
   if (/\bh2\b/.test(lower) || lower.startsWith("h2") || lower.includes("_h2") || lower.includes("-h2")) return "h2";

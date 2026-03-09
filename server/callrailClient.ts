@@ -6,7 +6,12 @@ import { dateRangeToGoogleDates, pctDelta, fmtDelta } from "./googleToken";
 async function getCallRailKey(): Promise<string | null> {
   const creds = await storage.getApiCredentialsByService("callrail");
   if (!creds.length) return null;
-  return decrypt(creds[0].encryptedValue);
+  try {
+    return decrypt(creds[0].encryptedValue);
+  } catch {
+    console.warn("[CallRail] Failed to decrypt API key — re-connect in Setup");
+    return null;
+  }
 }
 
 async function callRailGet(apiKey: string, path: string, params: Record<string, string> = {}): Promise<any> {

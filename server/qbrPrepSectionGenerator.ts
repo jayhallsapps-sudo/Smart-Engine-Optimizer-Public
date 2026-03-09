@@ -3,6 +3,7 @@ import { getGoogleAccessToken } from "./googleToken";
 import { fetchNsmGoals } from "./sheetsClient";
 import { fetchAirtableWorkLog } from "./airtable";
 import { fetchAsanaWorkLog } from "./asanaClient";
+import { queryCallRail } from "./callrailClient";
 import type { Client } from "@shared/schema";
 import type {
   QbrPrepReportData,
@@ -207,12 +208,35 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
   else missingData.push("Screaming Frog");
 
   let callTrackingData: any = null;
+  let callTrackingLandingPages: Array<{ page: string; calls: number }> = [];
+  let callTrackingSources: Array<{ source: string; calls: number }> = [];
   try {
-    const callrailCreds = await storage.getApiCredentialsByService("callrail").catch(() => []);
-    if (callrailCreds.length > 0 && client.callrailCompanyId) {
-      dataSources.push("CallRail");
+    if (client.callrailCompanyId) {
+      const dateRange = `custom:${quarter.analysisStart}:${quarter.analysisEnd}`;
+      const [landingResult, sourceResult] = await Promise.allSettled([
+        queryCallRail("callrail_qoq_top_landing_pages", client, dateRange),
+        queryCallRail("callrail_qoq_organic_calls", client, dateRange),
+      ]);
+      if (landingResult.status === "fulfilled" && landingResult.value) {
+        const rows = landingResult.value.tables?.[0]?.rows ?? [];
+        callTrackingLandingPages = rows.map((r: string[]) => ({
+          page: r[0] ?? "/",
+          calls: parseInt((r[1] ?? "0").replace(/,/g, ""), 10) || 0,
+        })).filter((r: { page: string; calls: number }) => r.calls > 0);
+        if (callTrackingLandingPages.length > 0) dataSources.push("CallRail");
+      }
+      if (sourceResult.status === "fulfilled" && sourceResult.value) {
+        const rows = sourceResult.value.tables?.[0]?.rows ?? [];
+        callTrackingSources = rows.map((r: string[]) => ({
+          source: r[0] ?? "Unknown",
+          calls: parseInt((r[1] ?? "0").replace(/,/g, ""), 10) || 0,
+        })).filter((r: { source: string; calls: number }) => r.calls > 0);
+      }
+      callTrackingData = { landingPages: callTrackingLandingPages, sources: callTrackingSources };
     }
-  } catch {}
+  } catch (err: any) {
+    console.warn("[QBR Prep] Call tracking fetch failed:", err.message);
+  }
 
   let airtableItems: any[] = [];
   try {
@@ -250,7 +274,7 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
   };
 
   const section1 = generateSection1(nsmData, ga4FunnelCurr, quarter);
-  const section2 = generateSection2(ga4LandingRows, gscPageRows, sfData, sfHeaders, client);
+  const section2 = generateSection2(ga4LandingRows, gscPageRows, sfData, sfHeaders, client, callTrackingLandingPages, callTrackingSources);
   const section3 = generateSection3(gscQueryRows, gscPageRows, ga4LandingRows, client);
   const section4 = generateSection4(sfData, sfHeaders, client);
 
@@ -495,66 +519,182 @@ function generateSection2(
   gscPages: any[],
   sfData: Record<string, any>[],
   sfHeaders: string[],
-  client: Client
+  client: Client,
+  callLandingPages: Array<{ page: string; calls: number }> = [],
+  callSources: Array<{ source: string; calls: number }> = []
 ): Section2Conversions {
   const topConvertingPages: ConvertingPageRow[] = [];
   const topConvertingSources: ConvertingSourceRow[] = [];
 
-  const totalConversions = ga4Landing.reduce((s, r) => s + (r.conversions ?? 0), 0);
+  // --- TOP CONVERTING PAGES ---
+  // Priority 1: GA4 organic conversions
+  const ga4WithConversions = ga4Landing
+    .filter(r => (r.conversions ?? 0) > 0)
+    .sort((a, b) => b.conversions - a.conversions)
+    .slice(0, 8);
 
-  if (ga4Landing.length > 0) {
-    const withConversions = ga4Landing
-      .filter(r => r.conversions > 0)
-      .sort((a, b) => b.conversions - a.conversions)
+  const totalGa4Conversions = ga4Landing.reduce((s, r) => s + (r.conversions ?? 0), 0);
+
+  for (const row of ga4WithConversions) {
+    const pageType = classifyPageType(row.page);
+    topConvertingPages.push({
+      type: pageType,
+      page: shortUrl(row.page),
+      conversionSource: `${fmtNum(row.conversions)} conversions (GA4 organic)`,
+      notes: getConversionNote(pageType, row.conversions, row.sessions),
+    });
+  }
+
+  // Priority 2: CallRail top organic call landing pages (fill remaining slots up to 8)
+  if (callLandingPages.length > 0) {
+    const seenPages = new Set(ga4WithConversions.map(r => shortUrl(r.page)));
+    const crRows = callLandingPages
+      .sort((a, b) => b.calls - a.calls)
       .slice(0, 8);
-
-    for (const row of withConversions) {
+    for (const row of crRows) {
+      if (topConvertingPages.length >= 8) break;
+      const normalized = row.page.replace(/^https?:\/\/[^/]+/, "") || "/";
+      const shortP = normalized.length > 60 ? normalized.slice(0, 57) + "…" : normalized;
+      if (seenPages.has(shortP)) continue;
       const pageType = classifyPageType(row.page);
       topConvertingPages.push({
         type: pageType,
-        page: shortUrl(row.page),
-        conversionSource: `${fmtNum(row.conversions)} conversions (GA4 organic)`,
-        notes: getConversionNote(pageType, row.conversions, row.sessions),
+        page: shortP,
+        conversionSource: `${fmtNum(row.calls)} organic calls (CallRail)`,
+        notes: getConversionNote(pageType, row.calls, 0),
+      });
+      seenPages.add(shortP);
+    }
+  }
+
+  // Priority 3: Client money pages (always configured — inferred signal)
+  const moneyPages: string[] = (client as any).moneyPages ?? [];
+  if (moneyPages.length > 0 && topConvertingPages.length === 0) {
+    for (const mp of moneyPages.slice(0, 6)) {
+      const pageType = classifyPageType(mp);
+      topConvertingPages.push({
+        type: pageType,
+        page: shortUrl(mp),
+        conversionSource: "Configured priority page (no tracking data available)",
+        notes: getConversionNote(pageType, 0, 0),
       });
     }
+  }
 
+  // Priority 4: GSC top pages by clicks (visibility proxy when no conversion data)
+  if (topConvertingPages.length === 0 && gscPages.length > 0) {
+    const topGsc = gscPages
+      .sort((a: any, b: any) => (b.clicks ?? 0) - (a.clicks ?? 0))
+      .slice(0, 6);
+    for (const row of topGsc) {
+      const pageUrl = row.keys?.[0] ?? "";
+      const pageType = classifyPageType(pageUrl);
+      topConvertingPages.push({
+        type: pageType,
+        page: shortUrl(pageUrl),
+        conversionSource: `${fmtNum(row.clicks ?? 0)} organic clicks (GSC — conversion data unavailable)`,
+        notes: getConversionNote(pageType, 0, 0),
+      });
+    }
+  }
+
+  // Final fallback
+  if (topConvertingPages.length === 0) {
+    topConvertingPages.push({
+      type: ME,
+      page: ME,
+      conversionSource: `${ME}: no conversion data available from GA4, CallRail, or GSC`,
+      notes: ME,
+    });
+  }
+
+  // --- TOP CONVERTING SOURCES ---
+  // Priority 1: GA4 page-type aggregation (conversions)
+  if (ga4WithConversions.length > 0) {
     const sourceMap = new Map<string, { conversions: number; pages: string[] }>();
-    for (const row of ga4Landing.filter(r => r.conversions > 0)) {
+    for (const row of ga4WithConversions) {
       const pageType = classifyPageType(row.page);
       if (!sourceMap.has(pageType)) sourceMap.set(pageType, { conversions: 0, pages: [] });
       const entry = sourceMap.get(pageType)!;
       entry.conversions += row.conversions;
       entry.pages.push(shortUrl(row.page));
     }
-
-    const sortedSources = [...sourceMap.entries()]
+    for (const [source, data] of [...sourceMap.entries()]
       .sort((a, b) => b[1].conversions - a[1].conversions)
-      .slice(0, 5);
-
-    for (const [source, data] of sortedSources) {
+      .slice(0, 5)) {
       topConvertingSources.push({
         source,
-        whatsConverting: `${fmtNum(data.conversions)} conversions across ${data.pages.length} pages`,
-        notes: classifyAdmitConnection(source, data.conversions, totalConversions) === "Direct"
+        whatsConverting: `${fmtNum(data.conversions)} conversions across ${data.pages.length} page${data.pages.length !== 1 ? "s" : ""}`,
+        notes: classifyAdmitConnection(source, data.conversions, totalGa4Conversions) === "Direct"
           ? "Directly tied to admission pathway"
           : "Supports conversion through content/awareness",
       });
     }
   }
 
-  if (topConvertingPages.length === 0) {
-    topConvertingPages.push({
-      type: ME,
-      page: ME,
-      conversionSource: `${ME}: conversion source attribution unavailable`,
-      notes: ME,
-    });
+  // Priority 2: CallRail organic sources (call volume by source)
+  if (callSources.length > 0 && topConvertingSources.length < 5) {
+    const existingSources = new Set(topConvertingSources.map(s => s.source));
+    const totalCalls = callSources.reduce((s, r) => s + r.calls, 0);
+    for (const src of callSources.sort((a, b) => b.calls - a.calls).slice(0, 5)) {
+      if (topConvertingSources.length >= 5) break;
+      if (existingSources.has(src.source)) continue;
+      const pct = totalCalls > 0 ? Math.round(src.calls / totalCalls * 100) : 0;
+      topConvertingSources.push({
+        source: src.source,
+        whatsConverting: `${fmtNum(src.calls)} organic calls (${pct}% of tracked calls)`,
+        notes: "Call tracking source — confirm with admissions team",
+      });
+      existingSources.add(src.source);
+    }
   }
 
+  // Priority 3: Infer from CallRail landing page types if still empty
+  if (topConvertingSources.length === 0 && callLandingPages.length > 0) {
+    const typeMap = new Map<string, { calls: number; pages: number }>();
+    for (const row of callLandingPages) {
+      const pt = classifyPageType(row.page);
+      if (!typeMap.has(pt)) typeMap.set(pt, { calls: 0, pages: 0 });
+      const e = typeMap.get(pt)!;
+      e.calls += row.calls;
+      e.pages++;
+    }
+    for (const [pageType, data] of [...typeMap.entries()]
+      .sort((a, b) => b[1].calls - a[1].calls)
+      .slice(0, 5)) {
+      topConvertingSources.push({
+        source: pageType,
+        whatsConverting: `${fmtNum(data.calls)} calls from ${data.pages} page${data.pages !== 1 ? "s" : ""} (CallRail)`,
+        notes: classifyAdmitConnection(pageType, data.calls, callLandingPages.reduce((s, r) => s + r.calls, 0)) === "Direct"
+          ? "Directly tied to admission pathway"
+          : "Supports conversion through content/awareness",
+      });
+    }
+  }
+
+  // Priority 4: Infer from money page types
+  if (topConvertingSources.length === 0 && moneyPages.length > 0) {
+    const typeSet = new Map<string, number>();
+    for (const mp of moneyPages) {
+      const pt = classifyPageType(mp);
+      typeSet.set(pt, (typeSet.get(pt) ?? 0) + 1);
+    }
+    for (const [pt, cnt] of [...typeSet.entries()].slice(0, 4)) {
+      topConvertingSources.push({
+        source: pt,
+        whatsConverting: `${cnt} configured priority page${cnt !== 1 ? "s" : ""} (no tracking data)`,
+        notes: classifyAdmitConnection(pt, 0, 0) === "Direct"
+          ? "Directly tied to admission pathway"
+          : "Supports conversion through content/awareness",
+      });
+    }
+  }
+
+  // Final fallback
   if (topConvertingSources.length === 0) {
     topConvertingSources.push({
       source: ME,
-      whatsConverting: `${ME}: source attribution unavailable`,
+      whatsConverting: `${ME}: no source attribution available from GA4, CallRail, or config`,
       notes: ME,
     });
   }

@@ -28,6 +28,8 @@ import {
   Minus,
   Users,
   LayoutDashboard,
+  Maximize2,
+  X,
 } from "lucide-react";
 import type { Client } from "@shared/schema";
 
@@ -83,6 +85,30 @@ interface ClientDashboardData {
   metrics: DashboardMetric[];
 }
 
+interface ExpandedMetric {
+  label: string;
+  value: string | number;
+  previous: string | number;
+  delta: string;
+  deltaPercent: string;
+  isPositive: boolean;
+  unit?: string;
+}
+
+interface ExpandedGroup {
+  source: string;
+  metrics: ExpandedMetric[];
+  tables: Array<{ title: string; headers: string[]; rows: (string | number)[][] }>;
+}
+
+interface ExpandedClientData {
+  clientId: number;
+  clientName: string;
+  lastUpdated: string;
+  connectedServices: string[];
+  groups: ExpandedGroup[];
+}
+
 const SERVICE_LABELS: Record<string, { label: string; color: string }> = {
   gsc: { label: "GSC", color: "bg-blue-600" },
   ga4: { label: "GA4", color: "bg-orange-500" },
@@ -98,6 +124,14 @@ const GROUP_COLORS: Record<string, string> = {
   GSC: "text-blue-400",
   GA4: "text-orange-400",
   Calls: "text-green-400",
+  SEMrush: "text-red-400",
+};
+
+const SOURCE_HEADER_COLORS: Record<string, { bg: string; text: string; border: string }> = {
+  GSC: { bg: "rgba(59,130,246,0.12)", text: "#93c5fd", border: "rgba(59,130,246,0.25)" },
+  GA4: { bg: "rgba(249,115,22,0.12)", text: "#fdba74", border: "rgba(249,115,22,0.25)" },
+  Calls: { bg: "rgba(34,197,94,0.12)", text: "#86efac", border: "rgba(34,197,94,0.25)" },
+  SEMrush: { bg: "rgba(239,68,68,0.12)", text: "#fca5a5", border: "rgba(239,68,68,0.25)" },
 };
 
 function parseVal(v: string | number): number {
@@ -239,6 +273,208 @@ function MetricTile({
   );
 }
 
+function ExpandedMetricTile({ metric }: { metric: ExpandedMetric }) {
+  const isNeutral =
+    !metric.deltaPercent || metric.deltaPercent === "—" || metric.deltaPercent === "0%";
+  const TrendIcon = isNeutral ? Minus : metric.isPositive ? TrendingUp : TrendingDown;
+  const trendColor = isNeutral
+    ? "text-white/35"
+    : metric.isPositive
+    ? "text-emerald-400"
+    : "text-red-400";
+
+  return (
+    <div
+      className="flex flex-col gap-1 rounded-lg border p-3"
+      style={{ borderColor: "rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)" }}
+    >
+      <p className="text-[10px] font-medium text-white/50 uppercase tracking-wide truncate">
+        {metric.label}
+      </p>
+      <p className="text-xl font-bold tracking-tight leading-none text-white">
+        {formatValue(metric.value, metric.unit)}
+      </p>
+      <div className={`flex items-center gap-1 text-[10px] font-medium ${trendColor}`}>
+        <TrendIcon className="w-2.5 h-2.5 shrink-0" />
+        <span>{isNeutral ? "No change" : `${metric.deltaPercent} vs prior`}</span>
+      </div>
+      <p className="text-[9px] text-white/35">
+        Prior: {formatValue(metric.previous, metric.unit)}
+      </p>
+    </div>
+  );
+}
+
+function ExpandedTable({ table }: { table: { title: string; headers: string[]; rows: (string | number)[][] } }) {
+  return (
+    <div>
+      <p className="text-[10px] font-semibold text-white/50 uppercase tracking-widest mb-2">{table.title}</p>
+      <div className="overflow-x-auto rounded-lg" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
+        <table className="w-full text-xs">
+          <thead>
+            <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.04)" }}>
+              {table.headers.map((h, i) => (
+                <th
+                  key={i}
+                  className="text-left px-3 py-2 text-[10px] font-semibold text-white/45 uppercase tracking-wide whitespace-nowrap"
+                >
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {table.rows.slice(0, 15).map((row, ri) => (
+              <tr
+                key={ri}
+                style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}
+                className="hover:bg-white/5 transition-colors"
+              >
+                {row.map((cell, ci) => (
+                  <td
+                    key={ci}
+                    className="px-3 py-2 text-white/75 whitespace-nowrap"
+                    style={{ maxWidth: ci === 0 ? 280 : undefined, overflow: "hidden", textOverflow: "ellipsis" }}
+                  >
+                    {String(cell)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function ExpandedClientView({
+  client,
+  color,
+  dateRange,
+  onClose,
+}: {
+  client: Client;
+  color: string;
+  dateRange: string;
+  onClose: () => void;
+}) {
+  const mutation = useMutation<ExpandedClientData, Error, void>({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/dashboard/client/${client.id}/expanded`, { dateRange });
+      return res.json();
+    },
+  });
+
+  useEffect(() => {
+    mutation.mutate();
+  }, [client.id, dateRange]);
+
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [onClose]);
+
+  const data = mutation.data;
+  const isLoading = mutation.isPending;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex flex-col overflow-hidden"
+      style={{ background: "#0a0e1a" }}
+    >
+      <div
+        className="h-1 shrink-0 w-full"
+        style={{ background: `linear-gradient(to right, ${color}, ${color}88)` }}
+      />
+
+      <div
+        className="shrink-0 flex items-center justify-between px-6 py-4"
+        style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}
+      >
+        <div>
+          <h2 className="text-base font-bold leading-tight" style={{ color }}>
+            {client.name}
+          </h2>
+          <p className="text-[11px] mt-0.5 text-white/40">
+            All metrics — {PERIOD_OPTIONS.find(o => o.value === dateRange)?.label ?? dateRange}
+          </p>
+        </div>
+        <button
+          onClick={onClose}
+          className="rounded-lg p-2 transition-colors hover:bg-white/10"
+          style={{ color: "rgba(255,255,255,0.5)" }}
+          data-testid={`button-close-expanded-${client.id}`}
+          aria-label="Close expanded view"
+        >
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-6 py-6">
+        {isLoading ? (
+          <div className="flex flex-col gap-8">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="flex flex-col gap-3">
+                <Skeleton className="h-4 w-24 bg-white/10" />
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {Array.from({ length: 4 }).map((_, j) => (
+                    <MetricSkeleton key={j} />
+                  ))}
+                </div>
+                <Skeleton className="h-40 w-full bg-white/5 rounded-lg" />
+              </div>
+            ))}
+          </div>
+        ) : !data || data.groups.length === 0 ? (
+          <div className="flex items-center justify-center h-48 text-white/30 text-sm">
+            No data available for this client
+          </div>
+        ) : (
+          <div className="flex flex-col gap-10 max-w-6xl mx-auto">
+            {data.groups.map(group => {
+              const colors = SOURCE_HEADER_COLORS[group.source] ?? SOURCE_HEADER_COLORS["GSC"];
+              return (
+                <div key={group.source}>
+                  <div
+                    className="inline-flex items-center gap-2 rounded-md px-3 py-1 mb-4"
+                    style={{ background: colors.bg, border: `1px solid ${colors.border}` }}
+                  >
+                    <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: colors.text }}>
+                      {group.source}
+                    </span>
+                  </div>
+
+                  {group.metrics.length > 0 && (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-6">
+                      {group.metrics.map(m => (
+                        <ExpandedMetricTile key={m.label} metric={m} />
+                      ))}
+                    </div>
+                  )}
+
+                  {group.metrics.length === 0 && group.tables.length === 0 && (
+                    <p className="text-[11px] text-white/30 mb-6">No data returned for this source</p>
+                  )}
+
+                  {group.tables.length > 0 && (
+                    <div className="flex flex-col gap-5">
+                      {group.tables.map((table, ti) => (
+                        <ExpandedTable key={ti} table={table} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ClientChart({
   data,
   clientId,
@@ -374,10 +610,12 @@ function ClientCard({
   client,
   color,
   dateRange,
+  onExpand,
 }: {
   client: Client;
   color: string;
   dateRange: string;
+  onExpand: () => void;
 }) {
   const [data, setData] = useState<ClientDashboardData | null>(null);
   const [selectedMetricLabel, setSelectedMetricLabel] = useState<string | null>(null);
@@ -418,7 +656,7 @@ function ClientCard({
 
   return (
     <div
-      className="rounded-xl overflow-hidden border shadow-sm flex flex-col"
+      className="rounded-xl overflow-hidden border shadow-sm flex flex-col relative"
       style={{ background: "#111827", borderColor: "rgba(255,255,255,0.08)" }}
       data-testid={`card-client-${client.id}`}
     >
@@ -502,7 +740,7 @@ function ClientCard({
         </div>
       )}
 
-      <div className="p-4 flex flex-col gap-4">
+      <div className="p-4 flex flex-col gap-4 pb-12">
         {mutation.isPending && !data ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {Array.from({ length: 6 }).map((_, i) => (
@@ -533,6 +771,17 @@ function ClientCard({
           </p>
         )}
       </div>
+
+      <button
+        onClick={onExpand}
+        className="absolute bottom-3 right-3 flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[10px] font-medium transition-all hover:bg-white/15"
+        style={{ background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.5)", border: "1px solid rgba(255,255,255,0.1)" }}
+        data-testid={`button-expand-client-${client.id}`}
+        title="Expand full view"
+      >
+        <Maximize2 className="w-3 h-3" />
+        Expand
+      </button>
     </div>
   );
 }
@@ -540,6 +789,7 @@ function ClientCard({
 export default function DashboardPage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [period, setPeriod] = useState<PeriodValue>("last_28_vs_prev_28");
+  const [expandedClientId, setExpandedClientId] = useState<number | null>(null);
 
   const { data: clients, isLoading: clientsLoading } = useQuery<Client[]>({
     queryKey: ["/api/clients"],
@@ -552,6 +802,11 @@ export default function DashboardPage() {
     });
     return map;
   }, [clients]);
+
+  const expandedClient = useMemo(
+    () => (clients ?? []).find(c => c.id === expandedClientId) ?? null,
+    [clients, expandedClientId]
+  );
 
   const handleGlobalRefresh = useCallback(() => {
     setRefreshKey(k => k + 1);
@@ -643,11 +898,21 @@ export default function DashboardPage() {
                 client={client}
                 color={colorMap.get(client.id) ?? "#888"}
                 dateRange={period}
+                onExpand={() => setExpandedClientId(client.id)}
               />
             ))}
           </div>
         )}
       </div>
+
+      {expandedClient && (
+        <ExpandedClientView
+          client={expandedClient}
+          color={colorMap.get(expandedClient.id) ?? "#888"}
+          dateRange={period}
+          onClose={() => setExpandedClientId(null)}
+        />
+      )}
     </div>
   );
 }

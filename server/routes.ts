@@ -1915,6 +1915,103 @@ export async function registerRoutes(
     });
   });
 
+  // Dashboard: fetch ALL metrics for expanded client view
+  app.post("/api/dashboard/client/:id/expanded", async (req, res) => {
+    const clientId = Number(req.params.id);
+    const dateRange = (req.body?.dateRange as string) || "last_28_vs_prev_28";
+
+    const client = await storage.getClient(clientId);
+    if (!client) return res.status(404).json({ message: "Client not found" });
+
+    async function runCmd(command: string): Promise<any> {
+      let result: any = null;
+      try {
+        if (handlesGscCommand(command)) result = await queryGsc(command, client, dateRange);
+        if (!result && handlesGa4Command(command)) result = await queryGa4(command, client, dateRange);
+        if (!result && handlesCallRailCommand(command)) result = await queryCallRail(command, client, dateRange);
+        if (!result && handlesCtmCommand(command)) result = await queryCtm(command, client, dateRange);
+        if (!result && handlesSemrushCommand(command)) result = await querySemrush(command, client, dateRange);
+      } catch (err: any) {
+        console.warn(`[Dashboard:expanded] ${command} failed: ${err.message}`);
+      }
+      return result;
+    }
+
+    const callsCmd = client.callrailCompanyId ? "callrail_summary"
+      : client.ctmAccountId ? "ctm_qoq_organic_calls"
+      : "callrail_summary";
+
+    const semrushCreds = await storage.getApiCredentialsByService("semrush").catch(() => []);
+    const hasSemrush = semrushCreds.length > 0;
+
+    const [gscQueries, gscPages, ga4Funnel, ga4Pages, callsResult, semrushResult] = await Promise.all([
+      runCmd("gsc_qoq_queries"),
+      runCmd("gsc_qoq_pages"),
+      runCmd("ga4_qoq_organic_funnel"),
+      runCmd("ga4_qoq_organic_landing_pages"),
+      client.callrailCompanyId || client.ctmAccountId ? runCmd(callsCmd) : Promise.resolve(null),
+      hasSemrush ? runCmd("semrush_organic_overview") : Promise.resolve(null),
+    ]);
+
+    interface ExpandedGroup {
+      source: string;
+      metrics: Array<{ label: string; value: string | number; previous: string | number; delta: string; deltaPercent: string; isPositive: boolean; unit?: string }>;
+      tables: Array<{ title: string; headers: string[]; rows: (string | number)[][] }>;
+    }
+
+    const groups: ExpandedGroup[] = [];
+
+    if (gscQueries || gscPages) {
+      const g: ExpandedGroup = { source: "GSC", metrics: [], tables: [] };
+      if (gscQueries?.summary) {
+        g.metrics.push(...gscQueries.summary.map((s: any) => ({ label: s.label, value: s.current, previous: s.previous, delta: s.delta, deltaPercent: s.deltaPercent, isPositive: s.isPositive, unit: s.label === "Avg Position" ? "pos" : undefined })));
+      }
+      if (gscQueries?.tables?.[0]) g.tables.push(gscQueries.tables[0]);
+      if (gscPages?.tables?.[0]) g.tables.push(gscPages.tables[0]);
+      groups.push(g);
+    }
+
+    if (ga4Funnel || ga4Pages) {
+      const g: ExpandedGroup = { source: "GA4", metrics: [], tables: [] };
+      if (ga4Funnel?.summary) {
+        g.metrics.push(...ga4Funnel.summary.map((s: any) => ({ label: s.label, value: s.current, previous: s.previous, delta: s.delta, deltaPercent: s.deltaPercent, isPositive: s.isPositive, unit: s.label === "Organic CVR" ? "%" : undefined })));
+      }
+      if (ga4Pages?.tables?.[0]) g.tables.push(ga4Pages.tables[0]);
+      else if (ga4Funnel?.tables?.[0]) g.tables.push(ga4Funnel.tables[0]);
+      groups.push(g);
+    }
+
+    if (callsResult) {
+      const g: ExpandedGroup = { source: "Calls", metrics: [], tables: [] };
+      if (callsResult.summary) {
+        g.metrics.push(...callsResult.summary.map((s: any) => ({ label: s.label, value: s.current, previous: s.previous, delta: s.delta, deltaPercent: s.deltaPercent, isPositive: s.isPositive })));
+      }
+      if (callsResult.tables?.[0]) g.tables.push(callsResult.tables[0]);
+      groups.push(g);
+    }
+
+    if (semrushResult) {
+      const g: ExpandedGroup = { source: "SEMrush", metrics: [], tables: [] };
+      if (semrushResult.summary) {
+        g.metrics.push(...semrushResult.summary.map((s: any) => ({ label: s.label, value: s.current, previous: s.previous, delta: s.delta ?? "—", deltaPercent: s.deltaPercent ?? "—", isPositive: s.isPositive })));
+      }
+      if (semrushResult.tables?.[0]) g.tables.push(semrushResult.tables[0]);
+      groups.push(g);
+    }
+
+    const connectedServices: string[] = [];
+    if (client.gscSiteUrl) connectedServices.push("gsc");
+    if (client.ga4PropertyId) connectedServices.push("ga4");
+    if (client.callrailCompanyId) connectedServices.push("callrail");
+    if (client.ctmAccountId) connectedServices.push("ctm");
+    if (hasSemrush) connectedServices.push("semrush");
+    if (client.ahrefsProjectUrl) connectedServices.push("ahrefs");
+    if (client.gbpLocationName) connectedServices.push("gbp");
+    if (client.airtableBaseId) connectedServices.push("airtable");
+
+    res.json({ clientId: client.id, clientName: client.name, lastUpdated: new Date().toISOString(), connectedServices, groups });
+  });
+
   app.get("/api/reports/biweekly/sample", async (_req, res) => {
     try {
       const sections = getSampleBiweeklySections();

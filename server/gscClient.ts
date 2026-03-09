@@ -58,6 +58,16 @@ export async function queryGsc(
       const prevMap = new Map<string, any>(prevRows.map(r => [r.keys[0], r]));
       const totalCurr = currRows.reduce((s, r) => s + r.clicks, 0);
       const totalPrev = prevRows.reduce((s, r) => s + r.clicks, 0);
+      const totalImprCurr = currRows.reduce((s, r) => s + r.impressions, 0);
+      const totalImprPrev = prevRows.reduce((s, r) => s + r.impressions, 0);
+      const avgCtrCurr = totalImprCurr > 0 ? totalCurr / totalImprCurr : 0;
+      const avgCtrPrev = totalImprPrev > 0 ? totalPrev / totalImprPrev : 0;
+      const avgPosCurr = currRows.length > 0 && totalImprCurr > 0
+        ? currRows.reduce((s, r) => s + r.position * r.impressions, 0) / totalImprCurr
+        : 0;
+      const avgPosPrev = prevRows.length > 0 && totalImprPrev > 0
+        ? prevRows.reduce((s, r) => s + r.position * r.impressions, 0) / totalImprPrev
+        : 0;
 
       const rows = currRows.map(r => {
         const q = r.keys[0];
@@ -81,6 +91,9 @@ export async function queryGsc(
         dateRange,
         summary: [
           { label: "Total Clicks", current: formatNum(totalCurr), previous: formatNum(totalPrev), delta: fmtDelta(totalCurr, totalPrev), deltaPercent: pctDelta(totalCurr, totalPrev), isPositive: totalCurr >= totalPrev },
+          { label: "Total Impressions", current: formatNum(totalImprCurr), previous: formatNum(totalImprPrev), delta: fmtDelta(totalImprCurr, totalImprPrev), deltaPercent: pctDelta(totalImprCurr, totalImprPrev), isPositive: totalImprCurr >= totalImprPrev },
+          { label: "Avg CTR", current: `${(avgCtrCurr * 100).toFixed(1)}%`, previous: `${(avgCtrPrev * 100).toFixed(1)}%`, delta: "", deltaPercent: pctDelta(avgCtrCurr, avgCtrPrev), isPositive: avgCtrCurr >= avgCtrPrev },
+          { label: "Avg Position", current: avgPosCurr > 0 ? avgPosCurr.toFixed(1) : "—", previous: avgPosPrev > 0 ? avgPosPrev.toFixed(1) : "—", delta: avgPosCurr > 0 && avgPosPrev > 0 ? fmtDelta(avgPosCurr, avgPosPrev) : "", deltaPercent: avgPosCurr > 0 && avgPosPrev > 0 ? pctDelta(avgPosCurr, avgPosPrev) : "—", isPositive: avgPosCurr > 0 && avgPosPrev > 0 ? avgPosCurr <= avgPosPrev : true },
         ],
         tables: [{
           title: "Top Queries by Clicks",

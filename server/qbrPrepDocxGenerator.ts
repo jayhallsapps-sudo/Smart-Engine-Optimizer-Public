@@ -192,12 +192,11 @@ export async function generateQbrPrepV2Docx(
   docChildren.push(sectionHeading(2, "Where Conversions Actually Happen"));
   docChildren.push(subHeading("Top Converting Pages"));
   const s2aRows = s2.topConvertingPages.map((r: any, ri: number) => [
-    resolveCell(`s2a_${ri}_0`, r.type, edits),
+    resolveCell(`s2a_${ri}_0`, r.dataSource ? `${r.type} [${r.dataSource}]` : r.type, edits),
     resolveCell(`s2a_${ri}_1`, r.page, edits),
-    resolveCell(`s2a_${ri}_2`, r.conversionSource, edits),
-    resolveCell(`s2a_${ri}_3`, r.notes, edits),
+    resolveCell(`s2a_${ri}_2`, r.notes, edits),
   ]);
-  docChildren.push(makeTable(["Type", "Page / Pattern", "Conversion Source", "Notes"], s2aRows));
+  docChildren.push(makeTable(["Type", "Page / Pattern", "Notes / What We're Learning"], s2aRows));
 
   docChildren.push(subHeading("Top Converting Sources"));
   const s2bRows = s2.topConvertingSources.map((r: any, ri: number) => [

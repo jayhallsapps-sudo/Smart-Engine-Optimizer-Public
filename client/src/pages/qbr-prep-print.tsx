@@ -124,12 +124,11 @@ export default function QbrPrepPrint() {
           <SectionHeading num={2} title="Where Conversions Actually Happen" />
           <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Converting Pages</div>
           <ReportTable
-            headers={["Type", "Page / Pattern", "Conversion Source", "Notes / What We're Learning"]}
+            headers={["Type", "Page / Pattern", "Notes / What We're Learning"]}
             rows={s2.topConvertingPages.map((r: any, ri: number) => [
-              cell(e(`s2a_${ri}_0`, r.type)),
+              badgeCell(e(`s2a_${ri}_0`, r.type), r.dataSource),
               cell(e(`s2a_${ri}_1`, r.page)),
-              badgeCell(e(`s2a_${ri}_2`, r.conversionSource), r.dataSource),
-              cell(e(`s2a_${ri}_3`, r.notes)),
+              cell(e(`s2a_${ri}_2`, r.notes)),
             ])}
           />
           <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Converting Sources</div>

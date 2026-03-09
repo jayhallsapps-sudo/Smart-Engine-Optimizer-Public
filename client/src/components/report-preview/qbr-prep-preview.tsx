@@ -27,7 +27,6 @@ interface GoalRow {
 interface ConvertingPageRow {
   type: string;
   page: string;
-  conversionSource: string;
   notes: string;
   dataSource?: string;
 }
@@ -284,12 +283,11 @@ export function QbrPrepPreview({
             <SectionHeading num={2} title="Where Conversions Actually Happen" />
             <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Converting Pages</div>
             <ReportTable
-              headers={["Type", "Page / Pattern", "Conversion Source", "Notes / What We're Learning"]}
+              headers={["Type", "Page / Pattern", "Notes / What We're Learning"]}
               rows={section2Conversions.topConvertingPages.map((r, ri) => [
-                <EditableCell key="t" editKey={`s2a_${ri}_0`} value={r.type} edits={edits} onEdit={onEdit} />,
+                <BadgeCell key="t" editKey={`s2a_${ri}_0`} value={r.type} dataSource={r.dataSource} edits={edits} onEdit={onEdit} />,
                 <EditableCell key="p" editKey={`s2a_${ri}_1`} value={r.page} edits={edits} onEdit={onEdit} />,
-                <BadgeCell key="cs" editKey={`s2a_${ri}_2`} value={r.conversionSource} dataSource={r.dataSource} edits={edits} onEdit={onEdit} />,
-                <EditableCell key="n" editKey={`s2a_${ri}_3`} value={r.notes} edits={edits} onEdit={onEdit} />,
+                <EditableCell key="n" editKey={`s2a_${ri}_2`} value={r.notes} edits={edits} onEdit={onEdit} />,
               ])}
             />
             <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Converting Sources</div>

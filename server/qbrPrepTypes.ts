@@ -26,7 +26,6 @@ export interface Section1Goals {
 export interface ConvertingPageRow {
   type: string;
   page: string;
-  conversionSource: string;
   notes: string;
   dataSource?: string;
 }

@@ -1,0 +1,237 @@
+Refactor the QBR Prep Section 2 “Top Converting Pages” table so it matches the intended structure and produces stronger, more client-useful analysis.
+
+Problem:
+The current Top Converting Pages table has multiple issues:
+- the Conversion Source column is being used for long fallback explanations instead of real source attribution
+- “Manual entry needed” is appearing in rows where it should not
+- Notes / What We’re Learning is repetitive and generic
+- event/action context like Phone Clicks or VOB Form Start is not being placed correctly
+- source attribution should display as a badge next to the Type, not as a full separate explanation column
+
+The current output is structurally wrong and too weak analytically.
+
+==================================================
+GOAL
+==================================================
+
+Rebuild the Top Converting Pages table so it works like this:
+
+Columns:
+1. Type
+2. Page / Pattern
+3. Notes / What We’re Learning
+
+Remove the standalone “Conversion Source” column.
+
+Instead:
+- show source attribution as badge(s) next to the Type label
+- move action/pattern info into the Page / Pattern column
+- improve Notes / What We’re Learning so each row teaches something distinct and useful
+
+==================================================
+NEW TABLE STRUCTURE
+==================================================
+
+Top Converting Pages should now render as:
+
+- Type
+  - display the page type label
+  - show source badge(s) inline next to it, such as:
+    - GA4
+    - CTM
+    - CallRail
+    - GBP
+    - GSC
+    - Fallback only if truly necessary and if the label is client-safe
+
+- Page / Pattern
+  - show the clean page URL
+  - append the observed or inferred pattern after an em dash
+  - examples:
+    - /contact/ — VOB Form Start
+    - / — Phone Clicks
+    - /faqs/ — Phone Clicks
+    - /alcohol-detox-los-angeles/ — Phone Clicks
+    - /meet-our-staff/ — Phone Clicks
+
+- Notes / What We’re Learning
+  - should contain a distinct insight for that row
+  - should not repeat the same vague sentence structure across all rows
+  - should explain why that page/pattern matters
+
+==================================================
+COLUMN RULES
+==================================================
+
+1. Remove “Conversion Source” as a visible column from this table.
+2. Do not place long fallback explanations inside any visible cell.
+3. Do not show “Manual entry needed” in this table unless the entire row truly cannot be built.
+4. If the row exists, it should look intentional and complete.
+5. If source attribution exists, show it as badge(s) next to Type.
+
+==================================================
+TYPE + SOURCE BADGE RULES
+==================================================
+
+Type labels should be client-readable, for example:
+- Form Entry
+- Homepage
+- FAQ Page
+- Service Page
+- Staff Page
+- Contact / Admissions
+- Verify Insurance
+- Location Page
+- Blog / Resource
+
+Next to the type, render the source badge(s):
+- GA4
+- CTM
+- CallRail
+- GBP
+- GSC
+- etc.
+
+Examples:
+- Form Entry [GA4]
+- Homepage [CTM] [GA4]
+- FAQ Page [GA4]
+- Service Page [GA4]
+- Staff Page [GA4]
+
+Use the shared badge component/style system already used elsewhere in report tables.
+
+==================================================
+PAGE / PATTERN RULES
+==================================================
+
+The Page / Pattern column must include:
+- clean URL only
+- user-relevant action/pattern appended after an em dash
+
+Examples:
+- /contact/ — VOB Form Start
+- / — Phone Clicks
+- /faqs/ — Phone Clicks
+- /alcohol-detox-los-angeles/ — Phone Clicks
+- /meet-our-staff/ — Phone Clicks
+
+Do not put asset paths, WP content paths, or internal debug text here.
+
+If a row is fallback-generated from priority pages and there is no observed tracked event:
+- still show the clean page URL
+- append a concise client-safe pattern only if justified
+- otherwise leave it as just the page URL
+
+==================================================
+NOTES / WHAT WE’RE LEARNING RULES
+==================================================
+
+This is the most important quality fix.
+
+Current problem:
+The notes are too repetitive and generic, like:
+- High-intent service page. —% CVR.
+- Direct admissions path. —% CVR.
+
+That provides almost no value.
+
+Expected:
+Each note should be specific to the page/pattern and give distinct strategic insight.
+
+Good examples:
+- Strongest trackable conversion on the site; client confirmed fast, quality leads from this form
+- Primary GMB landing page; dominant call driver but attribution drops to (not set)
+- High-intent pre-call behavior; users vetting before committing
+- Only non-homepage service page generating call clicks
+- Luxury buyers researching clinical credibility before calling
+
+Rules:
+1. Notes must differ meaningfully row to row.
+2. Notes should explain behavior, not just restate the page type.
+3. If a page is fallback-only and not directly tracked, the note should still offer useful strategic interpretation without pretending certainty.
+4. Avoid generic filler like:
+   - high-intent page
+   - likely conversion page
+   - unclear
+   - manual entry needed
+   unless absolutely unavoidable
+5. If CVR is not available, do not force “—% CVR” into every row.
+
+==================================================
+ANALYSIS LOGIC
+==================================================
+
+Build row-level notes using the strongest available signals:
+- GA4 event type
+- call-tracking source / landing page behavior
+- page class
+- page role in the funnel
+- service/admissions alignment
+- known business intent
+- whether the page is homepage / FAQ / staff / service / form entry
+
+Examples:
+- Form page + GA4 form_start → strongest trackable on-site conversion
+- Homepage + CTM/GA4 phone clicks → dominant top-funnel or GMB-assisted call driver
+- FAQ page + phone clicks → pre-call vetting behavior
+- Service page + phone clicks → direct service-intent conversion behavior
+- Staff page + phone clicks → trust/credibility research before contact
+
+==================================================
+FALLBACK RULES
+==================================================
+
+If real attribution is weak:
+- do not dump fallback explanations into visible cells
+- do not show long internal explanations like:
+  “Priority service page surfaced as a likely conversion target; direct page-level attribution unavailable”
+
+Instead:
+- keep the row structure clean
+- use source badges only if meaningful
+- write a concise strategic note if the row is included
+- if a row truly cannot be supported, omit it or use a clean unresolved fallback only as a last resort
+
+The goal is a polished client-facing table, not a debug table.
+
+==================================================
+APPLY TO
+==================================================
+
+Fix this specifically for:
+- QBR Prep Section 2 Top Converting Pages table
+- preview output
+- export output
+
+If the section JSON/schema needs to change to support this properly, do it upstream so preview and export both inherit the corrected structure.
+
+==================================================
+DO NOT DO
+==================================================
+
+- do not redesign the entire section
+- do not touch the Top Converting Sources table unless needed for shared schema compatibility
+- do not remove editability
+- do not leave the old Conversion Source column visible
+- do not keep long fallback explanations in visible cells
+- do not keep repeating the same low-value notes across rows
+
+==================================================
+PROOF REQUIRED
+==================================================
+
+Return:
+1. files changed
+2. the new Section 2 Top Converting Pages schema
+3. exact logic for:
+   - type label
+   - source badge assignment
+   - page/pattern rendering
+   - notes generation
+4. before/after JSON for the Top Converting Pages table
+5. screenshot/proof showing:
+   - Type with badge(s)
+   - Page / Pattern with event/action included
+   - improved distinct Notes / What We’re Learning
+6. confirmation that preview and export both use the new structure

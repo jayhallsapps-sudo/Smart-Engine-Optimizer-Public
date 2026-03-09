@@ -627,17 +627,17 @@ function generateSection2(
   const totalGa4Conversions = ga4Landing.reduce((s, r) => s + (r.conversions ?? 0), 0);
 
   for (const row of ga4WithConversions) {
-    const pageType = classifyPageType(row.page);
+    const internalType = classifyPageType(row.page);
     topConvertingPages.push({
-      type: pageType,
-      page: shortUrl(row.page),
-      conversionSource: `${fmtNum(row.conversions)} conversions (GA4 organic)`,
-      notes: getConversionNote(pageType, row.conversions, row.sessions),
+      type: clientReadableType(internalType),
+      page: buildPagePattern(row.page, internalType, "GA4"),
+      notes: buildConvertingPageNote(internalType, "GA4", row.conversions, row.sessions),
       dataSource: "GA4",
     });
   }
 
   // Priority 2: CallRail top organic call landing pages (fill remaining slots up to 8)
+  const callTrackingSource = detectCallTrackingProvider(client) ?? "CallRail";
   if (callLandingPages.length > 0) {
     const seenPages = new Set(ga4WithConversions.map(r => shortUrl(r.page)));
     const crRows = callLandingPages
@@ -648,13 +648,12 @@ function generateSection2(
       const normalized = row.page.replace(/^https?:\/\/[^/]+/, "") || "/";
       const shortP = normalized.length > 60 ? normalized.slice(0, 57) + "…" : normalized;
       if (seenPages.has(shortP)) continue;
-      const pageType = classifyPageType(row.page);
+      const internalType = classifyPageType(row.page);
       topConvertingPages.push({
-        type: pageType,
-        page: shortP,
-        conversionSource: `${fmtNum(row.calls)} organic calls (CallRail)`,
-        notes: getConversionNote(pageType, row.calls, 0),
-        dataSource: "CallRail",
+        type: clientReadableType(internalType),
+        page: buildPagePattern(row.page, internalType, callTrackingSource),
+        notes: buildConvertingPageNote(internalType, callTrackingSource, row.calls, 0),
+        dataSource: callTrackingSource,
       });
       seenPages.add(shortP);
     }
@@ -664,13 +663,12 @@ function generateSection2(
   const moneyPages: string[] = (client as any).moneyPages ?? [];
   if (moneyPages.length > 0 && topConvertingPages.length === 0) {
     for (const mp of moneyPages.slice(0, 6)) {
-      const pageType = classifyPageType(mp);
+      const internalType = classifyPageType(mp);
       topConvertingPages.push({
-        type: pageType,
+        type: clientReadableType(internalType),
         page: shortUrl(mp),
-        conversionSource: "Priority service page surfaced as a likely conversion target; direct page-level attribution unavailable",
-        notes: getConversionNote(pageType, 0, 0),
-        dataSource: "Manual entry needed",
+        notes: buildConvertingPageNote(internalType, "GSC", 0, 0),
+        dataSource: "GSC",
       });
     }
   }
@@ -682,12 +680,11 @@ function generateSection2(
       .slice(0, 6);
     for (const row of topGsc) {
       const pageUrl = row.keys?.[0] ?? "";
-      const pageType = classifyPageType(pageUrl);
+      const internalType = classifyPageType(pageUrl);
       topConvertingPages.push({
-        type: pageType,
+        type: clientReadableType(internalType),
         page: shortUrl(pageUrl),
-        conversionSource: `${fmtNum(row.clicks ?? 0)} organic clicks (GSC — conversion data unavailable)`,
-        notes: getConversionNote(pageType, 0, 0),
+        notes: buildConvertingPageNote(internalType, "GSC", 0, 0),
         dataSource: "GSC",
       });
     }
@@ -698,9 +695,8 @@ function generateSection2(
     topConvertingPages.push({
       type: ME,
       page: ME,
-      conversionSource: `${ME}: no conversion data available from GA4, CallRail, or GSC`,
       notes: ME,
-      dataSource: "Manual entry needed",
+      dataSource: undefined,
     });
   }
 
@@ -803,14 +799,73 @@ function generateSection2(
   return { topConvertingPages, topConvertingSources };
 }
 
-function getConversionNote(pageType: string, conversions: number, sessions: number): string {
-  const cvr = sessions > 0 ? (conversions / sessions * 100).toFixed(1) : "—";
-  if (pageType === "Verify Insurance") return `VOB page — strongest conversion assist. ${cvr}% CVR.`;
-  if (pageType === "Contact / Admissions") return `Direct admissions path. ${cvr}% CVR.`;
-  if (pageType === "Detox" || pageType === "Residential / Inpatient") return `High-intent service page. ${cvr}% CVR.`;
-  if (pageType === "PHP / IOP") return `Treatment level page contributing to conversion funnel. ${cvr}% CVR.`;
-  if (pageType === "Homepage") return `Branded entry point. ${cvr}% CVR — likely navigational.`;
-  return `${cvr}% CVR`;
+function clientReadableType(internalType: string): string {
+  const map: Record<string, string> = {
+    "Verify Insurance": "Verify Insurance",
+    "Contact / Admissions": "Contact / Admissions",
+    "Detox": "Service Page",
+    "Residential / Inpatient": "Service Page",
+    "PHP / IOP": "Service Page",
+    "Outpatient": "Service Page",
+    "Dual Diagnosis": "Service Page",
+    "Therapies": "Service Page",
+    "Conditions": "Service Page",
+    "Homepage": "Homepage",
+    "Staff / Team": "Staff Page",
+    "Blog / Resource": "Blog / Resource",
+    "FAQ": "FAQ Page",
+    "Local Treatment Intent": "Service Page",
+    "Branded Navigation": "Homepage",
+    "Substance-Specific": "Blog / Resource",
+    "Informational / Education": "Blog / Resource",
+  };
+  return map[internalType] ?? "Service Page";
+}
+
+function buildPagePattern(page: string, internalType: string, dataSource: string): string {
+  const clean = shortUrl(page);
+  let action = "";
+  if (dataSource === "CallRail" || dataSource === "CTM" || dataSource === "Nimbata") {
+    action = "Phone Clicks";
+  } else if (dataSource === "GA4") {
+    if (internalType === "Verify Insurance") action = "VOB Form Start";
+    else if (internalType === "Contact / Admissions") action = "Contact Form Start";
+    else action = "Conversion Event";
+  }
+  return action ? `${clean} — ${action}` : clean;
+}
+
+function buildConvertingPageNote(internalType: string, dataSource: string, conversions: number, sessions: number): string {
+  const isCallTracking = ["CallRail", "CTM", "Nimbata"].includes(dataSource);
+  const isGA4 = dataSource === "GA4";
+  const isGSC = dataSource === "GSC";
+  const cvr = isGA4 && sessions > 0 ? ` ${(conversions / sessions * 100).toFixed(1)}% CVR.` : "";
+
+  if (isCallTracking) {
+    if (internalType === "Homepage") return "Primary GMB landing page — dominant call driver. Verify organic vs paid attribution segmentation to ensure call quality from this source.";
+    if (internalType === "Staff / Team") return "Trust and credibility research — users evaluating clinical team before committing to an admissions call.";
+    if (internalType === "FAQ") return "Pre-call vetting behavior — high-intent users researching before contacting admissions. Strong signal even without a form conversion.";
+    if (internalType === "Blog / Resource" || internalType === "Substance-Specific" || internalType === "Informational / Education") return "Pre-call research path — informational content is creating awareness that converts to phone contact. Monitor call quality from these pages.";
+    if (internalType === "Verify Insurance") return "Insurance page is driving direct call behavior — users checking coverage before calling admissions. High-intent touchpoint.";
+    if (internalType === "Contact / Admissions") return "Direct admissions page generating phone clicks — users landing here are actively seeking intake contact.";
+    return "Organic phone click-generating page — users landing here are moving toward admissions contact.";
+  }
+
+  if (isGA4) {
+    if (internalType === "Verify Insurance") return `Strongest trackable on-site conversion — VOB form activity directly precedes admissions intake.${cvr}`;
+    if (internalType === "Contact / Admissions") return `Primary on-site form conversion point — users submitting here are actively requesting contact from admissions.${cvr}`;
+    if (internalType === "Homepage") return `Homepage form conversions are typically navigational or GMB-assisted — validate event type in GA4 to confirm admit alignment.${cvr}`;
+    return `On-site conversion event detected — confirm the GA4 event name to validate alignment with admissions pathway.${cvr}`;
+  }
+
+  if (isGSC) {
+    if (internalType === "Verify Insurance") return "High-traffic insurance page with strong organic visibility — add form tracking to confirm admit contribution.";
+    if (internalType === "Contact / Admissions") return "Contact page receiving organic traffic — verify form tracking is active to capture admission-driving events.";
+    if (internalType === "Homepage") return "Homepage is the top organic entry point — brand and direct traffic dominate here; validate quality of organic sessions reaching admissions.";
+    return "Organic traffic proxy — conversion role is unconfirmed. Add event tracking to validate whether this page contributes directly to admits.";
+  }
+
+  return "Strategic page identified for conversion contribution — manual tracking validation recommended.";
 }
 
 function generateSection3(

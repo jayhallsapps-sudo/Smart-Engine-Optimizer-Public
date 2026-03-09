@@ -177,6 +177,28 @@ export async function generateQbrPrepV2Docx(
 
   docChildren.push(new Paragraph({ spacing: { before: 120, after: 0 }, children: [] }));
 
+  const ami = reportData.sourceSnapshot?.manualInputs;
+  if (ami && (ami.clientSentiment || ami.sentiment || ami.amThoughts || ami.hypothesis || ami.priorityChecks || ami.auditNotes || ami.clientNotes)) {
+    docChildren.push(sectionHeading(0, "AM Inputs"));
+    const amFields: [string, string][] = [];
+    if (ami.clientSentiment || ami.sentiment) amFields.push(["Client Sentiment", resolveCell("am_sentiment", ami.clientSentiment ?? ami.sentiment ?? "", edits)]);
+    if (ami.amThoughts || ami.hypothesis) amFields.push(["AM's Thoughts", resolveCell("am_thoughts", ami.amThoughts ?? ami.hypothesis ?? "", edits)]);
+    if (ami.priorityChecks || ami.auditNotes) amFields.push(["Priority Checks", resolveCell("am_priority_checks", ami.priorityChecks ?? ami.auditNotes ?? "", edits)]);
+    if (ami.clientNotes) amFields.push(["Client Notes", resolveCell("am_client_notes", ami.clientNotes, edits)]);
+    for (const [label, val] of amFields) {
+      docChildren.push(
+        new Paragraph({
+          spacing: { before: 40, after: 40 },
+          children: [
+            new TextRun({ text: `${label}: `, bold: true, size: 18, color: DARK_HEADER, font: "Calibri" }),
+            new TextRun({ text: val, size: 18, color: "374151", font: "Calibri" }),
+          ],
+        })
+      );
+    }
+    docChildren.push(new Paragraph({ spacing: { before: 80, after: 0 }, children: [] }));
+  }
+
   const s1 = reportData.section1Goals;
   docChildren.push(sectionHeading(1, "What Matters Most This Quarter"));
   const s1Rows = s1.rows.map((r: any, ri: number) => [

@@ -36,6 +36,12 @@ function getCurrentQuarter(): { q: number; year: number } {
   return { q, year };
 }
 
+function getNextQuarter(): { q: number; year: number } {
+  const { q, year } = getCurrentQuarter();
+  if (q === 4) return { q: 1, year: year + 1 };
+  return { q: q + 1, year };
+}
+
 function buildTabName(q: number, year: number): string {
   return `NSM Tracker Q${q} ${year}`;
 }
@@ -125,7 +131,7 @@ async function downloadWorkbook(spreadsheetId: string): Promise<XLSX.WorkBook | 
   }
 }
 
-export async function fetchNsmGoals(clientName: string): Promise<NsmData> {
+export async function fetchNsmGoals(clientName: string, forwardLooking?: boolean): Promise<NsmData> {
   try {
     const sheetUrl = await storage.getSetting("google_sheet_url");
     if (!sheetUrl) return FALLBACK;
@@ -137,9 +143,16 @@ export async function fetchNsmGoals(clientName: string): Promise<NsmData> {
     const wb = await downloadWorkbook(spreadsheetId);
     if (!wb) return FALLBACK;
 
-    const { q, year } = getCurrentQuarter();
+    const { q, year } = forwardLooking ? getNextQuarter() : getCurrentQuarter();
+    const targetTabName = buildTabName(q, year);
     const tabName = findBestNsmTab(wb.SheetNames, q, year);
-    if (!tabName) return FALLBACK;
+    if (!tabName) {
+      console.warn(`[sheetsClient] NSM Tracker tab not found: ${targetTabName}`);
+      return FALLBACK;
+    }
+    if (forwardLooking && tabName !== targetTabName) {
+      console.warn(`[sheetsClient] NSM Tracker tab not found: ${targetTabName} — falling back to ${tabName}`);
+    }
 
     const quarterLabel = tabName.replace(/^NSM Tracker /i, "").trim();
 
@@ -158,6 +171,12 @@ export async function fetchNsmGoals(clientName: string): Promise<NsmData> {
     });
 
     if (!clientRow) return FALLBACK;
+
+    const colMvpTypePrecheck = findCol(headers, /mvp nsm type/i);
+    const mvpTypeRaw = colMvpTypePrecheck >= 0 ? String(clientRow[colMvpTypePrecheck] ?? "").trim() : "";
+    if (!mvpTypeRaw || mvpTypeRaw === "—" || mvpTypeRaw === "-") {
+      console.warn(`[sheetsClient] MVP NSM type missing for client in NSM Tracker`);
+    }
 
     const colSessGoal    = findCol(headers, /organic sessions nsm/i);
     const colSessActual  = findCol(headers, /organic sessions actual/i);

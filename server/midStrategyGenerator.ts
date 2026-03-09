@@ -89,6 +89,10 @@ export interface WorkbookState {
 }
 
 export interface MidStrategyAmInputs {
+  clientSentiment?: string;
+  amThoughts?: string;
+  priorityChecks?: string;
+  clientNotes?: string;
   accountFeeling?: string;
   hypothesis?: string;
   auditNotes?: string;
@@ -97,6 +101,14 @@ export interface MidStrategyAmInputs {
   focusNext60Days?: string;
   salesAdmissionsContext?: string;
   clientDependencyNotes?: string;
+}
+
+function normalizeMidStrategyAmInputs(raw: MidStrategyAmInputs): MidStrategyAmInputs {
+  return {
+    ...raw,
+    amThoughts: raw.amThoughts || raw.hypothesis || "",
+    priorityChecks: raw.priorityChecks || raw.auditNotes || "",
+  };
 }
 
 export interface MidStrategyReportJson {
@@ -672,7 +684,7 @@ function generateSlides(
       "Phase 1 navigation cleanup (conversion-focused)",
       `Moving Admissions-related pages under About Us`,
       "Replacing the Admissions nav item with Verify Insurance",
-      ...(amInputs.hypothesis ? [`AM Hypothesis: ${amInputs.hypothesis}`] : []),
+      ...(amInputs.amThoughts ? [`AM's Thoughts: ${amInputs.amThoughts}`] : []),
     ],
     commentary: amInputs.focusNext60Days || undefined,
   };
@@ -730,7 +742,7 @@ function generateSlides(
       "Risk flag: Keyword cannibalization — multiple pages targeting the same core intent dilute authority",
       ...(urlAudit.cannibalizationNotes.length > 0 ? urlAudit.cannibalizationNotes : []),
       ...s10DeltaBullets,
-      ...(amInputs.auditNotes ? [`Audit notes: ${amInputs.auditNotes}`] : []),
+      ...(amInputs.priorityChecks ? [`Priority Checks: ${amInputs.priorityChecks}`] : []),
     ],
   };
 
@@ -867,7 +879,25 @@ function generateSlides(
     },
   };
 
-  return [s01, s02, s03, s04, s05, s06, s07, s08, s09, s10, s11, s12, s13, s14];
+  const amInputsBullets: string[] = [];
+  if (amInputs.clientSentiment) amInputsBullets.push(`Client Sentiment: ${amInputs.clientSentiment}`);
+  if (amInputs.amThoughts?.trim()) amInputsBullets.push(`AM's Thoughts: ${amInputs.amThoughts.trim()}`);
+  if (amInputs.priorityChecks?.trim()) amInputsBullets.push(`Priority Checks: ${amInputs.priorityChecks.trim()}`);
+  if (amInputs.clientNotes?.trim()) amInputsBullets.push(`Client Notes: ${amInputs.clientNotes.trim()}`);
+
+  const allSlides = [s01, s02, s03, s04, s05, s06, s07, s08, s09, s10, s11, s12, s13, s14];
+
+  if (amInputsBullets.length > 0) {
+    allSlides.push({
+      id: "am_inputs",
+      type: "bullets",
+      title: "AM Inputs",
+      subtitle: "Account Manager Context & Priorities",
+      bullets: amInputsBullets,
+    });
+  }
+
+  return allSlides;
 }
 
 // ─── Main Entry Point ─────────────────────────────────────────────────────────
@@ -883,9 +913,10 @@ export async function generateMidStrategy({
   comparisonCrawlAssetId?: number | null;
   amInputs?: MidStrategyAmInputs;
 }): Promise<MidStrategyReportJson> {
+  const normalizedAmInputs = normalizeMidStrategyAmInputs(amInputs);
   const sources = await normalizeSources(clientId, currentCrawlAssetId ?? null, comparisonCrawlAssetId ?? null);
-  const workbook = await buildWorkbook(sources, amInputs);
-  const slides = generateSlides(workbook, sources.client.name, fmtDate(sources.today), amInputs);
+  const workbook = await buildWorkbook(sources, normalizedAmInputs);
+  const slides = generateSlides(workbook, sources.client.name, fmtDate(sources.today), normalizedAmInputs);
 
   return {
     report_title: "Content & SEO Mid-Strategy Check-in",

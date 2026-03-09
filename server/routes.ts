@@ -29,7 +29,7 @@ import { seedDatabase } from "./seed";
 import { encrypt, decrypt, deriveInternalToken } from "./encryption";
 import { buildGoogleAuthUrl, exchangeCodeForToken, callbackHtml, isGoogleConfigured } from "./googleAuth";
 import { testCredential } from "./connectionTest";
-import { insertSfReportSchema, insertCallTrackingReportSchema } from "@shared/schema";
+import { insertSfReportSchema, insertCallTrackingReportSchema, amInputsSchema, migrateLegacyAmInputs } from "@shared/schema";
 import { generateBiweeklyDocx, generatePptx, generateQbrPrepDocx } from "./reportGenerators";
 import { generateBiweeklyPdf, generateMonthlyPdf } from "./pdfGenerator";
 import { generatePdfViaPuppeteer } from "./puppeteerPdfGenerator";
@@ -132,6 +132,22 @@ function validateExportPayload(
     }
   }
   return null;
+}
+
+function validateAmInputs(body: any): { error: string } | { amInputs: { clientSentiment: string; amThoughts: string; priorityChecks: string; clientNotes: string } } {
+  const raw = body.amInputs ?? body;
+  const migrated = migrateLegacyAmInputs({
+    clientSentiment: raw.clientSentiment ?? raw.sentiment,
+    amThoughts: raw.amThoughts ?? raw.hypothesis,
+    priorityChecks: raw.priorityChecks ?? raw.auditNotes,
+    clientNotes: raw.clientNotes ?? "",
+  });
+  const result = amInputsSchema.safeParse(migrated);
+  if (!result.success) {
+    const messages = result.error.issues.map(i => i.message).join("; ");
+    return { error: `AM Inputs validation failed: ${messages}` };
+  }
+  return { amInputs: result.data };
 }
 
 function injectQbrPrepCustomRows(reportData: any, edits: Record<string, string> | undefined) {
@@ -1282,8 +1298,15 @@ export async function registerRoutes(
   const SF_FRESHNESS_DAYS = 90;
 
   app.post("/api/reports/qbr-prep/generate-v2", async (req, res) => {
-    const { clientId, generationDate, sentiment, hypothesis, auditNotes, currentCrawlAssetId } = req.body;
+    const { clientId, generationDate, currentCrawlAssetId } = req.body;
+    const sentimentVal = req.body.sentiment ?? req.body.clientSentiment;
+    const amThoughtsVal = req.body.amThoughts ?? req.body.hypothesis ?? "";
+    const priorityChecksVal = req.body.priorityChecks ?? req.body.auditNotes ?? "";
+    const clientNotesVal = req.body.clientNotes ?? "";
     if (!clientId) return res.status(400).json({ message: "clientId is required" });
+
+    const amValidation = validateAmInputs({ clientSentiment: sentimentVal, amThoughts: amThoughtsVal, priorityChecks: priorityChecksVal, clientNotes: clientNotesVal });
+    if ("error" in amValidation) return res.status(400).json({ message: amValidation.error });
 
     let latestSf: any;
     if (currentCrawlAssetId) {
@@ -1314,9 +1337,11 @@ export async function registerRoutes(
       const reportData = await generateQbrPrepReport({
         clientId: Number(clientId),
         generationDate: generationDate ?? new Date().toISOString().split("T")[0],
-        sentiment,
-        hypothesis,
-        auditNotes,
+        sentiment: sentimentVal,
+        hypothesis: amThoughtsVal,
+        auditNotes: priorityChecksVal,
+        clientNotes: clientNotesVal,
+        forwardLooking: true,
       });
 
       res.json({ reportData });
@@ -1413,6 +1438,10 @@ export async function registerRoutes(
   app.post("/api/reports/biweekly/generate", async (req, res) => {
     const { clientId, startDate, endDate, preparedBy } = req.body;
     if (!clientId) return res.status(400).json({ message: "clientId is required" });
+
+    const amValidation = validateAmInputs(req.body);
+    if ("error" in amValidation) return res.status(400).json({ message: amValidation.error });
+
     const fmt = (d: Date) => d.toISOString().slice(0, 10);
     const sub = (d: Date, n: number) => { const r = new Date(d); r.setDate(r.getDate() - n); return r; };
     const now = new Date();
@@ -1424,6 +1453,7 @@ export async function registerRoutes(
         startDate: resolvedStart,
         endDate: resolvedEnd,
         preparedBy: preparedBy ?? "JAY HALL",
+        amInputs: ("error" in amValidation) ? {} : amValidation.amInputs,
       });
       res.json(output);
     } catch (err: any) {
@@ -1567,13 +1597,17 @@ export async function registerRoutes(
   app.post("/api/reports/monthly/generate", async (req, res) => {
     const { clientId, month, year, timezone, amInputs, currentCrawlAssetId, comparisonCrawlAssetId } = req.body;
     if (!clientId || !month || !year) return res.status(400).json({ message: "clientId, month, year are required" });
+
+    const amValidation = validateAmInputs(req.body);
+    if ("error" in amValidation) return res.status(400).json({ message: amValidation.error });
+
     try {
       const output = await generateMonthly({
         clientId: Number(clientId),
         month: Number(month),
         year: Number(year),
         timezone: timezone ?? "America/Los_Angeles",
-        amInputs: amInputs ?? {},
+        amInputs: ("error" in amValidation) ? {} : amValidation.amInputs,
         currentCrawlAssetId: currentCrawlAssetId ?? null,
         comparisonCrawlAssetId: comparisonCrawlAssetId ?? null,
       });
@@ -1677,13 +1711,17 @@ export async function registerRoutes(
   app.post("/api/reports/qbr-full/generate", async (req, res) => {
     const { clientId, quarter, year, timezone, amInputs, currentCrawlAssetId, comparisonCrawlAssetId } = req.body;
     if (!clientId || !quarter || !year) return res.status(400).json({ message: "clientId, quarter, year are required" });
+
+    const amValidation = validateAmInputs(req.body);
+    if ("error" in amValidation) return res.status(400).json({ message: amValidation.error });
+
     try {
       const output = await generateQbrFull({
         clientId: Number(clientId),
         quarter: Number(quarter),
         year: Number(year),
         timezone: timezone ?? "America/Los_Angeles",
-        amInputs: amInputs ?? {},
+        amInputs: ("error" in amValidation) ? {} : amValidation.amInputs,
         currentCrawlAssetId: currentCrawlAssetId ?? null,
         comparisonCrawlAssetId: comparisonCrawlAssetId ?? null,
       });
@@ -1770,6 +1808,10 @@ export async function registerRoutes(
   app.post("/api/reports/mid-strategy/generate", async (req, res) => {
     const { clientId, currentCrawlAssetId, comparisonCrawlAssetId, amInputs } = req.body;
     if (!clientId) return res.status(400).json({ message: "clientId is required" });
+
+    const amValidation = validateAmInputs(req.body);
+    if ("error" in amValidation) return res.status(400).json({ message: amValidation.error });
+
     try {
       const client = await storage.getClient(Number(clientId));
       if (!client) return res.status(404).json({ message: "Client not found" });
@@ -1778,7 +1820,7 @@ export async function registerRoutes(
         clientId: Number(clientId),
         currentCrawlAssetId: currentCrawlAssetId ?? null,
         comparisonCrawlAssetId: comparisonCrawlAssetId ?? null,
-        amInputs: amInputs ?? {},
+        amInputs: ("error" in amValidation) ? {} : amValidation.amInputs,
       });
       if (!output || !Array.isArray(output.slides) || output.slides.length < 1) {
         return res.status(500).json({ message: "Mid-Strategy generator produced no slides. Ensure at least one data source or manual input is provided." });

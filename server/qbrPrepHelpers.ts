@@ -99,14 +99,14 @@ export function classifyAdmitConnection(
   conversions: number,
   totalConversions: number
 ): string {
-  const directTypes = ["Verify Insurance", "Contact / Admissions", "Detox", "Residential / Inpatient", "PHP / IOP"];
-  const assistedTypes = ["Dual Diagnosis", "Therapies", "Conditions", "Substance-Specific", "Population-Specific", "Location"];
+  const highTypes = ["Verify Insurance", "Contact / Admissions", "Detox", "Residential / Inpatient", "PHP / IOP"];
+  const mediumTypes = ["Dual Diagnosis", "Therapies", "Conditions", "Substance-Specific", "Population-Specific", "Location"];
 
-  if (directTypes.includes(pageType)) return "Direct";
-  if (assistedTypes.includes(pageType) && conversions > 0) return "Assisted";
-  if (pageType === "Blog / Resource") return "Weak";
-  if (conversions > 0 && totalConversions > 0 && conversions / totalConversions > 0.05) return "Assisted";
-  return "Unclear";
+  if (highTypes.includes(pageType)) return "High";
+  if (mediumTypes.includes(pageType) && conversions > 0) return "Medium";
+  if (pageType === "Blog / Resource") return "Low";
+  if (conversions > 0 && totalConversions > 0 && conversions / totalConversions > 0.05) return "Medium";
+  return "Low";
 }
 
 const TOPIC_PATTERNS: Array<{ pattern: RegExp; topic: string }> = [
@@ -185,17 +185,13 @@ export function clusterQueriesByTopic(
 }
 
 export function topicAdmitConnection(topic: string): string {
-  const directTopics = ["Detox", "Residential Treatment", "Insurance / Admissions", "PHP / IOP", "Local Intent"];
-  const assistedTopics = ["Women's Rehab", "Men's Rehab", "Dual Diagnosis", "Substance-Specific Education", "Therapies", "Mental Health / Conditions", "Aftercare / Continuum"];
-  const trustTopics = ["Trust / Evaluation"];
-  const weakTopics = ["Informational / Education"];
+  const highTopics = ["Detox", "Residential Treatment", "Insurance / Admissions", "PHP / IOP", "Local Intent"];
+  const mediumTopics = ["Women's Rehab", "Men's Rehab", "Dual Diagnosis", "Substance-Specific Education", "Therapies", "Mental Health / Conditions", "Aftercare / Continuum", "Trust / Evaluation"];
 
-  if (directTopics.includes(topic)) return "Direct";
-  if (assistedTopics.includes(topic)) return "Assisted";
-  if (trustTopics.includes(topic)) return "Trust / Evaluation";
-  if (weakTopics.includes(topic)) return "Informational";
-  if (topic === "Branded Navigation") return "Assisted";
-  return "Informational";
+  if (highTopics.includes(topic)) return "High";
+  if (mediumTopics.includes(topic)) return "Medium";
+  if (topic === "Branded Navigation") return "Medium";
+  return "Low";
 }
 
 export interface TierDiagnosisInput {
@@ -244,13 +240,29 @@ export function diagnoseTier(input: TierDiagnosisInput): TierDiagnosis {
 
   const tier1Issues: string[] = [];
   if (!input.hasDetoxPage && !input.hasResidentialPage) {
-    tier1Issues.push("Core service pages (detox, residential) appear missing or weak");
+    tier1Issues.push("Core service pages (detox, residential) are not conversion-ready — either missing entirely or not clearly accessible from the main navigation");
   }
   if (!input.hasVobPage) {
-    tier1Issues.push("Verify Insurance / VOB page is missing — a dedicated VOB page is critical for admissions conversion");
+    const hasInsuranceMention = input.sfData.some(r => {
+      const url = String(Object.values(r)[0] ?? "").toLowerCase();
+      return /insurance/i.test(url);
+    });
+    if (hasInsuranceMention) {
+      tier1Issues.push("Verify Insurance / VOB page exists but lacks prominence — a dedicated, clearly labeled VOB page is critical for admissions conversion");
+    } else {
+      tier1Issues.push("Verify Insurance / VOB page is not clearly accessible — a dedicated VOB page is critical for admissions conversion");
+    }
   }
   if (!input.hasContactPage) {
-    tier1Issues.push("Contact / admissions pathway is unclear or hard to reach");
+    const hasContactMention = input.sfData.some(r => {
+      const url = String(Object.values(r)[0] ?? "").toLowerCase();
+      return /contact|reach|help/i.test(url);
+    });
+    if (hasContactMention) {
+      tier1Issues.push("Contact / admissions pathway exists but lacks prominence — not conversion-ready for high-intent visitors");
+    } else {
+      tier1Issues.push("Contact / admissions pathway is not clearly accessible from the main site structure");
+    }
   }
   if (!input.highIntentTrafficLandsOnClearUrls) {
     tier1Issues.push("High-intent service traffic does not land on clear primary URLs");

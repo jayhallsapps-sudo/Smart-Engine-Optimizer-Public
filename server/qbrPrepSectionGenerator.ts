@@ -215,6 +215,19 @@ export interface QbrPrepGenerateInput {
   sentiment?: string;
   hypothesis?: string;
   auditNotes?: string;
+  forwardLooking?: boolean;
+}
+
+export function normalizeKpiLabel(mvpType: string): string {
+  if (!mvpType || mvpType === "—" || mvpType === "-") return "Admits";
+  const lower = mvpType.toLowerCase().trim();
+  if (/admits?$/i.test(lower)) return "Admits";
+  if (/viable\s*vob/i.test(lower) || /^vobs?$/i.test(lower)) return "Viable VOBs";
+  if (/organic.*gmb.*ai.*llm.*calls/i.test(lower)) return "Organic + GMB + AI LLM Calls";
+  if (/qualified.*calls/i.test(lower)) return "Qualified Calls";
+  if (/leads?$/i.test(lower)) return "Leads";
+  if (/contacts?$/i.test(lower)) return "Contacts";
+  return mvpType.trim();
 }
 
 export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promise<QbrPrepReportData> {
@@ -241,7 +254,7 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
 
   let nsmData: any = null;
   try {
-    nsmData = await fetchNsmGoals(client.name);
+    nsmData = await fetchNsmGoals(client.name, input.forwardLooking);
     if (nsmData && nsmData.quarter !== "—") dataSources.push("Google Sheets NSM Tracker");
     else nsmData = null;
   } catch {
@@ -440,6 +453,10 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
     airtable: airtableItems.length > 0 ? { itemCount: airtableItems.length } : null,
     asana: asanaTasks.length > 0 ? { taskCount: asanaTasks.length } : null,
     manualInputs: {
+      clientSentiment: input.sentiment,
+      amThoughts: input.hypothesis,
+      priorityChecks: input.auditNotes,
+      clientNotes: (input as any).clientNotes ?? "",
       sentiment: input.sentiment,
       hypothesis: input.hypothesis,
       auditNotes: input.auditNotes,
@@ -619,13 +636,12 @@ function generateSection1(nsmData: any, ga4Funnel: any, quarter: QuarterInfo, cl
   console.log(`[Section1] callTrackingProvider=${callTrackingProvider ?? "none"}`);
   console.log(`[Section1] nsmData present=${!!nsmData}, ga4Funnel present=${!!ga4Funnel}`);
 
-  // ── Primary Goal: Admits ────────────────────────────────────────────────
-  // STATE A: NSM Tracker has real numeric mvpGoal + mvpActual → confirmed source, show value + shift
-  // STATE B: No confirmed admits source → no number, no shift, static reason
-  // Do NOT fabricate admits from CallRail call counts.
-  let admitsGoalDisplay: string = "Admits";
+  const primaryKpiLabel = nsmData ? normalizeKpiLabel(nsmData.mvpType) : "Admits";
+  console.log(`[Section1] Primary KPI label from mvpType: "${primaryKpiLabel}" (raw mvpType: "${nsmData?.mvpType ?? "—"}")`);
+
+  let admitsGoalDisplay: string = primaryKpiLabel;
   let admitsShift = "—";
-  let admitsReason = "Admits is the strategic primary KPI. Reporting source is not yet confirmed — this goal will be updated once an admits tracking source is connected.";
+  let admitsReason = `${primaryKpiLabel} is the strategic primary KPI. Reporting source is not yet confirmed — this goal will be updated once a tracking source is connected.`;
   let admitsSource = "Source pending confirmation";
 
   let nsmMvpActNum: number | null = null;
@@ -645,29 +661,28 @@ function generateSection1(nsmData: any, ga4Funnel: any, quarter: QuarterInfo, cl
   }
 
   if (nsmMvpGoalNum !== null && nsmMvpActNum !== null) {
-    // STATE A — confirmed source via NSM Tracker
     admitsSource = "NSM Tracker";
     const pacing = nsmMvpActNum / nsmMvpGoalNum!;
+    const kpiLower = primaryKpiLabel.toLowerCase();
     if (pacing >= 0.9) {
       const target = fmtNum(Math.round(nsmMvpGoalNum! * 1.05));
-      admitsGoalDisplay = `${target} admits`;
+      admitsGoalDisplay = `${target} ${kpiLower}`;
       admitsShift = "+5%";
-      admitsReason = `Admits on pace (${nsmMvpActNum}/${nsmMvpGoalNum}). Slight increase is achievable given current trajectory.`;
+      admitsReason = `${primaryKpiLabel} on pace (${nsmMvpActNum}/${nsmMvpGoalNum}). Slight increase is achievable given current trajectory.`;
     } else if (pacing >= 0.7) {
       const target = fmtNum(nsmMvpGoalNum!);
-      admitsGoalDisplay = `${target} admits`;
+      admitsGoalDisplay = `${target} ${kpiLower}`;
       admitsShift = "Maintain";
-      admitsReason = `Admits tracking at ${nsmMvpActNum}/${nsmMvpGoalNum}. Maintaining goal while improving conversion paths.`;
+      admitsReason = `${primaryKpiLabel} tracking at ${nsmMvpActNum}/${nsmMvpGoalNum}. Maintaining goal while improving conversion paths.`;
     } else {
       const target = fmtNum(Math.round(nsmMvpGoalNum! * 0.95));
-      admitsGoalDisplay = `${target} admits`;
+      admitsGoalDisplay = `${target} ${kpiLower}`;
       admitsShift = "-5%";
-      admitsReason = `Admits behind pace (${nsmMvpActNum}/${nsmMvpGoalNum}). Modest adjustment reflects realistic expectations given current trajectory.`;
+      admitsReason = `${primaryKpiLabel} behind pace (${nsmMvpActNum}/${nsmMvpGoalNum}). Modest adjustment reflects realistic expectations given current trajectory.`;
     }
   }
-  // else: STATE B — source/value/shift remain as defaults above
 
-  console.log(`[Section1] Primary Goal=Admits, goal=${admitsGoalDisplay}, source=${admitsSource}, shift=${admitsShift}`);
+  console.log(`[Section1] Primary Goal=${primaryKpiLabel}, goal=${admitsGoalDisplay}, source=${admitsSource}, shift=${admitsShift}`);
 
   rows.push({
     goalType: "Primary Goal",
@@ -682,13 +697,13 @@ function generateSection1(nsmData: any, ga4Funnel: any, quarter: QuarterInfo, cl
   let callsGoal: string = ME;
   let callsShift = "Maintain";
   let callsReason = callTrackingProvider
-    ? `Qualified organic calls tracked via ${callTrackingProvider}. Calls serve as the primary operational proxy for admits until a direct admits source is confirmed.`
+    ? `Qualified organic calls tracked via ${callTrackingProvider}. Calls serve as the primary operational proxy for ${primaryKpiLabel.toLowerCase()} until a direct tracking source is confirmed.`
     : `${ME}: Call tracking provider not configured`;
 
   if (callTrackingSources.length > 0) {
     const totalCalls = callTrackingSources.reduce((s, r) => s + r.calls, 0);
     callsGoal = `${fmtNum(totalCalls)} tracked calls (QTD)`;
-    callsReason = `${fmtNum(totalCalls)} organic calls tracked via ${callTrackingProvider ?? "call tracking"} this quarter. Calls are the primary measurable operational proxy for admits.`;
+    callsReason = `${fmtNum(totalCalls)} organic calls tracked via ${callTrackingProvider ?? "call tracking"} this quarter. Calls are the primary measurable operational proxy for ${primaryKpiLabel.toLowerCase()}.`;
   }
 
   console.log(`[Section1] Secondary Goal=Calls, source=${callsSource}, shift=${callsShift}`);
@@ -767,10 +782,9 @@ const TRACKING_GAP_PHRASES = [
 ];
 
 const ADMIT_CONNECTION_DEFINITIONS: Record<string, string> = {
-  "Direct": "Service/admissions/VOB/contact pages or clearly treatment-intent traffic likely closest to conversion",
-  "Assisted": "Educational, branded, or mid-journey traffic that supports later conversion but is not a direct admit action",
-  "Informational": "Awareness-stage traffic with weak commercial/admissions intent",
-  "Trust / Evaluation": "Pages used to evaluate credibility before conversion, such as team, reviews, accreditations, about, outcomes",
+  "High": "Service/admissions/VOB/contact pages or clearly treatment-intent traffic likely closest to conversion",
+  "Medium": "Educational, branded, trust/evaluation, or mid-journey traffic that supports later conversion but is not a direct admit action",
+  "Low": "Awareness-stage traffic with weak commercial/admissions intent",
 };
 
 function generateSection2(
@@ -947,7 +961,7 @@ function generateSection2(
       topConvertingSources.push({
         source,
         whatsConverting: `${fmtNum(data.conversions)} conversions across ${data.pages.length} page${data.pages.length !== 1 ? "s" : ""}`,
-        notes: classifyAdmitConnection(source, data.conversions, totalGa4Conversions) === "Direct"
+        notes: classifyAdmitConnection(source, data.conversions, totalGa4Conversions) === "High"
           ? "Directly tied to admission pathway"
           : "Supports conversion through content/awareness",
         dataSource: "GA4",
@@ -994,7 +1008,7 @@ function generateSection2(
       topConvertingSources.push({
         source: pageType,
         whatsConverting: `${fmtNum(data.calls)} calls from ${data.pages} page${data.pages !== 1 ? "s" : ""} (CallRail)`,
-        notes: classifyAdmitConnection(pageType, data.calls, callLandingPages.reduce((s, r) => s + r.calls, 0)) === "Direct"
+        notes: classifyAdmitConnection(pageType, data.calls, callLandingPages.reduce((s, r) => s + r.calls, 0)) === "High"
           ? "Directly tied to admission pathway"
           : "Supports conversion through content/awareness",
         dataSource: "CallRail",
@@ -1013,7 +1027,7 @@ function generateSection2(
       topConvertingSources.push({
         source: pt,
         whatsConverting: `${cnt} configured priority page${cnt !== 1 ? "s" : ""} (no tracking data)`,
-        notes: classifyAdmitConnection(pt, 0, 0) === "Direct"
+        notes: classifyAdmitConnection(pt, 0, 0) === "High"
           ? "Directly tied to admission pathway"
           : "Supports conversion through content/awareness",
         dataSource: "Manual entry needed",
@@ -1034,7 +1048,7 @@ function generateSection2(
   const allNotes = [...topConvertingPages.map(p => p.notes), ...topConvertingSources.map(s => s.notes)].join(" ").toLowerCase();
   const hasGaps = TRACKING_GAP_PHRASES.some(phrase => allNotes.includes(phrase));
   const trackingDisclaimer = hasGaps
-    ? "Due to missing tracking data, connection to admits is inferred from page intent and journey position."
+    ? "Due to missing tracking data, connection to admits is inferred from page intent and journey position. Confidence level may be lower than reported."
     : undefined;
 
   return { topConvertingPages, topConvertingSources, trackingDisclaimer };
@@ -1102,15 +1116,15 @@ function buildConvertingPageNote(internalType: string, dataSource: string, conve
   }
 
   if (isSF) {
-    if (internalType === "Contact / Admissions") return "Priority admissions page confirmed in site crawl — no direct conversion tracking detected yet. Adding form and call tracking here would directly validate admit attribution.";
-    if (internalType === "Verify Insurance") return "Priority VOB/insurance page confirmed in site crawl — highest-value conversion target on the site. Event tracking here would directly measure admissions pipeline activity.";
+    if (internalType === "Contact / Admissions") return "Priority admissions page confirmed in site crawl — no direct conversion tracking detected yet. Adding contact form submit tracking here would directly validate admit attribution.";
+    if (internalType === "Verify Insurance") return "Priority VOB/insurance page confirmed in site crawl — highest-value conversion target on the site. Adding Verify Insurance / VOB form submit tracking here would directly measure admissions pipeline activity.";
     if (internalType === "Detox" || internalType === "Residential / Inpatient" || internalType === "PHP / IOP" || internalType === "Service Page") return "Priority service page confirmed in site crawl — high-intent organic candidate. Track user engagement and exits to identify friction in the admissions path.";
     return "Strategic page confirmed in site crawl — conversion tracking needed to validate admit contribution.";
   }
 
   if (isGSC) {
-    if (internalType === "Verify Insurance") return "Insurance page with organic visibility — add form tracking to confirm direct admit contribution.";
-    if (internalType === "Contact / Admissions") return "Contact page receiving organic traffic — verify form tracking is active to capture admission-driving events.";
+    if (internalType === "Verify Insurance") return "Insurance page with organic visibility — add Verify Insurance / VOB form submit tracking to confirm direct admit contribution.";
+    if (internalType === "Contact / Admissions") return "Contact page receiving organic traffic — verify contact form submit tracking is active to capture admission-driving events.";
     if (internalType === "Homepage") return "Homepage is the top organic entry point — brand and direct traffic dominate here; validate quality of organic sessions reaching admissions.";
     if (internalType === "Service Page" || ["Detox", "Residential / Inpatient", "PHP / IOP", "Outpatient", "Dual Diagnosis", "Therapies"].includes(internalType)) return "High-visibility service page with likely support value — direct conversion attribution is limited; add call or form tracking to confirm.";
     return "High-visibility page with likely support value, but direct conversion attribution is limited. Add event tracking to validate whether this page contributes to admits.";
@@ -1127,7 +1141,7 @@ function classifyTrafficPageConnection(pageType: string, url: string): string {
     case "Detox":
     case "Residential / Inpatient":
     case "PHP / IOP":
-      return "Direct";
+      return "High";
     case "Substance-Specific":
     case "Conditions":
     case "Dual Diagnosis":
@@ -1137,15 +1151,14 @@ function classifyTrafficPageConnection(pageType: string, url: string): string {
     case "Location":
     case "Aftercare / Alumni":
     case "Homepage":
-      return "Assisted";
     case "About / Team":
-      return "Trust / Evaluation";
+      return "Medium";
     case "Blog / Resource":
-      return "Informational";
+      return "Low";
     default:
-      if (/meet|\/team|\/staff|\/about|\/who-we-are|\/leadership/.test(path)) return "Trust / Evaluation";
-      if (/\/review|\/testimonial/.test(path)) return "Trust / Evaluation";
-      return "Informational";
+      if (/meet|\/team|\/staff|\/about|\/who-we-are|\/leadership/.test(path)) return "Medium";
+      if (/\/review|\/testimonial/.test(path)) return "Medium";
+      return "Low";
   }
 }
 
@@ -1242,9 +1255,9 @@ function generateSection3(
       const clickShare = totalClicks > 0 ? (ts.totalClicks / totalClicks * 100).toFixed(0) : "—";
       if (ts.topic === "Branded Navigation") {
         insight = `${clickShare}% of clicks are branded — ${ts.totalClicks > totalClicks * 0.5 ? "heavy reliance on brand traffic" : "healthy brand presence"}`;
-      } else if (connection === "Direct") {
+      } else if (connection === "High") {
         insight = `${clickShare}% of clicks. High-intent service traffic — directly tied to admissions.`;
-      } else if (connection === "Assisted") {
+      } else if (connection === "Medium") {
         insight = `${clickShare}% of clicks. Supporting traffic that assists conversion pathway.`;
       } else {
         insight = `${clickShare}% of clicks. Low admit connection — mostly informational.`;
@@ -1675,7 +1688,7 @@ function generateSection6(
       priority: 1,
       initiative: "Tracking & Attribution Setup",
       tier: "Tier 1",
-      action: "Implement or verify GA4 and call-tracking instrumentation on key admissions-path pages, starting with Contact, Verify Insurance, and highest-intent service pages.",
+      action: "Implement or verify GA4 and call-tracking instrumentation on key admissions-path pages — track contact form submits separately from Verify Insurance / VOB form submits, starting with Contact, Verify Insurance, and highest-intent service pages.",
       reason: "Reporting confidence is limited where conversion tracking is missing. Instrumentation must be in place before page-level admit connection can be quantified reliably.",
       source: "Multi-source",
     });
@@ -1755,13 +1768,13 @@ function generateSection6(
   }
 
   const unclearTrafficPages = section3.topTrafficPages.filter(p =>
-    p.connectionToAdmits === "Informational" || p.connectionToAdmits === "Trust / Evaluation"
+    p.connectionToAdmits === "Low" || p.connectionToAdmits === "Medium"
   );
   const topUnclearPage = unclearTrafficPages[0];
   const goalBehind = section1.rows.some(r => r.goalShift === "-5%");
   const hasMissingH1s = tierInput.missingH1s > 10;
   const hasThinPages = tierInput.thinPages > 15;
-  const topTrafficTopic = section3.topTrafficTopics.find(t => t.connectionToAdmits === "Unclear" || t.connectionToAdmits === "Assisted");
+  const topTrafficTopic = section3.topTrafficTopics.find(t => t.connectionToAdmits === "Low" || t.connectionToAdmits === "Medium");
   const thinPagesNote = hasThinPages ? ` (${tierInput.thinPages} thin pages detected in crawl)` : "";
 
   const evidenceFillers: Array<{ initiative: string; tier: string; action: string; reason: string; condition: boolean; source: string }> = [
@@ -1886,7 +1899,7 @@ function generateSection7(section6: Section6Priorities, section5: Section5Diagno
   const metricMap: Record<string, TrackingRow> = {
     "Tracking & Attribution Setup": {
       focusArea: "Admissions Conversions",
-      metric: "VOB submissions + qualified organic calls",
+      metric: "Verify Insurance / VOB form submits + contact form submits + qualified organic calls",
       source: "GA4 / Call Tracking",
       status: ga4Active && callActive ? "Needs Verification" : "Missing Setup",
       whyItMatters: "Directly measures admission-driving actions from organic traffic",
@@ -1900,7 +1913,7 @@ function generateSection7(section6: Section6Priorities, section5: Section5Diagno
     },
     "Admissions Pathway Clarity": {
       focusArea: "Admissions Conversions",
-      metric: "VOB submissions + qualified organic calls",
+      metric: "Verify Insurance / VOB form submits + contact form submits + qualified organic calls",
       source: "GA4 + Call Tracking",
       status: ga4Active && callActive ? "Live" : "Missing Setup",
       whyItMatters: "Directly measures admission-driving actions from organic traffic",

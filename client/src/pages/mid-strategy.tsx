@@ -29,6 +29,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { PptxPreview } from "@/components/report-preview/pptx-preview";
 import type { Client } from "@shared/schema";
+import { CLIENT_SENTIMENT_OPTIONS } from "@shared/schema";
 import { useReportSave } from "@/hooks/useReportSave";
 import { SaveStatusIndicator } from "@/components/reports/SaveStatusIndicator";
 import { ReportSaveSelector } from "@/components/reports/ReportSaveSelector";
@@ -43,18 +44,23 @@ export default function MidStrategyPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [currentCrawlId, setCurrentCrawlId] = useState<number | null>(null);
   const [comparisonCrawlId, setComparisonCrawlId] = useState<number | null>(null);
-  const [showAmInputs, setShowAmInputs] = useState(false);
+  const [showAdditionalInputs, setShowAdditionalInputs] = useState(false);
   const [workbookBuilt, setWorkbookBuilt] = useState(false);
   const [buildStep, setBuildStep] = useState<"idle" | "building" | "built">("idle");
 
+  const [clientSentiment, setClientSentiment] = useState("");
+  const [amThoughts, setAmThoughts] = useState("");
+  const [priorityChecks, setPriorityChecks] = useState("");
+  const [clientNotes, setClientNotes] = useState("");
+
   const [amAccountFeeling, setAmAccountFeeling] = useState("");
-  const [amHypothesis, setAmHypothesis] = useState("");
-  const [amAuditNotes, setAmAuditNotes] = useState("");
   const [amContextAnomalies, setAmContextAnomalies] = useState("");
   const [amLeadershipNote, setAmLeadershipNote] = useState("");
   const [amFocusNext60Days, setAmFocusNext60Days] = useState("");
   const [amSalesAdmissions, setAmSalesAdmissions] = useState("");
   const [amClientDependency, setAmClientDependency] = useState("");
+
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
   const { data: clients = [] } = useQuery<Client[]>({ queryKey: ["/api/clients"] });
   const clientName = (clients as Client[]).find(c => String(c.id) === clientId)?.name ?? "";
@@ -71,9 +77,11 @@ export default function MidStrategyPage() {
 
   function getAmInputs() {
     return {
+      clientSentiment,
+      amThoughts,
+      priorityChecks,
+      clientNotes: clientNotes || undefined,
       accountFeeling: amAccountFeeling || undefined,
-      hypothesis: amHypothesis || undefined,
-      auditNotes: amAuditNotes || undefined,
       contextAnomalies: amContextAnomalies || undefined,
       leadershipNote: amLeadershipNote || undefined,
       focusNext60Days: amFocusNext60Days || undefined,
@@ -93,9 +101,21 @@ export default function MidStrategyPage() {
     };
   }
 
+  function validateAmInputs(): boolean {
+    const errors: Record<string, string> = {};
+    if (!clientSentiment) errors.clientSentiment = "Client Sentiment is required";
+    if (!amThoughts.trim()) errors.amThoughts = "AM's Thoughts is required";
+    if (!priorityChecks.trim()) errors.priorityChecks = "Priority Checks is required";
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  }
+
+  const requiredFieldsMissing = !clientSentiment || !amThoughts.trim() || !priorityChecks.trim();
+
   const generateMut = useMutation({
     mutationFn: async () => {
       if (!clientId) throw new Error("Select a client first");
+      if (!validateAmInputs()) throw new Error("Please fill in all required AM Inputs fields");
       setBuildStep("building");
       const res = await apiRequest("POST", "/api/reports/mid-strategy/generate", {
         clientId: Number(clientId),
@@ -288,25 +308,84 @@ export default function MidStrategyPage() {
 
           <Separator />
 
-          {/* AM Inputs */}
+          {/* AM Inputs — Required */}
+          <div className="space-y-3">
+            <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">AM Inputs</Label>
+
+            <div className="space-y-1">
+              <Label className="text-[11px] text-muted-foreground">
+                Client Sentiment <span className="text-destructive">*</span>
+              </Label>
+              <Select value={clientSentiment} onValueChange={(v) => { setClientSentiment(v); setValidationErrors(prev => { const n = {...prev}; delete n.clientSentiment; return n; }); }}>
+                <SelectTrigger data-testid="select-client-sentiment" className={validationErrors.clientSentiment ? "border-destructive" : ""}>
+                  <SelectValue placeholder="Select sentiment…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {CLIENT_SENTIMENT_OPTIONS.map(opt => (
+                    <SelectItem key={opt} value={opt} data-testid={`option-sentiment-${opt.toLowerCase()}`}>{opt}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {validationErrors.clientSentiment && <p className="text-[10px] text-destructive" data-testid="error-client-sentiment">{validationErrors.clientSentiment}</p>}
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-[11px] text-muted-foreground">
+                AM's Thoughts <span className="text-destructive">*</span>
+              </Label>
+              <Textarea
+                placeholder="Your hypothesis, focus areas, strategy thoughts…"
+                value={amThoughts}
+                onChange={e => { setAmThoughts(e.target.value); setValidationErrors(prev => { const n = {...prev}; delete n.amThoughts; return n; }); }}
+                className={`text-xs resize-none h-14 ${validationErrors.amThoughts ? "border-destructive" : ""}`}
+                data-testid="input-am-thoughts"
+              />
+              {validationErrors.amThoughts && <p className="text-[10px] text-destructive" data-testid="error-am-thoughts">{validationErrors.amThoughts}</p>}
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-[11px] text-muted-foreground">
+                Priority Checks <span className="text-destructive">*</span>
+              </Label>
+              <Textarea
+                placeholder="Site observations, audit findings, priorities…"
+                value={priorityChecks}
+                onChange={e => { setPriorityChecks(e.target.value); setValidationErrors(prev => { const n = {...prev}; delete n.priorityChecks; return n; }); }}
+                className={`text-xs resize-none h-14 ${validationErrors.priorityChecks ? "border-destructive" : ""}`}
+                data-testid="input-priority-checks"
+              />
+              {validationErrors.priorityChecks && <p className="text-[10px] text-destructive" data-testid="error-priority-checks">{validationErrors.priorityChecks}</p>}
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-[11px] text-muted-foreground">Client Notes</Label>
+              <Textarea
+                placeholder="Optional notes from or about the client…"
+                value={clientNotes}
+                onChange={e => setClientNotes(e.target.value)}
+                className="text-xs resize-none h-14"
+                data-testid="input-client-notes"
+              />
+            </div>
+          </div>
+
+          {/* Additional Optional Inputs */}
           <div className="space-y-1.5">
             <button
               className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground w-full hover:text-foreground transition-colors"
-              onClick={() => setShowAmInputs(v => !v)}
-              data-testid="toggle-am-inputs-mid"
+              onClick={() => setShowAdditionalInputs(v => !v)}
+              data-testid="toggle-additional-inputs-mid"
             >
-              {showAmInputs ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-              AM Context Inputs
+              {showAdditionalInputs ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+              Additional Inputs (Optional)
             </button>
-            {showAmInputs && (
+            {showAdditionalInputs && (
               <div className="space-y-3 pt-1">
                 {[
                   { label: "How does the account feel so far?", value: amAccountFeeling, set: setAmAccountFeeling, testId: "input-am-feeling" },
-                  { label: "AM hypothesis / suspected focus", value: amHypothesis, set: setAmHypothesis, testId: "input-am-hypothesis" },
-                  { label: "Manual audit notes", value: amAuditNotes, set: setAmAuditNotes, testId: "input-am-audit" },
                   { label: "Key context / anomalies", value: amContextAnomalies, set: setAmContextAnomalies, testId: "input-am-context" },
                   { label: "What should leadership know?", value: amLeadershipNote, set: setAmLeadershipNote, testId: "input-am-leadership" },
-                  { label: "Focus over next 30–60 days", value: amFocusNext60Days, set: setAmFocusNext60Days, testId: "input-am-focus" },
+                  { label: "Focus over next 30-60 days", value: amFocusNext60Days, set: setAmFocusNext60Days, testId: "input-am-focus" },
                   { label: "Sales / admissions context", value: amSalesAdmissions, set: setAmSalesAdmissions, testId: "input-am-sales" },
                   { label: "Client dependency / approval notes", value: amClientDependency, set: setAmClientDependency, testId: "input-am-dependency" },
                 ].map(({ label, value, set, testId }) => (
@@ -377,7 +456,7 @@ export default function MidStrategyPage() {
             <Button
               className="w-full"
               onClick={() => generateMut.mutate()}
-              disabled={!clientId || generateMut.isPending}
+              disabled={!clientId || generateMut.isPending || requiredFieldsMissing}
               data-testid="button-generate-mid-strategy"
             >
               {generateMut.isPending ? (
@@ -392,6 +471,12 @@ export default function MidStrategyPage() {
                 </>
               )}
             </Button>
+
+            {requiredFieldsMissing && clientId && (
+              <p className="text-[10px] text-destructive text-center" data-testid="text-validation-warning">
+                Fill in all required AM Inputs to generate
+              </p>
+            )}
 
             {report && (
               <>

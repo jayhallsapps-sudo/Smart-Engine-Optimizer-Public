@@ -184,6 +184,27 @@ export const insertSavedReportSchema = createInsertSchema(savedReports).omit({
 export type SavedReport = typeof savedReports.$inferSelect;
 export type InsertSavedReport = z.infer<typeof insertSavedReportSchema>;
 
+export const CLIENT_SENTIMENT_OPTIONS = ["Happy", "Neutral", "Concerned", "Frustrated"] as const;
+export type ClientSentiment = typeof CLIENT_SENTIMENT_OPTIONS[number];
+
+export const amInputsSchema = z.object({
+  clientSentiment: z.enum(CLIENT_SENTIMENT_OPTIONS, { required_error: "Client Sentiment is required" }),
+  amThoughts: z.string().min(1, "AM's Thoughts is required"),
+  priorityChecks: z.string().min(1, "Priority Checks is required"),
+  clientNotes: z.string().optional().default(""),
+});
+
+export type AmInputs = z.infer<typeof amInputsSchema>;
+
+export function migrateLegacyAmInputs(raw: Record<string, any>): Partial<AmInputs> {
+  return {
+    clientSentiment: raw.clientSentiment ?? raw.sentiment ?? undefined,
+    amThoughts: raw.amThoughts ?? raw.hypothesis ?? raw.amHypothesis ?? "",
+    priorityChecks: raw.priorityChecks ?? raw.auditNotes ?? raw.manualAuditNotes ?? "",
+    clientNotes: raw.clientNotes ?? "",
+  };
+}
+
 export const insertApiCredentialSchema = createInsertSchema(apiCredentials).omit({
   id: true,
   createdAt: true,

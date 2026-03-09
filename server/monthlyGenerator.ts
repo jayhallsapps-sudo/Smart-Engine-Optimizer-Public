@@ -8,12 +8,24 @@ import { fetchAsanaWorkLog, asanaSectionToCategory, groupAsanaTasks } from "./as
 import type { Slide } from "../client/src/components/report-preview/pptx-preview";
 
 export interface MonthlyAmInputs {
+  clientSentiment?: string;
+  amThoughts?: string;
+  priorityChecks?: string;
+  clientNotes?: string;
   progressFeeling?: string;
   hypothesis?: string;
   auditNotes?: string;
   contextAnomalies?: string;
   leadershipNote?: string;
   focusNextMonth?: string;
+}
+
+function normalizeMonthlyAmInputs(raw: MonthlyAmInputs): MonthlyAmInputs {
+  return {
+    ...raw,
+    amThoughts: raw.amThoughts || raw.hypothesis || "",
+    priorityChecks: raw.priorityChecks || raw.auditNotes || "",
+  };
 }
 
 export interface MonthlyReportJson {
@@ -80,7 +92,7 @@ export async function generateMonthly(input: {
 
   const label = monthLabel(input.month, input.year);
   const now = new Date();
-  const am = input.amInputs ?? {};
+  const am = normalizeMonthlyAmInputs(input.amInputs ?? {});
 
   // True calendar month date range — analysis window
   const monthPad = String(input.month).padStart(2, "0");
@@ -533,20 +545,18 @@ export async function generateMonthly(input: {
     );
   }
 
-  // Inject auditNotes as a concise technical note if provided
-  if (am.auditNotes?.trim()) {
-    const note = am.auditNotes.trim();
+  if (am.priorityChecks?.trim()) {
+    const note = am.priorityChecks.trim();
     const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
     const end = (s: string) => /[.!?]$/.test(s) ? s : `${s}.`;
     nextMonthBullets.push(`Technical note: ${end(cap(note))}`);
   }
 
-  // Add AM context bullets if provided
   if (am.leadershipNote) {
     nextMonthBullets.push(`Leadership note: ${am.leadershipNote}`);
   }
-  if (am.hypothesis) {
-    nextMonthBullets.push(`Strategic focus: ${am.hypothesis}`);
+  if (am.amThoughts?.trim()) {
+    nextMonthBullets.push(`Strategic focus: ${am.amThoughts}`);
   }
 
   const nextMonthName = new Date(input.year, input.month, 1).toLocaleDateString("en-US", {
@@ -560,6 +570,22 @@ export async function generateMonthly(input: {
     title: `Next Month Priorities — ${nextMonthName}`,
     bullets: nextMonthBullets.slice(0, 8),
   });
+
+  const amInputsBullets: string[] = [];
+  if (am.clientSentiment) amInputsBullets.push(`Client Sentiment: ${am.clientSentiment}`);
+  if (am.amThoughts?.trim()) amInputsBullets.push(`AM's Thoughts: ${am.amThoughts.trim()}`);
+  if (am.priorityChecks?.trim()) amInputsBullets.push(`Priority Checks: ${am.priorityChecks.trim()}`);
+  if (am.clientNotes?.trim()) amInputsBullets.push(`Client Notes: ${am.clientNotes.trim()}`);
+
+  if (amInputsBullets.length > 0) {
+    slides.push({
+      id: "am_inputs",
+      type: "bullets",
+      title: "AM Inputs",
+      subtitle: "Account Manager Context & Priorities",
+      bullets: amInputsBullets,
+    });
+  }
 
   return {
     report_title: `SEO Monthly Report — ${label}`,

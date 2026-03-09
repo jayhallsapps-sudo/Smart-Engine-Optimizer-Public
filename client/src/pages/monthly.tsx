@@ -25,6 +25,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { PptxPreview } from "@/components/report-preview/pptx-preview";
 import type { Client, SavedReport } from "@shared/schema";
+import { CLIENT_SENTIMENT_OPTIONS } from "@shared/schema";
 import { useReportSave } from "@/hooks/useReportSave";
 import { SaveStatusIndicator } from "@/components/reports/SaveStatusIndicator";
 import { ReportSaveSelector } from "@/components/reports/ReportSaveSelector";
@@ -50,14 +51,19 @@ export default function MonthlyPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [currentCrawlId, setCurrentCrawlId] = useState<number | null>(null);
   const [comparisonCrawlId, setComparisonCrawlId] = useState<number | null>(null);
-  const [showAmInputs, setShowAmInputs] = useState(false);
+  const [showAdditionalInputs, setShowAdditionalInputs] = useState(false);
+
+  const [clientSentiment, setClientSentiment] = useState("");
+  const [amThoughts, setAmThoughts] = useState("");
+  const [priorityChecks, setPriorityChecks] = useState("");
+  const [clientNotes, setClientNotes] = useState("");
 
   const [amProgressFeeling, setAmProgressFeeling] = useState("");
-  const [amHypothesis, setAmHypothesis] = useState("");
-  const [amAuditNotes, setAmAuditNotes] = useState("");
   const [amContextAnomalies, setAmContextAnomalies] = useState("");
   const [amLeadershipNote, setAmLeadershipNote] = useState("");
   const [amFocusNextMonth, setAmFocusNextMonth] = useState("");
+
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
   const { data: clients = [] } = useQuery<Client[]>({ queryKey: ["/api/clients"] });
 
@@ -88,9 +94,21 @@ export default function MonthlyPage() {
     };
   }
 
+  function validateAmInputs(): boolean {
+    const errors: Record<string, string> = {};
+    if (!clientSentiment) errors.clientSentiment = "Client Sentiment is required";
+    if (!amThoughts.trim()) errors.amThoughts = "AM's Thoughts is required";
+    if (!priorityChecks.trim()) errors.priorityChecks = "Priority Checks is required";
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  }
+
+  const requiredFieldsMissing = !clientSentiment || !amThoughts.trim() || !priorityChecks.trim();
+
   const generateMut = useMutation({
     mutationFn: async () => {
       if (!clientId) throw new Error("Select a client first");
+      if (!validateAmInputs()) throw new Error("Please fill in all required AM Inputs fields");
       const res = await apiRequest("POST", "/api/reports/monthly/generate", {
         clientId: Number(clientId),
         month: Number(month),
@@ -99,9 +117,11 @@ export default function MonthlyPage() {
         currentCrawlAssetId: currentCrawlId ?? undefined,
         comparisonCrawlAssetId: comparisonCrawlId ?? undefined,
         amInputs: {
+          clientSentiment,
+          amThoughts,
+          priorityChecks,
+          clientNotes: clientNotes || undefined,
           progressFeeling: amProgressFeeling || undefined,
-          hypothesis: amHypothesis || undefined,
-          auditNotes: amAuditNotes || undefined,
           contextAnomalies: amContextAnomalies || undefined,
           leadershipNote: amLeadershipNote || undefined,
           focusNextMonth: amFocusNextMonth || undefined,
@@ -305,18 +325,79 @@ export default function MonthlyPage() {
 
           <Separator />
 
-          {/* AM Inputs */}
+          {/* AM Inputs — Required */}
+          <div className="space-y-3">
+            <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">AM Inputs</Label>
+
+            <div className="space-y-1">
+              <Label className="text-[11px] text-muted-foreground">
+                Client Sentiment <span className="text-destructive">*</span>
+              </Label>
+              <Select value={clientSentiment} onValueChange={(v) => { setClientSentiment(v); setValidationErrors(prev => { const n = {...prev}; delete n.clientSentiment; return n; }); }}>
+                <SelectTrigger data-testid="select-client-sentiment" className={validationErrors.clientSentiment ? "border-destructive" : ""}>
+                  <SelectValue placeholder="Select sentiment…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {CLIENT_SENTIMENT_OPTIONS.map(opt => (
+                    <SelectItem key={opt} value={opt} data-testid={`option-sentiment-${opt.toLowerCase()}`}>{opt}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {validationErrors.clientSentiment && <p className="text-[10px] text-destructive" data-testid="error-client-sentiment">{validationErrors.clientSentiment}</p>}
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-[11px] text-muted-foreground">
+                AM's Thoughts <span className="text-destructive">*</span>
+              </Label>
+              <Textarea
+                placeholder="Your hypothesis, focus areas, strategy thoughts…"
+                value={amThoughts}
+                onChange={e => { setAmThoughts(e.target.value); setValidationErrors(prev => { const n = {...prev}; delete n.amThoughts; return n; }); }}
+                className={`text-xs resize-none h-14 ${validationErrors.amThoughts ? "border-destructive" : ""}`}
+                data-testid="input-am-thoughts"
+              />
+              {validationErrors.amThoughts && <p className="text-[10px] text-destructive" data-testid="error-am-thoughts">{validationErrors.amThoughts}</p>}
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-[11px] text-muted-foreground">
+                Priority Checks <span className="text-destructive">*</span>
+              </Label>
+              <Textarea
+                placeholder="Site observations, audit findings, priorities…"
+                value={priorityChecks}
+                onChange={e => { setPriorityChecks(e.target.value); setValidationErrors(prev => { const n = {...prev}; delete n.priorityChecks; return n; }); }}
+                className={`text-xs resize-none h-14 ${validationErrors.priorityChecks ? "border-destructive" : ""}`}
+                data-testid="input-priority-checks"
+              />
+              {validationErrors.priorityChecks && <p className="text-[10px] text-destructive" data-testid="error-priority-checks">{validationErrors.priorityChecks}</p>}
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-[11px] text-muted-foreground">Client Notes</Label>
+              <Textarea
+                placeholder="Optional notes from or about the client…"
+                value={clientNotes}
+                onChange={e => setClientNotes(e.target.value)}
+                className="text-xs resize-none h-14"
+                data-testid="input-client-notes"
+              />
+            </div>
+          </div>
+
+          {/* Additional Optional Inputs */}
           <div>
             <button
               className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground w-full text-left hover:text-foreground transition-colors"
-              onClick={() => setShowAmInputs(v => !v)}
-              data-testid="toggle-am-inputs"
+              onClick={() => setShowAdditionalInputs(v => !v)}
+              data-testid="toggle-additional-inputs"
             >
-              {showAmInputs ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-              AM Inputs (Optional)
+              {showAdditionalInputs ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+              Additional Inputs (Optional)
             </button>
 
-            {showAmInputs && (
+            {showAdditionalInputs && (
               <div className="mt-3 space-y-3">
                 <div className="space-y-1">
                   <Label className="text-[11px] text-muted-foreground">SEO progress this month?</Label>
@@ -326,26 +407,6 @@ export default function MonthlyPage() {
                     onChange={e => setAmProgressFeeling(e.target.value)}
                     className="text-xs resize-none h-14"
                     data-testid="input-am-progress-feeling"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[11px] text-muted-foreground">AM hypothesis / focus</Label>
-                  <Textarea
-                    placeholder="Suspected focus or strategy…"
-                    value={amHypothesis}
-                    onChange={e => setAmHypothesis(e.target.value)}
-                    className="text-xs resize-none h-14"
-                    data-testid="input-am-hypothesis"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[11px] text-muted-foreground">Manual audit notes</Label>
-                  <Textarea
-                    placeholder="Site observations…"
-                    value={amAuditNotes}
-                    onChange={e => setAmAuditNotes(e.target.value)}
-                    className="text-xs resize-none h-14"
-                    data-testid="input-am-audit-notes"
                   />
                 </div>
                 <div className="space-y-1">
@@ -388,7 +449,7 @@ export default function MonthlyPage() {
           <Button
             className="w-full"
             onClick={() => generateMut.mutate()}
-            disabled={!clientId || generateMut.isPending}
+            disabled={!clientId || generateMut.isPending || requiredFieldsMissing}
             data-testid="btn-generate-report"
           >
             {generateMut.isPending ? (
@@ -399,6 +460,12 @@ export default function MonthlyPage() {
               "Generate Report"
             )}
           </Button>
+
+          {requiredFieldsMissing && clientId && (
+            <p className="text-[10px] text-destructive text-center" data-testid="text-validation-warning">
+              Fill in all required AM Inputs to generate
+            </p>
+          )}
 
           {report && (
             <div className="text-[10px] text-muted-foreground text-center">

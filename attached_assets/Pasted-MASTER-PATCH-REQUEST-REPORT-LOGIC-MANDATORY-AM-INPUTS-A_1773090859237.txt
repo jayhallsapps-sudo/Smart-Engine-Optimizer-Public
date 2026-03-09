@@ -1,0 +1,403 @@
+MASTER PATCH REQUEST — REPORT LOGIC + MANDATORY AM INPUTS
+APPLIES TO ALL REPORT TYPES, NOT JUST QBR PREP
+
+Scope:
+This patch is not limited to QBR Prep.
+It must apply across all current report types and any shared reporting infrastructure used by:
+- Bi-weekly
+- Monthly
+- QBR Prep
+- QBR Full
+- Mid-Strategy
+- any other report type using shared report creation, preview, print, DOCX/PDF export, or saved report schemas
+
+DO NOT TREAT THIS AS A NICE-TO-HAVE.
+AM INPUTS ARE NOW A REQUIRED PART OF THE REPORTING WORKFLOW.
+THE PURPOSE IS TO FORCE HUMAN THINKING INTO THE REPORT PROCESS INSTEAD OF ALLOWING THE SYSTEM TO AUTO-GENERATE EVERYTHING WITHOUT ACCOUNT-LEVEL JUDGMENT.
+
+NON-NEGOTIABLE RULES
+- Do not silently guess business KPI logic
+- Do not allow report generation/export to bypass required AM inputs
+- Do not implement this only in the UI; backend validation is required
+- Do not implement this only for QBR Prep; it must exist across all report types
+- Do not mark complete until all acceptance tests below pass
+
+==================================================
+P0 — BUSINESS KPI / NSM TRACKER LOGIC
+==================================================
+
+1) PRIMARY KPI MUST COME FROM THE NSM TRACKER, NOT FROM A GLOBAL HARD-CODED RULE
+Problem:
+The report cannot assume every client’s primary KPI is Admits.
+The primary business success metric is client-dependent and must come from the linked Google Sheet.
+
+Required behavior:
+- Read the client’s value from the quarter-specific NSM Tracker tab field/column:
+  "MVP NSM type"
+- That value determines the primary business KPI outside of sessions
+
+Examples of valid MVP NSM type values:
+- Admits
+- Viable VOB
+- VOBs
+- Organic + GMB + AI LLM Calls
+- any other approved tracker value actually present in the sheet
+
+Rules:
+- Do not globally hard-code Admits for every client
+- The report must be client-specific
+- Organic Sessions remains a traffic metric, not the primary KPI unless that is what the tracker dictates
+- Supporting metrics like Calls may still appear beneath the primary KPI where appropriate, but the main KPI must follow the tracker
+
+Implementation requirement:
+- Build a normalized mapper from "MVP NSM type" to the report’s Section 1 / KPI stack logic
+- Preserve the tracker’s intended business meaning
+- Normalize minor wording variations safely
+- Do not overwrite or reinterpret the tracker arbitrarily
+
+Acceptance tests:
+- If MVP NSM type = Admits, primary KPI = Admits
+- If MVP NSM type = Viable VOB, primary KPI = Viable VOB
+- If MVP NSM type = VOBs, primary KPI = VOBs
+- If MVP NSM type = Organic + GMB + AI LLM Calls, primary KPI = Organic + GMB + AI LLM Calls
+- Different clients can render different primary KPI logic from the same system
+
+2) QBR / QUARTERLY REPORTS MUST LOOK TO THE NEXT QUARTER’S NSM TRACKER TAB
+Problem:
+Quarterly review work is forward-looking.
+The app must not always pull from the current quarter’s tracker tab.
+
+Required behavior:
+- Detect the current quarter based on the report date
+- For QBR Prep and any forward-looking quarterly review logic, load the NEXT quarter’s NSM Tracker tab
+- This must handle year rollover correctly
+
+Quarter mapping:
+- Jan–Mar -> use Q2 of same year
+- Apr–Jun -> use Q3 of same year
+- Jul–Sep -> use Q4 of same year
+- Oct–Dec -> use Q1 of next year
+
+Examples:
+- June 2026 report -> NSM Tracker Q3 2026
+- December 2026 report -> NSM Tracker Q1 2027
+- February 2027 report -> NSM Tracker Q2 2027
+
+Implementation requirement:
+- Prefer explicit report date stored in the report payload
+- Fall back to system/export date only if no report date exists
+- Build the expected tab name dynamically:
+  "NSM Tracker QX YYYY"
+
+Acceptance tests:
+- QBR Prep generated in Q2 2026 pulls NSM Tracker Q3 2026
+- QBR Prep generated in Q4 2026 pulls NSM Tracker Q1 2027
+- The system must not remain on the current quarter tab for forward-looking quarterly review logic
+
+3) FAIL LOUDLY IF THE REQUIRED NSM TRACKER DATA IS MISSING
+Problem:
+Silent fallback causes fake KPI logic.
+
+Required behavior:
+- If the expected quarter tab cannot be found, raise a visible internal warning
+- If the client row is found but "MVP NSM type" is blank or missing, raise a visible internal warning
+- Do not silently substitute Admits or any other KPI
+
+Approved warnings:
+- "NSM Tracker tab not found: NSM Tracker QX YYYY"
+- "MVP NSM type missing for client in NSM Tracker"
+
+Acceptance tests:
+- Missing tab -> visible internal warning
+- Missing MVP NSM type -> visible internal warning
+- No silent fallback to a guessed primary KPI
+
+==================================================
+P0 — MANDATORY AM INPUTS ACROSS ALL REPORTS
+==================================================
+
+4) ADD A REQUIRED "AM INPUTS" SECTION TO ALL REPORT TYPES
+Problem:
+AM inputs currently do not force human review strongly enough.
+The system must require the AM to think through the account instead of letting AI do all the work.
+
+Required behavior:
+Every report type must include an "AM Inputs" section with the following fields:
+
+REQUIRED FIELDS:
+- Client Sentiment
+- AM’s Thoughts
+- Priority Checks
+
+OPTIONAL FIELD:
+- Client Notes
+
+Field definitions:
+A) Client Sentiment
+- Required
+- Captures the AM’s current read on the client/account relationship or client posture
+- Implementation may be select, text, or select + notes, but it must be required, saved, editable, and rendered in outputs
+
+B) AM’s Thoughts
+- Required
+- This replaces any prior "Hypothesis", "Focus Area", or similar label
+- Label must be exactly: "AM’s Thoughts"
+- Multi-line field
+- Purpose: what the AM actually thinks about the account, site, performance, UX, priorities, concerns, or opportunities
+- Freeform by design
+
+C) Priority Checks
+- Required
+- This replaces any prior "Manual Audit Notes" label
+- Label must be exactly: "Priority Checks"
+- Multi-line field
+- Purpose: items the AM wants to make sure they explicitly check, even if the normal automated workflow would not force it
+
+D) Client Notes
+- Optional
+- Multi-line field
+- Used for client-specific conditions, constraints, account nuances, special deliverables, or special content requirements
+- Example use case:
+  Iris Healing requires insurance pages for every insurance provider they service
+
+Required implementation:
+- Add this AM Inputs section to all report creation/edit flows
+- Add it to backend schema/types
+- Add it to saved report payloads
+- Add it to preview
+- Add it to print
+- Add it to DOCX/PDF export
+- Add it to any API validation layer used when saving/generating reports
+
+Acceptance tests:
+- Every report type includes the AM Inputs section
+- Client Sentiment is present and required
+- AM’s Thoughts is present and required
+- Priority Checks is present and required
+- Client Notes is present and optional
+- Values persist correctly across save/reload/edit/export
+- Labels render exactly as specified
+
+5) MAKE REQUIRED AM INPUTS ACTUALLY BLOCK REPORT GENERATION / EXPORT
+Problem:
+A required field that can be skipped in practice is not actually required.
+
+Required behavior:
+A report must not be considered ready to generate/export if any required AM Inputs field is missing.
+
+Blocking fields:
+- Client Sentiment
+- AM’s Thoughts
+- Priority Checks
+
+Rules:
+- Frontend validation must block submit/generate/export
+- Backend validation must also block save/generate/export if required fields are missing
+- Do not rely on frontend-only enforcement
+- Client Notes must never block generation/export
+
+Approved error behavior:
+- Clear validation message at field level and/or form level
+- Example:
+  - "Client Sentiment is required"
+  - "AM’s Thoughts is required"
+  - "Priority Checks is required"
+
+Acceptance tests:
+- Cannot generate report with missing Client Sentiment
+- Cannot generate report with missing AM’s Thoughts
+- Cannot generate report with missing Priority Checks
+- Can generate report with Client Notes blank
+- Same behavior must hold in preview/export/save pathways, not just initial form submit
+
+6) RENAME LEGACY FIELDS EVERYWHERE THEY EXIST
+Problem:
+Old labels will create confusion if only partially renamed.
+
+Required behavior:
+- "Hypothesis", "Focus Area", or similar old AM-judgment fields must be migrated/replaced with:
+  "AM’s Thoughts"
+- "Manual Audit Notes" must be migrated/replaced with:
+  "Priority Checks"
+
+Implementation requirement:
+- Update UI labels
+- Update schema/type names as needed
+- Update preview/print labels
+- Update export labels
+- Migrate legacy saved data where possible
+- Preserve existing data by mapping old field content into the new field names
+
+Acceptance tests:
+- No old "Manual Audit Notes" label appears in current reports
+- No old "Hypothesis" or "Focus Area" label appears where AM’s Thoughts is intended
+- Legacy data still shows up under the new labels after migration
+
+==================================================
+P0 — QBR PREP LOGIC TO KEEP FROM THE PREVIOUS PATCHES
+==================================================
+
+7) KEEP THE ALREADY-APPROVED LOGIC FOR QBR PREP
+Do not regress the following:
+
+- Tracking gaps in the conversions section must auto-inject a "Tracking & Attribution Setup" initiative into the next-steps section
+- Mandatory tracking for trustworthy reporting on key pages is:
+  - phone click
+  - form submit
+- Contact form submit and Verify Insurance form submit should be treated as distinct where possible
+- If a page exists in the crawl, the narrative must not call it "missing"
+- Source/channel normalization must not call paid calls "organic calls"
+- Final export sanitization must still be enforced
+- Section 7/source legend/status logic must remain consistent with actual data usage
+- Do not fabricate admits from generic call counts unless the call tracking data explicitly supports admit disposition
+- QBR Prep should remain internal-facing but logically rigorous
+
+==================================================
+P0 — OLIVIA ALIGNMENT RULES
+==================================================
+
+8) LOCK SOURCE HIERARCHY BY DATA TYPE
+Required behavior:
+When sources conflict, use the following source-of-truth hierarchy by metric type:
+
+- Admits = client call tracking software, only when manually marked as admit
+- Calls = client call tracking software
+- On-site behavior / conversion interpretation = GA4
+- Search queries / clicks / impressions = GSC
+- Crawl / page existence / architecture = Screaming Frog
+- NSM setup / KPI target selection = NSM Tracker sheet
+
+Rules:
+- Do not let GA4 override GSC for search query data
+- Do not let GA4 override call tracking for calls or admits
+- Do not let narrative logic override crawl-confirmed page existence
+- If conflict exists, resolve it according to metric type, not with one blanket source rule
+
+9) MAKE CONTACT VS VERIFY INSURANCE FORM TRACKING DISTINCT
+Required behavior:
+Where form submit tracking exists or is being recommended, the system should distinguish between:
+- Contact form submits
+- Verify Insurance / VOB form submits
+
+Rules:
+- Do not lump all form submits into one generic conversion bucket if the page intent differs
+- If separate tracking is not confirmed, flag it as a reporting limitation and next-step action
+
+10) UPDATE "CONNECTION TO ADMITS" LOGIC
+Required behavior:
+Treat "Connection to Admits" as an assessment of how well organic traffic drivers convert users into admits.
+
+Rules:
+- Prefer a simple assessment framework such as High / Medium / Low
+  OR another clearly equivalent scoring system
+- Do not present older labels like Direct / Assisted / Informational / Trust Evaluation as if they are fixed truth unless explicitly approved
+- If inference is being used because tracking is incomplete, say so clearly
+
+11) KEEP TOPIC BUCKETS FLEXIBLE BY CLIENT
+Required behavior:
+Topic buckets must remain client-specific and service-specific.
+
+Rules:
+- Do not force all behavioral health clients into one rigid universal bucket taxonomy
+- Bucket naming should reflect the client’s actual services, programs, and search themes
+- Grouping should help the ADR discuss strategic themes, not just keyword rankings
+
+12) TIE PAGE DIAGNOSIS WORDING TO PURPOSE + TIER LOGIC
+Required behavior:
+If a page is weak, the narrative wording must reflect why it is weak and what role it plays.
+
+Rules:
+- If page exists but is buried -> "exists but lacks prominence" or equivalent
+- If page exists but is hard to reach -> "not clearly accessible"
+- If page exists but lacks UX/trust/conversion readiness -> "not conversion-ready"
+- Only use "missing" when the page truly does not exist in crawl data
+- Diagnosis wording should align with the existing tier framework
+
+13) SUPPORT CONSULTATIVE SELLING IN QBR PREP
+Required behavior:
+QBR Prep should be able to support upsell / cross-sell identification as part of internal strategic prep.
+
+Rules:
+- Do not force this into every visible section if it creates clutter
+- But preserve space in the reporting logic for consultative opportunities tied to account needs, growth gaps, or missing deliverables
+- This should support the AM / ADR in preparing for QBR discussion, not just performance reporting
+
+==================================================
+P1 — IMPLEMENTATION NOTES FOR AM INPUTS
+==================================================
+
+14) AM INPUTS MUST BE PROMINENT, NOT BURIED
+Required behavior:
+- AM Inputs should appear in a clearly visible report setup section
+- In rendered report outputs, AM Inputs should appear early enough that they shape interpretation rather than being buried at the end
+- Do not tuck them into a hidden advanced settings panel
+
+15) CLIENT NOTES MUST REMAIN CLIENT-SPECIFIC AND NON-DESTRUCTIVE
+Required behavior:
+- Client Notes is optional
+- It must allow genuinely account-specific instructions/nuance
+- It must not be overwritten by AI generation
+- It should persist across edits unless the user changes it
+
+16) KEEP THE PURPOSE HUMAN
+Required behavior:
+The system can assist, but it must not replace the AM’s thinking.
+AM Inputs exist to force human judgment into the workflow.
+
+That means:
+- Do not auto-fill required AM fields with generic AI text just to satisfy validation
+- Empty placeholders are fine
+- AI suggestions can exist if already supported, but the AM must still provide the required input before completion/export
+
+Acceptance tests:
+- Required AM fields are not auto-satisfied with empty boilerplate
+- Report cannot be finalized without real AM-provided content in required fields
+
+==================================================
+SCHEMA / DATA / EXPORT CONSISTENCY
+==================================================
+
+17) KEEP ALL LAYERS IN SYNC
+Required behavior:
+Any new or renamed field must be consistent across:
+- DB/schema/types
+- API contracts
+- report generator payloads
+- preview components
+- print templates
+- DOCX/PDF generators
+- saved report edit flows
+- legacy migration logic if needed
+
+Acceptance tests:
+- No field exists in UI but disappears in export
+- No field exists in export but is missing from edit/save flow
+- No report type is left behind if it shares the common reporting pipeline
+
+==================================================
+DONE MEANS ALL OF THIS IS TRUE
+==================================================
+
+1. The primary KPI is determined by the client’s "MVP NSM type" from the correct NSM Tracker tab
+2. QBR / quarterly logic uses the next quarter’s NSM Tracker tab, including year rollover
+3. Missing tracker tabs or missing MVP NSM type fail loudly instead of guessing
+4. Every report type has an AM Inputs section
+5. Client Sentiment is required everywhere
+6. AM’s Thoughts is required everywhere
+7. Priority Checks is required everywhere
+8. Client Notes is optional everywhere
+9. Required AM Inputs block generation/export if missing
+10. Legacy labels are fully replaced/migrated
+11. AM Inputs persist across save, reload, preview, print, and DOCX/PDF export
+12. Tracking gaps still auto-inject Tracking & Attribution Setup in QBR Prep
+13. Contact and Verify Insurance form submits are distinct where possible
+14. Source hierarchy follows metric type, not blanket preference
+15. Connection to Admits reflects admit-conversion assessment, not fake certainty
+16. Topic buckets remain flexible by client
+17. Page diagnosis wording matches purpose + tier logic
+18. QBR Prep still supports consultative selling preparation
+19. No regressions to prior QBR Prep fixes
+
+FINAL INSTRUCTION
+Do not reply with a high-level summary.
+Implement the patch across the full reporting system, validate it end-to-end, and verify every acceptance test above before calling it done.

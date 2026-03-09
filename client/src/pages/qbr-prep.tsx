@@ -28,6 +28,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { QbrPrepPreview } from "@/components/report-preview/qbr-prep-preview";
 import type { Client } from "@shared/schema";
+import { CLIENT_SENTIMENT_OPTIONS } from "@shared/schema";
 import { useReportSave } from "@/hooks/useReportSave";
 import { SaveStatusIndicator } from "@/components/reports/SaveStatusIndicator";
 import { ReportSaveSelector } from "@/components/reports/ReportSaveSelector";
@@ -89,10 +90,12 @@ export default function QbrPrepPage() {
   const [clientId, setClientId] = useState<string>("");
   const [generationDate, setGenerationDate] = useState(new Date().toISOString().split("T")[0]);
   const [sentiment, setSentiment] = useState("");
-  const [hypothesis, setHypothesis] = useState("");
-  const [auditNotes, setAuditNotes] = useState("");
+  const [amThoughts, setAmThoughts] = useState("");
+  const [priorityChecks, setPriorityChecks] = useState("");
+  const [clientNotes, setClientNotes] = useState("");
   const [currentCrawlId, setCurrentCrawlId] = useState<number | null>(null);
-  const [showAmInputs, setShowAmInputs] = useState(false);
+  const [showAmInputs, setShowAmInputs] = useState(true);
+  const [amValidationErrors, setAmValidationErrors] = useState<Record<string, string>>({});
 
   const [reportData, setReportData] = useState<any>(null);
   const [edits, setEdits] = useState<Record<string, string>>({});
@@ -132,14 +135,28 @@ export default function QbrPrepPage() {
 
   const clientName = clients.find(c => String(c.id) === clientId)?.name;
 
+  function validateAmInputs(): boolean {
+    const errors: Record<string, string> = {};
+    if (!sentiment) errors.sentiment = "Client Sentiment is required";
+    if (!amThoughts.trim()) errors.amThoughts = "AM's Thoughts is required";
+    if (!priorityChecks.trim()) errors.priorityChecks = "Priority Checks is required";
+    setAmValidationErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      setShowAmInputs(true);
+      return false;
+    }
+    return true;
+  }
+
   const generateMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/reports/qbr-prep/generate-v2", {
         clientId: Number(clientId),
         generationDate,
-        sentiment: sentiment || undefined,
-        hypothesis: hypothesis || undefined,
-        auditNotes: auditNotes || undefined,
+        sentiment,
+        amThoughts,
+        priorityChecks,
+        clientNotes: clientNotes || undefined,
         currentCrawlAssetId: currentCrawlId ?? undefined,
       });
       return res.json();
@@ -361,42 +378,55 @@ export default function QbrPrepPage() {
               data-testid="toggle-am-inputs"
             >
               {showAmInputs ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-              AM Inputs (Optional)
+              AM Inputs
+              <span className="text-destructive text-[10px] normal-case font-medium ml-1">Required</span>
             </button>
             {showAmInputs && (
               <div className="space-y-3">
                 <div>
-                  <Label className="text-xs mb-1 block">Client Sentiment</Label>
-                  <Select value={sentiment} onValueChange={setSentiment}>
-                    <SelectTrigger className="h-8 text-xs" data-testid="select-sentiment">
+                  <Label className="text-xs mb-1 block">Client Sentiment <span className="text-destructive">*</span></Label>
+                  <Select value={sentiment} onValueChange={(v) => { setSentiment(v); setAmValidationErrors(prev => { const n = {...prev}; delete n.sentiment; return n; }); }}>
+                    <SelectTrigger className={`h-8 text-xs ${amValidationErrors.sentiment ? "border-destructive" : ""}`} data-testid="select-sentiment">
                       <SelectValue placeholder="Select…" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="happy">Happy — strong momentum</SelectItem>
-                      <SelectItem value="neutral">Neutral — steady state</SelectItem>
-                      <SelectItem value="concerned">Concerned — needs attention</SelectItem>
-                      <SelectItem value="frustrated">Frustrated — escalated risk</SelectItem>
+                      {CLIENT_SENTIMENT_OPTIONS.map(s => (
+                        <SelectItem key={s} value={s}>{s}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
+                  {amValidationErrors.sentiment && <p className="text-destructive text-[10px] mt-0.5">{amValidationErrors.sentiment}</p>}
                 </div>
                 <div>
-                  <Label className="text-xs mb-1 block">Hypothesis / Focus Area</Label>
+                  <Label className="text-xs mb-1 block">AM's Thoughts <span className="text-destructive">*</span></Label>
                   <Textarea
-                    className="text-xs min-h-[60px]"
-                    placeholder="What you think should be the priority this quarter…"
-                    value={hypothesis}
-                    onChange={e => setHypothesis(e.target.value)}
-                    data-testid="textarea-hypothesis"
+                    className={`text-xs min-h-[60px] ${amValidationErrors.amThoughts ? "border-destructive" : ""}`}
+                    placeholder="What you actually think about the account, performance, priorities, concerns, or opportunities…"
+                    value={amThoughts}
+                    onChange={e => { setAmThoughts(e.target.value); setAmValidationErrors(prev => { const n = {...prev}; delete n.amThoughts; return n; }); }}
+                    data-testid="textarea-am-thoughts"
                   />
+                  {amValidationErrors.amThoughts && <p className="text-destructive text-[10px] mt-0.5">{amValidationErrors.amThoughts}</p>}
                 </div>
                 <div>
-                  <Label className="text-xs mb-1 block">Manual Audit Notes</Label>
+                  <Label className="text-xs mb-1 block">Priority Checks <span className="text-destructive">*</span></Label>
+                  <Textarea
+                    className={`text-xs min-h-[60px] ${amValidationErrors.priorityChecks ? "border-destructive" : ""}`}
+                    placeholder="Items you want to explicitly check, even if the automated workflow wouldn't force it…"
+                    value={priorityChecks}
+                    onChange={e => { setPriorityChecks(e.target.value); setAmValidationErrors(prev => { const n = {...prev}; delete n.priorityChecks; return n; }); }}
+                    data-testid="textarea-priority-checks"
+                  />
+                  {amValidationErrors.priorityChecks && <p className="text-destructive text-[10px] mt-0.5">{amValidationErrors.priorityChecks}</p>}
+                </div>
+                <div>
+                  <Label className="text-xs mb-1 block text-muted-foreground">Client Notes <span className="text-muted-foreground text-[10px]">(optional)</span></Label>
                   <Textarea
                     className="text-xs min-h-[60px]"
-                    placeholder="Any specific site observations…"
-                    value={auditNotes}
-                    onChange={e => setAuditNotes(e.target.value)}
-                    data-testid="textarea-audit-notes"
+                    placeholder="Client-specific conditions, constraints, special deliverables…"
+                    value={clientNotes}
+                    onChange={e => setClientNotes(e.target.value)}
+                    data-testid="textarea-client-notes"
                   />
                 </div>
               </div>
@@ -426,9 +456,10 @@ export default function QbrPrepPage() {
                     },
                   };
                   const savedInputs = data?.sourceSnapshot?.manualInputs ?? {};
-                  if (savedInputs.sentiment) setSentiment(savedInputs.sentiment);
-                  if (savedInputs.hypothesis) setHypothesis(savedInputs.hypothesis);
-                  if (savedInputs.auditNotes) setAuditNotes(savedInputs.auditNotes);
+                  if (savedInputs.sentiment || savedInputs.clientSentiment) setSentiment(savedInputs.clientSentiment ?? savedInputs.sentiment ?? "");
+                  if (savedInputs.amThoughts || savedInputs.hypothesis) setAmThoughts(savedInputs.amThoughts ?? savedInputs.hypothesis ?? "");
+                  if (savedInputs.priorityChecks || savedInputs.auditNotes) setPriorityChecks(savedInputs.priorityChecks ?? savedInputs.auditNotes ?? "");
+                  if (savedInputs.clientNotes) setClientNotes(savedInputs.clientNotes ?? "");
                   toast({ title: "Report loaded" });
                 }}
               />
@@ -439,7 +470,7 @@ export default function QbrPrepPage() {
 
           <Button
             className="w-full"
-            onClick={() => generateMutation.mutate()}
+            onClick={() => { if (validateAmInputs()) generateMutation.mutate(); }}
             disabled={!clientId || !sfReadyForGeneration || generateMutation.isPending}
             data-testid="button-generate-qbr-prep"
           >
@@ -538,6 +569,12 @@ export default function QbrPrepPage() {
             edits={edits}
             onEdit={handleEdit}
             generationMeta={reportData.generationMeta}
+            amInputs={reportData.sourceSnapshot?.manualInputs ? {
+              clientSentiment: reportData.sourceSnapshot.manualInputs.clientSentiment ?? reportData.sourceSnapshot.manualInputs.sentiment,
+              amThoughts: reportData.sourceSnapshot.manualInputs.amThoughts ?? reportData.sourceSnapshot.manualInputs.hypothesis,
+              priorityChecks: reportData.sourceSnapshot.manualInputs.priorityChecks ?? reportData.sourceSnapshot.manualInputs.auditNotes,
+              clientNotes: reportData.sourceSnapshot.manualInputs.clientNotes,
+            } : undefined}
           />
         )}
       </div>

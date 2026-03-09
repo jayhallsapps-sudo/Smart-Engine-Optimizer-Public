@@ -60,6 +60,16 @@ SmartEO integrates with the following external services and APIs:
 - `shared/schema.ts` - Drizzle schema (all tables including deletedAt on saved_reports)
 - `.agents/skills/data-handling-rules/SKILL.md` - Data handling rules for all report types
 
+## Master Patch (March 2026)
+- **NSM Tracker KPI Logic**: `fetchNsmGoals()` supports `forwardLooking` param for next-quarter tab; `normalizeKpiLabel()` maps mvpType to display label; QBR Prep Section 1 primary KPI is dynamic (e.g., "Organic + GMB + AI LLM Calls")
+- **Mandatory AM Inputs**: All 5 report types require Client Sentiment, AM's Thoughts, Priority Checks before generation; Client Notes is optional; frontend + backend validation blocks generation if required fields empty
+- **Legacy Label Migration**: `hypothesis` → `amThoughts`, `auditNotes` → `priorityChecks`, `sentiment` → `clientSentiment`; `migrateLegacyAmInputs()` in shared/schema.ts; DOCX guards check both old and new field names
+- **Connection to Admits**: Uses High/Medium/Low labels (replaced Direct/Assisted/Informational); `topicAdmitConnection()` and `classifyTrafficPageConnection()` both return High/Medium/Low
+- **Source Hierarchy**: Olivia alignment — Contact vs VOB form distinction; page diagnosis wording reflects crawl status
+- **AM Inputs Edit Keys**: `am_sentiment`, `am_thoughts`, `am_priority_checks`, `am_client_notes`
+- **CLIENT_SENTIMENT_OPTIONS**: `["Happy", "Neutral", "Concerned", "Frustrated"]`
+- **Routes use validated/normalized amInputs**: All generate endpoints pass `amValidation.amInputs` (not raw body) to generators
+
 ## Removed / Legacy
 - QBR Prep v1 routes (`/generate`, `/docx`, `/upload-to-drive`, `/saved/*`) — removed; use v2 routes only
 - SEMrush Project ID input field removed from client setup UI (field still in DB; connectedServices now checks actual API credential existence)

@@ -10,6 +10,10 @@ import type { Slide } from "../client/src/components/report-preview/pptx-preview
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export interface QbrAmInputs {
+  clientSentiment?: string;
+  amThoughts?: string;
+  priorityChecks?: string;
+  clientNotes?: string;
   quarterFeeling?: string;
   hypothesis?: string;
   auditNotes?: string;
@@ -18,6 +22,14 @@ export interface QbrAmInputs {
   focusNextQuarter?: string;
   competitorObservations?: string;
   trackingNotes?: string;
+}
+
+function normalizeQbrAmInputs(raw: QbrAmInputs): QbrAmInputs {
+  return {
+    ...raw,
+    amThoughts: raw.amThoughts || raw.hypothesis || "",
+    priorityChecks: raw.priorityChecks || raw.auditNotes || "",
+  };
 }
 
 export interface QbrFullReportJson {
@@ -221,7 +233,7 @@ export async function generateQbrFull(input: {
   const client = await storage.getClient(input.clientId);
   if (!client) throw new Error("Client not found: " + input.clientId);
 
-  const am = input.amInputs ?? {};
+  const am = normalizeQbrAmInputs(input.amInputs ?? {});
   const now = new Date();
   const { qStart, qEnd, prevQStart, prevQEnd, qLabel, prevQLabel } = quarterDates(input.quarter, input.year);
 
@@ -452,7 +464,7 @@ export async function generateQbrFull(input: {
 
   // AM context
   if (norm(am.quarterFeeling)) liftBullets.push(norm(am.quarterFeeling)!);
-  if (norm(am.hypothesis)) liftBullets.push(`AM Focus: ${norm(am.hypothesis)}`);
+  if (norm(am.amThoughts)) liftBullets.push(`AM Focus: ${norm(am.amThoughts)}`);
 
   if (liftBullets.length < 3) {
     liftBullets.push(`${MNE} — Add narrative summary of the biggest SEO growth driver(s) this quarter.`);
@@ -578,7 +590,7 @@ export async function generateQbrFull(input: {
   marketBullets.push("Search behavior continues shifting toward longer, intent-rich queries vs. short-tail. High-quality hub pages outperform thin category pages.");
 
   // AM context
-  if (norm(am.hypothesis)) marketBullets.push(norm(am.hypothesis)!);
+  if (norm(am.amThoughts)) marketBullets.push(norm(am.amThoughts)!);
   if (norm(am.contextAnomalies)) marketBullets.push(norm(am.contextAnomalies)!);
 
   slides.push({
@@ -626,7 +638,7 @@ export async function generateQbrFull(input: {
   // ────────────────────────────────────────────────────────────────────────────
   const challengeBullets: string[] = [];
 
-  if (norm(am.auditNotes)) challengeBullets.push(norm(am.auditNotes)!);
+  if (norm(am.priorityChecks)) challengeBullets.push(norm(am.priorityChecks)!);
 
   // Derive challenge signals from data
   if (avgPosMetric?.current) {
@@ -665,7 +677,7 @@ export async function generateQbrFull(input: {
   // ────────────────────────────────────────────────────────────────────────────
   const opportunityBullets: string[] = [];
 
-  if (norm(am.hypothesis)) opportunityBullets.push(`AM-identified opportunity: ${norm(am.hypothesis)}`);
+  if (norm(am.amThoughts)) opportunityBullets.push(`AM-identified opportunity: ${norm(am.amThoughts)}`);
 
   // Top pages with low clicks but high impressions → opportunity
   if (topPageRows.length >= 3) {
@@ -747,7 +759,7 @@ export async function generateQbrFull(input: {
   if (norm(am.focusNextQuarter)) tacticBullets.push(norm(am.focusNextQuarter)!);
 
   // Derive from challenge/opportunity slides
-  if (norm(am.auditNotes)) tacticBullets.push(`Technical: ${norm(am.auditNotes)}`);
+  if (norm(am.priorityChecks)) tacticBullets.push(`Technical: ${norm(am.priorityChecks)}`);
 
   // Standard realistic quarterly tactics for behavioral health SEO
   const standardTactics = [
@@ -847,6 +859,22 @@ export async function generateQbrFull(input: {
     subtitle: "Next steps and referral program",
     bullets: closingBullets.slice(0, 8),
   });
+
+  const amInputsBullets: string[] = [];
+  if (am.clientSentiment) amInputsBullets.push(`Client Sentiment: ${am.clientSentiment}`);
+  if (am.amThoughts?.trim()) amInputsBullets.push(`AM's Thoughts: ${am.amThoughts.trim()}`);
+  if (am.priorityChecks?.trim()) amInputsBullets.push(`Priority Checks: ${am.priorityChecks.trim()}`);
+  if (am.clientNotes?.trim()) amInputsBullets.push(`Client Notes: ${am.clientNotes.trim()}`);
+
+  if (amInputsBullets.length > 0) {
+    slides.push({
+      id: "am_inputs",
+      type: "bullets",
+      title: "AM Inputs",
+      subtitle: "Account Manager Context & Priorities",
+      bullets: amInputsBullets,
+    });
+  }
 
   return {
     report_title: `QBR — ${qLabel}`,

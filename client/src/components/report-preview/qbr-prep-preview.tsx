@@ -87,6 +87,7 @@ export interface QbrPrepPreviewProps {
   edits: Record<string, string>;
   onEdit: (key: string, value: string) => void;
   generationMeta?: { dataSources: string[]; missingData: string[] };
+  amInputs?: { clientSentiment?: string; amThoughts?: string; priorityChecks?: string; clientNotes?: string };
 }
 
 function EditableCell({
@@ -178,6 +179,7 @@ export function QbrPrepPreview({
   edits,
   onEdit,
   generationMeta,
+  amInputs,
 }: QbrPrepPreviewProps) {
   const [headerImgUrl, setHeaderImgUrl] = useState<string | null>(null);
 
@@ -302,6 +304,44 @@ export function QbrPrepPreview({
               <div><strong>Planning Quarter:</strong> {meta.planningQuarter}</div>
               <div><strong>Generated On:</strong> {meta.generatedOn}</div>
             </div>
+
+            {amInputs && (amInputs.clientSentiment || amInputs.amThoughts || amInputs.priorityChecks || amInputs.clientNotes) && (
+              <div style={{
+                marginBottom: 20,
+                padding: "14px 18px",
+                backgroundColor: "#FDF8F0",
+                borderRadius: 6,
+                border: "1px solid #E5D5C0",
+              }} data-testid="am-inputs-section">
+                <div style={{ fontWeight: 700, fontSize: "13px", color: ACCENT, marginBottom: 10, borderBottom: `1px solid ${ACCENT}`, paddingBottom: 4 }}>
+                  AM Inputs
+                </div>
+                {amInputs.clientSentiment && (
+                  <div style={{ fontSize: "11px", marginBottom: 6 }}>
+                    <strong>Client Sentiment:</strong>{" "}
+                    <EditableCell editKey="am_sentiment" value={amInputs.clientSentiment} edits={edits} onEdit={onEdit} />
+                  </div>
+                )}
+                {amInputs.amThoughts && (
+                  <div style={{ fontSize: "11px", marginBottom: 6 }}>
+                    <strong>AM's Thoughts:</strong>{" "}
+                    <EditableCell editKey="am_thoughts" value={amInputs.amThoughts} edits={edits} onEdit={onEdit} />
+                  </div>
+                )}
+                {amInputs.priorityChecks && (
+                  <div style={{ fontSize: "11px", marginBottom: 6 }}>
+                    <strong>Priority Checks:</strong>{" "}
+                    <EditableCell editKey="am_priority_checks" value={amInputs.priorityChecks} edits={edits} onEdit={onEdit} />
+                  </div>
+                )}
+                {amInputs.clientNotes && (
+                  <div style={{ fontSize: "11px", marginBottom: 6 }}>
+                    <strong>Client Notes:</strong>{" "}
+                    <EditableCell editKey="am_client_notes" value={amInputs.clientNotes} edits={edits} onEdit={onEdit} />
+                  </div>
+                )}
+              </div>
+            )}
 
             <SectionHeading num={1} title="What Matters Most This Quarter" />
             <AddableReportTable

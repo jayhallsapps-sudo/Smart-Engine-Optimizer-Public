@@ -9,6 +9,13 @@ import { fetchAsanaWorkLog, asanaSectionToCategory, groupAsanaTasks } from "./as
 import type { WorkLogItem } from "./airtable";
 import type { DocxSection } from "../client/src/components/report-preview/docx-preview";
 
+export interface BiweeklyAmInputs {
+  clientSentiment?: string;
+  amThoughts?: string;
+  priorityChecks?: string;
+  clientNotes?: string;
+}
+
 export interface BiweeklyReportJson {
   report_title: string;
   client_name: string;
@@ -164,6 +171,7 @@ export async function generateBiweekly(input: {
   startDate: string;
   endDate: string;
   preparedBy: string;
+  amInputs?: BiweeklyAmInputs;
 }): Promise<BiweeklyReportJson> {
   const { clientId, startDate, endDate, preparedBy } = input;
   const client = await storage.getClient(clientId);
@@ -465,6 +473,22 @@ export async function generateBiweekly(input: {
 
   // SF technical data already feeds into the Technical SEO row's nextItems (sfPriorities above).
   // No separate Technical Maintenance section — matches the 3-section template structure.
+
+  const bwAm = input.amInputs ?? {};
+  const amBullets: string[] = [];
+  if (bwAm.clientSentiment) amBullets.push(`Client Sentiment: ${bwAm.clientSentiment}`);
+  if (bwAm.amThoughts?.trim()) amBullets.push(`AM's Thoughts: ${bwAm.amThoughts.trim()}`);
+  if (bwAm.priorityChecks?.trim()) amBullets.push(`Priority Checks: ${bwAm.priorityChecks.trim()}`);
+  if (bwAm.clientNotes?.trim()) amBullets.push(`Client Notes: ${bwAm.clientNotes.trim()}`);
+
+  if (amBullets.length > 0) {
+    sections.push({
+      id: "bw_am_inputs",
+      type: "bullets",
+      title: "AM Inputs",
+      bullets: amBullets,
+    });
+  }
 
   sections.push({
     id: "bw_partnership",

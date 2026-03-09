@@ -5,7 +5,7 @@ const ACCENT = "#C0392B";
 export const SOURCE_COLORS: Record<string, { bg: string; text: string }> = {
   "Airtable":            { bg: "#FFF3D6", text: "#B45309" },
   "Asana":               { bg: "#FDEAEA", text: "#C0392B" },
-  "Screaming Frog":      { bg: "#E6F4EA", text: "#1E7E34" },
+  "Multi-source":        { bg: "#E6F4EA", text: "#1E7E34" },
   "GA4":                 { bg: "#E8F0FE", text: "#1967D2" },
   "GSC":                 { bg: "#E6F4EA", text: "#137333" },
   "GBP":                 { bg: "#FFF7ED", text: "#9A3412" },

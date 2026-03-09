@@ -76,7 +76,7 @@ const SOURCE_COLORS: Record<string, { bg: string; text: string }> = {
   Airtable:        { bg: "#FEF3C7", text: "#92400E" },
   Asana:           { bg: "#FFE4E1", text: "#BE123C" },
   NSM:             { bg: "#E0E7FF", text: "#3730A3" },
-  "Screaming Frog":{ bg: "#FEE2E2", text: "#991B1B" },
+  "Multi-source":  { bg: "#FEE2E2", text: "#991B1B" },
 };
 
 interface MetricCardProps {

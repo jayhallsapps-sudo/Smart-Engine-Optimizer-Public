@@ -22,7 +22,7 @@ const FOOTER_TEXT = "Webserv  |  32 Discovery Suite 130, Irvine, CA 92618  |  we
 const SOURCE_COLORS: Record<string, { bg: string; text: string }> = {
   Airtable:         { bg: "#FFF3D6", text: "#B45309" },
   Asana:            { bg: "#FDEAEA", text: "#C0392B" },
-  "Screaming Frog": { bg: "#E6F4EA", text: "#1E7E34" },
+  "Multi-source":   { bg: "#E6F4EA", text: "#1E7E34" },
   GA4:              { bg: "#E8F0FE", text: "#1967D2" },
   GSC:              { bg: "#E6F4EA", text: "#137333" },
   CallRail:         { bg: "#F3E8FF", text: "#6D28D9" },

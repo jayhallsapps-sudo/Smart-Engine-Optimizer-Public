@@ -409,7 +409,7 @@ export async function generateBiweekly(input: {
     ...(noAirtable ? [] : productionOptimization.map(i => ({ text: i.task, source: "Airtable" }))),
   ];
 
-  const sfDidItemsTagged: BulletItem[] = sfDidItems.map(i => ({ ...i, source: "Screaming Frog" }));
+  const sfDidItemsTagged: BulletItem[] = sfDidItems.map(i => ({ ...i, source: "Multi-source" }));
   const techDid: BulletItem[] = [...sfDidItemsTagged, ...asanaTechDid];
   const localDid: BulletItem[] = [...asanaLocalDid];
   const localNext: BulletItem[] = asanaLocalNext.length > 0 ? asanaLocalNext : [
@@ -419,7 +419,7 @@ export async function generateBiweekly(input: {
 
   const sfPrioritiesRich: BulletItem[] = sfPriorities.map(t => ({
     text: t,
-    source: hasSf ? "Screaming Frog" : undefined,
+    source: hasSf ? "Multi-source" : undefined,
   }));
   const techNext: BulletItem[] = sfPrioritiesRich.length > 0
     ? sfPrioritiesRich

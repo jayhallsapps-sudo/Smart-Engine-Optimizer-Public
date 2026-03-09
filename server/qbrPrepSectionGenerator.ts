@@ -204,8 +204,8 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
     missingData.push("GA4");
   }
 
-  if (sfData.length > 0) dataSources.push("Screaming Frog");
-  else missingData.push("Screaming Frog");
+  if (sfData.length > 0) dataSources.push("Multi-source");
+  else missingData.push("Multi-source");
 
   let callTrackingData: any = null;
   let callTrackingLandingPages: Array<{ page: string; calls: number }> = [];
@@ -698,8 +698,8 @@ function generateSection2(
         row: {
           type: clientReadableType(internalType),
           page: best,
-          notes: buildConvertingPageNote(internalType, "Screaming Frog", 0, 0),
-          dataSource: "Screaming Frog",
+          notes: buildConvertingPageNote(internalType, "Multi-source", 0, 0),
+          dataSource: "Multi-source",
         },
       });
     }
@@ -901,7 +901,7 @@ function buildConvertingPageNote(internalType: string, dataSource: string, conve
   const isCallTracking = ["CallRail", "CTM", "Nimbata", "CallTrackingMetrics"].includes(dataSource);
   const isGA4 = dataSource === "GA4";
   const isGSC = dataSource === "GSC";
-  const isSF = dataSource === "Screaming Frog";
+  const isSF = dataSource === "Multi-source";
   const cvr = isGA4 && sessions > 0 ? ` ${(conversions / sessions * 100).toFixed(1)}% CVR.` : "";
 
   if (isGA4) {
@@ -1379,7 +1379,7 @@ function generateSection6(
           tier: "Tier 1",
           action: "Refresh and consolidate primary detox and residential intent so Google sees one clear service path per treatment level",
           reason: "Core service pages are the foundation for search trust — without clear primary URLs, nothing else compounds",
-          source: "Screaming Frog",
+          source: "Multi-source",
         });
       }
     }
@@ -1391,7 +1391,7 @@ function generateSection6(
           tier: "Tier 1",
           action: "Strengthen Verify Insurance and admissions entry points to reduce friction on high-intent traffic",
           reason: "VOB and contact pages are the primary conversion mechanism — unclear pathways lose admits",
-          source: "Screaming Frog",
+          source: "Multi-source",
         });
       }
     }
@@ -1405,7 +1405,7 @@ function generateSection6(
         tier: "Tier 2",
         action: "Build a conditions hub to support authority flow into existing service pages",
         reason: "Hub structure lets Google understand topical relationships and pass authority to conversion pages",
-        source: "Screaming Frog",
+        source: "Multi-source",
       });
     }
     if (!tierInput.hasTherapiesHub && !isAlreadyDone("therapies hub") && !isAlreadyDone("therapy hub")) {
@@ -1415,7 +1415,7 @@ function generateSection6(
         tier: "Tier 2",
         action: "Organize treatment modalities into a therapies hub that reinforces service page authority",
         reason: "Therapy pages support E-E-A-T and differentiate the program in competitive searches",
-        source: "Screaming Frog",
+        source: "Multi-source",
       });
     }
   }
@@ -1428,7 +1428,7 @@ function generateSection6(
         tier: "Tier 3",
         action: `Resolve ${tierInput.errors4xx5xx} error pages (4xx/5xx) and clean up redirect chains suppressing crawl efficiency`,
         reason: "Error pages create structural drag — cleaning them improves crawl budget allocation to revenue pages",
-        source: "Screaming Frog",
+        source: "Multi-source",
       });
     }
     if (tierInput.overlapGeoPages > 5 && !isAlreadyDone("geo") && !isAlreadyDone("location")) {
@@ -1438,7 +1438,7 @@ function generateSection6(
         tier: "Tier 3",
         action: "Retire overlapping near-me and legacy geo pages into the primary location architecture",
         reason: "Duplicate geo pages dilute authority and confuse Google about the primary service area",
-        source: "Screaming Frog",
+        source: "Multi-source",
       });
     }
   }
@@ -1498,7 +1498,7 @@ function generateSection6(
         ? `Crawl shows ${tierInput.missingH1s} pages without H1 tags — these pages are structurally weak and likely suppressed in rankings; fixing them requires low effort for potentially high impact`
         : "CTR improvements on existing impression volume require no new traffic — they are free growth on what the site already earns",
       condition: !priorities.find(p => p.initiative.includes("Title") || p.initiative.includes("Meta")),
-      source: "Screaming Frog",
+      source: "Multi-source",
     },
   ];
 
@@ -1579,7 +1579,7 @@ function generateSection7(section6: Section6Priorities, section5: Section5Diagno
     "Technical Cleanup": {
       focusArea: "Crawl Health",
       metric: "Reduction in 4xx/5xx errors and redirect chains",
-      source: "Screaming Frog",
+      source: "Multi-source",
       whyItMatters: "Fewer errors = better crawl budget allocation to revenue pages",
     },
     "Location Consolidation": {

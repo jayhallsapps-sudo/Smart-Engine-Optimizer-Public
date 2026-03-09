@@ -1903,7 +1903,7 @@ export async function generateQbrPrep(input: QbrPrepInput): Promise<QbrPrepOutpu
     allWins.push({
       title: `Site Crawled: ${fmtNum(sfData.length)} URLs Analyzed`,
       evidence: `Screaming Frog: Full crawl of ${fmtNum(sfData.length)} URLs completed. Technical audit data available for all opportunity categories.`,
-      source: "Screaming Frog",
+      source: "Multi-source",
     });
   }
 

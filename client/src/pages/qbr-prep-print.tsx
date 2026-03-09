@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import swoopHeaderFallback from "@assets/HEADER_IMAGE_1773063127856.png";
-import { ReportTable, SourceBadge } from "../components/report-preview/report-table";
+import { ReportTable, SourceBadge, getCustomRows } from "../components/report-preview/report-table";
 
 const ACCENT = "#C0392B";
 const FOOTER_TEXT = "Webserv  |  32 Discovery Suite 130, Irvine, CA 92618  |  webserv.io";
@@ -53,6 +53,14 @@ function applyEdits(value: string, key: string, edits: Record<string, string>): 
   return edits[key] ?? value;
 }
 
+function customRowsAsNodes(
+  edits: Record<string, string>,
+  tableId: string,
+): ReactNode[][] {
+  const rows = getCustomRows(edits, tableId);
+  return rows.map(row => row.map(c => c as ReactNode));
+}
+
 export default function QbrPrepPrint() {
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
@@ -90,6 +98,80 @@ export default function QbrPrepPrint() {
 
   const e = (key: string, val: string) => applyEdits(val, key, edits);
 
+  const s1Rows = [
+    ...s1.rows.map((r: any, ri: number) => [e(`s1_${ri}_0`, r.goalType), e(`s1_${ri}_1`, r.goal), e(`s1_${ri}_2`, r.measurementSource), e(`s1_${ri}_3`, r.goalShift), e(`s1_${ri}_4`, r.reason)]),
+    ...getCustomRows(edits, "s1"),
+  ];
+
+  const s2aRows: ReactNode[][] = [
+    ...s2.topConvertingPages.map((r: any, ri: number) => [
+      badgeCell(e(`s2a_${ri}_0`, r.type), r.dataSource),
+      cell(e(`s2a_${ri}_1`, r.page)),
+      cell(e(`s2a_${ri}_2`, r.notes)),
+    ]),
+    ...customRowsAsNodes(edits, "s2a"),
+  ];
+
+  const s2bRows: ReactNode[][] = [
+    ...s2.topConvertingSources.map((r: any, ri: number) => [
+      badgeCell(e(`s2b_${ri}_0`, r.source), r.dataSource),
+      cell(e(`s2b_${ri}_1`, r.whatsConverting)),
+      cell(e(`s2b_${ri}_2`, r.notes)),
+    ]),
+    ...customRowsAsNodes(edits, "s2b"),
+  ];
+
+  const s3aRows: ReactNode[][] = [
+    ...s3.topTrafficTopics.map((r: any, ri: number) => [
+      cell(e(`s3a_${ri}_0`, r.topic)),
+      cell(e(`s3a_${ri}_1`, r.exampleQueries)),
+      cell(e(`s3a_${ri}_2`, r.connectionToAdmits)),
+      badgeCell(e(`s3a_${ri}_3`, r.insight), r.dataSource),
+    ]),
+    ...customRowsAsNodes(edits, "s3a"),
+  ];
+
+  const s3bRows: ReactNode[][] = [
+    ...s3.topTrafficPages.map((r: any, ri: number) => [
+      cell(e(`s3b_${ri}_0`, r.page)),
+      cell(e(`s3b_${ri}_1`, r.clicks)),
+      cell(e(`s3b_${ri}_2`, r.ctr)),
+      cell(e(`s3b_${ri}_3`, r.connectionToAdmits)),
+      badgeCell(e(`s3b_${ri}_4`, r.insight), r.dataSource),
+    ]),
+    ...customRowsAsNodes(edits, "s3b"),
+  ];
+
+  const s4Rows = [
+    ...s4.services.map((r: any, ri: number) => [e(`s4_${ri}_0`, r.service), e(`s4_${ri}_1`, r.examplePage)]),
+    ...getCustomRows(edits, "s4"),
+  ];
+
+  const s6Rows: ReactNode[][] = [
+    ...s6.priorities.map((r: any, ri: number) => [
+      cell(e(`s6_${ri}_0`, String(r.priority))),
+      badgeCell(e(`s6_${ri}_1`, r.initiative), r.source),
+      cell(e(`s6_${ri}_2`, r.tier)),
+      cell(e(`s6_${ri}_3`, r.action)),
+      cell(e(`s6_${ri}_4`, r.reason)),
+    ]),
+    ...customRowsAsNodes(edits, "s6"),
+  ];
+
+  const s7Rows: ReactNode[][] = [
+    ...s7.tracking.map((r: any, ri: number) => [
+      cell(e(`s7_${ri}_0`, r.focusArea)),
+      cell(e(`s7_${ri}_1`, r.metric)),
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 3, flexWrap: "wrap" }}>
+        {parseS7Sources(e(`s7_${ri}_2`, r.source)).map((src: string, si: number) => (
+          <SourceBadge key={si} source={src} />
+        ))}
+      </span>,
+      cell(e(`s7_${ri}_3`, r.whyItMatters)),
+    ]),
+    ...customRowsAsNodes(edits, "s7"),
+  ];
+
   return (
     <div data-report-root style={{ background: "white", margin: 0, padding: 0 }}>
       <style>{`
@@ -118,56 +200,37 @@ export default function QbrPrepPrint() {
           <SectionHeading num={1} title="What Matters Most This Quarter" />
           <DataTable
             headers={["Goal Type", "Goal", "Measurement Source", "Goal Shift vs Last Quarter", "Reason"]}
-            rows={s1.rows.map((r: any, ri: number) => [e(`s1_${ri}_0`, r.goalType), e(`s1_${ri}_1`, r.goal), e(`s1_${ri}_2`, r.measurementSource), e(`s1_${ri}_3`, r.goalShift), e(`s1_${ri}_4`, r.reason)])}
+            rows={s1Rows}
           />
 
           <SectionHeading num={2} title="Where Conversions Actually Happen" />
           <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Converting Pages</div>
           <ReportTable
             headers={["Type", "Page / Pattern", "Notes / What We're Learning"]}
-            rows={s2.topConvertingPages.map((r: any, ri: number) => [
-              badgeCell(e(`s2a_${ri}_0`, r.type), r.dataSource),
-              cell(e(`s2a_${ri}_1`, r.page)),
-              cell(e(`s2a_${ri}_2`, r.notes)),
-            ])}
+            rows={s2aRows}
           />
           <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Converting Sources</div>
           <ReportTable
             headers={["Source", "What's Converting", "Notes / What We're Learning"]}
-            rows={s2.topConvertingSources.map((r: any, ri: number) => [
-              badgeCell(e(`s2b_${ri}_0`, r.source), r.dataSource),
-              cell(e(`s2b_${ri}_1`, r.whatsConverting)),
-              cell(e(`s2b_${ri}_2`, r.notes)),
-            ])}
+            rows={s2bRows}
           />
 
           <SectionHeading num={3} title="Top Organic Traffic Drivers" />
           <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Traffic Topics</div>
           <ReportTable
             headers={["Topic", "Example Queries", "Connection to Admits", "Insight"]}
-            rows={s3.topTrafficTopics.map((r: any, ri: number) => [
-              cell(e(`s3a_${ri}_0`, r.topic)),
-              cell(e(`s3a_${ri}_1`, r.exampleQueries)),
-              cell(e(`s3a_${ri}_2`, r.connectionToAdmits)),
-              badgeCell(e(`s3a_${ri}_3`, r.insight), r.dataSource),
-            ])}
+            rows={s3aRows}
           />
           <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Traffic Pages</div>
           <ReportTable
             headers={["Page", "Clicks", "CTR", "Connection to Admits", "Insight"]}
-            rows={s3.topTrafficPages.map((r: any, ri: number) => [
-              cell(e(`s3b_${ri}_0`, r.page)),
-              cell(e(`s3b_${ri}_1`, r.clicks)),
-              cell(e(`s3b_${ri}_2`, r.ctr)),
-              cell(e(`s3b_${ri}_3`, r.connectionToAdmits)),
-              badgeCell(e(`s3b_${ri}_4`, r.insight), r.dataSource),
-            ])}
+            rows={s3bRows}
           />
 
           <SectionHeading num={4} title="Site Service Overview" />
           <DataTable
             headers={["Service", "Example Page"]}
-            rows={s4.services.map((r: any, ri: number) => [e(`s4_${ri}_0`, r.service), e(`s4_${ri}_1`, r.examplePage)])}
+            rows={s4Rows}
           />
 
           <SectionHeading num={5} title="SEO Tier Diagnosis" />
@@ -181,28 +244,13 @@ export default function QbrPrepPrint() {
           <SectionHeading num={6} title="What We Need to Do Next" />
           <ReportTable
             headers={["#", "Initiative", "Tier", "Action", "Reason"]}
-            rows={s6.priorities.map((r: any, ri: number) => [
-              cell(e(`s6_${ri}_0`, String(r.priority))),
-              badgeCell(e(`s6_${ri}_1`, r.initiative), r.source),
-              cell(e(`s6_${ri}_2`, r.tier)),
-              cell(e(`s6_${ri}_3`, r.action)),
-              cell(e(`s6_${ri}_4`, r.reason)),
-            ])}
+            rows={s6Rows}
           />
 
           <SectionHeading num={7} title="What We Track" />
           <ReportTable
             headers={["Focus Area", "Metric", "Source", "Why It Matters"]}
-            rows={s7.tracking.map((r: any, ri: number) => [
-              cell(e(`s7_${ri}_0`, r.focusArea)),
-              cell(e(`s7_${ri}_1`, r.metric)),
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 3, flexWrap: "wrap" }}>
-                {parseS7Sources(e(`s7_${ri}_2`, r.source)).map((src: string, si: number) => (
-                  <SourceBadge key={si} source={src} />
-                ))}
-              </span>,
-              cell(e(`s7_${ri}_3`, r.whyItMatters)),
-            ])}
+            rows={s7Rows}
           />
 
           {genMeta && (

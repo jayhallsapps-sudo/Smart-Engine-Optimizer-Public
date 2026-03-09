@@ -1,6 +1,29 @@
+import { useState } from "react";
 import type { ReactNode } from "react";
 
 const ACCENT = "#C0392B";
+
+export const CR_PREFIX = "__cr__";
+
+export function getCustomRows(edits: Record<string, string>, tableId: string): string[][] {
+  try {
+    const raw = edits[CR_PREFIX + tableId];
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed as string[][];
+  } catch {
+    return [];
+  }
+}
+
+export function setCustomRows(
+  tableId: string,
+  rows: string[][],
+  onEdit: (k: string, v: string) => void,
+) {
+  onEdit(CR_PREFIX + tableId, JSON.stringify(rows));
+}
 
 export const SOURCE_COLORS: Record<string, { bg: string; text: string }> = {
   "Airtable":            { bg: "#FFF3D6", text: "#B45309" },
@@ -41,19 +64,76 @@ export function SourceBadge({ source }: { source: string }) {
   );
 }
 
+function CustomRowCell({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+
+  if (editing) {
+    return (
+      <textarea
+        autoFocus
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={() => { onChange(draft); setEditing(false); }}
+        onKeyDown={e => { if (e.key === "Escape") setEditing(false); }}
+        style={{
+          width: "100%",
+          fontSize: "10px",
+          fontFamily: "inherit",
+          resize: "vertical",
+          minHeight: 28,
+          padding: "2px 4px",
+          border: "1px solid #C0392B60",
+          borderRadius: 3,
+          outline: "none",
+          background: "white",
+          lineHeight: 1.4,
+        }}
+      />
+    );
+  }
+
+  return (
+    <span
+      onClick={() => { setDraft(value); setEditing(true); }}
+      title="Click to edit"
+      style={{
+        display: "block",
+        minHeight: 16,
+        cursor: "text",
+        color: value ? "#111827" : "#9CA3AF",
+        fontStyle: value ? "normal" : "italic",
+        fontSize: "10px",
+        lineHeight: 1.4,
+      }}
+    >
+      {value || "Click to edit…"}
+    </span>
+  );
+}
+
 export function ReportTable({
   title,
   headers,
   rows,
   accent = ACCENT,
   fontSize = "10px",
+  highlightRows,
 }: {
   title?: string;
   headers: string[];
   rows: ReactNode[][];
   accent?: string;
   fontSize?: string;
+  highlightRows?: number[];
 }) {
+  const highlightSet = new Set(highlightRows ?? []);
   return (
     <div
       style={{
@@ -104,7 +184,16 @@ export function ReportTable({
         </thead>
         <tbody>
           {rows.map((row, ri) => (
-            <tr key={ri} style={{ backgroundColor: ri % 2 === 1 ? "#FBF8F7" : "white" }}>
+            <tr
+              key={ri}
+              style={{
+                backgroundColor: highlightSet.has(ri)
+                  ? "#FFFBEB"
+                  : ri % 2 === 1
+                  ? "#FBF8F7"
+                  : "white",
+              }}
+            >
               {row.map((cell, ci) => (
                 <td
                   key={ci}
@@ -122,6 +211,127 @@ export function ReportTable({
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+export function AddableReportTable({
+  tableId,
+  headers,
+  sourceRows,
+  edits,
+  onEdit,
+  exportMode = false,
+  accent = ACCENT,
+  fontSize = "10px",
+  title,
+}: {
+  tableId: string;
+  headers: string[];
+  sourceRows: ReactNode[][];
+  edits: Record<string, string>;
+  onEdit: (k: string, v: string) => void;
+  exportMode?: boolean;
+  accent?: string;
+  fontSize?: string;
+  title?: string;
+}) {
+  const customRows = getCustomRows(edits, tableId);
+  const colCount = headers.length;
+
+  function addRow() {
+    const next = [...customRows, Array(colCount).fill("")];
+    setCustomRows(tableId, next, onEdit);
+  }
+
+  function updateCell(ri: number, ci: number, val: string) {
+    const next = customRows.map((r, r_i) =>
+      r_i === ri ? r.map((c, c_i) => (c_i === ci ? val : c)) : r,
+    );
+    setCustomRows(tableId, next, onEdit);
+  }
+
+  function deleteRow(ri: number) {
+    const next = customRows.filter((_, r_i) => r_i !== ri);
+    setCustomRows(tableId, next, onEdit);
+  }
+
+  const customNodeRows: ReactNode[][] = customRows.map((row, ri) =>
+    row.map((cell, ci) => {
+      const isLast = ci === colCount - 1;
+      if (exportMode) {
+        return <span key={ci}>{cell}</span>;
+      }
+      return (
+        <span
+          key={ci}
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 4,
+          }}
+        >
+          <span style={{ flex: 1 }}>
+            <CustomRowCell value={cell} onChange={v => updateCell(ri, ci, v)} />
+          </span>
+          {isLast && (
+            <button
+              onClick={() => deleteRow(ri)}
+              title="Delete row"
+              data-testid={`button-delete-customrow-${tableId}-${ri}`}
+              style={{
+                flexShrink: 0,
+                color: "#EF4444",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                fontSize: 14,
+                lineHeight: 1,
+                padding: "0 2px",
+                borderRadius: 3,
+              }}
+            >
+              ×
+            </button>
+          )}
+        </span>
+      );
+    }),
+  );
+
+  const allRows = [...sourceRows, ...customNodeRows];
+  const highlightRows = customRows.map((_, i) => sourceRows.length + i);
+
+  return (
+    <div>
+      <ReportTable
+        title={title}
+        headers={headers}
+        rows={allRows}
+        accent={accent}
+        fontSize={fontSize}
+        highlightRows={highlightRows}
+      />
+      {!exportMode && (
+        <button
+          onClick={addRow}
+          data-testid={`button-add-row-${tableId}`}
+          style={{
+            fontSize: "10px",
+            color: "#6B7280",
+            marginTop: -8,
+            marginBottom: 12,
+            background: "none",
+            border: "1px dashed #D1D5DB",
+            borderRadius: 4,
+            padding: "2px 10px",
+            cursor: "pointer",
+            display: "block",
+          }}
+        >
+          + Add row
+        </button>
+      )}
     </div>
   );
 }

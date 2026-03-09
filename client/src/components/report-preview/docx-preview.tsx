@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { Pencil, Check, X } from "lucide-react";
 import { EditableSection } from "./editable-section";
 import { MetricCard } from "./report-chart";
-import { SourceBadge } from "./report-table";
+import { SourceBadge, AddableReportTable, getCustomRows, setCustomRows } from "./report-table";
 
 interface BulletItem { text: string; url?: string; source?: string }
 
@@ -375,6 +375,33 @@ export function DocxPreview({
   );
 }
 
+function DocxCustomCell({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  if (editing) {
+    return (
+      <textarea
+        autoFocus
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={() => { onChange(draft); setEditing(false); }}
+        onKeyDown={e => { if (e.key === "Escape") setEditing(false); }}
+        className="w-full border border-gray-300 rounded px-1 py-0.5 text-[10px] font-inherit bg-white resize-y min-h-[24px] outline-none focus:border-blue-500"
+      />
+    );
+  }
+  return (
+    <span
+      onClick={() => { setDraft(value); setEditing(true); }}
+      title="Click to edit"
+      className="block cursor-text min-h-[16px]"
+      style={{ color: value ? "#111827" : "#9CA3AF", fontStyle: value ? "normal" : "italic", fontSize: "10px" }}
+    >
+      {value || "Click to edit…"}
+    </span>
+  );
+}
+
 function DocxSectionBlock({
   section,
   sectionIndex,
@@ -534,90 +561,119 @@ function DocxSectionBlock({
         </div>
       ))}
 
-      {section.type === "progress" && section.workLog && section.workLog.length > 0 && (
-        <div className="border rounded-md overflow-hidden text-[11px]" style={{ borderColor: accentColor + "40" }}>
-          <div className="px-3 py-1.5 font-semibold text-[11px]" style={{ backgroundColor: "#FDF2F0", color: accentColor }}>
-            Progress &amp; Quick Wins
+      {section.type === "progress" && section.workLog && section.workLog.length > 0 && (() => {
+        const progressTableId = `${section.id}_progress`;
+        const crRows = getCustomRows(edits, progressTableId);
+        const colCount = 3;
+        function addProgressRow() {
+          const next = [...crRows, Array(colCount).fill("")];
+          setCustomRows(progressTableId, next, onEdit);
+        }
+        function updateProgressCell(ri: number, ci: number, val: string) {
+          const next = crRows.map((r, r_i) => r_i === ri ? r.map((c, c_i) => c_i === ci ? val : c) : r);
+          setCustomRows(progressTableId, next, onEdit);
+        }
+        function deleteProgressRow(ri: number) {
+          const next = crRows.filter((_, r_i) => r_i !== ri);
+          setCustomRows(progressTableId, next, onEdit);
+        }
+        return (
+          <div>
+            <div className="border rounded-md overflow-hidden text-[11px]" style={{ borderColor: accentColor + "40" }}>
+              <div className="px-3 py-1.5 font-semibold text-[11px]" style={{ backgroundColor: "#FDF2F0", color: accentColor }}>
+                Progress &amp; Quick Wins
+              </div>
+              <table className="w-full text-xs border-collapse">
+                <thead>
+                  <tr style={{ backgroundColor: "#F9FAFB" }}>
+                    {["Area", "What We Did / Learned", "What's Next"].map(h => (
+                      <th
+                        key={h}
+                        className="text-left px-3 py-1.5 text-[10px] font-medium border-b"
+                        style={{ color: "#6B7280", borderColor: "#E5E7EB" }}
+                      >
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {section.workLog!.map((row, ri) => (
+                    <tr key={ri} style={{ background: ri % 2 === 1 ? "#F9FAFB" : "white" }}>
+                      <td className="px-3 py-1.5 border-b border-gray-100 text-[10px] align-top font-medium w-28">{row.area || "—"}</td>
+                      <td className="px-3 py-1.5 border-b border-gray-100 border-l text-[10px] align-top" style={{ borderLeftColor: "#E5E7EB" }}>
+                        <WorkLogBulletCell
+                          editKey={`${section.id}_worklog_${ri}_did`}
+                          rawValue={row.whatWeDid}
+                          items={row.items}
+                          edits={edits}
+                          onEdit={onEdit}
+                        />
+                      </td>
+                      <td className="px-3 py-1.5 border-b border-gray-100 border-l text-[10px] align-top" style={{ borderLeftColor: "#E5E7EB" }}>
+                        <WorkLogBulletCell
+                          editKey={`${section.id}_worklog_${ri}_next`}
+                          rawValue={row.whatsNext}
+                          items={row.nextItemsRich ?? row.nextItems?.map(t => ({ text: t }))}
+                          edits={edits}
+                          onEdit={onEdit}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                  {crRows.map((row, ri) => (
+                    <tr key={`cr-${ri}`} style={{ background: "#FFFBEB" }}>
+                      {row.map((cellVal, ci) => {
+                        const isLast = ci === colCount - 1;
+                        return (
+                          <td key={ci} className="px-3 py-1.5 border-b border-gray-100 text-[10px] align-top" style={{ borderLeft: ci > 0 ? "1px solid #E5E7EB" : undefined }}>
+                            <span style={{ display: "flex", alignItems: "flex-start", gap: 4 }}>
+                              <DocxCustomCell value={cellVal} onChange={v => updateProgressCell(ri, ci, v)} />
+                              {isLast && (
+                                <button
+                                  onClick={() => deleteProgressRow(ri)}
+                                  data-testid={`button-delete-customrow-${progressTableId}-${ri}`}
+                                  style={{ flexShrink: 0, color: "#EF4444", background: "none", border: "none", cursor: "pointer", fontSize: 13, lineHeight: 1, padding: 0 }}
+                                >×</button>
+                              )}
+                            </span>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <button
+              onClick={addProgressRow}
+              data-testid={`button-add-row-${progressTableId}`}
+              style={{ fontSize: "10px", color: "#6B7280", marginTop: 4, background: "none", border: "1px dashed #D1D5DB", borderRadius: 4, padding: "2px 10px", cursor: "pointer", display: "block" }}
+            >+ Add row</button>
           </div>
-          <table className="w-full text-xs border-collapse">
-            <thead>
-              <tr style={{ backgroundColor: "#F9FAFB" }}>
-                {["Area", "What We Did / Learned", "What's Next"].map(h => (
-                  <th
-                    key={h}
-                    className="text-left px-3 py-1.5 text-[10px] font-medium border-b"
-                    style={{ color: "#6B7280", borderColor: "#E5E7EB" }}
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {section.workLog.map((row, ri) => (
-                <tr key={ri} style={{ background: ri % 2 === 1 ? "#F9FAFB" : "white" }}>
-                  <td className="px-3 py-1.5 border-b border-gray-100 text-[10px] align-top font-medium w-28">{row.area || "—"}</td>
-                  <td className="px-3 py-1.5 border-b border-gray-100 border-l text-[10px] align-top" style={{ borderLeftColor: "#E5E7EB" }}>
-                    <WorkLogBulletCell
-                      editKey={`${section.id}_worklog_${ri}_did`}
-                      rawValue={row.whatWeDid}
-                      items={row.items}
-                      edits={edits}
-                      onEdit={onEdit}
-                    />
-                  </td>
-                  <td className="px-3 py-1.5 border-b border-gray-100 border-l text-[10px] align-top" style={{ borderLeftColor: "#E5E7EB" }}>
-                    <WorkLogBulletCell
-                      editKey={`${section.id}_worklog_${ri}_next`}
-                      rawValue={row.whatsNext}
-                      items={row.nextItemsRich ?? row.nextItems?.map(t => ({ text: t }))}
-                      edits={edits}
-                      onEdit={onEdit}
-                    />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+        );
+      })()}
 
       {section.type === "technical" && section.technicalTable && (
-        <div style={{ border: "1px solid #C0392B28", borderRadius: 6, overflow: "hidden", marginTop: 4 }}>
-          <table className="w-full text-xs border-collapse">
-            <thead>
-              <tr style={{ backgroundColor: "#C0392B0D" }}>
-                {section.technicalTable.headers.map(h => (
-                  <th
-                    key={h}
-                    className="text-left px-2 py-1.5 text-[9px]"
-                    style={{ color: "#C0392B", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: "1px solid #C0392B20" }}
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {section.technicalTable.rows.map((row, ri) => (
-                <tr key={ri} style={{ background: ri % 2 === 1 ? "#FBF8F7" : "white" }}>
-                  {row.map((cell, ci) => (
-                    <td key={ci} className="px-2 py-1.5 text-[10px] align-top" style={{ borderBottom: "1px solid #F3EDED" }}>
-                      <EditableSection
-                        editKey={`${section.id}_tech_${ri}_${ci}`}
-                        value={cell}
-                        edits={edits}
-                        onEdit={onEdit}
-                        as="span"
-                        multiline
-                      />
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <AddableReportTable
+          tableId={`${section.id}_technical`}
+          headers={section.technicalTable.headers}
+          sourceRows={section.technicalTable.rows.map((row, ri) =>
+            row.map((cellVal, ci) => (
+              <EditableSection
+                key={ci}
+                editKey={`${section.id}_tech_${ri}_${ci}`}
+                value={cellVal}
+                edits={edits}
+                onEdit={onEdit}
+                as="span"
+                multiline
+              />
+            ))
+          )}
+          edits={edits}
+          onEdit={onEdit}
+        />
       )}
 
       {section.table && (

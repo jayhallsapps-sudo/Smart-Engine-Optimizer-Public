@@ -1,7 +1,6 @@
-import { useState, useRef, useEffect } from "react";
-import { Pencil, Check, X } from "lucide-react";
+import { useState, useEffect } from "react";
 import { EditableSection } from "./editable-section";
-import { ReportTable, SourceBadge } from "./report-table";
+import { ReportTable, AddableReportTable, SourceBadge } from "./report-table";
 import swoopHeaderFallback from "@assets/HEADER_IMAGE_1773063127856.png";
 
 const ACCENT = "#C0392B";
@@ -90,12 +89,6 @@ export interface QbrPrepPreviewProps {
   generationMeta?: { dataSources: string[]; missingData: string[] };
 }
 
-function ManualEntry({ text }: { text?: string }) {
-  const isManual = text && (text.includes("Manual entry needed") || text === "Manual entry needed");
-  if (!isManual) return null;
-  return <span style={{ fontStyle: "italic", color: "#9CA3AF", fontSize: "10px" }}>{text}</span>;
-}
-
 function EditableCell({
   editKey,
   value,
@@ -142,33 +135,6 @@ function SectionHeading({ num, title }: { num: number; title: string }) {
       {num}. {title}
     </div>
   );
-}
-
-function DataTable({
-  headers,
-  rows,
-  editKeyPrefix,
-  edits,
-  onEdit,
-}: {
-  headers: string[];
-  rows: string[][];
-  editKeyPrefix: string;
-  edits: Record<string, string>;
-  onEdit: (k: string, v: string) => void;
-}) {
-  const nodeRows = rows.map((row, ri) =>
-    row.map((cell, ci) => (
-      <EditableCell
-        key={ci}
-        editKey={`${editKeyPrefix}_${ri}_${ci}`}
-        value={cell}
-        edits={edits}
-        onEdit={onEdit}
-      />
-    ))
-  );
-  return <ReportTable headers={headers} rows={nodeRows} />;
 }
 
 function parseS7Sources(source: string): string[] {
@@ -222,6 +188,65 @@ export function QbrPrepPreview({
       .catch(() => setHeaderImgUrl(null));
   }, []);
 
+  const s1SourceRows: React.ReactNode[][] = section1Goals.rows.map((r, ri) => [
+    <EditableCell key="g" editKey={`s1_${ri}_0`} value={r.goalType} edits={edits} onEdit={onEdit} />,
+    <EditableCell key="go" editKey={`s1_${ri}_1`} value={r.goal} edits={edits} onEdit={onEdit} />,
+    <EditableCell key="m" editKey={`s1_${ri}_2`} value={r.measurementSource} edits={edits} onEdit={onEdit} />,
+    <EditableCell key="gs" editKey={`s1_${ri}_3`} value={r.goalShift} edits={edits} onEdit={onEdit} />,
+    <EditableCell key="r" editKey={`s1_${ri}_4`} value={r.reason} edits={edits} onEdit={onEdit} />,
+  ]);
+
+  const s2aSourceRows: React.ReactNode[][] = section2Conversions.topConvertingPages.map((r, ri) => [
+    <BadgeCell key="t" editKey={`s2a_${ri}_0`} value={r.type} dataSource={r.dataSource} edits={edits} onEdit={onEdit} />,
+    <EditableCell key="p" editKey={`s2a_${ri}_1`} value={r.page} edits={edits} onEdit={onEdit} />,
+    <EditableCell key="n" editKey={`s2a_${ri}_2`} value={r.notes} edits={edits} onEdit={onEdit} />,
+  ]);
+
+  const s2bSourceRows: React.ReactNode[][] = section2Conversions.topConvertingSources.map((r, ri) => [
+    <BadgeCell key="s" editKey={`s2b_${ri}_0`} value={r.source} dataSource={r.dataSource} edits={edits} onEdit={onEdit} />,
+    <EditableCell key="wc" editKey={`s2b_${ri}_1`} value={r.whatsConverting} edits={edits} onEdit={onEdit} />,
+    <EditableCell key="n" editKey={`s2b_${ri}_2`} value={r.notes} edits={edits} onEdit={onEdit} />,
+  ]);
+
+  const s3aSourceRows: React.ReactNode[][] = section3Traffic.topTrafficTopics.map((r, ri) => [
+    <EditableCell key="t" editKey={`s3a_${ri}_0`} value={r.topic} edits={edits} onEdit={onEdit} />,
+    <EditableCell key="eq" editKey={`s3a_${ri}_1`} value={r.exampleQueries} edits={edits} onEdit={onEdit} />,
+    <EditableCell key="c" editKey={`s3a_${ri}_2`} value={r.connectionToAdmits} edits={edits} onEdit={onEdit} />,
+    <BadgeCell key="i" editKey={`s3a_${ri}_3`} value={r.insight} dataSource={r.dataSource} edits={edits} onEdit={onEdit} />,
+  ]);
+
+  const s3bSourceRows: React.ReactNode[][] = section3Traffic.topTrafficPages.map((r, ri) => [
+    <EditableCell key="p" editKey={`s3b_${ri}_0`} value={r.page} edits={edits} onEdit={onEdit} />,
+    <EditableCell key="cl" editKey={`s3b_${ri}_1`} value={r.clicks} edits={edits} onEdit={onEdit} />,
+    <EditableCell key="ct" editKey={`s3b_${ri}_2`} value={r.ctr} edits={edits} onEdit={onEdit} />,
+    <EditableCell key="c" editKey={`s3b_${ri}_3`} value={r.connectionToAdmits} edits={edits} onEdit={onEdit} />,
+    <BadgeCell key="i" editKey={`s3b_${ri}_4`} value={r.insight} dataSource={r.dataSource} edits={edits} onEdit={onEdit} />,
+  ]);
+
+  const s4SourceRows: React.ReactNode[][] = section4Services.services.map((r, ri) => [
+    <EditableCell key="s" editKey={`s4_${ri}_0`} value={r.service} edits={edits} onEdit={onEdit} />,
+    <EditableCell key="e" editKey={`s4_${ri}_1`} value={r.examplePage} edits={edits} onEdit={onEdit} />,
+  ]);
+
+  const s6SourceRows: React.ReactNode[][] = section6Priorities.priorities.map((r, ri) => [
+    <EditableCell key="n" editKey={`s6_${ri}_0`} value={String(r.priority)} edits={edits} onEdit={onEdit} />,
+    <BadgeCell key="i" editKey={`s6_${ri}_1`} value={r.initiative} dataSource={r.source} edits={edits} onEdit={onEdit} />,
+    <EditableCell key="t" editKey={`s6_${ri}_2`} value={r.tier} edits={edits} onEdit={onEdit} />,
+    <EditableCell key="a" editKey={`s6_${ri}_3`} value={r.action} edits={edits} onEdit={onEdit} />,
+    <EditableCell key="r" editKey={`s6_${ri}_4`} value={r.reason} edits={edits} onEdit={onEdit} />,
+  ]);
+
+  const s7SourceRows: React.ReactNode[][] = section7Tracking.tracking.map((r, ri) => [
+    <EditableCell key="f" editKey={`s7_${ri}_0`} value={r.focusArea} edits={edits} onEdit={onEdit} />,
+    <EditableCell key="m" editKey={`s7_${ri}_1`} value={r.metric} edits={edits} onEdit={onEdit} />,
+    <span key="s" style={{ display: "inline-flex", alignItems: "center", gap: 3, flexWrap: "wrap" }}>
+      {parseS7Sources(r.source).map((src, si) => (
+        <SourceBadge key={si} source={src} />
+      ))}
+    </span>,
+    <EditableCell key="w" editKey={`s7_${ri}_3`} value={r.whyItMatters} edits={edits} onEdit={onEdit} />,
+  ]);
+
   return (
     <div className="bg-muted/30 min-h-full flex items-start justify-center p-6 overflow-y-auto" data-testid="qbr-prep-preview-wrapper">
       <div
@@ -272,62 +297,55 @@ export function QbrPrepPreview({
             </div>
 
             <SectionHeading num={1} title="What Matters Most This Quarter" />
-            <DataTable
+            <AddableReportTable
+              tableId="s1"
               headers={["Goal Type", "Goal", "Measurement Source", "Goal Shift vs Last Quarter", "Reason"]}
-              rows={section1Goals.rows.map(r => [r.goalType, r.goal, r.measurementSource, r.goalShift, r.reason])}
-              editKeyPrefix="s1"
+              sourceRows={s1SourceRows}
               edits={edits}
               onEdit={onEdit}
             />
 
             <SectionHeading num={2} title="Where Conversions Actually Happen" />
             <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Converting Pages</div>
-            <ReportTable
+            <AddableReportTable
+              tableId="s2a"
               headers={["Type", "Page / Pattern", "Notes / What We're Learning"]}
-              rows={section2Conversions.topConvertingPages.map((r, ri) => [
-                <BadgeCell key="t" editKey={`s2a_${ri}_0`} value={r.type} dataSource={r.dataSource} edits={edits} onEdit={onEdit} />,
-                <EditableCell key="p" editKey={`s2a_${ri}_1`} value={r.page} edits={edits} onEdit={onEdit} />,
-                <EditableCell key="n" editKey={`s2a_${ri}_2`} value={r.notes} edits={edits} onEdit={onEdit} />,
-              ])}
+              sourceRows={s2aSourceRows}
+              edits={edits}
+              onEdit={onEdit}
             />
             <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Converting Sources</div>
-            <ReportTable
+            <AddableReportTable
+              tableId="s2b"
               headers={["Source", "What's Converting", "Notes / What We're Learning"]}
-              rows={section2Conversions.topConvertingSources.map((r, ri) => [
-                <BadgeCell key="s" editKey={`s2b_${ri}_0`} value={r.source} dataSource={r.dataSource} edits={edits} onEdit={onEdit} />,
-                <EditableCell key="wc" editKey={`s2b_${ri}_1`} value={r.whatsConverting} edits={edits} onEdit={onEdit} />,
-                <EditableCell key="n" editKey={`s2b_${ri}_2`} value={r.notes} edits={edits} onEdit={onEdit} />,
-              ])}
+              sourceRows={s2bSourceRows}
+              edits={edits}
+              onEdit={onEdit}
             />
 
             <SectionHeading num={3} title="Top Organic Traffic Drivers" />
             <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Traffic Topics</div>
-            <ReportTable
+            <AddableReportTable
+              tableId="s3a"
               headers={["Topic", "Example Queries", "Connection to Admits", "Insight"]}
-              rows={section3Traffic.topTrafficTopics.map((r, ri) => [
-                <EditableCell key="t" editKey={`s3a_${ri}_0`} value={r.topic} edits={edits} onEdit={onEdit} />,
-                <EditableCell key="eq" editKey={`s3a_${ri}_1`} value={r.exampleQueries} edits={edits} onEdit={onEdit} />,
-                <EditableCell key="c" editKey={`s3a_${ri}_2`} value={r.connectionToAdmits} edits={edits} onEdit={onEdit} />,
-                <BadgeCell key="i" editKey={`s3a_${ri}_3`} value={r.insight} dataSource={r.dataSource} edits={edits} onEdit={onEdit} />,
-              ])}
+              sourceRows={s3aSourceRows}
+              edits={edits}
+              onEdit={onEdit}
             />
             <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Traffic Pages</div>
-            <ReportTable
+            <AddableReportTable
+              tableId="s3b"
               headers={["Page", "Clicks", "CTR", "Connection to Admits", "Insight"]}
-              rows={section3Traffic.topTrafficPages.map((r, ri) => [
-                <EditableCell key="p" editKey={`s3b_${ri}_0`} value={r.page} edits={edits} onEdit={onEdit} />,
-                <EditableCell key="cl" editKey={`s3b_${ri}_1`} value={r.clicks} edits={edits} onEdit={onEdit} />,
-                <EditableCell key="ct" editKey={`s3b_${ri}_2`} value={r.ctr} edits={edits} onEdit={onEdit} />,
-                <EditableCell key="c" editKey={`s3b_${ri}_3`} value={r.connectionToAdmits} edits={edits} onEdit={onEdit} />,
-                <BadgeCell key="i" editKey={`s3b_${ri}_4`} value={r.insight} dataSource={r.dataSource} edits={edits} onEdit={onEdit} />,
-              ])}
+              sourceRows={s3bSourceRows}
+              edits={edits}
+              onEdit={onEdit}
             />
 
             <SectionHeading num={4} title="Site Service Overview" />
-            <DataTable
+            <AddableReportTable
+              tableId="s4"
               headers={["Service", "Example Page"]}
-              rows={section4Services.services.map(r => [r.service, r.examplePage])}
-              editKeyPrefix="s4"
+              sourceRows={s4SourceRows}
               edits={edits}
               onEdit={onEdit}
             />
@@ -358,30 +376,21 @@ export function QbrPrepPreview({
             </div>
 
             <SectionHeading num={6} title="What We Need to Do Next" />
-            <ReportTable
+            <AddableReportTable
+              tableId="s6"
               headers={["#", "Initiative", "Tier", "Action", "Reason"]}
-              rows={section6Priorities.priorities.map((r, ri) => [
-                <EditableCell key="n" editKey={`s6_${ri}_0`} value={String(r.priority)} edits={edits} onEdit={onEdit} />,
-                <BadgeCell key="i" editKey={`s6_${ri}_1`} value={r.initiative} dataSource={r.source} edits={edits} onEdit={onEdit} />,
-                <EditableCell key="t" editKey={`s6_${ri}_2`} value={r.tier} edits={edits} onEdit={onEdit} />,
-                <EditableCell key="a" editKey={`s6_${ri}_3`} value={r.action} edits={edits} onEdit={onEdit} />,
-                <EditableCell key="r" editKey={`s6_${ri}_4`} value={r.reason} edits={edits} onEdit={onEdit} />,
-              ])}
+              sourceRows={s6SourceRows}
+              edits={edits}
+              onEdit={onEdit}
             />
 
             <SectionHeading num={7} title="What We Track" />
-            <ReportTable
+            <AddableReportTable
+              tableId="s7"
               headers={["Focus Area", "Metric", "Source", "Why It Matters"]}
-              rows={section7Tracking.tracking.map((r, ri) => [
-                <EditableCell key="f" editKey={`s7_${ri}_0`} value={r.focusArea} edits={edits} onEdit={onEdit} />,
-                <EditableCell key="m" editKey={`s7_${ri}_1`} value={r.metric} edits={edits} onEdit={onEdit} />,
-                <span key="s" style={{ display: "inline-flex", alignItems: "center", gap: 3, flexWrap: "wrap" }}>
-                  {parseS7Sources(r.source).map((src, si) => (
-                    <SourceBadge key={si} source={src} />
-                  ))}
-                </span>,
-                <EditableCell key="w" editKey={`s7_${ri}_3`} value={r.whyItMatters} edits={edits} onEdit={onEdit} />,
-              ])}
+              sourceRows={s7SourceRows}
+              edits={edits}
+              onEdit={onEdit}
             />
 
             {generationMeta && (

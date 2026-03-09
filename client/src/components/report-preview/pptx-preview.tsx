@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { EditableSection } from "./editable-section";
 import { ReportBarChart, ReportLineChart, MetricCard } from "./report-chart";
+import { getCustomRows, setCustomRows } from "./report-table";
 
 export interface Slide {
   id: string;
@@ -137,6 +138,164 @@ function SlideFooter() {
   );
 }
 
+function SlideCustomRowCell({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={() => { onChange(draft); setEditing(false); }}
+        onKeyDown={e => { if (e.key === "Enter" || e.key === "Escape") setEditing(false); if (e.key === "Enter") onChange(draft); }}
+        style={{ width: "100%", fontSize: 7.5, fontFamily: "inherit", padding: "1px 3px", border: "1px solid #C0392B60", borderRadius: 2, outline: "none" }}
+      />
+    );
+  }
+
+  return (
+    <span
+      onClick={() => { setDraft(value); setEditing(true); }}
+      title="Click to edit"
+      style={{
+        display: "block",
+        cursor: "text",
+        color: value ? "#1F2937" : "#9CA3AF",
+        fontStyle: value ? "normal" : "italic",
+        fontSize: 7.5,
+        minHeight: 12,
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {value || "Edit…"}
+    </span>
+  );
+}
+
+function SlideTableWithCustomRows({
+  slideId,
+  tableKey,
+  headers,
+  rows,
+  edits,
+  onEdit,
+  colW,
+  maxRows = 18,
+}: {
+  slideId: string;
+  tableKey: string;
+  headers: string[];
+  rows: (string | number)[][];
+  edits: Record<string, string>;
+  onEdit: (k: string, v: string) => void;
+  colW: number;
+  maxRows?: number;
+}) {
+  const tableId = `${slideId}_${tableKey}`;
+  const customRows = getCustomRows(edits, tableId);
+  const colCount = headers.length;
+
+  function addRow() {
+    const next = [...customRows, Array(colCount).fill("")];
+    setCustomRows(tableId, next, onEdit);
+  }
+
+  function updateCell(ri: number, ci: number, val: string) {
+    const next = customRows.map((r, r_i) =>
+      r_i === ri ? r.map((c, c_i) => (c_i === ci ? val : c)) : r,
+    );
+    setCustomRows(tableId, next, onEdit);
+  }
+
+  function deleteRow(ri: number) {
+    const next = customRows.filter((_, r_i) => r_i !== ri);
+    setCustomRows(tableId, next, onEdit);
+  }
+
+  const sourceRowCount = rows.length;
+
+  return (
+    <div>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 8, border: "1px solid #C0392B28", borderRadius: 4, overflow: "hidden" }}>
+        <thead>
+          <tr style={{ backgroundColor: "#C0392B0D" }}>
+            {headers.map((h, hi) => (
+              <th key={hi} style={{ color: "#C0392B", padding: "3px 6px", textAlign: "left", fontWeight: 700, fontSize: 7, textTransform: "uppercase", letterSpacing: "0.05em", borderBottom: "1px solid #C0392B20", whiteSpace: "nowrap" }}>
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.slice(0, maxRows).map((row, ri) => (
+            <tr key={ri} style={{ background: ri % 2 === 0 ? "white" : LIGHT_BLUE }}>
+              {row.map((cellVal, ci) => (
+                <td key={ci} style={{ padding: "2px 4px", borderBottom: "1px solid #E5E7EB", borderRight: "1px solid #F3F4F6", maxWidth: colW, overflow: "hidden", color: "#1F2937" }}>
+                  <EditableSection
+                    editKey={`${slideId}_cell_${ri}_${ci}`}
+                    value={String(cellVal)}
+                    edits={edits}
+                    onEdit={onEdit}
+                    as="span"
+                    className="block"
+                    style={{ fontSize: 8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } as any}
+                  />
+                </td>
+              ))}
+            </tr>
+          ))}
+          {customRows.map((row, ri) => {
+            const absRi = sourceRowCount + ri;
+            return (
+              <tr key={`cr-${ri}`} style={{ background: "#FFFBEB" }}>
+                {row.map((cellVal, ci) => {
+                  const isLast = ci === colCount - 1;
+                  return (
+                    <td key={ci} style={{ padding: "2px 4px", borderBottom: "1px solid #E5E7EB", borderRight: "1px solid #F3F4F6", maxWidth: colW, overflow: "hidden" }}>
+                      <span style={{ display: "flex", alignItems: "center", gap: 2 }}>
+                        <span style={{ flex: 1, overflow: "hidden" }}>
+                          <SlideCustomRowCell value={cellVal} onChange={v => updateCell(ri, ci, v)} />
+                        </span>
+                        {isLast && (
+                          <button
+                            onClick={() => deleteRow(ri)}
+                            data-testid={`button-delete-sliderow-${tableId}-${ri}`}
+                            style={{ flexShrink: 0, color: "#EF4444", background: "none", border: "none", cursor: "pointer", fontSize: 11, lineHeight: 1, padding: 0 }}
+                          >
+                            ×
+                          </button>
+                        )}
+                      </span>
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      {rows.length > maxRows && <div style={{ fontSize: 7, color: "#9CA3AF", marginTop: 4 }}>+ {rows.length - maxRows} more rows in full export</div>}
+      <button
+        onClick={addRow}
+        data-testid={`button-add-row-${tableId}`}
+        style={{ fontSize: 7, color: "#6B7280", marginTop: 3, background: "none", border: "1px dashed #D1D5DB", borderRadius: 3, padding: "1px 6px", cursor: "pointer", display: "block" }}
+      >
+        + Add row
+      </button>
+    </div>
+  );
+}
+
 export function SlideRenderer({ slide, edits, onEdit }: { slide: Slide; edits: Record<string, string>; onEdit: (k: string, v: string) => void }) {
   if (slide.loading) {
     return (
@@ -238,37 +397,15 @@ export function SlideRenderer({ slide, edits, onEdit }: { slide: Slide; edits: R
               <EditableSection editKey={`${slide.id}_subtitle`} value={slide.subtitle} edits={edits} onEdit={onEdit} as="span" />
             </div>
           )}
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 8, border: "1px solid #C0392B28", borderRadius: 4, overflow: "hidden" }}>
-            <thead>
-              <tr style={{ backgroundColor: "#C0392B0D" }}>
-                {headers.map((h, hi) => (
-                  <th key={hi} style={{ color: "#C0392B", padding: "3px 6px", textAlign: "left", fontWeight: 700, fontSize: 7, textTransform: "uppercase", letterSpacing: "0.05em", borderBottom: "1px solid #C0392B20", whiteSpace: "nowrap" }}>
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.slice(0, 18).map((row, ri) => (
-                <tr key={ri} style={{ background: ri % 2 === 0 ? "white" : LIGHT_BLUE }}>
-                  {row.map((cell, ci) => (
-                    <td key={ci} style={{ padding: "2px 4px", borderBottom: "1px solid #E5E7EB", borderRight: "1px solid #F3F4F6", maxWidth: colW, overflow: "hidden", color: "#1F2937" }}>
-                      <EditableSection
-                        editKey={`${slide.id}_cell_${ri}_${ci}`}
-                        value={String(cell)}
-                        edits={edits}
-                        onEdit={onEdit}
-                        as="span"
-                        className="block"
-                        style={{ fontSize: 8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } as any}
-                      />
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {rows.length > 18 && <div style={{ fontSize: 7, color: "#9CA3AF", marginTop: 4 }}>+ {rows.length - 18} more rows in full export</div>}
+          <SlideTableWithCustomRows
+            slideId={slide.id}
+            tableKey="table"
+            headers={headers}
+            rows={rows}
+            edits={edits}
+            onEdit={onEdit}
+            colW={colW}
+          />
         </div>
         <SlideFooter />
       </div>
@@ -380,6 +517,7 @@ export function SlideRenderer({ slide, edits, onEdit }: { slide: Slide; edits: R
     const mets = slide.metrics ?? [];
     const { headers, rows } = slide.table ?? { headers: [], rows: [] };
     const commentary = edits[`${slide.id}_commentary`] ?? slide.commentary;
+    const colW = headers.length > 0 ? Math.floor((SLIDE_W * 0.65) / headers.length) : 60;
     return (
       <div style={{ position: "absolute", inset: 0 }}>
         <SlideHeader slideTitle={edits[`${slide.id}_title`] ?? slide.title} />
@@ -391,29 +529,16 @@ export function SlideRenderer({ slide, edits, onEdit }: { slide: Slide; edits: R
               </div>
             )}
             {headers.length > 0 && (
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 7.5, border: "1px solid #C0392B28", borderRadius: 4, overflow: "hidden" }}>
-                <thead>
-                  <tr style={{ backgroundColor: "#C0392B0D" }}>
-                    {headers.map((h, hi) => (
-                      <th key={hi} style={{ color: "#C0392B", padding: "3px 5px", textAlign: "left", fontWeight: 700, fontSize: 7, textTransform: "uppercase", letterSpacing: "0.05em", borderBottom: "1px solid #C0392B20", whiteSpace: "nowrap" }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.slice(0, 14).map((row, ri) => {
-                    const isClient = String(row[0]).startsWith("★");
-                    return (
-                      <tr key={ri} style={{ background: isClient ? "#FFF3F0" : ri % 2 === 0 ? "white" : LIGHT_BLUE, fontWeight: isClient ? "bold" : "normal" }}>
-                        {row.map((cell, ci) => (
-                          <td key={ci} style={{ padding: "2px 4px", borderBottom: "1px solid #E5E7EB", borderRight: "1px solid #F3F4F6", color: isClient ? "#C0392B" : "#1F2937", whiteSpace: "nowrap" }}>
-                            <EditableSection editKey={`${slide.id}_cell_${ri}_${ci}`} value={String(cell)} edits={edits} onEdit={onEdit} as="span" className="block" style={{ fontSize: 7.5 } as any} />
-                          </td>
-                        ))}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              <SlideTableWithCustomRows
+                slideId={slide.id}
+                tableKey="scorecard"
+                headers={headers}
+                rows={rows}
+                edits={edits}
+                onEdit={onEdit}
+                colW={colW}
+                maxRows={14}
+              />
             )}
           </div>
           <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6, justifyContent: "center" }}>

@@ -104,6 +104,54 @@ const heavyLimiter = rateLimit({
   skip: (_req) => process.env.NODE_ENV === "test",
 });
 
+function parseCustomRowsFromEdits(edits: Record<string, string> | undefined, tableId: string): string[][] {
+  if (!edits) return [];
+  try {
+    const raw = edits["__cr__" + tableId];
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as string[][]) : [];
+  } catch { return []; }
+}
+
+function injectQbrPrepCustomRows(reportData: any, edits: Record<string, string> | undefined) {
+  if (!reportData || !edits) return reportData;
+  const rd = { ...reportData };
+  if (rd.section1Goals?.rows) {
+    const cr = parseCustomRowsFromEdits(edits, "s1");
+    rd.section1Goals = { ...rd.section1Goals, rows: [...rd.section1Goals.rows, ...cr.map(r => ({ goalType: r[0] ?? "", goal: r[1] ?? "", measurementSource: r[2] ?? "", goalShift: r[3] ?? "", reason: r[4] ?? "" }))] };
+  }
+  if (rd.section2Conversions?.topConvertingPages) {
+    const cr = parseCustomRowsFromEdits(edits, "s2a");
+    rd.section2Conversions = { ...rd.section2Conversions, topConvertingPages: [...rd.section2Conversions.topConvertingPages, ...cr.map(r => ({ type: r[0] ?? "", page: r[1] ?? "", notes: r[2] ?? "" }))] };
+  }
+  if (rd.section2Conversions?.topConvertingSources) {
+    const cr = parseCustomRowsFromEdits(edits, "s2b");
+    rd.section2Conversions = { ...rd.section2Conversions, topConvertingSources: [...rd.section2Conversions.topConvertingSources, ...cr.map(r => ({ source: r[0] ?? "", whatsConverting: r[1] ?? "", notes: r[2] ?? "" }))] };
+  }
+  if (rd.section3Traffic?.topTrafficTopics) {
+    const cr = parseCustomRowsFromEdits(edits, "s3a");
+    rd.section3Traffic = { ...rd.section3Traffic, topTrafficTopics: [...rd.section3Traffic.topTrafficTopics, ...cr.map(r => ({ topic: r[0] ?? "", exampleQueries: r[1] ?? "", connectionToAdmits: r[2] ?? "", insight: r[3] ?? "" }))] };
+  }
+  if (rd.section3Traffic?.topTrafficPages) {
+    const cr = parseCustomRowsFromEdits(edits, "s3b");
+    rd.section3Traffic = { ...rd.section3Traffic, topTrafficPages: [...rd.section3Traffic.topTrafficPages, ...cr.map(r => ({ page: r[0] ?? "", clicks: r[1] ?? "", ctr: r[2] ?? "", connectionToAdmits: r[3] ?? "", insight: r[4] ?? "" }))] };
+  }
+  if (rd.section4Services?.services) {
+    const cr = parseCustomRowsFromEdits(edits, "s4");
+    rd.section4Services = { ...rd.section4Services, services: [...rd.section4Services.services, ...cr.map(r => ({ service: r[0] ?? "", examplePage: r[1] ?? "" }))] };
+  }
+  if (rd.section6Priorities?.priorities) {
+    const cr = parseCustomRowsFromEdits(edits, "s6");
+    rd.section6Priorities = { ...rd.section6Priorities, priorities: [...rd.section6Priorities.priorities, ...cr.map((r, i) => ({ priority: rd.section6Priorities.priorities.length + i + 1, initiative: r[1] ?? "", tier: r[2] ?? "", action: r[3] ?? "", reason: r[4] ?? "" }))] };
+  }
+  if (rd.section7Tracking?.tracking) {
+    const cr = parseCustomRowsFromEdits(edits, "s7");
+    rd.section7Tracking = { ...rd.section7Tracking, tracking: [...rd.section7Tracking.tracking, ...cr.map(r => ({ focusArea: r[0] ?? "", metric: r[1] ?? "", source: r[2] ?? "", whyItMatters: r[3] ?? "" }))] };
+  }
+  return rd;
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -1262,7 +1310,7 @@ export async function registerRoutes(
     const { reportData, edits } = req.body;
     if (!reportData) return res.status(400).json({ message: "reportData is required" });
     try {
-      const buffer = await generateQbrPrepV2Docx(reportData, edits);
+      const buffer = await generateQbrPrepV2Docx(injectQbrPrepCustomRows(reportData, edits), edits);
       const slug = (reportData.meta?.site ?? "report").toLowerCase().replace(/\s+/g, "_");
       const filename = `${slug}_qbr_prep_${reportData.meta?.planningQuarter?.replace(/\s+/g, "_") ?? "report"}.docx`;
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
@@ -1279,7 +1327,7 @@ export async function registerRoutes(
     if (!reportData) return res.status(400).json({ message: "reportData is required" });
 
     try {
-      const docxBuffer = await generateQbrPrepV2Docx(reportData, edits);
+      const docxBuffer = await generateQbrPrepV2Docx(injectQbrPrepCustomRows(reportData, edits), edits);
       const { ReplitConnectors } = await import("@replit/connectors-sdk");
       const connectors = new ReplitConnectors();
 
@@ -1365,14 +1413,20 @@ export async function registerRoutes(
         const items: any[] = [];
         if (s.metrics?.length) items.push({ summary: s.metrics.map((m: any) => ({ label: m.label, current: m.current, previous: m.previous ?? "—", deltaPercent: m.delta ?? "—", isPositive: m.isPositive ?? true })) });
         if (s.bullets?.length) items.push({ manualText: (s.bullets as string[]).map((b, bi) => edits?.[`${s.id}_bullet_${bi}`] ?? b).filter(Boolean).join("\n") });
-        if (s.workLog?.length) items.push({ tableRows: (s.workLog as any[]).map((r: any, ri: number) => { const editedDid = edits?.[`${s.id}_worklog_${ri}_did`]; const editedNext = edits?.[`${s.id}_worklog_${ri}_next`]; return { area: r.area, whatWeDid: editedDid ?? r.whatWeDid, whatsNext: editedNext ?? r.whatsNext, items: editedDid !== undefined ? undefined : r.items, nextItems: editedNext !== undefined ? undefined : r.nextItems }; }) });
+        if (s.workLog?.length) {
+          const baseRows = (s.workLog as any[]).map((r: any, ri: number) => { const editedDid = edits?.[`${s.id}_worklog_${ri}_did`]; const editedNext = edits?.[`${s.id}_worklog_${ri}_next`]; return { area: r.area, whatWeDid: editedDid ?? r.whatWeDid, whatsNext: editedNext ?? r.whatsNext, items: editedDid !== undefined ? undefined : r.items, nextItems: editedNext !== undefined ? undefined : r.nextItems }; });
+          const crProgress = parseCustomRowsFromEdits(edits, `${s.id}_progress`);
+          const allRows = [...baseRows, ...crProgress.map(cr => ({ area: cr[0] ?? "", whatWeDid: cr[1] ?? "", whatsNext: cr[2] ?? "" }))];
+          items.push({ tableRows: allRows });
+        }
         if (s.table) items.push({ tables: [{ title: s.title, headers: s.table.headers, rows: s.table.rows }] });
         if (s.technicalTable) {
           const tbl = s.technicalTable as { headers: string[]; rows: string[][] };
           const resolvedRows = (tbl.rows ?? []).map((row: string[], ri: number) =>
             row.map((cell: string, ci: number) => edits?.[`${s.id}_tech_${ri}_${ci}`] ?? cell)
           );
-          items.push({ tables: [{ title: s.title ?? "", headers: tbl.headers, rows: resolvedRows }] });
+          const crTech = parseCustomRowsFromEdits(edits, `${s.id}_technical`);
+          items.push({ tables: [{ title: s.title ?? "", headers: tbl.headers, rows: [...resolvedRows, ...crTech] }] });
         }
         return { sectionId: s.id, title: s.title ?? "", items };
       });
@@ -1399,7 +1453,11 @@ export async function registerRoutes(
         const items: any[] = [];
         if (s.metrics?.length) items.push({ summary: s.metrics.map((m: any) => ({ label: m.label, current: m.current, previous: m.previous ?? "—", deltaPercent: m.delta ?? "—", isPositive: m.isPositive ?? true })) });
         if (s.bullets?.length) items.push({ manualText: (s.bullets as string[]).map((b, bi) => edits?.[`${s.id}_bullet_${bi}`] ?? b).filter(Boolean).join("\n") });
-        if (s.workLog?.length) items.push({ tableRows: (s.workLog as any[]).map((r: any, ri: number) => { const editedDid = edits?.[`${s.id}_worklog_${ri}_did`]; const editedNext = edits?.[`${s.id}_worklog_${ri}_next`]; return { area: r.area, whatWeDid: editedDid ?? r.whatWeDid, whatsNext: editedNext ?? r.whatsNext, items: editedDid !== undefined ? undefined : r.items, nextItems: editedNext !== undefined ? undefined : (r.nextItemsRich ?? r.nextItems) }; }) });
+        if (s.workLog?.length) {
+          const baseRows = (s.workLog as any[]).map((r: any, ri: number) => { const editedDid = edits?.[`${s.id}_worklog_${ri}_did`]; const editedNext = edits?.[`${s.id}_worklog_${ri}_next`]; return { area: r.area, whatWeDid: editedDid ?? r.whatWeDid, whatsNext: editedNext ?? r.whatsNext, items: editedDid !== undefined ? undefined : r.items, nextItems: editedNext !== undefined ? undefined : (r.nextItemsRich ?? r.nextItems) }; });
+          const crProgress = parseCustomRowsFromEdits(edits, `${s.id}_progress`);
+          items.push({ tableRows: [...baseRows, ...crProgress.map(cr => ({ area: cr[0] ?? "", whatWeDid: cr[1] ?? "", whatsNext: cr[2] ?? "" }))] });
+        }
         if (s.table) items.push({ tables: [{ title: s.title, headers: s.table.headers, rows: s.table.rows }] });
         return { sectionId: s.id, title: s.title ?? "", items };
       });
@@ -1454,7 +1512,11 @@ export async function registerRoutes(
         const items: any[] = [];
         if (s.metrics?.length) items.push({ summary: s.metrics.map((m: any) => ({ label: m.label, current: m.current, previous: m.previous ?? "—", deltaPercent: m.delta ?? "—", isPositive: m.isPositive ?? true })) });
         if (s.bullets?.length) items.push({ manualText: (s.bullets as string[]).map((b, bi) => edits?.[`${s.id}_bullet_${bi}`] ?? b).filter(Boolean).join("\n") });
-        if (s.workLog?.length) items.push({ tableRows: (s.workLog as any[]).map((r: any, ri: number) => { const editedDid = edits?.[`${s.id}_worklog_${ri}_did`]; const editedNext = edits?.[`${s.id}_worklog_${ri}_next`]; return { area: r.area, whatWeDid: editedDid ?? r.whatWeDid, whatsNext: editedNext ?? r.whatsNext, items: editedDid !== undefined ? undefined : r.items, nextItems: editedNext !== undefined ? undefined : (r.nextItemsRich ?? r.nextItems) }; }) });
+        if (s.workLog?.length) {
+          const baseRows = (s.workLog as any[]).map((r: any, ri: number) => { const editedDid = edits?.[`${s.id}_worklog_${ri}_did`]; const editedNext = edits?.[`${s.id}_worklog_${ri}_next`]; return { area: r.area, whatWeDid: editedDid ?? r.whatWeDid, whatsNext: editedNext ?? r.whatsNext, items: editedDid !== undefined ? undefined : r.items, nextItems: editedNext !== undefined ? undefined : (r.nextItemsRich ?? r.nextItems) }; });
+          const crProgress = parseCustomRowsFromEdits(edits, `${s.id}_progress`);
+          items.push({ tableRows: [...baseRows, ...crProgress.map(cr => ({ area: cr[0] ?? "", whatWeDid: cr[1] ?? "", whatsNext: cr[2] ?? "" }))] });
+        }
         if (s.table) items.push({ tables: [{ title: s.title, headers: s.table.headers, rows: s.table.rows }] });
         return { sectionId: s.id, title: s.title ?? "", items };
       });
@@ -1501,7 +1563,7 @@ export async function registerRoutes(
         if (s.metrics?.length) items.push({ summary: s.metrics.map((m: any) => ({ label: m.label, current: m.current, previous: m.previous ?? "—", deltaPercent: m.delta ?? "—", isPositive: m.isPositive ?? true })) });
         const commentary = edits?.[`${s.id}_commentary`] ?? s.commentary;
         if (commentary) items.push({ manualText: commentary });
-        if (s.table) items.push({ tables: [{ title: edits?.[`${s.id}_subtitle`] ?? s.subtitle ?? "", headers: s.table.headers, rows: (s.table.rows as any[][]).map((row: any[], ri: number) => row.map((cell: any, ci: number) => edits?.[`${s.id}_cell_${ri}_${ci}`] ?? String(cell))) }] });
+        if (s.table) { const resolvedRows = (s.table.rows as any[][]).map((row: any[], ri: number) => row.map((cell: any, ci: number) => edits?.[`${s.id}_cell_${ri}_${ci}`] ?? String(cell))); const tableKey = s.type === "scorecard" ? `${s.id}_scorecard` : `${s.id}_table`; const crRows = parseCustomRowsFromEdits(edits, tableKey); items.push({ tables: [{ title: edits?.[`${s.id}_subtitle`] ?? s.subtitle ?? "", headers: s.table.headers, rows: [...resolvedRows, ...crRows] }] }); }
         if (s.bullets) items.push({ manualText: (s.bullets as string[]).map((b: string, bi: number) => edits?.[`${s.id}_bullet_${bi}`] ?? b).join("\n") });
         return { sectionId: `slide_${idx}`, title: edits?.[`${s.id}_title`] ?? s.title ?? "", items };
       });
@@ -1529,7 +1591,7 @@ export async function registerRoutes(
         if (s.metrics?.length) items.push({ summary: s.metrics.map((m: any) => ({ label: m.label, current: m.current, previous: m.previous ?? "—", deltaPercent: m.delta ?? "—", isPositive: m.isPositive ?? true })) });
         const driveCommentary = edits?.[`${s.id}_commentary`] ?? s.commentary;
         if (driveCommentary) items.push({ manualText: driveCommentary });
-        if (s.table) items.push({ tables: [{ title: edits?.[`${s.id}_subtitle`] ?? s.subtitle ?? "", headers: s.table.headers, rows: (s.table.rows as any[][]).map((row: any[], ri: number) => row.map((cell: any, ci: number) => edits?.[`${s.id}_cell_${ri}_${ci}`] ?? String(cell))) }] });
+        if (s.table) { const resolvedRows = (s.table.rows as any[][]).map((row: any[], ri: number) => row.map((cell: any, ci: number) => edits?.[`${s.id}_cell_${ri}_${ci}`] ?? String(cell))); const tableKey = s.type === "scorecard" ? `${s.id}_scorecard` : `${s.id}_table`; const crRows = parseCustomRowsFromEdits(edits, tableKey); items.push({ tables: [{ title: edits?.[`${s.id}_subtitle`] ?? s.subtitle ?? "", headers: s.table.headers, rows: [...resolvedRows, ...crRows] }] }); }
         if (s.bullets) items.push({ manualText: (s.bullets as string[]).map((b: string, bi: number) => edits?.[`${s.id}_bullet_${bi}`] ?? b).join("\n") });
         return { sectionId: `slide_${idx}`, title: edits?.[`${s.id}_title`] ?? s.title ?? "", items };
       });
@@ -1563,7 +1625,7 @@ export async function registerRoutes(
       const sections: SectionData[] = (json.slides ?? []).filter((s: any) => s.type !== "title" && s.type !== "chart-bar" && s.type !== "chart-line").map((s: any, idx: number) => {
         const items: any[] = [];
         if (s.metrics?.length) items.push({ summary: s.metrics.map((m: any) => ({ label: m.label, current: m.current, previous: m.previous ?? "—", deltaPercent: m.delta ?? "—", isPositive: m.isPositive ?? true })) });
-        if (s.table) items.push({ tables: [{ title: s.subtitle ?? "", headers: s.table.headers, rows: s.table.rows }] });
+        if (s.table) { const tableKey = s.type === "scorecard" ? `${s.id}_scorecard` : `${s.id}_table`; const crRows = parseCustomRowsFromEdits(edits, tableKey); items.push({ tables: [{ title: s.subtitle ?? "", headers: s.table.headers, rows: [...s.table.rows, ...crRows] }] }); }
         if (s.bullets) items.push({ manualText: (s.bullets as string[]).join("\n") });
         return { sectionId: `slide_${idx}`, title: edits?.[`${s.id}_title`] ?? s.title ?? "", items };
       });
@@ -1611,7 +1673,7 @@ export async function registerRoutes(
           if (s.metrics?.length) items.push({ summary: s.metrics.map((m: any) => ({ label: m.label, current: m.current, previous: m.previous ?? "—", deltaPercent: m.delta ?? "—", isPositive: m.isPositive ?? true })) });
           const commentary = edits?.[`${s.id}_commentary`] ?? s.commentary;
           if (commentary) items.push({ manualText: commentary });
-          if (s.table) items.push({ tables: [{ title: edits?.[`${s.id}_subtitle`] ?? s.subtitle ?? "", headers: s.table.headers, rows: (s.table.rows as any[][]).map((row: any[], ri: number) => row.map((cell: any, ci: number) => edits?.[`${s.id}_cell_${ri}_${ci}`] ?? String(cell))) }] });
+          if (s.table) { const resolvedRows = (s.table.rows as any[][]).map((row: any[], ri: number) => row.map((cell: any, ci: number) => edits?.[`${s.id}_cell_${ri}_${ci}`] ?? String(cell))); const tableKey = s.type === "scorecard" ? `${s.id}_scorecard` : `${s.id}_table`; const crRows = parseCustomRowsFromEdits(edits, tableKey); items.push({ tables: [{ title: edits?.[`${s.id}_subtitle`] ?? s.subtitle ?? "", headers: s.table.headers, rows: [...resolvedRows, ...crRows] }] }); }
           if (s.bullets) items.push({ manualText: (s.bullets as string[]).map((b: string, bi: number) => edits?.[`${s.id}_bullet_${bi}`] ?? b).join("\n") });
           if (s.leftContent?.table) items.push({ tables: [{ title: "", headers: s.leftContent.table.headers, rows: s.leftContent.table.rows }] });
           return { sectionId: `slide_${idx}`, title: edits?.[`${s.id}_title`] ?? s.title ?? "", items };
@@ -1642,7 +1704,7 @@ export async function registerRoutes(
           if (s.metrics?.length) items.push({ summary: s.metrics.map((m: any) => ({ label: m.label, current: m.current, previous: m.previous ?? "—", deltaPercent: m.delta ?? "—", isPositive: m.isPositive ?? true })) });
           const driveCommentary = edits?.[`${s.id}_commentary`] ?? s.commentary;
           if (driveCommentary) items.push({ manualText: driveCommentary });
-          if (s.table) items.push({ tables: [{ title: edits?.[`${s.id}_subtitle`] ?? s.subtitle ?? "", headers: s.table.headers, rows: (s.table.rows as any[][]).map((row: any[], ri: number) => row.map((cell: any, ci: number) => edits?.[`${s.id}_cell_${ri}_${ci}`] ?? String(cell))) }] });
+          if (s.table) { const resolvedRows = (s.table.rows as any[][]).map((row: any[], ri: number) => row.map((cell: any, ci: number) => edits?.[`${s.id}_cell_${ri}_${ci}`] ?? String(cell))); const tableKey = s.type === "scorecard" ? `${s.id}_scorecard` : `${s.id}_table`; const crRows = parseCustomRowsFromEdits(edits, tableKey); items.push({ tables: [{ title: edits?.[`${s.id}_subtitle`] ?? s.subtitle ?? "", headers: s.table.headers, rows: [...resolvedRows, ...crRows] }] }); }
           if (s.bullets) items.push({ manualText: (s.bullets as string[]).map((b: string, bi: number) => edits?.[`${s.id}_bullet_${bi}`] ?? b).join("\n") });
           if (s.leftContent?.table) items.push({ tables: [{ title: "", headers: s.leftContent.table.headers, rows: s.leftContent.table.rows }] });
           return { sectionId: `slide_${idx}`, title: edits?.[`${s.id}_title`] ?? s.title ?? "", items };
@@ -1705,7 +1767,7 @@ export async function registerRoutes(
           if (s.metrics?.length) items.push({ summary: s.metrics.map((m: any) => ({ label: m.label, current: m.current, previous: m.previous ?? "—", deltaPercent: m.delta ?? "—", isPositive: m.isPositive ?? true })) });
           const comm = edits?.[`${s.id}_commentary`] ?? s.commentary;
           if (comm) items.push({ manualText: comm });
-          if (s.table) items.push({ tables: [{ title: edits?.[`${s.id}_subtitle`] ?? s.subtitle ?? "", headers: s.table.headers, rows: (s.table.rows as any[][]).map((row: any[], ri: number) => row.map((cell: any, ci: number) => edits?.[`${s.id}_cell_${ri}_${ci}`] ?? String(cell))) }] });
+          if (s.table) { const resolvedRows = (s.table.rows as any[][]).map((row: any[], ri: number) => row.map((cell: any, ci: number) => edits?.[`${s.id}_cell_${ri}_${ci}`] ?? String(cell))); const tableKey = s.type === "scorecard" ? `${s.id}_scorecard` : `${s.id}_table`; const crRows = parseCustomRowsFromEdits(edits, tableKey); items.push({ tables: [{ title: edits?.[`${s.id}_subtitle`] ?? s.subtitle ?? "", headers: s.table.headers, rows: [...resolvedRows, ...crRows] }] }); }
           if (s.bullets) items.push({ manualText: (s.bullets as string[]).map((b: string, bi: number) => edits?.[`${s.id}_bullet_${bi}`] ?? b).join("\n") });
           if (s.leftContent?.bullets) items.push({ manualText: (s.leftContent.bullets as string[]).join("\n") });
           if (s.rightContent?.metrics) items.push({ summary: s.rightContent.metrics.map((m: any) => ({ label: m.label, current: m.current, isPositive: m.isPositive ?? true })) });
@@ -1736,7 +1798,7 @@ export async function registerRoutes(
           if (s.metrics?.length) items.push({ summary: s.metrics.map((m: any) => ({ label: m.label, current: m.current, previous: m.previous ?? "—", deltaPercent: m.delta ?? "—", isPositive: m.isPositive ?? true })) });
           const comm2 = edits?.[`${s.id}_commentary`] ?? s.commentary;
           if (comm2) items.push({ manualText: comm2 });
-          if (s.table) items.push({ tables: [{ title: edits?.[`${s.id}_subtitle`] ?? s.subtitle ?? "", headers: s.table.headers, rows: (s.table.rows as any[][]).map((row: any[], ri: number) => row.map((cell: any, ci: number) => edits?.[`${s.id}_cell_${ri}_${ci}`] ?? String(cell))) }] });
+          if (s.table) { const resolvedRows = (s.table.rows as any[][]).map((row: any[], ri: number) => row.map((cell: any, ci: number) => edits?.[`${s.id}_cell_${ri}_${ci}`] ?? String(cell))); const tableKey = s.type === "scorecard" ? `${s.id}_scorecard` : `${s.id}_table`; const crRows = parseCustomRowsFromEdits(edits, tableKey); items.push({ tables: [{ title: edits?.[`${s.id}_subtitle`] ?? s.subtitle ?? "", headers: s.table.headers, rows: [...resolvedRows, ...crRows] }] }); }
           if (s.bullets) items.push({ manualText: (s.bullets as string[]).map((b: string, bi: number) => edits?.[`${s.id}_bullet_${bi}`] ?? b).join("\n") });
           if (s.leftContent?.bullets) items.push({ manualText: (s.leftContent.bullets as string[]).join("\n") });
           return { sectionId: `slide_${idx}`, title: edits?.[`${s.id}_title`] ?? s.title ?? "", items };

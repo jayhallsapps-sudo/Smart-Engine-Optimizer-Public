@@ -54,7 +54,7 @@ export function EditableSection({
             ref={ref as React.RefObject<HTMLTextAreaElement>}
             value={draft}
             onChange={e => setDraft(e.target.value)}
-            className="w-full border-2 border-border rounded px-2 py-1 text-sm font-inherit bg-background resize-y min-h-[60px] outline-none focus:border-primary"
+            className="w-full border-2 border-gray-300 rounded px-2 py-1 text-sm font-inherit bg-white text-gray-900 resize-y min-h-[60px] outline-none focus:border-blue-500"
             data-testid={`input-edit-${editKey}`}
           />
         ) : (
@@ -62,7 +62,7 @@ export function EditableSection({
             ref={ref as React.RefObject<HTMLInputElement>}
             value={draft}
             onChange={e => setDraft(e.target.value)}
-            className="w-full border-2 border-border rounded px-2 py-1 text-sm font-inherit bg-background outline-none focus:border-primary"
+            className="w-full border-2 border-gray-300 rounded px-2 py-1 text-sm font-inherit bg-white text-gray-900 outline-none focus:border-blue-500"
             data-testid={`input-edit-${editKey}`}
           />
         )}

@@ -83,7 +83,7 @@ function WorkLogBulletCell({
           ref={ref}
           value={draft}
           onChange={e => setDraft(e.target.value)}
-          className="w-full border-2 border-border rounded px-2 py-1 text-[10px] font-inherit bg-background resize-y min-h-[60px] outline-none focus:border-primary"
+          className="w-full border-2 border-gray-300 rounded px-2 py-1 text-[10px] font-inherit bg-white text-gray-900 resize-y min-h-[60px] outline-none focus:border-blue-500"
         />
         <span className="flex gap-1 mt-1">
           <button onClick={commit} className="flex items-center gap-1 text-[10px] px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700">

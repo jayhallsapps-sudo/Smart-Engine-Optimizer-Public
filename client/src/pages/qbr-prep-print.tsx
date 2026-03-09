@@ -69,8 +69,12 @@ export default function QbrPrepPrint() {
   useEffect(() => {
     const token = new URLSearchParams(window.location.search).get("token");
     if (!token) { setError("No token."); return; }
-    fetch(`/api/print-cache/${token}`)
-      .then(r => { if (!r.ok) throw new Error(`${r.status}`); return r.json(); })
+    fetch("/api/auth/bootstrap")
+      .then(r => r.json())
+      .then(({ token: authToken }: { token: string }) =>
+        fetch(`/api/print-cache/${token}`, { headers: { "X-Internal-Token": authToken } })
+      )
+      .then(r => { if (!r.ok) throw new Error(`Cache fetch failed: ${r.status}`); return r.json(); })
       .then(d => setData(d))
       .catch(e => setError(e.message));
   }, []);

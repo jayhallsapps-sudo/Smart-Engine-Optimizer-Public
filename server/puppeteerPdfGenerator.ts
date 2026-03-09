@@ -13,6 +13,11 @@ function findChromium(): string | undefined {
 }
 
 export async function generatePdfViaPuppeteer(token: string, renderPath?: string): Promise<Buffer> {
+  const route = renderPath || "biweekly/pdf-render";
+  const printUrl = `http://localhost:5000/${route}?token=${token}`;
+  const startMs = Date.now();
+  console.log(`[PDF] Starting PDF generation — route: ${route}, token: ${token}`);
+
   const executablePath = findChromium();
 
   const browser = await puppeteer.launch({
@@ -31,21 +36,30 @@ export async function generatePdfViaPuppeteer(token: string, renderPath?: string
 
   try {
     const page = await browser.newPage();
-
     await page.setViewport({ width: 816, height: 1056, deviceScaleFactor: 1 });
 
-    const route = renderPath || "biweekly/pdf-render";
-    const printUrl = `http://localhost:5000/${route}?token=${token}`;
+    const gotoResult = await page.goto(printUrl, { waitUntil: "networkidle2", timeout: 45000 });
+    if (!gotoResult?.ok()) {
+      const status = gotoResult?.status() ?? 0;
+      throw new Error(`Print page returned HTTP ${status}. Ensure the report data is valid and the server is running.`);
+    }
 
-    await page.goto(printUrl, { waitUntil: "networkidle0", timeout: 30000 });
-
-    await page.waitForSelector("[data-report-root]", { timeout: 15000 });
+    try {
+      await page.waitForSelector("[data-report-root]", { timeout: 20000 });
+    } catch {
+      const pageText = await page.evaluate(() => document.body?.innerText ?? "").catch(() => "");
+      const preview = pageText.slice(0, 300).trim();
+      throw new Error(
+        `Report content did not render within 20 seconds. ` +
+        `Page content: "${preview || "(empty)"}". ` +
+        `Check that the report was generated before downloading PDF.`
+      );
+    }
 
     await page.emulateMediaType("screen");
 
     await page.evaluate(async () => {
       await document.fonts.ready;
-
       const images = Array.from(document.images);
       await Promise.all(
         images.map(img => {
@@ -58,11 +72,9 @@ export async function generatePdfViaPuppeteer(token: string, renderPath?: string
       );
     });
 
-    await new Promise(r => setTimeout(r, 300));
+    await new Promise(r => setTimeout(r, 400));
 
-    const contentHeight = await page.evaluate(() => {
-      return document.documentElement.scrollHeight;
-    });
+    const contentHeight = await page.evaluate(() => document.documentElement.scrollHeight);
 
     const pdf = await page.pdf({
       width: "816px",
@@ -71,7 +83,9 @@ export async function generatePdfViaPuppeteer(token: string, renderPath?: string
       margin: { top: "0", right: "0", bottom: "0", left: "0" },
     });
 
-    return Buffer.from(pdf);
+    const buf = Buffer.from(pdf);
+    console.log(`[PDF] Done — ${buf.length} bytes in ${Date.now() - startMs}ms`);
+    return buf;
   } finally {
     await browser.close();
   }

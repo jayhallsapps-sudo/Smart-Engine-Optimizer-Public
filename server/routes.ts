@@ -114,6 +114,26 @@ function parseCustomRowsFromEdits(edits: Record<string, string> | undefined, tab
   } catch { return []; }
 }
 
+function logExport(label: string, startMs: number, ok: boolean, err?: string) {
+  const dur = Date.now() - startMs;
+  if (ok) console.log(`[Export] ${label} — OK (${dur}ms)`);
+  else console.error(`[Export] ${label} — FAILED (${dur}ms): ${err ?? "unknown"}`);
+}
+
+function validateExportPayload(
+  reportType: string,
+  data: any,
+  requiredKeys: string[]
+): string | null {
+  if (!data) return `No payload provided for ${reportType} export`;
+  for (const key of requiredKeys) {
+    if (data[key] === undefined || data[key] === null) {
+      return `Missing required field "${key}" for ${reportType} export`;
+    }
+  }
+  return null;
+}
+
 function injectQbrPrepCustomRows(reportData: any, edits: Record<string, string> | undefined) {
   if (!reportData || !edits) return reportData;
   const rd = { ...reportData };
@@ -1307,17 +1327,20 @@ export async function registerRoutes(
   });
 
   app.post("/api/reports/qbr-prep/docx-v2", async (req, res) => {
+    const t0 = Date.now();
     const { reportData, edits } = req.body;
-    if (!reportData) return res.status(400).json({ message: "reportData is required" });
+    const validErr = validateExportPayload("QBR Prep DOCX", reportData, ["meta", "section1Goals"]);
+    if (validErr) { logExport("QBR Prep DOCX", t0, false, validErr); return res.status(400).json({ message: validErr }); }
     try {
       const buffer = await generateQbrPrepV2Docx(injectQbrPrepCustomRows(reportData, edits), edits);
       const slug = (reportData.meta?.site ?? "report").toLowerCase().replace(/\s+/g, "_");
       const filename = `${slug}_qbr_prep_${reportData.meta?.planningQuarter?.replace(/\s+/g, "_") ?? "report"}.docx`;
+      logExport("QBR Prep DOCX", t0, true);
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
       res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
       res.send(buffer);
     } catch (err: any) {
-      console.error("QBR Prep V2 DOCX error:", err);
+      logExport("QBR Prep DOCX", t0, false, err.message);
       res.status(500).json({ message: "Failed to generate DOCX: " + err.message });
     }
   });
@@ -1366,19 +1389,23 @@ export async function registerRoutes(
   });
 
   app.post("/api/reports/qbr-prep/preview-pdf", async (req, res) => {
+    const t0 = Date.now();
     const { reportData, edits } = req.body;
-    if (!reportData) return res.status(400).json({ message: "reportData is required" });
+    const validErr = validateExportPayload("QBR Prep PDF", reportData, ["meta"]);
+    if (validErr) { logExport("QBR Prep PDF", t0, false, validErr); return res.status(400).json({ message: validErr }); }
+    const id = "qbr-prep-" + Date.now();
+    printCache.set(id, { data: { reportData, edits }, ts: Date.now() });
     try {
-      const id = "qbr-prep-" + Date.now();
-      printCache.set(id, { data: { reportData, edits }, ts: Date.now() });
       const buffer = await generatePdfViaPuppeteer(id, "qbr-prep-print");
       printCache.delete(id);
       const slug = (reportData.meta?.site ?? "report").toLowerCase().replace(/\s+/g, "_");
+      logExport("QBR Prep PDF", t0, true);
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `attachment; filename="${slug}_qbr_prep.pdf"`);
       res.send(buffer);
     } catch (err: any) {
-      console.error("QBR Prep PDF error:", err);
+      printCache.delete(id);
+      logExport("QBR Prep PDF", t0, false, err.message);
       res.status(500).json({ message: "PDF generation failed: " + err.message });
     }
   });
@@ -1485,21 +1512,24 @@ export async function registerRoutes(
   });
 
   app.post("/api/reports/biweekly/preview-pdf", async (req, res) => {
+    const t0 = Date.now();
     const { report, edits } = req.body as { report: any; edits?: Record<string, string> };
     if (!report) return res.status(400).json({ message: "report is required" });
+    const id = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    printCache.set(id, { data: { report, edits: edits ?? {} }, ts: Date.now() });
     try {
-      const id = Math.random().toString(36).slice(2) + Date.now().toString(36);
-      printCache.set(id, { data: { report, edits: edits ?? {} }, ts: Date.now() });
-
       const buffer = await generatePdfViaPuppeteer(id);
+      printCache.delete(id);
       const clientName = edits?.["client_name"] ?? report.client_name ?? "report";
       const slug = clientName.toLowerCase().replace(/\s+/g, "_");
       const dateSlug = (edits?.["report_date"] ?? report.date ?? "").replace(/[\s,]/g, "_");
+      logExport("Biweekly PDF", t0, true);
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `attachment; filename="${slug}_biweekly_${dateSlug}.pdf"`);
       res.send(buffer);
     } catch (err: any) {
-      console.error("Preview PDF error:", err);
+      printCache.delete(id);
+      logExport("Biweekly PDF", t0, false, err.message);
       res.status(500).json({ message: "Failed to generate PDF: " + err.message });
     }
   });
@@ -1555,8 +1585,9 @@ export async function registerRoutes(
   });
 
   app.post("/api/reports/monthly/pptx", async (req, res) => {
+    const t0 = Date.now();
     const { json, edits } = req.body as { json: any; edits?: Record<string, string> };
-    if (!json) return res.status(400).json({ message: "json is required" });
+    if (!json || !json.slides?.length) { logExport("Monthly PPTX", t0, false, "No slides"); return res.status(400).json({ message: "No slide data found. Generate the report first." }); }
     try {
       const sections: SectionData[] = (json.slides ?? []).filter((s: any) => s.type !== "title").map((s: any, idx: number) => {
         const items: any[] = [];
@@ -1573,11 +1604,12 @@ export async function registerRoutes(
       const buffer = await generatePptx(clientName, reportTitle, generatedAt, sections);
       const slug = clientName.toLowerCase().replace(/\s+/g, "_");
       const monthSlug = (json.month_label ?? "report").replace(/\s/g, "_");
+      logExport("Monthly PPTX", t0, true);
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
       res.setHeader("Content-Disposition", `attachment; filename="${slug}_monthly_${monthSlug}.pptx"`);
       res.send(buffer);
     } catch (err: any) {
-      console.error("Monthly PPTX error:", err);
+      logExport("Monthly PPTX", t0, false, err.message);
       res.status(500).json({ message: "Failed to generate PPTX: " + err.message });
     }
   });
@@ -1663,8 +1695,9 @@ export async function registerRoutes(
   });
 
   app.post("/api/reports/qbr-full/pptx", async (req, res) => {
+    const t0 = Date.now();
     const { json, edits } = req.body as { json: any; edits?: Record<string, string> };
-    if (!json) return res.status(400).json({ message: "json is required" });
+    if (!json || !json.slides?.length) { logExport("QBR Full PPTX", t0, false, "No slides"); return res.status(400).json({ message: "No slide data found. Generate the report first." }); }
     try {
       const sections: SectionData[] = (json.slides ?? [])
         .filter((s: any) => s.type !== "title" && s.type !== "divider")
@@ -1684,11 +1717,12 @@ export async function registerRoutes(
       const buffer = await generatePptx(clientName, reportTitle, generatedAt, sections);
       const slug = clientName.toLowerCase().replace(/\s+/g, "_");
       const qtrSlug = (json.quarter_label ?? "qbr").replace(/\s/g, "_");
+      logExport("QBR Full PPTX", t0, true);
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
       res.setHeader("Content-Disposition", `attachment; filename="${slug}_QBR_${qtrSlug}.pptx"`);
       res.send(buffer);
     } catch (err: any) {
-      console.error("QBR Full PPTX error:", err);
+      logExport("QBR Full PPTX", t0, false, err.message);
       res.status(500).json({ message: "Failed to generate PPTX: " + err.message });
     }
   });
@@ -1757,8 +1791,9 @@ export async function registerRoutes(
   });
 
   app.post("/api/reports/mid-strategy/pptx", async (req, res) => {
+    const t0 = Date.now();
     const { json, edits } = req.body as { json: any; edits?: Record<string, string> };
-    if (!json) return res.status(400).json({ message: "json is required" });
+    if (!json || !json.slides?.length) { logExport("Mid-Strategy PPTX", t0, false, "No slides"); return res.status(400).json({ message: "No slide data found. Generate the report first." }); }
     try {
       const sections: SectionData[] = (json.slides ?? [])
         .filter((s: any) => s.type !== "title")
@@ -1778,11 +1813,12 @@ export async function registerRoutes(
       const generatedAt = json.generated_at ? new Date(json.generated_at).toLocaleDateString("en-US") : new Date().toLocaleDateString("en-US");
       const buffer = await generatePptx(clientName, reportTitle, generatedAt, sections);
       const slug = clientName.toLowerCase().replace(/\s+/g, "_");
+      logExport("Mid-Strategy PPTX", t0, true);
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
       res.setHeader("Content-Disposition", `attachment; filename="${slug}_Mid_Strategy.pptx"`);
       res.send(buffer);
     } catch (err: any) {
-      console.error("Mid-Strategy PPTX error:", err);
+      logExport("Mid-Strategy PPTX", t0, false, err.message);
       res.status(500).json({ message: "Failed to generate PPTX: " + err.message });
     }
   });

@@ -792,16 +792,12 @@ function GenerateReportDialog({
   const handleDownload = async () => {
     setDownloading(true);
     try {
-      const res = await fetch("/api/reports/export", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          reportType,
-          clientId: client.id,
-          sections: buildSectionsPayload(),
-          attendees,
-          date: now,
-        }),
+      const res = await apiRequest("POST", "/api/reports/export", {
+        reportType,
+        clientId: client.id,
+        sections: buildSectionsPayload(),
+        attendees,
+        date: now,
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({})) as any;
@@ -826,16 +822,12 @@ function GenerateReportDialog({
     setUploading(true);
     setDriveLink(null);
     try {
-      const res = await fetch("/api/reports/upload-to-drive", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          reportType,
-          clientId: client.id,
-          sections: buildSectionsPayload(),
-          attendees,
-          date: now,
-        }),
+      const res = await apiRequest("POST", "/api/reports/upload-to-drive", {
+        reportType,
+        clientId: client.id,
+        sections: buildSectionsPayload(),
+        attendees,
+        date: now,
       });
       const data = await res.json() as any;
       if (!res.ok) throw new Error(data.message || "Upload failed");

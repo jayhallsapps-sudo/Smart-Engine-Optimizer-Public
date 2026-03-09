@@ -577,7 +577,7 @@ function generateSection2(
       topConvertingPages.push({
         type: pageType,
         page: shortUrl(mp),
-        conversionSource: "Configured priority page (no tracking data available)",
+        conversionSource: "Priority service page surfaced as a likely conversion target; direct page-level attribution unavailable",
         notes: getConversionNote(pageType, 0, 0),
       });
     }

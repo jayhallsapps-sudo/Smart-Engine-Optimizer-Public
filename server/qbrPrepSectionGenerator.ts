@@ -1177,6 +1177,180 @@ function checkHighIntentLanding(gscPages: any[], sfData: Record<string, any>[], 
   return highIntentOnClearUrl >= 3;
 }
 
+interface AmContext {
+  sentimentKey: string | null;
+  hypothesisSignals: string[];
+  hypothesisSummary: string | null;
+  auditSignals: string[];
+  auditSummary: string | null;
+}
+
+function parseAmContext(sentiment?: string, hypothesis?: string, auditNotes?: string): AmContext {
+  const hypothesisSignals: string[] = [];
+  const hypothesisSummary = hypothesis?.trim() ? hypothesis.trim().slice(0, 160) : null;
+
+  if (hypothesis) {
+    const h = hypothesis.toLowerCase();
+    if (/admissions|vob|insurance.*verif|contact form|conversion path/.test(h)) hypothesisSignals.push("admissions_path");
+    if (/service.?page|program page|trust/.test(h)) hypothesisSignals.push("service_page");
+    if (/convert|cvr|conversion rate|cta/.test(h)) hypothesisSignals.push("conversion");
+    if (/internal.?link/.test(h)) hypothesisSignals.push("internal_linking");
+    if (/local|gbp|google business|map pack|location page/.test(h)) hypothesisSignals.push("local");
+    if (/content|blog|refresh|article|copywrite/.test(h)) hypothesisSignals.push("content");
+    if (/technical|crawl|site.?speed|core web|performance|site.?health/.test(h)) hypothesisSignals.push("technical");
+    if (/cannibali|duplicate.?content/.test(h)) hypothesisSignals.push("cannibalization");
+    if (/keyword|rank|position|serp/.test(h)) hypothesisSignals.push("rankings");
+  }
+
+  const auditSignals: string[] = [];
+  const auditSummary = auditNotes?.trim() ? auditNotes.trim().slice(0, 200) : null;
+
+  if (auditNotes) {
+    const a = auditNotes.toLowerCase();
+    if (/title|meta desc|h1|heading tag/.test(a)) auditSignals.push("metadata");
+    if (/internal.?link/.test(a)) auditSignals.push("internal_linking");
+    if (/thin content|thin pages|duplicate|cannibali/.test(a)) auditSignals.push("thin_content");
+    if (/redirect|404|broken link|error page/.test(a)) auditSignals.push("crawl_errors");
+    if (/speed|core web vitals|lcp|cls|fid|page speed/.test(a)) auditSignals.push("page_speed");
+    if (/admissions|vob|contact|conversion/.test(a)) auditSignals.push("admissions_path");
+    if (/service.?page|program page/.test(a)) auditSignals.push("service_page");
+    if (/schema|structured data/.test(a)) auditSignals.push("schema");
+  }
+
+  return {
+    sentimentKey: sentiment ?? null,
+    hypothesisSignals,
+    hypothesisSummary,
+    auditSignals,
+    auditSummary,
+  };
+}
+
+function enrichWithAmContext(priorities: PriorityRow[], amCtx: AmContext): void {
+  for (const p of priorities) {
+    const initLower = p.initiative.toLowerCase();
+
+    if (amCtx.hypothesisSignals.includes("admissions_path") &&
+      /admissions|conversion path|vob/.test(initLower) && amCtx.hypothesisSummary) {
+      p.reason += ` AM focus area aligns: ${amCtx.hypothesisSummary.slice(0, 90).replace(/\.$/, "")}.`;
+    }
+    if (amCtx.hypothesisSignals.includes("service_page") &&
+      /service page|service foundation/.test(initLower) && amCtx.hypothesisSummary) {
+      p.reason += ` AM focus area aligns: ${amCtx.hypothesisSummary.slice(0, 90).replace(/\.$/, "")}.`;
+    }
+    if (amCtx.hypothesisSignals.includes("internal_linking") &&
+      /internal link/.test(initLower) && amCtx.hypothesisSummary) {
+      p.reason += ` AM context: ${amCtx.hypothesisSummary.slice(0, 80).replace(/\.$/, "")}.`;
+    }
+    if (amCtx.hypothesisSignals.includes("content") &&
+      /content refresh/.test(initLower) && amCtx.hypothesisSummary) {
+      p.reason += ` AM context: ${amCtx.hypothesisSummary.slice(0, 80).replace(/\.$/, "")}.`;
+    }
+    if (amCtx.hypothesisSignals.includes("technical") &&
+      /technical cleanup/.test(initLower) && amCtx.hypothesisSummary) {
+      p.reason += ` AM focus area aligns: ${amCtx.hypothesisSummary.slice(0, 80).replace(/\.$/, "")}.`;
+    }
+
+    if (amCtx.auditSignals.includes("metadata") && /title|meta/.test(initLower)) {
+      p.reason += " Manual audit confirms: metadata gaps present — title and description optimization will improve click-through on current impressions.";
+    }
+    if (amCtx.auditSignals.includes("internal_linking") && /internal link/.test(initLower)) {
+      p.reason += " Manual audit confirms: internal linking gaps identified — high-traffic pages are not passing authority to conversion pages.";
+    }
+    if (amCtx.auditSignals.includes("thin_content") && /content refresh/.test(initLower)) {
+      p.reason += " Manual audit confirms: thin or duplicate content detected — refreshing these pages directly improves crawl quality and topical authority.";
+    }
+    if (amCtx.auditSignals.includes("crawl_errors") && /technical cleanup/.test(initLower)) {
+      p.reason += " Manual audit confirms: redirect chains and error pages identified — resolving these improves crawl efficiency and page equity flow.";
+    }
+    if (amCtx.auditSignals.includes("admissions_path") && /admissions|conversion path|vob/.test(initLower)) {
+      p.reason += " Manual audit flags the admissions/VOB path as a friction point — aligns with this initiative.";
+    }
+    if (amCtx.auditSignals.includes("service_page") && /service page|service foundation/.test(initLower)) {
+      p.reason += " Manual audit flagged service page gaps — consolidation and refresh are confirmed priorities.";
+    }
+  }
+}
+
+function addNetNewAmPriorities(
+  priorities: PriorityRow[],
+  amCtx: AmContext,
+  section5: Section5Diagnosis
+): void {
+  const covered = priorities.map(p => p.initiative.toLowerCase());
+
+  if (amCtx.hypothesisSignals.includes("local") &&
+    !covered.some(c => /local|gbp/.test(c)) &&
+    priorities.length < 7) {
+    priorities.push({
+      priority: priorities.length + 1,
+      initiative: "Local Presence Optimization",
+      tier: "Tier 3",
+      action: "Strengthen Google Business Profile signals and local service-area content to improve map-pack visibility in the primary target market",
+      reason: amCtx.hypothesisSummary
+        ? `Strategic focus this quarter: ${amCtx.hypothesisSummary.slice(0, 100).replace(/\.$/, "")}. Local signals are a compounding factor for treatment center visibility in geo-targeted searches.`
+        : "Local presence improvements compound with organic rankings — GBP signals, local citations, and location content reinforce market-area authority",
+      source: "Manual entry needed",
+    });
+  }
+
+  if (amCtx.hypothesisSignals.includes("rankings") &&
+    !covered.some(c => /keyword rank|ranking accel/.test(c)) &&
+    priorities.length < 7) {
+    priorities.push({
+      priority: priorities.length + 1,
+      initiative: "Keyword Ranking Acceleration",
+      tier: `Tier ${Math.min(section5.tier, 3)}`,
+      action: "Identify the 10–15 highest-value keywords where the site ranks on page 2 and build targeted content and link equity to push them to page 1",
+      reason: amCtx.hypothesisSummary
+        ? `Strategic direction: ${amCtx.hypothesisSummary.slice(0, 100).replace(/\.$/, "")}. Page 2 keywords are the fastest path to meaningful organic traffic gains without new content investment.`
+        : "Page 2 rankings represent ready-to-capture traffic — closing that gap is higher ROI than launching net-new content",
+      source: "GSC",
+    });
+  }
+
+  if (amCtx.auditSignals.includes("page_speed") &&
+    !covered.some(c => /speed|core web|performance/.test(c)) &&
+    priorities.length < 7) {
+    priorities.push({
+      priority: priorities.length + 1,
+      initiative: "Core Web Vitals / Page Speed",
+      tier: "Tier 3",
+      action: "Audit and improve LCP, CLS, and FID scores on primary service and admissions pages to meet Google's performance threshold",
+      reason: "Manual audit flagged page speed as an issue — slow load times on high-intent pages suppress both rankings and on-site conversion rates",
+      source: "Manual entry needed",
+    });
+  }
+
+  if (amCtx.auditSignals.includes("schema") &&
+    !covered.some(c => /schema|structured data/.test(c)) &&
+    priorities.length < 7) {
+    priorities.push({
+      priority: priorities.length + 1,
+      initiative: "Schema Markup Implementation",
+      tier: "Tier 3",
+      action: "Implement LocalBusiness, MedicalOrganization, and FAQ schema on core service and admissions pages",
+      reason: "Manual audit identified missing structured data — schema markup improves SERP feature eligibility and helps Google confirm treatment center entity context",
+      source: "Manual entry needed",
+    });
+  }
+
+  if (amCtx.hypothesisSignals.includes("cannibalization") &&
+    !covered.some(c => /cannibali|consolidat/.test(c)) &&
+    priorities.length < 7) {
+    priorities.push({
+      priority: priorities.length + 1,
+      initiative: "Keyword Cannibalization Cleanup",
+      tier: "Tier 3",
+      action: "Identify pages competing for the same service and condition keywords and consolidate or differentiate them to protect primary ranking pages",
+      reason: amCtx.hypothesisSummary
+        ? `AM focus area: ${amCtx.hypothesisSummary.slice(0, 90).replace(/\.$/, "")}. Cannibalization dilutes authority on core service pages.`
+        : "Pages competing for the same keywords split ranking signals — consolidation protects the primary service page hierarchy",
+      source: "Manual entry needed",
+    });
+  }
+}
+
 function generateSection6(
   section1: Section1Goals,
   section2: Section2Conversions,
@@ -1269,32 +1443,6 @@ function generateSection6(
     }
   }
 
-  if (hypothesis && priorities.length < 7) {
-    priorities.push({
-      priority: priorities.length + 1,
-      initiative: "AM-Identified Focus",
-      tier: `Tier ${section5.tier}`,
-      action: hypothesis,
-      reason: "Account manager identified this as a priority based on client relationship and strategic context",
-      source: "Manual entry needed",
-    });
-  }
-
-  if (auditNotes && priorities.length < 7) {
-    const noteActions = auditNotes.split(/[.;\n]/).filter(n => n.trim().length > 10).slice(0, 2);
-    for (const note of noteActions) {
-      if (priorities.length >= 7) break;
-      priorities.push({
-        priority: priorities.length + 1,
-        initiative: "Audit Finding",
-        tier: `Tier ${Math.min(section5.tier + 1, 5)}`,
-        action: note.trim(),
-        reason: "Identified during manual audit review",
-        source: "Manual entry needed",
-      });
-    }
-  }
-
   const unclearTrafficPages = section3.topTrafficPages.filter(p => p.connectionToAdmits === "Unclear");
   const topUnclearPage = unclearTrafficPages[0];
   const goalBehind = section1.rows.some(r => r.goalShift === "-5%");
@@ -1378,6 +1526,24 @@ function generateSection6(
       source: "GA4",
     });
   }
+
+  const amCtx = parseAmContext(sentiment, hypothesis, auditNotes);
+
+  enrichWithAmContext(priorities, amCtx);
+
+  addNetNewAmPriorities(priorities, amCtx, section5);
+
+  if (amCtx.sentimentKey === "concerned" || amCtx.sentimentKey === "frustrated") {
+    if (priorities.length > 0) {
+      priorities[0].reason = `Given the current client situation, this is the highest-leverage action to address performance concerns. ${priorities[0].reason}`;
+    }
+  } else if (amCtx.sentimentKey === "happy") {
+    if (priorities.length > 0) {
+      priorities[0].reason = `Building on current momentum, ${priorities[0].reason.charAt(0).toLowerCase() + priorities[0].reason.slice(1)}`;
+    }
+  }
+
+  priorities.forEach((p, i) => { p.priority = i + 1; });
 
   return { priorities: priorities.slice(0, 7) };
 }

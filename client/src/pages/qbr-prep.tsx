@@ -425,6 +425,10 @@ export default function QbrPrepPage() {
                       currentCrawlAssetId: currentCrawlId,
                     },
                   };
+                  const savedInputs = data?.sourceSnapshot?.manualInputs ?? {};
+                  if (savedInputs.sentiment) setSentiment(savedInputs.sentiment);
+                  if (savedInputs.hypothesis) setHypothesis(savedInputs.hypothesis);
+                  if (savedInputs.auditNotes) setAuditNotes(savedInputs.auditNotes);
                   toast({ title: "Report loaded" });
                 }}
               />

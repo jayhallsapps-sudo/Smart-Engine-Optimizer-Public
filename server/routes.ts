@@ -137,8 +137,14 @@ export async function registerRoutes(
     res.json({ token: INTERNAL_TOKEN });
   });
 
+  const AUTH_PUBLIC_PATHS = [
+    "/auth/bootstrap",
+    "/auth/google/start",
+    "/auth/google/callback",
+    "/auth/google/configured",
+  ];
   app.use("/api", (req: Request, res: Response, next: NextFunction) => {
-    if (req.path === "/auth/bootstrap") return next();
+    if (AUTH_PUBLIC_PATHS.some(p => req.path === p || req.path.startsWith(p + "?"))) return next();
     const provided = req.headers["x-internal-token"];
     if (provided !== INTERNAL_TOKEN) {
       return res.status(401).json({ message: "Unauthorized" });

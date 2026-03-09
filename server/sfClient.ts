@@ -5,14 +5,84 @@ function fmtN(n: number): string {
   return Math.round(n).toLocaleString("en-US");
 }
 
+const PRIORITY_ORDER: Record<string, number> = {
+  critical: 0,
+  high: 1,
+  medium: 2,
+  low: 3,
+};
+
+function priorityRank(val: string): number {
+  return PRIORITY_ORDER[String(val).toLowerCase().trim()] ?? 4;
+}
+
 export async function querySfReport(
   command: Command,
   client: Client,
   _dateRange: string
 ): Promise<CommandResult | null> {
-  if (command !== "technical_health_summary" && command !== "new_pages_tracker") return null;
+  if (
+    command !== "technical_health_summary" &&
+    command !== "new_pages_tracker" &&
+    command !== "sf_issues_summary"
+  )
+    return null;
 
-  const reports = await storage.getSfReports(client.id);
+  const allReports = await storage.getSfReports(client.id);
+  if (!allReports.length) return null;
+
+  if (command === "sf_issues_summary") {
+    const issuesReport = allReports.find(r => r.fileType === "issues");
+    if (!issuesReport) return null;
+    const headers = issuesReport.headers ?? [];
+    const rows = ((issuesReport.data ?? []) as Record<string, any>[]);
+    if (!rows.length) return null;
+
+    const issueCol =
+      headers.find(h => /^issue\s*name$/i.test(h)) ??
+      headers.find(h => /^issue\s*type$/i.test(h)) ??
+      headers.find(h => /^issue$/i.test(h)) ??
+      headers[0];
+    const priorityCol = headers.find(h => /priority/i.test(h));
+    const countCol =
+      headers.find(h => /occurrence/i.test(h)) ??
+      headers.find(h => /^count$/i.test(h)) ??
+      headers.find(h => /^urls?$/i.test(h));
+
+    const sorted = [...rows].sort((a, b) => {
+      const pa = priorityRank(String(a[priorityCol ?? ""] ?? ""));
+      const pb = priorityRank(String(b[priorityCol ?? ""] ?? ""));
+      return pa !== pb ? pa - pb : (Number(b[countCol ?? ""] ?? 0) - Number(a[countCol ?? ""] ?? 0));
+    });
+
+    const high = sorted.filter(r => /high|critical/i.test(String(r[priorityCol ?? ""] ?? ""))).length;
+    const medium = sorted.filter(r => /medium/i.test(String(r[priorityCol ?? ""] ?? ""))).length;
+    const low = sorted.filter(r => /low/i.test(String(r[priorityCol ?? ""] ?? ""))).length;
+
+    const tableRows = sorted.slice(0, 25).map(r => [
+      String(r[issueCol] ?? "—"),
+      priorityCol ? String(r[priorityCol] ?? "—") : "—",
+      countCol ? fmtN(Number(String(r[countCol] ?? "0").replace(/[^0-9.]/g, "")) || 0) : "—",
+    ]);
+
+    return {
+      command,
+      clientName: client.name,
+      dateRange: issuesReport.reportDate,
+      summary: [
+        { label: "Total Issues", current: fmtN(sorted.length), previous: "—", delta: "—", deltaPercent: "—", isPositive: sorted.length === 0 },
+        { label: "High / Critical", current: fmtN(high), previous: "—", delta: "—", deltaPercent: "—", isPositive: high === 0 },
+        { label: "Medium", current: fmtN(medium), previous: "—", delta: "—", deltaPercent: "—", isPositive: medium === 0 },
+        { label: "Low", current: fmtN(low), previous: "—", delta: "—", deltaPercent: "—", isPositive: true },
+      ],
+      tables: tableRows.length
+        ? [{ title: "Issues by Priority", headers: ["Issue", "Priority", "Occurrences"], rows: tableRows }]
+        : [],
+    };
+  }
+
+  // Crawl commands — exclude issues reports, only use crawl data
+  const reports = allReports.filter(r => r.fileType !== "issues");
   if (!reports.length) return null;
 
   const latest = reports[0];
@@ -106,5 +176,5 @@ export async function querySfReport(
 }
 
 export function handlesSfCommand(command: Command): boolean {
-  return ["technical_health_summary", "new_pages_tracker"].includes(command);
+  return ["technical_health_summary", "new_pages_tracker", "sf_issues_summary"].includes(command);
 }

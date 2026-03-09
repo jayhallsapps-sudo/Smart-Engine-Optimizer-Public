@@ -302,15 +302,52 @@ export async function generateBiweekly(input: {
   const asanaUpcomingByCategory = asanaData ? groupAsanaTasks(asanaData.upcoming) : {};
 
   const allSfReports = sfReportsResult.status === "fulfilled" ? (sfReportsResult.value ?? []) : [];
-  const hasSf = allSfReports.length > 0;
-  const sfCounts = hasSf ? aggregateSfCounts(allSfReports) : null;
-  const sfPriorities = sfCounts
-    ? getSfTopPriorities(sfCounts)
-    : [
-        "Upload a Screaming Frog crawl CSV in the sidebar to generate technical priorities",
-        "Audit Core Web Vitals for top landing pages",
-        "Review internal link structure for crawl efficiency",
-      ];
+  const crawlReports = allSfReports.filter((r: any) => r.fileType !== "issues");
+  const issuesReport = allSfReports.find((r: any) => r.fileType === "issues") ?? null;
+
+  const hasSf = crawlReports.length > 0;
+  const sfCounts = hasSf ? aggregateSfCounts(crawlReports) : null;
+
+  // Build techNext from Issues Report if available, otherwise fall back to crawl-computed priorities
+  let sfPriorities: string[];
+  if (issuesReport) {
+    const iHeaders: string[] = issuesReport.headers ?? [];
+    const iRows: Record<string, any>[] = (issuesReport.data ?? []) as Record<string, any>[];
+    const issueCol =
+      iHeaders.find((h: string) => /^issue\s*name$/i.test(h)) ??
+      iHeaders.find((h: string) => /^issue\s*type$/i.test(h)) ??
+      iHeaders.find((h: string) => /^issue$/i.test(h)) ??
+      iHeaders[0];
+    const priorityCol = iHeaders.find((h: string) => /priority/i.test(h));
+    const countCol =
+      iHeaders.find((h: string) => /occurrence/i.test(h)) ??
+      iHeaders.find((h: string) => /^count$/i.test(h)) ??
+      iHeaders.find((h: string) => /^urls?$/i.test(h));
+    const PRIO: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+    const sorted = [...iRows].sort((a, b) => {
+      const pa = PRIO[String(a[priorityCol ?? ""] ?? "").toLowerCase().trim()] ?? 4;
+      const pb = PRIO[String(b[priorityCol ?? ""] ?? "").toLowerCase().trim()] ?? 4;
+      return pa !== pb ? pa - pb : (Number(b[countCol ?? ""] ?? 0) - Number(a[countCol ?? ""] ?? 0));
+    });
+    const topIssues = sorted.slice(0, 3);
+    sfPriorities = topIssues.map(r => {
+      const name = String(r[issueCol] ?? "").trim() || "Unknown issue";
+      const priority = priorityCol ? String(r[priorityCol] ?? "").trim() : "";
+      const count = countCol ? Number(String(r[countCol] ?? "0").replace(/[^0-9.]/g, "")) || 0 : 0;
+      return `${name}${priority ? ` [${priority}]` : ""}${count > 0 ? ` — ${count} occurrence${count !== 1 ? "s" : ""}` : ""}`;
+    });
+    if (sfPriorities.length === 0) {
+      sfPriorities = ["No active issues found in latest Screaming Frog Issues Report"];
+    }
+  } else if (sfCounts) {
+    sfPriorities = getSfTopPriorities(sfCounts);
+  } else {
+    sfPriorities = [
+      "Upload a Screaming Frog crawl or Issues Report CSV to generate technical priorities",
+      "Audit Core Web Vitals for top landing pages",
+      "Review internal link structure for crawl efficiency",
+    ];
+  }
 
   const snapshotKey = `sf_snapshot_${clientId}`;
   const prevSnapshotRaw = await storage.getSetting(snapshotKey);

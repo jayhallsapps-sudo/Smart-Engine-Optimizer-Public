@@ -41,6 +41,7 @@ const SOURCE_PRIORITY: Record<Command, number> = {
   ga4_yoy_comparison: 1,
   // Tier 2 — Screaming Frog
   technical_health_summary: 2,
+  sf_issues_summary: 2,
   core_web_vitals: 2,
   new_pages_tracker: 2,
   // Tier 3 — Call tracking
@@ -100,6 +101,7 @@ const COMMAND_KEYWORDS: Record<Command, string[]> = {
   ga4_yoy_comparison: ["year over year", "yoy comparison", "same month last year", "yoy monthly", "yoy sessions"],
   // Screaming Frog / Technical
   technical_health_summary: ["technical health", "technical issues", "crawl errors", "technical seo summary", "site health", "screaming frog"],
+  sf_issues_summary: ["sf issues", "issues report", "screaming frog issues", "crawl issues", "issue list", "seo issues list", "issues by priority"],
   core_web_vitals: ["core web vitals", "cwv", "lcp", "cls", "inp", "page experience"],
   new_pages_tracker: ["new pages", "updated pages", "pages tracker", "recently published", "new urls"],
   // Call tracking
@@ -275,6 +277,7 @@ export function getCommandDescription(command: Command): string {
     semrush_competitor_visibility: "SEMrush Competitor Visibility (Share of Voice)",
     content_output_summary: "Content Output Summary (Published / Refreshed)",
     technical_health_summary: "Technical Health Summary (Screaming Frog)",
+    sf_issues_summary: "SF Issues Report — Issues by Priority",
     core_web_vitals: "Core Web Vitals Trend",
     gbp_local_summary: "GBP / Local SEO Summary",
     new_pages_tracker: "New & Updated Pages Tracker",

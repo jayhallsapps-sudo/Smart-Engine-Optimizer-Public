@@ -243,6 +243,7 @@ export const COMMANDS = [
   "semrush_competitor_visibility",
   "content_output_summary",
   "technical_health_summary",
+  "sf_issues_summary",
   "core_web_vitals",
   "gbp_local_summary",
   "new_pages_tracker",

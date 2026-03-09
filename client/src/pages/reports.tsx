@@ -1544,6 +1544,9 @@ export default function ReportsPage() {
         headers.forEach((h, i) => { obj[h] = (cols[i] ?? "").replace(/^"|"$/g, "").trim(); });
         return obj;
       });
+      const isIssuesReport =
+        headers.some(h => /^issue(\s*(name|type))?$/i.test(h)) &&
+        headers.some(h => /priority/i.test(h));
       const today = new Date().toISOString().split("T")[0];
       const body = {
         reportDate: today,
@@ -1551,17 +1554,23 @@ export default function ReportsPage() {
         rowCount: rows.length,
         headers,
         data: rows,
+        fileType: isIssuesReport ? "issues" : null,
       };
+      const { getAuthHeaders } = await import("@/lib/queryClient");
+      const authHeaders = await getAuthHeaders();
       const res = await fetch(`/api/clients/${selectedClientId}/sf-reports`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error("Upload failed");
       const created = await res.json();
       rqClient.invalidateQueries({ queryKey: ["/api/clients", selectedClientId, "sf-reports"] });
       if (created?.id) setSfActiveId(created.id);
-      toast({ title: "Crawl uploaded", description: `${rows.length} rows from ${file.name}` });
+      toast({
+        title: isIssuesReport ? "Issues report uploaded" : "Crawl uploaded",
+        description: `${rows.length} ${isIssuesReport ? "issues" : "rows"} from ${file.name}`,
+      });
     } catch (err: any) {
       toast({ title: "Upload failed", description: err.message, variant: "destructive" });
     } finally {
@@ -1893,11 +1902,11 @@ export default function ReportsPage() {
                 <SelectItem value="__none__">No crawl selected</SelectItem>
                 {sfReports.map(r => (
                   <SelectItem key={r.id} value={String(r.id)} data-testid={`sf-active-option-${r.id}`}>
-                    {r.reportDate} — {r.filename}
+                    {r.fileType === "issues" ? "⚠ " : ""}{r.reportDate} — {r.fileType === "issues" ? "[Issues] " : ""}{r.filename}
                   </SelectItem>
                 ))}
                 <SelectItem value="__upload__" data-testid="sf-upload-option">
-                  {sfUploading ? "Uploading…" : "↑ Upload new crawl…"}
+                  {sfUploading ? "Uploading…" : "↑ Upload crawl or issues CSV…"}
                 </SelectItem>
               </SelectContent>
             </Select>
@@ -1925,7 +1934,7 @@ export default function ReportsPage() {
                   <SelectItem value="__none__">No crawl selected</SelectItem>
                   {sfReports.map(r => (
                     <SelectItem key={r.id} value={String(r.id)} data-testid={`sf-compare-option-${r.id}`}>
-                      {r.reportDate} — {r.filename}
+                      {r.fileType === "issues" ? "⚠ " : ""}{r.reportDate} — {r.fileType === "issues" ? "[Issues] " : ""}{r.filename}
                     </SelectItem>
                   ))}
                 </SelectContent>

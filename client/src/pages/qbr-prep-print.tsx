@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import swoopHeaderFallback from "@assets/HEADER_IMAGE_1773063127856.png";
+import { ReportTable } from "../components/report-preview/report-table";
 
 const ACCENT = "#C0392B";
-const TABLE_HEADER_BG = "#111827";
 const FOOTER_TEXT = "Webserv  |  32 Discovery Suite 130, Irvine, CA 92618  |  webserv.io";
 
 function SectionHeading({ num, title }: { num: number; title: string }) {
@@ -14,34 +15,14 @@ function SectionHeading({ num, title }: { num: number; title: string }) {
 }
 
 function DataTable({ headers, rows }: { headers: string[]; rows: string[][] }) {
-  return (
-    <div style={{ border: "1px solid #E5E7EB", borderRadius: 4, overflow: "hidden", marginBottom: 12 }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px" }}>
-        <thead>
-          <tr>
-            {headers.map((h, hi) => (
-              <th key={hi} style={{ backgroundColor: TABLE_HEADER_BG, color: "white", padding: "6px 8px", textAlign: "left", fontWeight: 600, fontSize: "9px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, ri) => (
-            <tr key={ri} style={{ background: ri % 2 === 1 ? "#F9FAFB" : "white" }}>
-              {row.map((cell, ci) => (
-                <td key={ci} style={{ padding: "6px 8px", borderBottom: "1px solid #F3F4F6", verticalAlign: "top", lineHeight: 1.4 }}>
-                  {cell?.includes("Manual entry needed") ? (
-                    <span style={{ fontStyle: "italic", color: "#9CA3AF" }}>{cell}</span>
-                  ) : cell}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+  const nodeRows: ReactNode[][] = rows.map(row =>
+    row.map((cell: string) =>
+      cell?.includes("Manual entry needed") ? (
+        <span style={{ fontStyle: "italic", color: "#9CA3AF" }}>{cell}</span>
+      ) : cell
+    )
   );
+  return <ReportTable headers={headers} rows={nodeRows} />;
 }
 
 function applyEdits(value: string, key: string, edits: Record<string, string>): string {

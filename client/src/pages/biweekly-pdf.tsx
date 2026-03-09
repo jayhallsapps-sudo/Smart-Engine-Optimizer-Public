@@ -1,27 +1,9 @@
 import { useEffect, useState } from "react";
 
+import { SourceBadge } from "../components/report-preview/report-table";
+
 const FOOTER_TEXT = "Webserv  |  32 Discovery Suite 130, Irvine, CA 92618  |  webserv.io";
 const ACCENT = "#C0392B";
-const TABLE_HEADER_BG = "#111827";
-
-const SOURCE_COLORS: Record<string, { bg: string; text: string }> = {
-  "Airtable":       { bg: "#FFF3D6", text: "#B45309" },
-  "Asana":          { bg: "#FDEAEA", text: "#C0392B" },
-  "Screaming Frog": { bg: "#E6F4EA", text: "#1E7E34" },
-  "GA4":            { bg: "#E8F0FE", text: "#1967D2" },
-  "GSC":            { bg: "#E6F4EA", text: "#137333" },
-  "CallRail":       { bg: "#F3E8FF", text: "#6D28D9" },
-  "NSM":            { bg: "#EEF2FF", text: "#4338CA" },
-};
-
-function SourceBadge({ source }: { source: string }) {
-  const c = SOURCE_COLORS[source] ?? { bg: "#F3F4F6", text: "#6B7280" };
-  return (
-    <span style={{ backgroundColor: c.bg, color: c.text, fontSize: "8px", padding: "1px 4px", borderRadius: "3px", fontWeight: 500, lineHeight: 1.4, whiteSpace: "nowrap", display: "inline-block" }}>
-      {source}
-    </span>
-  );
-}
 
 function StatusIcon({ value }: { value: string }) {
   const isBad = value.includes("❌") || value.toLowerCase().includes("behind") || value.toLowerCase().includes("no");

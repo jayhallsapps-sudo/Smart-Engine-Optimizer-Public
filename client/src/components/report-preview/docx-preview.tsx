@@ -2,40 +2,9 @@ import { useState, useRef, useEffect } from "react";
 import { Pencil, Check, X } from "lucide-react";
 import { EditableSection } from "./editable-section";
 import { MetricCard } from "./report-chart";
+import { SourceBadge } from "./report-table";
 
 interface BulletItem { text: string; url?: string; source?: string }
-
-const SOURCE_COLORS: Record<string, { bg: string; text: string }> = {
-  "Airtable":       { bg: "#FFF3D6", text: "#B45309" },
-  "Asana":          { bg: "#FDEAEA", text: "#C0392B" },
-  "Screaming Frog": { bg: "#E6F4EA", text: "#1E7E34" },
-  "GA4":            { bg: "#E8F0FE", text: "#1967D2" },
-  "GSC":            { bg: "#E6F4EA", text: "#137333" },
-  "CallRail":       { bg: "#F3E8FF", text: "#6D28D9" },
-  "NSM":            { bg: "#EEF2FF", text: "#4338CA" },
-};
-
-function SourceBadge({ source }: { source: string }) {
-  const colors = SOURCE_COLORS[source] ?? { bg: "#F3F4F6", text: "#6B7280" };
-  return (
-    <span
-      style={{
-        backgroundColor: colors.bg,
-        color: colors.text,
-        fontSize: "8px",
-        padding: "1px 4px",
-        borderRadius: "3px",
-        fontWeight: 500,
-        lineHeight: 1.4,
-        whiteSpace: "nowrap",
-        flexShrink: 0,
-        letterSpacing: "0.01em",
-      }}
-    >
-      {source}
-    </span>
-  );
-}
 
 function WorkLogBulletCell({
   editKey,
@@ -431,7 +400,6 @@ function DocxSectionBlock({
   }
 
   const accentColor = bwTheme ? "#C0392B" : "#1B3A6B";
-  const tableHeaderBg = bwTheme ? "#111827" : "#1B3A6B";
   const num = sectionIndex + 1;
 
   return (
@@ -615,62 +583,66 @@ function DocxSectionBlock({
       )}
 
       {section.type === "technical" && section.technicalTable && (
-        <table className="w-full text-xs border-collapse mt-1">
-          <thead>
-            <tr>
-              {section.technicalTable.headers.map(h => (
-                <th
-                  key={h}
-                  className="text-left px-2 py-1.5 text-white text-[10px]"
-                  style={{ background: tableHeaderBg }}
-                >
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {section.technicalTable.rows.map((row, ri) => (
-              <tr key={ri} style={{ background: ri % 2 === 1 ? "#F0F4FA" : "white" }}>
-                {row.map((cell, ci) => (
-                  <td key={ci} className="px-2 py-1.5 border border-[#D1D5DB] text-[10px] align-top">
-                    <EditableSection
-                      editKey={`${section.id}_tech_${ri}_${ci}`}
-                      value={cell}
-                      edits={edits}
-                      onEdit={onEdit}
-                      as="span"
-                      multiline
-                    />
-                  </td>
+        <div style={{ border: "1px solid #C0392B28", borderRadius: 6, overflow: "hidden", marginTop: 4 }}>
+          <table className="w-full text-xs border-collapse">
+            <thead>
+              <tr style={{ backgroundColor: "#C0392B0D" }}>
+                {section.technicalTable.headers.map(h => (
+                  <th
+                    key={h}
+                    className="text-left px-2 py-1.5 text-[9px]"
+                    style={{ color: "#C0392B", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: "1px solid #C0392B20" }}
+                  >
+                    {h}
+                  </th>
                 ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {section.technicalTable.rows.map((row, ri) => (
+                <tr key={ri} style={{ background: ri % 2 === 1 ? "#FBF8F7" : "white" }}>
+                  {row.map((cell, ci) => (
+                    <td key={ci} className="px-2 py-1.5 text-[10px] align-top" style={{ borderBottom: "1px solid #F3EDED" }}>
+                      <EditableSection
+                        editKey={`${section.id}_tech_${ri}_${ci}`}
+                        value={cell}
+                        edits={edits}
+                        onEdit={onEdit}
+                        as="span"
+                        multiline
+                      />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {section.table && (
-        <table className="w-full text-xs border-collapse mt-1">
-          <thead>
-            <tr>
-              {section.table.headers.map(h => (
-                <th key={h} className="text-left px-2 py-1.5 text-white text-[10px]" style={{ background: tableHeaderBg }}>
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {section.table.rows.map((row, ri) => (
-              <tr key={ri} style={{ background: ri % 2 === 1 ? "#F0F4FA" : "white" }}>
-                {row.map((cell, ci) => (
-                  <td key={ci} className="px-2 py-1.5 border border-[#D1D5DB] text-[10px]">{String(cell)}</td>
+        <div style={{ border: "1px solid #C0392B28", borderRadius: 6, overflow: "hidden", marginTop: 4 }}>
+          <table className="w-full text-xs border-collapse">
+            <thead>
+              <tr style={{ backgroundColor: "#C0392B0D" }}>
+                {section.table.headers.map(h => (
+                  <th key={h} className="text-left px-2 py-1.5 text-[9px]" style={{ color: "#C0392B", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: "1px solid #C0392B20" }}>
+                    {h}
+                  </th>
                 ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {section.table.rows.map((row, ri) => (
+                <tr key={ri} style={{ background: ri % 2 === 1 ? "#FBF8F7" : "white" }}>
+                  {row.map((cell, ci) => (
+                    <td key={ci} className="px-2 py-1.5 text-[10px]" style={{ borderBottom: "1px solid #F3EDED" }}>{String(cell)}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {section.type === "qbr-exec" && (

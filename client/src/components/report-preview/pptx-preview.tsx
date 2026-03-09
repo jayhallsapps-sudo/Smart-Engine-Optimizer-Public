@@ -238,11 +238,11 @@ export function SlideRenderer({ slide, edits, onEdit }: { slide: Slide; edits: R
               <EditableSection editKey={`${slide.id}_subtitle`} value={slide.subtitle} edits={edits} onEdit={onEdit} as="span" />
             </div>
           )}
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 8 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 8, border: "1px solid #C0392B28", borderRadius: 4, overflow: "hidden" }}>
             <thead>
-              <tr>
+              <tr style={{ backgroundColor: "#C0392B0D" }}>
                 {headers.map((h, hi) => (
-                  <th key={hi} style={{ background: NAVY, color: "white", padding: "4px 6px", textAlign: "left", fontWeight: "bold", borderRight: "1px solid #2D5A9E", whiteSpace: "nowrap" }}>
+                  <th key={hi} style={{ color: "#C0392B", padding: "3px 6px", textAlign: "left", fontWeight: 700, fontSize: 7, textTransform: "uppercase", letterSpacing: "0.05em", borderBottom: "1px solid #C0392B20", whiteSpace: "nowrap" }}>
                     {h}
                   </th>
                 ))}
@@ -335,11 +335,11 @@ export function SlideRenderer({ slide, edits, onEdit }: { slide: Slide; edits: R
               </div>
             ))}
             {slide.leftContent.type === "table" && slide.leftContent.table && (
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 7 }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 7, border: "1px solid #C0392B28", borderRadius: 4, overflow: "hidden" }}>
                 <thead>
-                  <tr>
+                  <tr style={{ backgroundColor: "#C0392B0D" }}>
                     {slide.leftContent.table.headers.map((h, hi) => (
-                      <th key={hi} style={{ background: NAVY, color: "white", padding: "3px 4px" }}>{h}</th>
+                      <th key={hi} style={{ color: "#C0392B", padding: "2px 4px", fontWeight: 700, fontSize: 7, textTransform: "uppercase", letterSpacing: "0.04em", borderBottom: "1px solid #C0392B20" }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -391,11 +391,11 @@ export function SlideRenderer({ slide, edits, onEdit }: { slide: Slide; edits: R
               </div>
             )}
             {headers.length > 0 && (
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 7.5 }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 7.5, border: "1px solid #C0392B28", borderRadius: 4, overflow: "hidden" }}>
                 <thead>
-                  <tr>
+                  <tr style={{ backgroundColor: "#C0392B0D" }}>
                     {headers.map((h, hi) => (
-                      <th key={hi} style={{ background: NAVY, color: "white", padding: "3px 5px", textAlign: "left", fontWeight: "bold", borderRight: "1px solid #2D5A9E", whiteSpace: "nowrap" }}>{h}</th>
+                      <th key={hi} style={{ color: "#C0392B", padding: "3px 5px", textAlign: "left", fontWeight: 700, fontSize: 7, textTransform: "uppercase", letterSpacing: "0.05em", borderBottom: "1px solid #C0392B20", whiteSpace: "nowrap" }}>{h}</th>
                     ))}
                   </tr>
                 </thead>

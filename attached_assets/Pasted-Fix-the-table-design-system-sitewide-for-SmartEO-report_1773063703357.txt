@@ -1,0 +1,174 @@
+Fix the table design system sitewide for SmartEO reports so it matches the approved branded table style and source-label treatment.
+
+Problem:
+The app is still rendering generic/basic tables:
+- black header background
+- plain table styling
+- missing source labels / badges
+- not matching the approved report design system
+
+Expected:
+All report tables should use the approved SmartEO branded table design, like the examples I attached:
+- soft light table background
+- subtle bordered container with rounded corners
+- branded section/table title in red
+- light header row, not black
+- clean spacing and typography
+- source badges/labels showing where data came from, such as:
+  - Airtable
+  - Asana
+  - Screaming Frog
+  - GA4
+  - GSC
+  - GBP
+  - CallRail / CTM / Nimbata
+  - SEMrush
+  - Ahrefs
+  - Manual entry needed
+
+This should be consistent sitewide across report previews and exports where these styled tables appear.
+
+==================================================
+REQUIRED FIX
+==================================================
+
+Create or enforce one shared report-table design system.
+
+Requirements:
+1. Replace the generic black-header table styling with the approved branded table style.
+2. Build this as a shared reusable table component or shared styling layer.
+3. Add support for inline source badges/labels inside table cells where source attribution exists.
+4. Make sure this applies consistently across:
+   - Bi-Weekly
+   - Monthly
+   - QBR Prep
+   - Full QBR
+   - Mid-Strategy SEO Report
+5. Do not patch one report at a time. Fix the shared table system.
+
+==================================================
+APPROVED TABLE STYLE
+==================================================
+
+Match the attached examples as closely as possible.
+
+Visual rules:
+- outer container with subtle red-tinted border
+- rounded corners
+- light warm/neutral table background
+- section/table title in branded red
+- header row in very light neutral/pink tint, not black
+- dark readable text
+- consistent row borders
+- spacious padding
+- visually polished, client-ready appearance
+
+Do NOT use:
+- black/dark table header bars
+- generic browser table look
+- plain unstyled cells
+- inconsistent font sizes or cramped spacing
+
+==================================================
+SOURCE LABEL / BADGE SYSTEM
+==================================================
+
+Each report should display source labels where the data or task came from.
+
+Examples:
+- Airtable
+- Asana
+- Screaming Frog
+- GA4
+- GSC
+- GBP
+- CallRail
+- CTM
+- Nimbata
+- SEMrush
+- Ahrefs
+- Manual entry needed
+
+Requirements:
+1. Build a reusable badge component or badge style system for source labels.
+2. Support multiple badge types with distinct soft colors, consistent with the approved examples.
+3. Allow badges to appear inline inside table cells without breaking layout.
+4. Use badges only where source attribution is meaningful.
+5. Preserve readability and export quality.
+
+Suggested badge style direction:
+- small rounded pill
+- soft background tint
+- dark readable label text
+- low visual weight
+- consistent padding and font size
+
+==================================================
+WHERE TO APPLY SOURCE LABELS
+==================================================
+
+Use source badges in places like:
+- What We Did / Learned
+- What’s Next
+- task/source provenance
+- note provenance
+- crawl-origin notes
+- attribution notes
+- fallback/manual states where appropriate
+
+Examples:
+- a content item from Airtable gets an Airtable badge
+- a task from Asana gets an Asana badge
+- a technical recommendation from crawl data gets a Screaming Frog badge
+- GA4-derived conversion note gets GA4 badge
+- GSC-derived visibility note gets GSC badge
+
+==================================================
+SHARED IMPLEMENTATION RULE
+==================================================
+
+Do not hardcode styling separately in each report.
+
+Instead:
+- create one shared report table component or shared table style primitives
+- create one shared source badge component or shared badge style map
+- refactor report tables to use those shared pieces
+
+This must become the sitewide report-table standard.
+
+==================================================
+EXPORT / PREVIEW CONSISTENCY
+==================================================
+
+The improved table design should appear in:
+- report preview UI
+- print/export render where applicable
+
+If some export paths use a different rendering pipeline, make the styling as consistent as that pipeline reasonably allows.
+
+Do not leave preview polished and export plain, or vice versa.
+
+==================================================
+DO NOT DO
+==================================================
+
+- do not redesign the entire report system
+- do not change the report content structure
+- do not remove editability
+- do not apply random one-off CSS overrides to individual tables only
+- do not leave black headers anywhere in report tables unless explicitly approved for a specific non-report UI
+
+==================================================
+PROOF REQUIRED
+==================================================
+
+Return:
+1. files changed
+2. the shared table component or styling system you created/updated
+3. the shared source badge component or style map you created/updated
+4. which report types now use the shared table design
+5. before/after proof for at least:
+   - one NSM/KPI table
+   - one progress / quick wins table
+   - one table with multiple source badges
+6. proof that the black header/basic table style has been removed from report tables

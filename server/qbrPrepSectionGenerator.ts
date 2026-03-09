@@ -223,7 +223,6 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
           page: r[0] ?? "/",
           calls: parseInt((r[1] ?? "0").replace(/,/g, ""), 10) || 0,
         })).filter((r: { page: string; calls: number }) => r.calls > 0);
-        if (callTrackingLandingPages.length > 0) dataSources.push("CallRail");
       }
       if (sourceResult.status === "fulfilled" && sourceResult.value) {
         const rows = sourceResult.value.tables?.[0]?.rows ?? [];
@@ -231,6 +230,9 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
           source: r[0] ?? "Unknown",
           calls: parseInt((r[1] ?? "0").replace(/,/g, ""), 10) || 0,
         })).filter((r: { source: string; calls: number }) => r.calls > 0);
+      }
+      if (callTrackingLandingPages.length > 0 || callTrackingSources.length > 0) {
+        dataSources.push("CallRail");
       }
       callTrackingData = { landingPages: callTrackingLandingPages, sources: callTrackingSources };
     }

@@ -121,9 +121,8 @@ export interface QssbInsight {
 }
 
 export interface QssbOpportunity {
-  service: string;
+  title: string;
   description: string;
-  source: string;
 }
 
 export interface SectionQssb {

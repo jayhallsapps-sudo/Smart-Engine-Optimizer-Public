@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { EditableSection } from "./editable-section";
-import { ReportTable, AddableReportTable, SourceBadge } from "./report-table";
+import { AddableReportTable, SourceBadge } from "./report-table";
 import swoopHeaderFallback from "@assets/HEADER_IMAGE_1773063127856.png";
 
 const ACCENT = "#C0392B";
@@ -85,7 +85,7 @@ interface TrackingRow {
 }
 
 interface QssbInsight { question: string; }
-interface QssbOpportunity { service: string; description: string; source: string; }
+interface QssbOpportunity { title: string; description: string; }
 interface SectionQssb { clientInsights: QssbInsight[]; additionalOpportunities: QssbOpportunity[]; }
 
 export interface QbrPrepPreviewProps {
@@ -248,28 +248,7 @@ export function QbrPrepPreview({
   });
 
   const hasPageDeltas = section3Traffic.topTrafficPages.some(r => r.clicksDelta || r.impressions || r.queries);
-
-  const s3bSourceRows: React.ReactNode[][] = section3Traffic.topTrafficPages.map((r, ri) => {
-    const cells: React.ReactNode[] = [
-      <EditableCell key="p" editKey={`s3b_${ri}_0`} value={r.page} edits={edits} onEdit={onEdit} />,
-      <EditableCell key="cl" editKey={`s3b_${ri}_1`} value={r.clicks} edits={edits} onEdit={onEdit} />,
-    ];
-    if (hasPageDeltas) {
-      cells.push(
-        <span key="cld" style={{ fontSize: "10px", color: r.clicksDelta?.startsWith("-") ? "#DC2626" : "#16A34A" }}>{r.clicksDelta ?? "—"}</span>,
-        <span key="imp" style={{ fontSize: "10px" }}>{r.impressions ?? "—"}</span>,
-        <span key="impd" style={{ fontSize: "10px", color: r.impressionsDelta?.startsWith("-") ? "#DC2626" : "#16A34A" }}>{r.impressionsDelta ?? "—"}</span>,
-        <span key="qr" style={{ fontSize: "10px" }}>{r.queries ?? "—"}</span>,
-        <span key="qrd" style={{ fontSize: "10px", color: r.queriesDelta?.startsWith("-") ? "#DC2626" : "#16A34A" }}>{r.queriesDelta ?? "—"}</span>,
-      );
-    }
-    cells.push(
-      <EditableCell key="ct" editKey={`s3b_${ri}_2`} value={r.ctr} edits={edits} onEdit={onEdit} />,
-      <EditableCell key="c" editKey={`s3b_${ri}_3`} value={r.connectionToAdmits} edits={edits} onEdit={onEdit} />,
-      <BadgeCell key="i" editKey={`s3b_${ri}_4`} value={r.insight} dataSource={r.dataSource} edits={edits} onEdit={onEdit} />,
-    );
-    return cells;
-  });
+  const pageColCount = hasPageDeltas ? 9 : 4;
 
   const s4SourceRows: React.ReactNode[][] = section4Services.services.map((r, ri) => [
     <EditableCell key="s" editKey={`s4_${ri}_0`} value={r.service} edits={edits} onEdit={onEdit} />,
@@ -292,13 +271,7 @@ export function QbrPrepPreview({
         <SourceBadge key={si} source={src} />
       ))}
     </span>,
-    <EditableCell key="st" editKey={`s7_${ri}_3`} value={(r as any).status ?? "Needs Verification"} edits={edits} onEdit={onEdit}
-      style={{
-        fontWeight: 600,
-        fontSize: "0.75rem",
-        color: ((r as any).status === "Live" ? "#27ae60" : (r as any).status === "Missing Setup" ? "#c0392b" : (r as any).status === "Inferred Only" ? "#8e44ad" : "#e67e22"),
-      }}
-    />,
+    // Status column removed — was showing "Comment Out Status" / verification states not ready for clients
     <EditableCell key="w" editKey={`s7_${ri}_4`} value={r.whyItMatters} edits={edits} onEdit={onEdit} />,
   ]);
 
@@ -351,43 +324,8 @@ export function QbrPrepPreview({
               <div><strong>Generated On:</strong> {meta.generatedOn}</div>
             </div>
 
-            {amInputs && (amInputs.clientSentiment || amInputs.amThoughts || amInputs.priorityChecks || amInputs.clientNotes) && (
-              <div style={{
-                marginBottom: 20,
-                padding: "14px 18px",
-                backgroundColor: "#FDF8F0",
-                borderRadius: 6,
-                border: "1px solid #E5D5C0",
-              }} data-testid="am-inputs-section">
-                <div style={{ fontWeight: 700, fontSize: "13px", color: ACCENT, marginBottom: 10, borderBottom: `1px solid ${ACCENT}`, paddingBottom: 4 }}>
-                  AM Inputs
-                </div>
-                {amInputs.clientSentiment && (
-                  <div style={{ fontSize: "11px", marginBottom: 6 }}>
-                    <strong>Client Sentiment:</strong>{" "}
-                    <EditableCell editKey="am_sentiment" value={amInputs.clientSentiment} edits={edits} onEdit={onEdit} />
-                  </div>
-                )}
-                {amInputs.amThoughts && (
-                  <div style={{ fontSize: "11px", marginBottom: 6 }}>
-                    <strong>AM's Thoughts:</strong>{" "}
-                    <EditableCell editKey="am_thoughts" value={amInputs.amThoughts} edits={edits} onEdit={onEdit} />
-                  </div>
-                )}
-                {amInputs.priorityChecks && (
-                  <div style={{ fontSize: "11px", marginBottom: 6 }}>
-                    <strong>Priority Checks:</strong>{" "}
-                    <EditableCell editKey="am_priority_checks" value={amInputs.priorityChecks} edits={edits} onEdit={onEdit} />
-                  </div>
-                )}
-                {amInputs.clientNotes && (
-                  <div style={{ fontSize: "11px", marginBottom: 6 }}>
-                    <strong>Client Notes:</strong>{" "}
-                    <EditableCell editKey="am_client_notes" value={amInputs.clientNotes} edits={edits} onEdit={onEdit} />
-                  </div>
-                )}
-              </div>
-            )}
+            {/* AM Inputs are used internally to guide report generation only.
+                They are not rendered as a visible section in the client-facing report. */}
 
             <SectionHeading num={1} title="What Matters Most This Quarter" />
             <AddableReportTable
@@ -433,15 +371,42 @@ export function QbrPrepPreview({
               onEdit={onEdit}
             />
             <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Traffic Pages</div>
-            <AddableReportTable
-              tableId="s3b"
-              headers={hasPageDeltas
-                ? ["Page", "Clicks", "Δ Clicks", "Impressions", "Δ Impressions", "# Queries", "Δ Queries", "CTR", "Connection to Admits", "Insight"]
-                : ["Page", "Clicks", "CTR", "Connection to Admits", "Insight"]}
-              sourceRows={s3bSourceRows}
-              edits={edits}
-              onEdit={onEdit}
-            />
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px", marginBottom: 16 }}>
+              <thead>
+                <tr style={{ backgroundColor: "#F9FAFB" }}>
+                  {["Page", "Clicks", ...(hasPageDeltas ? ["Δ Clicks", "Impressions", "Δ Impressions", "# Queries", "Δ Queries"] : []), "CTR", "Connection to Admits"].map(h => (
+                    <th key={h} style={{ padding: "5px 8px", textAlign: "left", borderBottom: "2px solid #E5E7EB", fontWeight: 600, color: "#374151", whiteSpace: "nowrap" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {section3Traffic.topTrafficPages.map((r, ri) => (
+                  <>
+                    <tr key={`${ri}-m`} style={{ borderBottom: r.insight ? "none" : "1px solid #E5E7EB" }}>
+                      <td style={{ padding: "5px 8px", verticalAlign: "top" }}><EditableCell editKey={`s3b_${ri}_0`} value={r.page} edits={edits} onEdit={onEdit} /></td>
+                      <td style={{ padding: "5px 8px", verticalAlign: "top" }}><EditableCell editKey={`s3b_${ri}_1`} value={r.clicks} edits={edits} onEdit={onEdit} /></td>
+                      {hasPageDeltas && <>
+                        <td style={{ padding: "5px 8px", verticalAlign: "top", color: r.clicksDelta?.startsWith("-") ? "#DC2626" : "#16A34A" }}>{r.clicksDelta ?? "—"}</td>
+                        <td style={{ padding: "5px 8px", verticalAlign: "top" }}>{r.impressions ?? "—"}</td>
+                        <td style={{ padding: "5px 8px", verticalAlign: "top", color: r.impressionsDelta?.startsWith("-") ? "#DC2626" : "#16A34A" }}>{r.impressionsDelta ?? "—"}</td>
+                        <td style={{ padding: "5px 8px", verticalAlign: "top" }}>{r.queries ?? "—"}</td>
+                        <td style={{ padding: "5px 8px", verticalAlign: "top", color: r.queriesDelta?.startsWith("-") ? "#DC2626" : "#16A34A" }}>{r.queriesDelta ?? "—"}</td>
+                      </>}
+                      <td style={{ padding: "5px 8px", verticalAlign: "top" }}><EditableCell editKey={`s3b_${ri}_2`} value={r.ctr} edits={edits} onEdit={onEdit} /></td>
+                      <td style={{ padding: "5px 8px", verticalAlign: "top" }}><EditableCell editKey={`s3b_${ri}_3`} value={r.connectionToAdmits} edits={edits} onEdit={onEdit} /></td>
+                    </tr>
+                    {(edits[`s3b_${ri}_4`] ?? r.insight) && (
+                      <tr key={`${ri}-i`} style={{ borderBottom: "1px solid #E5E7EB", backgroundColor: "#FAFAFA" }}>
+                        <td colSpan={pageColCount} style={{ padding: "4px 8px 6px 12px", fontSize: "9px", color: "#6B7280" }}>
+                          <span style={{ fontWeight: 600, color: "#4B5563" }}>Insight: </span>
+                          <EditableCell editKey={`s3b_${ri}_4`} value={r.insight} edits={edits} onEdit={onEdit} />
+                        </td>
+                      </tr>
+                    )}
+                  </>
+                ))}
+              </tbody>
+            </table>
 
             <SectionHeading num={4} title="Site Service Overview" />
             <AddableReportTable
@@ -489,7 +454,7 @@ export function QbrPrepPreview({
             <SectionHeading num={7} title="What We Track" />
             <AddableReportTable
               tableId="s7"
-              headers={["Focus Area", "Metric", "Source", "Status", "Why It Matters"]}
+              headers={["Focus Area", "Metric", "Source", "Why It Matters"]}
               sourceRows={s7SourceRows}
               edits={edits}
               onEdit={onEdit}
@@ -511,15 +476,21 @@ export function QbrPrepPreview({
             {sectionQssb && sectionQssb.additionalOpportunities.length > 0 && (
               <>
                 <SectionHeading num={sectionQssb.clientInsights.length > 0 ? 9 : 8} title="Additional Opportunities" />
-                <ReportTable
-                  headers={["Service", "Description", "Source"]}
-                  rows={sectionQssb.additionalOpportunities.map((opp, i) => [
-                    <EditableCell key="s" editKey={`qssb_opp_${i}_0`} value={opp.service} edits={edits} onEdit={onEdit} />,
-                    <EditableCell key="d" editKey={`qssb_opp_${i}_1`} value={opp.description} edits={edits} onEdit={onEdit} />,
-                    <SourceBadge key="b" source={opp.source} />,
-                  ])}
-                  testId="qssb-opportunities-table"
-                />
+                <div style={{ marginBottom: 16 }} data-testid="qssb-opportunities-table">
+                  {sectionQssb.additionalOpportunities.map((opp, i) => (
+                    <div key={i} style={{ display: "flex", gap: 10, marginBottom: 12, alignItems: "flex-start" }}>
+                      <span style={{ fontWeight: 700, color: ACCENT, minWidth: 18, flexShrink: 0, fontSize: "11px" }}>{i + 1}.</span>
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: "11px", color: "#111827", marginBottom: 2 }}>
+                          <EditableCell editKey={`qssb_opp_${i}_0`} value={opp.title} edits={edits} onEdit={onEdit} />
+                        </div>
+                        <div style={{ fontSize: "10px", color: "#4B5563" }}>
+                          <EditableCell editKey={`qssb_opp_${i}_1`} value={opp.description} edits={edits} onEdit={onEdit} />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </>
             )}
 

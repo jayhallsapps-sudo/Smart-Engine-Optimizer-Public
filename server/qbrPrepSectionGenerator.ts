@@ -472,12 +472,43 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
       fetchStrategyBank(),
     ]);
     if (qssbData.clientInsights.length > 0 || qssbData.additionalOpportunities.length > 0 || strategyBank.entries.length > 0) {
+      // Additional Opportunities: monetizable/scope-expanding items only, max 5.
+      // Only include things that could realistically be upsold or cross-sold as new scope.
+      // Internal notes, generic best-practices, and operational QA items are excluded.
+      const MONETIZABLE_SIGNALS = [
+        "paid media", "paid retargeting", "retargeting", "cro", "conversion rate",
+        "landing page", "landing page build", "technical cleanup", "technical sprint",
+        "review generation", "gbp expansion", "call tracking", "attribution",
+        "content expansion", "local seo", "local expansion", "dev support",
+        "schema markup", "page speed", "core web vitals", "link building",
+        "reputation management", "chat", "live chat", "video", "email marketing",
+        "sms", "competitor", "competitive", "authority", "backlink", "pr campaign",
+        "social", "influencer", "programmatic", "display ads",
+      ];
+      const isMonetizable = (title: string, desc: string): boolean => {
+        const combined = `${title} ${desc}`.toLowerCase();
+        return MONETIZABLE_SIGNALS.some(sig => combined.includes(sig));
+      };
+      const rawOpps: Array<{ title: string; description: string }> = [
+        ...qssbData.additionalOpportunities
+          .filter(o => isMonetizable(o.service, o.description))
+          .map(o => ({ title: o.service, description: o.description })),
+        ...strategyBank.entries
+          .filter(e => isMonetizable(e.service, e.description))
+          .map(e => ({ title: e.service, description: e.description })),
+      ];
+      // Deduplicate by title and limit to 5
+      const seen = new Set<string>();
+      const additionalOpportunities = rawOpps.filter(o => {
+        const key = o.title.toLowerCase().trim();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      }).slice(0, 5);
+
       sectionQssb = {
         clientInsights: qssbData.clientInsights.map(q => ({ question: q })),
-        additionalOpportunities: [
-          ...qssbData.additionalOpportunities.map(o => ({ service: o.service, description: o.description, source: "QSSB" })),
-          ...strategyBank.entries.map(e => ({ service: e.service, description: e.description, source: "Strategy Bank" })),
-        ],
+        additionalOpportunities,
       };
       dataSources.push("QSSB");
       if (strategyBank.entries.length > 0) dataSources.push("Strategy Bank");

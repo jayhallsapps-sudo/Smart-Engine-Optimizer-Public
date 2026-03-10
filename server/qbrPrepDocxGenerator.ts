@@ -355,12 +355,27 @@ export async function generateQbrPrepV2Docx(
   if (qssb?.additionalOpportunities?.length > 0) {
     const oppNum = qssb?.clientInsights?.length > 0 ? 9 : 8;
     docChildren.push(sectionHeading(oppNum, "Additional Opportunities"));
-    const oppRows = qssb.additionalOpportunities.map((o: any, i: number) => [
-      resolveCell(`qssb_opp_${i}_0`, o.service, edits),
-      resolveCell(`qssb_opp_${i}_1`, o.description, edits),
-      o.source ?? "",
-    ]);
-    docChildren.push(makeTable(["Service", "Description", "Source"], oppRows));
+    for (let i = 0; i < qssb.additionalOpportunities.length; i++) {
+      const o = qssb.additionalOpportunities[i] as any;
+      const titleVal = resolveCell(`qssb_opp_${i}_0`, o.title ?? o.service ?? "", edits);
+      const descVal = resolveCell(`qssb_opp_${i}_1`, o.description ?? "", edits);
+      docChildren.push(
+        new Paragraph({
+          spacing: { before: 80, after: 0 },
+          children: [
+            new TextRun({ text: `${i + 1}. `, bold: true, size: 20, color: "C0392B", font: "Calibri" }),
+            new TextRun({ text: titleVal, bold: true, size: 20, color: DARK_HEADER, font: "Calibri" }),
+          ],
+        }),
+        new Paragraph({
+          spacing: { before: 20, after: 60 },
+          indent: { left: 360 },
+          children: [
+            new TextRun({ text: descVal, size: 18, color: "374151", font: "Calibri" }),
+          ],
+        }),
+      );
+    }
   }
 
   if (reportData.generationMeta) {

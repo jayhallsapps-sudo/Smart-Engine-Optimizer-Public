@@ -19,6 +19,7 @@ import {
   CloudUpload,
   Loader2,
   RefreshCw,
+  CheckCircle2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { DocxPreview } from "@/components/report-preview/docx-preview";
@@ -28,6 +29,9 @@ import { useReportSave } from "@/hooks/useReportSave";
 import { SaveStatusIndicator } from "@/components/reports/SaveStatusIndicator";
 import { ReportSaveSelector } from "@/components/reports/ReportSaveSelector";
 import { CrawlAssetSelector } from "@/components/reports/CrawlAssetSelector";
+import { useFillInTheGaps } from "@/hooks/useFillInTheGaps";
+import { FillInTheGapsModal } from "@/components/FillInTheGapsModal";
+import { Checkbox } from "@/components/ui/checkbox";
 
 function toYMD(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -65,7 +69,7 @@ export default function BiweeklyPage() {
   const [currentCrawlId, setCurrentCrawlId] = useState<number | null>(null);
   const [comparisonCrawlId, setComparisonCrawlId] = useState<number | null>(null);
 
-  const [clientSentiment, setClientSentiment] = useState("");
+  const [clientSentiment, setClientSentiment] = useState<string>("");
   const [amThoughts, setAmThoughts] = useState("");
   const [priorityChecks, setPriorityChecks] = useState("");
   const [clientNotes, setClientNotes] = useState("");
@@ -80,6 +84,18 @@ export default function BiweeklyPage() {
     reportType: "biweekly",
     clientId: clientId ? Number(clientId) : null,
   });
+
+  const {
+    fillInGapsEnabled,
+    setFillInGapsEnabled,
+    isAnalyzing,
+    showModal,
+    questions,
+    runGapAnalysis,
+    submitAnswers,
+    sessionId,
+    closeModal,
+  } = useFillInTheGaps({ reportType: "biweekly" });
 
   function getDateRange(): { startDate: string; endDate: string } {
     if (datePreset === "custom" && customStart && customEnd) {
@@ -111,7 +127,7 @@ export default function BiweeklyPage() {
   const requiredFieldsMissing = !clientSentiment || !amThoughts.trim() || !priorityChecks.trim();
 
   const generateMut = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (params?: { gapAnswers?: any[]; gapSessionId?: number }) => {
       if (!clientId) throw new Error("Select a client first");
       if (!validateAmInputs()) throw new Error("Please fill in all required AM Inputs fields");
       const range = getDateRange();
@@ -126,6 +142,8 @@ export default function BiweeklyPage() {
           priorityChecks,
           clientNotes: clientNotes || undefined,
         },
+        gapAnswers: params?.gapAnswers,
+        gapSessionId: params?.gapSessionId,
       });
       return res.json();
     },
@@ -232,6 +250,34 @@ export default function BiweeklyPage() {
     });
     reportSave.markDirty();
   }
+
+  const handleGenerateClick = async () => {
+    if (!clientId) return;
+    if (!validateAmInputs()) return;
+
+    if (fillInGapsEnabled) {
+      const result = await runGapAnalysis(Number(clientId), {
+        clientSentiment: clientSentiment as any,
+        amThoughts,
+        priorityChecks,
+        clientNotes,
+      });
+      if (result && !result.hasQuestions) {
+        generateMut.mutate();
+      }
+    } else {
+      generateMut.mutate();
+    }
+  };
+
+  const handleGapComplete = async (answers: any[]) => {
+    try {
+      const sid = await submitAnswers(Number(clientId), answers);
+      generateMut.mutate({ gapAnswers: answers, gapSessionId: sid });
+    } catch (err) {
+      // Error handled in hook
+    }
+  };
 
   return (
     <div className="flex h-full min-h-0" data-testid="biweekly-page">
@@ -434,14 +480,37 @@ export default function BiweeklyPage() {
 
           <Separator />
 
+          <div className="space-y-3">
+            <div className="flex items-start space-x-2">
+              <Checkbox
+                id="fill-gaps"
+                checked={fillInGapsEnabled}
+                onCheckedChange={(checked) => setFillInGapsEnabled(!!checked)}
+                data-testid="checkbox-fill-gaps"
+                className="mt-1"
+              />
+              <div className="grid gap-1.5 leading-none">
+                <Label
+                  htmlFor="fill-gaps"
+                  className="text-xs font-semibold uppercase tracking-wide text-muted-foreground cursor-pointer"
+                >
+                  Fill in the gaps
+                </Label>
+                <p className="text-[10px] text-muted-foreground">
+                  Ask follow-up questions before generating if the system detects missing context.
+                </p>
+              </div>
+            </div>
+          </div>
+
           <Button
             className="w-full"
-            onClick={() => generateMut.mutate()}
-            disabled={!clientId || generateMut.isPending || requiredFieldsMissing}
+            onClick={handleGenerateClick}
+            disabled={!clientId || generateMut.isPending || isAnalyzing || requiredFieldsMissing}
             data-testid="button-generate"
           >
-            {generateMut.isPending ? (
-              <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Generating…</>
+            {generateMut.isPending || isAnalyzing ? (
+              <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {isAnalyzing ? "Analyzing Gaps…" : "Generating…"}</>
             ) : report ? (
               <><RefreshCw className="w-4 h-4 mr-2" /> Regenerate</>
             ) : (
@@ -527,6 +596,15 @@ export default function BiweeklyPage() {
           />
         )}
       </div>
+
+      {showModal && (
+        <FillInTheGapsModal
+          questions={questions}
+          onComplete={handleGapComplete}
+          onCancel={closeModal}
+          isGenerating={generateMut.isPending}
+        />
+      )}
     </div>
   );
 }

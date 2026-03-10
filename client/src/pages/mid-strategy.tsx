@@ -34,6 +34,9 @@ import { useReportSave } from "@/hooks/useReportSave";
 import { SaveStatusIndicator } from "@/components/reports/SaveStatusIndicator";
 import { ReportSaveSelector } from "@/components/reports/ReportSaveSelector";
 import { CrawlAssetSelector } from "@/components/reports/CrawlAssetSelector";
+import { useFillInTheGaps } from "@/hooks/useFillInTheGaps";
+import { FillInTheGapsModal } from "@/components/FillInTheGapsModal";
+import { Checkbox } from "@/components/ui/checkbox";
 
 export default function MidStrategyPage() {
   const { toast } = useToast();
@@ -48,7 +51,7 @@ export default function MidStrategyPage() {
   const [workbookBuilt, setWorkbookBuilt] = useState(false);
   const [buildStep, setBuildStep] = useState<"idle" | "building" | "built">("idle");
 
-  const [clientSentiment, setClientSentiment] = useState("");
+  const [clientSentiment, setClientSentiment] = useState<string>("");
   const [amThoughts, setAmThoughts] = useState("");
   const [priorityChecks, setPriorityChecks] = useState("");
   const [clientNotes, setClientNotes] = useState("");
@@ -69,6 +72,18 @@ export default function MidStrategyPage() {
     reportType: "mid_strategy_seo",
     clientId: clientId ? Number(clientId) : null,
   });
+
+  const {
+    fillInGapsEnabled,
+    setFillInGapsEnabled,
+    isAnalyzing,
+    showModal,
+    questions,
+    runGapAnalysis,
+    submitAnswers,
+    sessionId,
+    closeModal,
+  } = useFillInTheGaps({ reportType: "mid_strategy_seo" });
 
   const reportRef = useRef(report);
   reportRef.current = report;
@@ -113,7 +128,7 @@ export default function MidStrategyPage() {
   const requiredFieldsMissing = !clientSentiment || !amThoughts.trim() || !priorityChecks.trim();
 
   const generateMut = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (params?: { gapAnswers?: any[]; gapSessionId?: number }) => {
       if (!clientId) throw new Error("Select a client first");
       if (!validateAmInputs()) throw new Error("Please fill in all required AM Inputs fields");
       setBuildStep("building");
@@ -122,6 +137,8 @@ export default function MidStrategyPage() {
         currentCrawlAssetId: currentCrawlId ?? undefined,
         comparisonCrawlAssetId: comparisonCrawlId ?? undefined,
         amInputs: getAmInputs(),
+        gapAnswers: params?.gapAnswers,
+        gapSessionId: params?.gapSessionId,
       });
       if (!res.ok) throw new Error((await res.json()).message ?? "Generation failed");
       return res.json();
@@ -223,6 +240,30 @@ export default function MidStrategyPage() {
     setBuildStep("idle");
     reportSave.setSavedReportId(null);
   }
+
+  const handleGenerateClick = async () => {
+    if (!clientId) return;
+    if (!validateAmInputs()) return;
+
+    if (fillInGapsEnabled) {
+      const amInputs = getAmInputs();
+      const result = await runGapAnalysis(Number(clientId), amInputs as any);
+      if (result && !result.hasQuestions) {
+        generateMut.mutate();
+      }
+    } else {
+      generateMut.mutate();
+    }
+  };
+
+  const handleGapComplete = async (answers: any[]) => {
+    try {
+      const sid = await submitAnswers(Number(clientId), answers);
+      generateMut.mutate({ gapAnswers: answers, gapSessionId: sid });
+    } catch (err) {
+      // Error handled in hook
+    }
+  };
 
   const wb = report?.workbook;
   const missingFields: string[] = wb?.buildStatus?.missingFields ?? [];
@@ -451,18 +492,41 @@ export default function MidStrategyPage() {
 
           <Separator />
 
+          <div className="space-y-3">
+            <div className="flex items-start space-x-2">
+              <Checkbox
+                id="mid-strategy-fill-gaps"
+                checked={fillInGapsEnabled}
+                onCheckedChange={(checked) => setFillInGapsEnabled(!!checked)}
+                data-testid="checkbox-fill-gaps"
+                className="mt-1"
+              />
+              <div className="grid gap-1.5 leading-none">
+                <Label
+                  htmlFor="mid-strategy-fill-gaps"
+                  className="text-xs font-semibold uppercase tracking-wide text-muted-foreground cursor-pointer"
+                >
+                  Fill in the gaps
+                </Label>
+                <p className="text-[10px] text-muted-foreground">
+                  Ask follow-up questions before generating if the system detects missing context.
+                </p>
+              </div>
+            </div>
+          </div>
+
           {/* Action buttons */}
           <div className="space-y-2">
             <Button
               className="w-full"
-              onClick={() => generateMut.mutate()}
-              disabled={!clientId || generateMut.isPending || requiredFieldsMissing}
+              onClick={handleGenerateClick}
+              disabled={!clientId || generateMut.isPending || isAnalyzing || requiredFieldsMissing}
               data-testid="button-generate-mid-strategy"
             >
-              {generateMut.isPending ? (
+              {generateMut.isPending || isAnalyzing ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  {buildStep === "building" ? "Building workbook & slides…" : "Generating…"}
+                  {isAnalyzing ? "Analyzing Gaps…" : buildStep === "building" ? "Building workbook & slides…" : "Generating…"}
                 </>
               ) : (
                 <>
@@ -552,6 +616,15 @@ export default function MidStrategyPage() {
           </div>
         )}
       </div>
+
+      {showModal && (
+        <FillInTheGapsModal
+          questions={questions}
+          onComplete={handleGapComplete}
+          onCancel={closeModal}
+          isGenerating={generateMut.isPending}
+        />
+      )}
     </div>
   );
 }

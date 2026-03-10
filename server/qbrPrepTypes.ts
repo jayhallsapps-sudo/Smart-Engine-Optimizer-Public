@@ -1,3 +1,5 @@
+import type { GapContext } from "./gapAnswerContext";
+
 export interface QbrPrepMeta {
   site: string;
   domain: string;
@@ -162,6 +164,7 @@ export interface QbrPrepReportData {
   section6Priorities: Section6Priorities;
   section7Tracking: Section7Tracking;
   sectionQssb?: SectionQssb;
+  gapContext?: GapContext;
   sourceSnapshot: SourceSnapshot;
   generationMeta: GenerationMeta;
 }

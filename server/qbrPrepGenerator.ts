@@ -1,7 +1,8 @@
 import { storage } from "./storage";
 import { getGoogleAccessToken } from "./googleToken";
 import { decrypt } from "./encryption";
-import type { Client } from "@shared/schema";
+import type { Client, GapAnswer } from "@shared/schema";
+import { type GapContext, buildGapContext } from "./gapAnswerContext";
 
 export type PastQuarter =
   | "Q1" | "Q2" | "Q3" | "Q4"
@@ -21,6 +22,7 @@ export interface QbrPrepInput {
   opportunityCapPerCategory: number;
   timezone: string;
   sfReportId?: number;
+  gapAnswers?: GapAnswer[];
 }
 
 export interface Opportunity {
@@ -324,6 +326,8 @@ export async function generateQbrPrep(input: QbrPrepInput): Promise<QbrPrepOutpu
   const ctmCreds = await storage.getApiCredentialsByService("ctm").catch(() => []);
   const callTrackingAvailable = (callrailCreds.length > 0 && !!client.callrailCompanyId) ||
     (ctmCreds.length > 0 && !!(client as any).ctmAccountId);
+
+  const gapContext = buildGapContext(input.gapAnswers ?? []);
 
   const ctReports = await storage.getCallTrackingReports(client.id).catch(() => []);
   const ctReportAvailable = ctReports.length > 0;

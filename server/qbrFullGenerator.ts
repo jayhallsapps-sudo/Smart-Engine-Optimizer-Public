@@ -8,6 +8,7 @@ import { fetchAsanaWorkLog, groupAsanaTasks } from "./asanaClient";
 import { fetchQssbData } from "./qssbClient";
 import { fetchStrategyBank } from "./notionClient";
 import type { Slide } from "../client/src/components/report-preview/pptx-preview";
+import { type GapContext } from "./gapAnswerContext";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -231,6 +232,7 @@ export async function generateQbrFull(input: {
   amInputs?: QbrAmInputs;
   currentCrawlAssetId?: number | null;
   comparisonCrawlAssetId?: number | null;
+  gapContext?: GapContext;
 }): Promise<QbrFullReportJson> {
   const client = await storage.getClient(input.clientId);
   if (!client) throw new Error("Client not found: " + input.clientId);
@@ -403,7 +405,17 @@ export async function generateQbrFull(input: {
   }
 
   // Leadership note or quarter feeling → commentary
-  const nsmCommentary = norm(am.leadershipNote) ?? norm(am.quarterFeeling);
+  let nsmCommentary = norm(am.leadershipNote) ?? norm(am.quarterFeeling);
+  if (input.gapContext && input.gapContext.hasAnswers) {
+    const gapParts = [
+      input.gapContext.sentimentContext,
+      input.gapContext.businessChanges,
+      input.gapContext.narrativeNotes
+    ].filter(Boolean);
+    if (gapParts.length > 0) {
+      nsmCommentary = (nsmCommentary ? nsmCommentary + " " : "") + "Gap Insights: " + gapParts.join("; ");
+    }
+  }
 
   slides.push({
     id: "s04_nsm_overview",

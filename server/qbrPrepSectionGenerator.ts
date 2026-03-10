@@ -1,3 +1,4 @@
+import { type GapContext, buildGapContext, gapContextToString } from "./gapAnswerContext";
 import { storage } from "./storage";
 import { getGoogleAccessToken } from "./googleToken";
 import { fetchNsmGoals } from "./sheetsClient";
@@ -225,6 +226,7 @@ export interface QbrPrepGenerateInput {
   hypothesis?: string;
   auditNotes?: string;
   forwardLooking?: boolean;
+  gapAnswers?: import("@shared/schema").GapAnswer[];
 }
 
 export function normalizeKpiLabel(mvpType: string): string {
@@ -485,6 +487,8 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
     console.warn("[QBR Prep] QSSB/Strategy Bank fetch failed:", qssbErr.message);
   }
 
+  const gapContext = input.gapAnswers ? buildGapContext(input.gapAnswers) : undefined;
+
   const sourceSnapshot: SourceSnapshot = {
     smartSeoClientMeta: { name: client.name, domain, brandTerms: client.brandTerms },
     nsmTracker: nsmData,
@@ -516,6 +520,7 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
     section6Priorities: section6,
     section7Tracking: section7,
     sectionQssb,
+    gapContext,
     sourceSnapshot,
     generationMeta: {
       generatedAt: new Date().toISOString(),

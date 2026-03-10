@@ -8,6 +8,7 @@ import {
   callTrackingReports,
   settings,
   qbrPrepReports,
+  gapAnalysisSessions,
   type Client,
   type InsertClient,
   type QueryLog,
@@ -21,6 +22,9 @@ import {
   type Setting,
   type QbrPrepReport,
   type InsertQbrPrepReport,
+  type GapAnalysisSession,
+  type GapQuestion,
+  type GapAnswer,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -59,6 +63,11 @@ export interface IStorage {
   updateQbrPrepReport(id: number, data: Partial<InsertQbrPrepReport>): Promise<QbrPrepReport | undefined>;
   deleteQbrPrepReport(id: number): Promise<boolean>;
   getAllQbrPrepReports(): Promise<QbrPrepReport[]>;
+
+  createGapSession(data: { clientId: number; reportType: string; questions: GapQuestion[]; seoHqChecksApplied?: string[] }): Promise<GapAnalysisSession>;
+  updateGapSession(id: number, data: { answers?: GapAnswer[]; linkedReportId?: number; linkedReportType?: string }): Promise<GapAnalysisSession | undefined>;
+  getGapSession(id: number): Promise<GapAnalysisSession | undefined>;
+  getGapSessionsByClient(clientId: number): Promise<GapAnalysisSession[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -243,6 +252,39 @@ export class DatabaseStorage implements IStorage {
 
   async getAllQbrPrepReports(): Promise<QbrPrepReport[]> {
     return db.select().from(qbrPrepReports).orderBy(desc(qbrPrepReports.createdAt));
+  }
+
+  async createGapSession(data: { clientId: number; reportType: string; questions: GapQuestion[]; seoHqChecksApplied?: string[] }): Promise<GapAnalysisSession> {
+    const [session] = await db.insert(gapAnalysisSessions).values({
+      clientId: data.clientId,
+      reportType: data.reportType,
+      questionsJson: data.questions as any,
+      seoHqChecksApplied: data.seoHqChecksApplied ?? [],
+      generatedOn: new Date().toISOString(),
+    }).returning();
+    return session;
+  }
+
+  async updateGapSession(id: number, data: { answers?: GapAnswer[]; linkedReportId?: number; linkedReportType?: string }): Promise<GapAnalysisSession | undefined> {
+    const updateData: Record<string, any> = {};
+    if (data.answers !== undefined) updateData.answersJson = data.answers;
+    if (data.linkedReportId !== undefined) updateData.linkedReportId = data.linkedReportId;
+    if (data.linkedReportType !== undefined) updateData.linkedReportType = data.linkedReportType;
+    const [updated] = await db.update(gapAnalysisSessions).set(updateData).where(eq(gapAnalysisSessions.id, id)).returning();
+    return updated;
+  }
+
+  async getGapSession(id: number): Promise<GapAnalysisSession | undefined> {
+    const [session] = await db.select().from(gapAnalysisSessions).where(eq(gapAnalysisSessions.id, id));
+    return session;
+  }
+
+  async getGapSessionsByClient(clientId: number): Promise<GapAnalysisSession[]> {
+    return db
+      .select()
+      .from(gapAnalysisSessions)
+      .where(eq(gapAnalysisSessions.clientId, clientId))
+      .orderBy(desc(gapAnalysisSessions.createdAt));
   }
 }
 

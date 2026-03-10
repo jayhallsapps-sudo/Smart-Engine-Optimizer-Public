@@ -6,6 +6,7 @@ import { extractDomain } from "./googleToken";
 import { fetchQssbData } from "./qssbClient";
 import { fetchStrategyBank } from "./notionClient";
 import type { Slide } from "../client/src/components/report-preview/pptx-preview";
+import { type GapContext } from "./gapAnswerContext";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -546,10 +547,13 @@ function generateSlides(
   wb: WorkbookState,
   clientName: string,
   reportDate: string,
-  amInputs: MidStrategyAmInputs
+  amInputs: MidStrategyAmInputs,
+  gapContext?: GapContext
 ): Slide[] {
   const allRows = [wb.competitorBenchmark.clientRow, ...wb.competitorBenchmark.competitorRows];
   const { urlAudit } = wb;
+
+  const allSlides: Slide[] = [];
 
   // ── s01: Title ─────────────────────────────────────────────────────────────
   const s01: Slide = {
@@ -560,6 +564,23 @@ function generateSlides(
     clientName,
     date: reportDate,
   };
+  allSlides.push(s01);
+
+  if (gapContext && gapContext.hasAnswers) {
+    const gapBullets: string[] = [];
+    if (gapContext.sentimentContext) gapBullets.push(`Sentiment: ${gapContext.sentimentContext}`);
+    if (gapContext.businessChanges) gapBullets.push(`Business: ${gapContext.businessChanges}`);
+    if (gapContext.blockers) gapBullets.push(`Blockers: ${gapContext.blockers}`);
+    if (gapContext.narrativeNotes) gapBullets.push(`Notes: ${gapContext.narrativeNotes}`);
+
+    allSlides.push({
+      id: "gap_insights",
+      type: "bullets",
+      title: "Gap Analysis Insights",
+      subtitle: "Clarifying context collected before generation",
+      bullets: gapBullets,
+    });
+  }
 
   // ── s02: Agenda ────────────────────────────────────────────────────────────
   const s02: Slide = {
@@ -909,16 +930,18 @@ export async function generateMidStrategy({
   currentCrawlAssetId,
   comparisonCrawlAssetId,
   amInputs = {},
+  gapContext,
 }: {
   clientId: number;
   currentCrawlAssetId?: number | null;
   comparisonCrawlAssetId?: number | null;
   amInputs?: MidStrategyAmInputs;
+  gapContext?: GapContext;
 }): Promise<MidStrategyReportJson> {
   const normalizedAmInputs = normalizeMidStrategyAmInputs(amInputs);
   const sources = await normalizeSources(clientId, currentCrawlAssetId ?? null, comparisonCrawlAssetId ?? null);
   const workbook = await buildWorkbook(sources, normalizedAmInputs);
-  const slides = generateSlides(workbook, sources.client.name, fmtDate(sources.today), normalizedAmInputs);
+  const slides = generateSlides(workbook, sources.client.name, fmtDate(sources.today), normalizedAmInputs, gapContext);
 
   try {
     const [qssbData, strategyBank] = await Promise.all([fetchQssbData(), fetchStrategyBank()]);

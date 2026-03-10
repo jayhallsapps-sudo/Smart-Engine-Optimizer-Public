@@ -35,6 +35,7 @@ import { generateBiweeklyPdf, generateMonthlyPdf } from "./pdfGenerator";
 import { generatePdfViaPuppeteer } from "./puppeteerPdfGenerator";
 import type { SectionData } from "./reportGenerators";
 import { getSampleBiweeklySections, getSampleMonthlySections, getSampleQbrSections, getSampleQbrPrepJson, SAMPLE_CLIENT_NAME, SAMPLE_ATTENDEES } from "./sampleData";
+import { type GapContext, buildGapContext, gapContextToString } from "./gapAnswerContext";
 import { generateQbrPrep } from "./qbrPrepGenerator";
 import type { QbrPrepJson } from "./qbrPrepGenerator";
 import { generateBiweekly } from "./biweeklyGenerator";
@@ -51,6 +52,7 @@ import { querySfReport, handlesSfCommand } from "./sfClient";
 import { getGoogleAccessToken } from "./googleToken";
 import { generateQbrPrepReport } from "./qbrPrepSectionGenerator";
 import { generateQbrPrepV2Docx } from "./qbrPrepDocxGenerator";
+import { analyzeReportGaps, loadSEOHQContext, type AccountContext } from "./gapAnalysisEngine";
 
 
 const SECTION_COMMANDS_AUTO: Record<string, Record<string, string[]>> = {
@@ -1154,6 +1156,75 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/reports/gap-analysis", async (req, res) => {
+    try {
+      const { reportType, clientId, amInputs, reportContext } = req.body;
+      if (!reportType || !clientId || !amInputs) {
+        return res.status(400).json({ message: "reportType, clientId, and amInputs are required" });
+      }
+
+      const client = await storage.getClient(Number(clientId));
+      if (!client) return res.status(404).json({ message: "Client not found" });
+
+      const validation = validateAmInputs(amInputs);
+      if ("error" in validation) {
+        return res.status(400).json({ message: validation.error });
+      }
+
+      // Determine available data sources
+      const availableDataSources: string[] = [];
+      if (client.gscSiteUrl) availableDataSources.push("google_search_console");
+      if (client.ga4PropertyId) availableDataSources.push("google_analytics_4");
+      if (client.gbpLocationName) availableDataSources.push("google_business_profile");
+      if (client.callrailCompanyId) availableDataSources.push("callrail");
+      if (client.ctmAccountId) availableDataSources.push("call_tracking_metrics");
+      if (client.ahrefsProjectUrl) availableDataSources.push("ahrefs");
+      if (client.semrushProjectId) availableDataSources.push("semrush");
+      if (client.nimbataAccountId) availableDataSources.push("nimbata");
+      if (client.airtableBaseId) availableDataSources.push("airtable");
+      if (client.screamingFrogProfile) availableDataSources.push("screaming_frog");
+
+      const accountContext: AccountContext = {
+        client,
+        availableDataSources,
+        recentReports: [], // Could be populated if needed
+      };
+
+      const seoHqContext = await loadSEOHQContext();
+      const result = await analyzeReportGaps(reportType, validation.amInputs as any, accountContext, seoHqContext);
+
+      res.json(result);
+    } catch (err: any) {
+      console.error("[GapAnalysis] Error:", err);
+      res.status(500).json({ message: "Failed to run gap analysis: " + err.message });
+    }
+  });
+
+  app.post("/api/reports/gap-analysis/session", async (req, res) => {
+    try {
+      const { clientId, reportType, questions, answers, seoHqChecksApplied } = req.body;
+      if (!clientId || !reportType || !questions) {
+        return res.status(400).json({ message: "clientId, reportType, and questions are required" });
+      }
+
+      const session = await storage.createGapSession({
+        clientId: Number(clientId),
+        reportType,
+        questions,
+        seoHqChecksApplied,
+      });
+
+      if (answers && answers.length > 0) {
+        await storage.updateGapSession(session.id, { answers });
+      }
+
+      res.status(201).json({ sessionId: session.id });
+    } catch (err: any) {
+      console.error("[GapAnalysis] Session creation error:", err);
+      res.status(500).json({ message: "Failed to create gap session: " + err.message });
+    }
+  });
+
   app.post("/api/reports/export", async (req, res) => {
     const { reportType, clientId, sections, attendees, date } = req.body;
     if (!reportType || !sections) {
@@ -1318,7 +1389,7 @@ export async function registerRoutes(
   const SF_FRESHNESS_DAYS = 90;
 
   app.post("/api/reports/qbr-prep/generate-v2", async (req, res) => {
-    const { clientId, generationDate, currentCrawlAssetId } = req.body;
+    const { clientId, generationDate, currentCrawlAssetId, gapAnswers } = req.body;
     const sentimentVal = req.body.sentiment ?? req.body.clientSentiment;
     const amThoughtsVal = req.body.amThoughts ?? req.body.hypothesis ?? "";
     const priorityChecksVal = req.body.priorityChecks ?? req.body.auditNotes ?? "";
@@ -1362,6 +1433,7 @@ export async function registerRoutes(
         auditNotes: priorityChecksVal,
         clientNotes: clientNotesVal,
         forwardLooking: true,
+        gapAnswers,
       });
 
       res.json({ reportData });
@@ -1456,7 +1528,7 @@ export async function registerRoutes(
   });
 
   app.post("/api/reports/biweekly/generate", async (req, res) => {
-    const { clientId, startDate, endDate, preparedBy } = req.body;
+    const { clientId, startDate, endDate, preparedBy, gapAnswers } = req.body;
     if (!clientId) return res.status(400).json({ message: "clientId is required" });
 
     const amValidation = validateAmInputs(req.body);
@@ -1474,6 +1546,7 @@ export async function registerRoutes(
         endDate: resolvedEnd,
         preparedBy: preparedBy ?? "JAY HALL",
         amInputs: ("error" in amValidation) ? {} : amValidation.amInputs,
+        gapContext: gapAnswers ? buildGapContext(gapAnswers) : undefined,
       });
       res.json(output);
     } catch (err: any) {
@@ -1615,7 +1688,7 @@ export async function registerRoutes(
   });
 
   app.post("/api/reports/monthly/generate", async (req, res) => {
-    const { clientId, month, year, timezone, amInputs, currentCrawlAssetId, comparisonCrawlAssetId } = req.body;
+    const { clientId, month, year, timezone, amInputs, currentCrawlAssetId, comparisonCrawlAssetId, gapAnswers } = req.body;
     if (!clientId || !month || !year) return res.status(400).json({ message: "clientId, month, year are required" });
 
     const amValidation = validateAmInputs(req.body);
@@ -1630,6 +1703,7 @@ export async function registerRoutes(
         amInputs: ("error" in amValidation) ? {} : amValidation.amInputs,
         currentCrawlAssetId: currentCrawlAssetId ?? null,
         comparisonCrawlAssetId: comparisonCrawlAssetId ?? null,
+        gapContext: gapAnswers ? buildGapContext(gapAnswers) : undefined,
       });
       res.json(output);
     } catch (err: any) {
@@ -1729,7 +1803,7 @@ export async function registerRoutes(
   });
 
   app.post("/api/reports/qbr-full/generate", async (req, res) => {
-    const { clientId, quarter, year, timezone, amInputs, currentCrawlAssetId, comparisonCrawlAssetId } = req.body;
+    const { clientId, quarter, year, timezone, amInputs, currentCrawlAssetId, comparisonCrawlAssetId, gapAnswers } = req.body;
     if (!clientId || !quarter || !year) return res.status(400).json({ message: "clientId, quarter, year are required" });
 
     const amValidation = validateAmInputs(req.body);
@@ -1744,6 +1818,7 @@ export async function registerRoutes(
         amInputs: ("error" in amValidation) ? {} : amValidation.amInputs,
         currentCrawlAssetId: currentCrawlAssetId ?? null,
         comparisonCrawlAssetId: comparisonCrawlAssetId ?? null,
+        gapContext: gapAnswers ? buildGapContext(gapAnswers) : undefined,
       });
       res.json(output);
     } catch (err: any) {
@@ -1826,7 +1901,7 @@ export async function registerRoutes(
 
   // ─── Mid-Strategy SEO Report ─────────────────────────────────────────────
   app.post("/api/reports/mid-strategy/generate", async (req, res) => {
-    const { clientId, currentCrawlAssetId, comparisonCrawlAssetId, amInputs } = req.body;
+    const { clientId, currentCrawlAssetId, comparisonCrawlAssetId, amInputs, gapAnswers } = req.body;
     if (!clientId) return res.status(400).json({ message: "clientId is required" });
 
     const amValidation = validateAmInputs(req.body);
@@ -1841,6 +1916,7 @@ export async function registerRoutes(
         currentCrawlAssetId: currentCrawlAssetId ?? null,
         comparisonCrawlAssetId: comparisonCrawlAssetId ?? null,
         amInputs: ("error" in amValidation) ? {} : amValidation.amInputs,
+        gapContext: gapAnswers ? buildGapContext(gapAnswers) : undefined,
       });
       if (!output || !Array.isArray(output.slides) || output.slides.length < 1) {
         return res.status(500).json({ message: "Mid-Strategy generator produced no slides. Ensure at least one data source or manual input is provided." });

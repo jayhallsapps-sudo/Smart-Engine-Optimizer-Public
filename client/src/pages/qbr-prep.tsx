@@ -24,6 +24,7 @@ import {
   ChevronDown,
   ChevronRight,
   AlertTriangle,
+  CheckCircle2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { QbrPrepPreview } from "@/components/report-preview/qbr-prep-preview";
@@ -33,6 +34,9 @@ import { useReportSave } from "@/hooks/useReportSave";
 import { SaveStatusIndicator } from "@/components/reports/SaveStatusIndicator";
 import { ReportSaveSelector } from "@/components/reports/ReportSaveSelector";
 import { CrawlAssetSelector } from "@/components/reports/CrawlAssetSelector";
+import { useFillInTheGaps } from "@/hooks/useFillInTheGaps";
+import { FillInTheGapsModal } from "@/components/FillInTheGapsModal";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface CrawlAsset {
   id: number;
@@ -89,7 +93,7 @@ export default function QbrPrepPage() {
 
   const [clientId, setClientId] = useState<string>("");
   const [generationDate, setGenerationDate] = useState(new Date().toISOString().split("T")[0]);
-  const [sentiment, setSentiment] = useState("");
+  const [sentiment, setSentiment] = useState<string>("");
   const [amThoughts, setAmThoughts] = useState("");
   const [priorityChecks, setPriorityChecks] = useState("");
   const [clientNotes, setClientNotes] = useState("");
@@ -113,6 +117,18 @@ export default function QbrPrepPage() {
     reportType: "qbr_prep",
     clientId: clientId ? Number(clientId) : null,
   });
+
+  const {
+    fillInGapsEnabled,
+    setFillInGapsEnabled,
+    isAnalyzing,
+    showModal,
+    questions,
+    runGapAnalysis,
+    submitAnswers,
+    sessionId,
+    closeModal,
+  } = useFillInTheGaps({ reportType: "qbr_prep" });
 
   useEffect(() => {
     if (crawlAssets.length > 0 && !currentCrawlId) {
@@ -149,7 +165,7 @@ export default function QbrPrepPage() {
   }
 
   const generateMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (params?: { gapAnswers?: any[]; gapSessionId?: number }) => {
       const res = await apiRequest("POST", "/api/reports/qbr-prep/generate-v2", {
         clientId: Number(clientId),
         generationDate,
@@ -158,6 +174,8 @@ export default function QbrPrepPage() {
         priorityChecks,
         clientNotes: clientNotes || undefined,
         currentCrawlAssetId: currentCrawlId ?? undefined,
+        gapAnswers: params?.gapAnswers,
+        gapSessionId: params?.gapSessionId,
       });
       return res.json();
     },
@@ -289,6 +307,34 @@ export default function QbrPrepPage() {
       toast({ title: "PDF failed", description: err.message, variant: "destructive" });
     } finally {
       setPdfDownloading(false);
+    }
+  };
+
+  const handleGenerateClick = async () => {
+    if (!clientId) return;
+    if (!validateAmInputs()) return;
+
+    if (fillInGapsEnabled) {
+      const result = await runGapAnalysis(Number(clientId), {
+        clientSentiment: sentiment as any,
+        amThoughts,
+        priorityChecks,
+        clientNotes,
+      });
+      if (result && !result.hasQuestions) {
+        generateMutation.mutate();
+      }
+    } else {
+      generateMutation.mutate();
+    }
+  };
+
+  const handleGapComplete = async (answers: any[]) => {
+    try {
+      const sid = await submitAnswers(Number(clientId), answers);
+      generateMutation.mutate({ gapAnswers: answers, gapSessionId: sid });
+    } catch (err) {
+      // Error handled in hook
     }
   };
 
@@ -468,14 +514,37 @@ export default function QbrPrepPage() {
 
           <Separator />
 
+          <div className="space-y-3">
+            <div className="flex items-start space-x-2">
+              <Checkbox
+                id="qbr-prep-fill-gaps"
+                checked={fillInGapsEnabled}
+                onCheckedChange={(checked) => setFillInGapsEnabled(!!checked)}
+                data-testid="checkbox-fill-gaps"
+                className="mt-1"
+              />
+              <div className="grid gap-1.5 leading-none">
+                <Label
+                  htmlFor="qbr-prep-fill-gaps"
+                  className="text-xs font-semibold uppercase tracking-wide text-muted-foreground cursor-pointer"
+                >
+                  Fill in the gaps
+                </Label>
+                <p className="text-[10px] text-muted-foreground">
+                  Ask follow-up questions before generating if the system detects missing context.
+                </p>
+              </div>
+            </div>
+          </div>
+
           <Button
             className="w-full"
-            onClick={() => { if (validateAmInputs()) generateMutation.mutate(); }}
-            disabled={!clientId || !sfReadyForGeneration || generateMutation.isPending}
+            onClick={handleGenerateClick}
+            disabled={!clientId || !sfReadyForGeneration || generateMutation.isPending || isAnalyzing}
             data-testid="button-generate-qbr-prep"
           >
-            {generateMutation.isPending ? (
-              <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Generating…</>
+            {generateMutation.isPending || isAnalyzing ? (
+              <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {isAnalyzing ? "Analyzing Gaps…" : "Generating…"}</>
             ) : reportData ? (
               <><RefreshCw className="w-4 h-4 mr-2" /> Regenerate</>
             ) : (
@@ -579,6 +648,15 @@ export default function QbrPrepPage() {
           />
         )}
       </div>
+
+      {showModal && (
+        <FillInTheGapsModal
+          questions={questions}
+          onComplete={handleGapComplete}
+          onCancel={closeModal}
+          isGenerating={generateMutation.isPending}
+        />
+      )}
     </div>
   );
 }

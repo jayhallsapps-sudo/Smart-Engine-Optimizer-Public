@@ -85,6 +85,18 @@ SmartEO integrates with the following external services and APIs:
 - **Daily Trend Charts**: GSC (Clicks + Impressions) and GA4 (Sessions + Engaged Sessions) daily line charts comparing current vs previous period in Monthly report
 - **Data Functions**: `fetchGscDailyTrend()` in gscClient.ts, `fetchGa4DailyTrend()` in ga4Client.ts, `fetchGscQueryRowsForTopicClustering()` in gscClient.ts
 
+## Fill in the Gaps (March 2026)
+- **Feature**: Optional preflight clarification step for all 5 report types (Bi-Weekly, Monthly, QBR Prep, QBR Full, Mid-Strategy)
+- **UI**: Checkbox labeled "Fill in the gaps" above Generate button in every report sidebar; unchecked by default; helper text explains the purpose
+- **Flow**: When enabled, clicking Generate first calls `POST /api/reports/gap-analysis` → evaluates inputs → if questions found, opens `FillInTheGapsModal`; if no questions, generates immediately
+- **Engine**: `server/gapAnalysisEngine.ts` — 80+ rule-based question templates across 9 categories (missing_data, sentiment_gap, business_context_gap, SEO_HQ_alignment_gap, report_narrative_gap, priority_gap, tracking_confidence_gap, blocker_dependency_gap, source_conflict); report-type-specific focus; SEO HQ Notion/QSSB context integration; top-10 question cap
+- **Modal**: `client/src/components/FillInTheGapsModal.tsx` — step-by-step one-question-at-a-time flow, thin progress bar, "X of N" counter, all question types (short_text/long_text/single_select/multi_select/boolean), Skip/Back/Next/Generate buttons, optional file upload + supporting link per question, "Why are we asking this?" rationale toggle
+- **Hook**: `client/src/hooks/useFillInTheGaps.ts` — manages analysis state, session persistence within page lifecycle
+- **Context**: `server/gapAnswerContext.ts` — converts answers to structured `GapContext` injected into all generators
+- **Persistence**: `gap_analysis_sessions` DB table stores questions, answers, links, session state; linked to generated report by ID
+- **Routes**: `POST /api/reports/gap-analysis`, `POST /api/reports/gap-analysis/session`
+- **Generators**: All 5 generators accept `gapAnswers: GapAnswer[]` + `gapSessionId` in payload and weave context into report narrative
+
 ## Removed / Legacy
 - QBR Prep v1 routes (`/generate`, `/docx`, `/upload-to-drive`, `/saved/*`) — removed; use v2 routes only
 - SEMrush Project ID input field removed from client setup UI (field still in DB; connectedServices now checks actual API credential existence)

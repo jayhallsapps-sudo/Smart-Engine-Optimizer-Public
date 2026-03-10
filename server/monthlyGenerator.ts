@@ -7,6 +7,7 @@ import { fetchAirtableWorkLog } from "./airtable";
 import { fetchAsanaWorkLog, asanaSectionToCategory, groupAsanaTasks } from "./asanaClient";
 import { clusterQueriesByTopic, topicAdmitConnection } from "./qbrPrepHelpers";
 import type { Slide } from "../client/src/components/report-preview/pptx-preview";
+import { type GapContext } from "./gapAnswerContext";
 
 export interface MonthlyAmInputs {
   clientSentiment?: string;
@@ -87,6 +88,7 @@ export async function generateMonthly(input: {
   amInputs?: MonthlyAmInputs;
   currentCrawlAssetId?: number | null;
   comparisonCrawlAssetId?: number | null;
+  gapContext?: GapContext;
 }): Promise<MonthlyReportJson> {
   const client = await storage.getClient(input.clientId);
   if (!client) throw new Error("Client not found: " + input.clientId);
@@ -238,13 +240,24 @@ export async function generateMonthly(input: {
   }
 
   const perfCommentary = buildPerformanceCommentary(am);
+  let finalCommentary = perfCommentary;
+  if (input.gapContext && input.gapContext.hasAnswers) {
+    const gapParts = [
+      input.gapContext.sentimentContext,
+      input.gapContext.businessChanges,
+      input.gapContext.narrativeNotes
+    ].filter(Boolean);
+    if (gapParts.length > 0) {
+      finalCommentary = (finalCommentary ? finalCommentary + " " : "") + "Gap Insights: " + gapParts.join("; ");
+    }
+  }
 
   slides.push({
     id: "performance",
     type: "metrics",
     title: "Monthly Performance Overview",
     subtitle: `${label} vs ${new Date(input.year, input.month - 2, 1).toLocaleDateString("en-US", { month: "long", year: "numeric" })}`,
-    ...(perfCommentary ? { commentary: perfCommentary } : {}),
+    ...(finalCommentary ? { commentary: finalCommentary } : {}),
     metrics:
       perfMetrics.length > 0
         ? perfMetrics

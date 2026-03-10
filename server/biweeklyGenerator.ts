@@ -8,6 +8,7 @@ import { fetchNsmGoals } from "./sheetsClient";
 import { fetchAsanaWorkLog, asanaSectionToCategory, groupAsanaTasks } from "./asanaClient";
 import type { WorkLogItem } from "./airtable";
 import type { DocxSection } from "../client/src/components/report-preview/docx-preview";
+import { type GapContext, gapContextToString } from "./gapAnswerContext";
 
 export interface BiweeklyAmInputs {
   clientSentiment?: string;
@@ -172,8 +173,9 @@ export async function generateBiweekly(input: {
   endDate: string;
   preparedBy: string;
   amInputs?: BiweeklyAmInputs;
+  gapContext?: GapContext;
 }): Promise<BiweeklyReportJson> {
-  const { clientId, startDate, endDate, preparedBy } = input;
+  const { clientId, startDate, endDate, preparedBy, gapContext } = input;
   const client = await storage.getClient(clientId);
   if (!client) throw new Error("Client not found: " + clientId);
 
@@ -481,12 +483,21 @@ export async function generateBiweekly(input: {
   if (bwAm.priorityChecks?.trim()) amBullets.push(`Priority Checks: ${bwAm.priorityChecks.trim()}`);
   if (bwAm.clientNotes?.trim()) amBullets.push(`Client Notes: ${bwAm.clientNotes.trim()}`);
 
-  if (amBullets.length > 0) {
+  if (amBullets.length > 0 || (gapContext && gapContext.hasAnswers)) {
+    const finalBullets = [...amBullets];
+    if (gapContext && gapContext.hasAnswers) {
+      finalBullets.push("--- Gap Analysis Insights ---");
+      if (gapContext.sentimentContext) finalBullets.push(`Sentiment Context: ${gapContext.sentimentContext}`);
+      if (gapContext.businessChanges) finalBullets.push(`Business Context: ${gapContext.businessChanges}`);
+      if (gapContext.blockers) finalBullets.push(`Blockers: ${gapContext.blockers}`);
+      if (gapContext.narrativeNotes) finalBullets.push(`Additional Notes: ${gapContext.narrativeNotes}`);
+    }
+
     sections.push({
       id: "bw_am_inputs",
       type: "bullets",
       title: "AM Inputs",
-      bullets: amBullets,
+      bullets: finalBullets,
     });
   }
 

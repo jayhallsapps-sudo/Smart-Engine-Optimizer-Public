@@ -218,6 +218,82 @@ export type InsertQueryLog = z.infer<typeof insertQueryLogSchema>;
 export type ApiCredential = typeof apiCredentials.$inferSelect;
 export type InsertApiCredential = z.infer<typeof insertApiCredentialSchema>;
 
+// ─── Fill in the Gaps ────────────────────────────────────────────────────────
+
+export const GAP_SOURCE_CATEGORIES = [
+  "missing_data",
+  "source_conflict",
+  "business_context_gap",
+  "sentiment_gap",
+  "SEO_HQ_alignment_gap",
+  "report_narrative_gap",
+  "priority_gap",
+  "tracking_confidence_gap",
+  "blocker_dependency_gap",
+] as const;
+
+export type GapSourceCategory = (typeof GAP_SOURCE_CATEGORIES)[number];
+
+export const GAP_QUESTION_TYPES = [
+  "short_text",
+  "long_text",
+  "single_select",
+  "multi_select",
+  "boolean",
+] as const;
+
+export type GapQuestionType = (typeof GAP_QUESTION_TYPES)[number];
+
+export interface GapQuestion {
+  id: string;
+  prompt: string;
+  type: GapQuestionType;
+  options?: string[];
+  placeholder?: string;
+  priorityScore: number;
+  rationale: string;
+  showRationaleToUser: boolean;
+  sourceCategory: GapSourceCategory;
+  sourceReference?: string | null;
+}
+
+export interface GapAnswer {
+  questionId: string;
+  answerType: GapQuestionType;
+  value: string | string[] | boolean | null;
+  skipped: boolean;
+  supportingLink?: string | null;
+  supportingDocumentName?: string | null;
+  supportingDocumentData?: string | null;
+}
+
+export interface GapAnalysisResult {
+  shouldAskQuestions: boolean;
+  questions: GapQuestion[];
+  confidenceScore: number;
+  notes?: string[];
+  seoHqChecksApplied?: string[];
+}
+
+export const gapAnalysisSessions = pgTable("gap_analysis_sessions", {
+  id: serial("id").primaryKey(),
+  clientId: integer("client_id").notNull(),
+  reportType: text("report_type").notNull(),
+  questionsJson: jsonb("questions_json").notNull(),
+  answersJson: jsonb("answers_json"),
+  seoHqChecksApplied: text("seo_hq_checks_applied").array(),
+  linkedReportId: integer("linked_report_id"),
+  linkedReportType: text("linked_report_type"),
+  generatedOn: text("generated_on").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [
+  index("gap_sessions_client_idx").on(t.clientId),
+]);
+
+export type GapAnalysisSession = typeof gapAnalysisSessions.$inferSelect;
+
+// ─── End Fill in the Gaps ────────────────────────────────────────────────────
+
 export const DATA_SERVICES = [
   "google_search_console",
   "google_analytics_4",

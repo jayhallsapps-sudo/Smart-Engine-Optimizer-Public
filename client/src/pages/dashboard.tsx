@@ -52,10 +52,11 @@ interface NsmData {
 }
 
 interface ClientNsmResponse {
-  website: string | null;
-  credits: string | null;
-  nsmType: string | null;
+  website: string;
+  credits: string;
+  nsmType: string;
   websiteSource: "client_record" | "nsm_sheet" | "none";
+  creditsSource: "nsm_sheet" | "none";
   current: NsmData | null;
   next: NsmData | null;
 }
@@ -698,13 +699,13 @@ function ClientInfoTab({ client, clientId }: { client: Client; clientId: number 
   const current = nsmData?.current ?? null;
   const next = nsmData?.next ?? null;
 
-  // website and credits are pre-resolved by the API with priority logic:
-  //   website: client.gscSiteUrl first → NSM sheet fallback → null
-  //   credits: NSM sheet only (client record has no credits field)
-  //   nsmType: NSM sheet only
-  const website = nsmData?.website ?? null;
-  const credits = nsmData?.credits ?? null;
-  const nsmType = nsmData?.nsmType ?? null;
+  // All three fields are pre-resolved by the API and always return a value or "—".
+  // Website: client.gscSiteUrl first → NSM sheet fallback → "—"
+  // Credits: NSM sheet only (no credits field on client record yet) → "—"
+  // NSM Type: NSM sheet only → "—"
+  const website = nsmData?.website ?? "—";
+  const credits = nsmData?.credits ?? "—";
+  const nsmType = nsmData?.nsmType ?? "—";
 
   if (isLoading) {
     return (
@@ -721,9 +722,9 @@ function ClientInfoTab({ client, clientId }: { client: Client; clientId: number 
   return (
     <div className="p-4 pb-12 flex flex-col gap-4">
       <div className="flex flex-col gap-2">
-        {website ? (
-          <div className="flex items-center gap-2">
-            <Globe className="w-3 h-3 shrink-0" style={{ color: "rgba(255,255,255,0.35)" }} />
+        <div className="flex items-center gap-2">
+          <Globe className="w-3 h-3 shrink-0" style={{ color: "rgba(255,255,255,0.35)" }} />
+          {website !== "—" ? (
             <a
               href={website.startsWith("http") ? website : `https://${website}`}
               target="_blank"
@@ -734,27 +735,22 @@ function ClientInfoTab({ client, clientId }: { client: Client; clientId: number 
             >
               {website}
             </a>
-          </div>
-        ) : null}
-        {credits ? (
-          <div className="flex items-center gap-2">
-            <CreditCard className="w-3 h-3 shrink-0" style={{ color: "rgba(255,255,255,0.35)" }} />
-            <span className="text-[11px]" style={{ color: "rgba(255,255,255,0.7)" }} data-testid={`text-credits-${clientId}`}>
-              {credits} credits allocated
-            </span>
-          </div>
-        ) : null}
-        {nsmType ? (
-          <div className="flex items-center gap-2">
-            <Target className="w-3 h-3 shrink-0" style={{ color: "rgba(255,255,255,0.35)" }} />
-            <span className="text-[11px]" style={{ color: "rgba(255,255,255,0.7)" }} data-testid={`text-nsm-type-${clientId}`}>
-              NSM Type: {nsmType}
-            </span>
-          </div>
-        ) : null}
-        {!website && !credits && !nsmType && (
-          <p className="text-[11px]" style={{ color: "rgba(255,255,255,0.3)" }}>No account info available</p>
-        )}
+          ) : (
+            <span className="text-[11px]" style={{ color: "rgba(255,255,255,0.35)" }} data-testid={`link-website-${clientId}`}>—</span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <CreditCard className="w-3 h-3 shrink-0" style={{ color: "rgba(255,255,255,0.35)" }} />
+          <span className="text-[11px]" style={{ color: credits !== "—" ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.35)" }} data-testid={`text-credits-${clientId}`}>
+            {credits !== "—" ? `${credits} credits allocated` : "—"}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Target className="w-3 h-3 shrink-0" style={{ color: "rgba(255,255,255,0.35)" }} />
+          <span className="text-[11px]" style={{ color: nsmType !== "—" ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.35)" }} data-testid={`text-nsm-type-${clientId}`}>
+            {nsmType !== "—" ? `NSM Type: ${nsmType}` : "NSM Type: —"}
+          </span>
+        </div>
       </div>
 
       <div style={{ height: "1px", background: "rgba(255,255,255,0.07)" }} />

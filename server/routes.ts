@@ -2113,22 +2113,32 @@ export async function registerRoutes(
         fetchNsmGoals(client.name, true).catch(() => null),
       ]);
 
-      // Website: primary = client.gscSiteUrl; fallback = NSM sheet; final fallback = null
-      const websiteFromClient = client.gscSiteUrl && client.gscSiteUrl !== "—" ? client.gscSiteUrl : null;
-      const websiteFromSheet = current?.website && current.website !== "—" ? current.website : null;
-      const website = websiteFromClient ?? websiteFromSheet ?? null;
+      // Website priority: 1) client.gscSiteUrl, 2) NSM sheet fallback, 3) "—"
+      // client.gscSiteUrl is the canonical website URL stored on every client record.
+      const websiteFromClient = (client.gscSiteUrl ?? "").trim() || null;
+      const websiteFromSheet = (current?.website ?? "").trim().replace(/^—$/, "") || null;
+      const websiteResolved = websiteFromClient ?? websiteFromSheet ?? null;
+      const website = websiteResolved ?? "—";
+      const websiteSource: "client_record" | "nsm_sheet" | "none" =
+        websiteFromClient ? "client_record" : websiteFromSheet ? "nsm_sheet" : "none";
 
-      // Credits: client record has no credits field; only source = NSM sheet
-      const credits = current?.credits && current.credits !== "—" ? current.credits : null;
+      // Credits priority: NSM sheet only.
+      // NOTE: The client record does NOT currently have a credits field.
+      // When a credits field is added to the clients table, update this to prefer client.credits first.
+      const creditsFromSheet = (current?.credits ?? "").trim().replace(/^—$/, "") || null;
+      const credits = creditsFromSheet ?? "—";
+      const creditsSource: "nsm_sheet" | "none" = creditsFromSheet ? "nsm_sheet" : "none";
 
-      // NSM Type: NSM sheet only
-      const nsmType = current?.mvpType && current.mvpType !== "—" ? current.mvpType : null;
+      // NSM Type: NSM sheet only (no client-record equivalent)
+      const nsmTypeFromSheet = (current?.mvpType ?? "").trim().replace(/^—$/, "") || null;
+      const nsmType = nsmTypeFromSheet ?? "—";
 
       return res.json({
         website,
         credits,
         nsmType,
-        websiteSource: websiteFromClient ? "client_record" : websiteFromSheet ? "nsm_sheet" : "none",
+        websiteSource,
+        creditsSource,
         current: current ?? null,
         next: next ?? null,
       });

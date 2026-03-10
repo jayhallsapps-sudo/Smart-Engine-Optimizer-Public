@@ -1,0 +1,75 @@
+One more cleanup pass is required on Dashboard > Client Info so the implementation fully matches the intended behavior.
+
+Current state:
+- Website now correctly prefers the client record first, then falls back to the NSM sheet
+- Credits still comes only from the NSM sheet because there is no credits field on the client record
+- Missing Website/Credits fields currently do not render at all
+- I want missing values to display as —, not disappear
+
+Required fixes:
+
+1. Website display behavior
+- Keep the existing source priority:
+  1. client record
+  2. NSM sheet fallback
+  3. if neither exists, return/display —
+- Do not hide the Website row when missing
+- Always render the Website label in Client Info, with — when unavailable
+
+2. Credits display behavior
+- Keep Credits sourced from the NSM sheet for now, since the client record does not currently have a credits field
+- Make that explicit in code comments so there is no false assumption that this is already client-record-first
+- If Credits is missing from the sheet, return/display —
+- Do not hide the Credits row when missing
+- Always render the Credits label in Client Info, with — when unavailable
+
+3. Source-of-truth clarity
+- Do not imply that Credits now prefers the client record unless that field actually exists
+- Keep Website source resolution server-side
+- Keep Credits resolution server-side as well
+- Return pre-resolved values to the frontend
+
+4. API response behavior
+- The Dashboard > Client Info API response should return top-level values for:
+  - website
+  - credits
+  - nsmType
+- Those values should already be normalized for display:
+  - real value when available
+  - — when unavailable
+- Keep websiteSource for debugging if helpful
+- Add creditsSource too if useful:
+  - "client_record" only if such a source truly exists
+  - "nsm_sheet"
+  - "none"
+
+5. Frontend behavior
+- Client Info should always render:
+  - Website
+  - Credits
+  - NSM Type
+- If any are unavailable, show —
+- Do not conditionally remove those rows
+
+6. Do not change:
+- quarter metrics logic
+- Stats tab behavior
+- navigation
+- Clients page
+- Integrations page
+
+Acceptance criteria:
+1. Website always appears in Client Info and shows either a real value or —
+2. Credits always appears in Client Info and shows either a real value or —
+3. NSM Type always appears in Client Info and shows either a real value or —
+4. Website still prefers client record first, then NSM sheet
+5. Credits is honestly documented as NSM-sheet-sourced unless a real client-record field exists
+6. Frontend no longer hides missing Website/Credits rows
+7. No regressions to dashboard behavior
+
+After implementing, report back with:
+- exact files changed
+- exact final source priority for Website
+- exact final source priority for Credits
+- whether Credits has a true client-record field yet or not
+- confirmation that missing fields now display as —

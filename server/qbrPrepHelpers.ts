@@ -69,7 +69,7 @@ export function isBrandedQuery(query: string, client: Client): boolean {
 
 const PAGE_TYPE_PATTERNS: Array<{ pattern: RegExp; type: string }> = [
   { pattern: /verify.?insurance|vob|verification.?of.?benefits/i, type: "Verify Insurance" },
-  { pattern: /contact|admissions|get.?help|reach.?out|intake/i, type: "Contact / Admissions" },
+  { pattern: /contact|admissions|get.?help(?![-\w])|reach.?out(?![-\w])|intake(?![-\w])/i, type: "Contact / Admissions" },
   { pattern: /detox|detoxification/i, type: "Detox" },
   { pattern: /residential|inpatient/i, type: "Residential / Inpatient" },
   { pattern: /php|iop|partial.?hospitalization|intensive.?outpatient/i, type: "PHP / IOP" },

@@ -1139,7 +1139,7 @@ function generateSection2(
   // P3 — SF high-intent service pages (confidence 3) — better than GSC blog rows
   // Ordered by conversion importance: admissions → insurance → detox → residential → PHP → therapies → dual dx → outpatient
   const sfServicePriority: Array<{ pattern: RegExp; internalType: string }> = [
-    { pattern: /\/contact\b|\/admissions\b|\/get.?help\b|\/admit\b/i, internalType: "Contact / Admissions" },
+    { pattern: /\/contact\b|\/admissions\b|\/get.?help(?![-\w])|\/admit\b/i, internalType: "Contact / Admissions" },
     { pattern: /\/verify.?insur|\/vob\b|\/insurance.?verif|\/check.?insur|\/insurance\b/i, internalType: "Verify Insurance" },
     { pattern: /\/detox/i, internalType: "Detox" },
     { pattern: /\/residential|\/inpatient/i, internalType: "Residential / Inpatient" },
@@ -1758,7 +1758,7 @@ function generateSection4(
     { service: "Outpatient", pattern: /\/outpatient(?!.*intensive)/i },
     { service: "Dual Diagnosis", pattern: /\/dual.?diagnosis|\/co.?occurring/i },
     { service: "Verify Insurance", pattern: /\/verify.?insur|\/vob\b|\/insurance.?verif|\/check.?insur/i },
-    { service: "Contact / Admissions", pattern: /\/contact\b|\/admissions\b|\/get.?help\b|\/admit\b/i },
+    { service: "Contact / Admissions", pattern: /\/contact\b|\/admissions\b|\/get.?help(?![-\w])|\/admit\b/i },
     { service: "Primary Location", pattern: /\/location\b|\/campus\b|\/facility\b|\/our.?location/i },
     { service: "Therapies", pattern: /\/therap(y|ies)\b|\/treatment.?modalities|\/modalities/i },
     { service: "Conditions", pattern: /\/conditions\b|\/mental.?health\b|\/disorders\b/i },

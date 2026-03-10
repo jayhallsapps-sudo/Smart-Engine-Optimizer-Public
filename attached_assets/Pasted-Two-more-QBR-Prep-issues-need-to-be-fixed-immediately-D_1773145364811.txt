@@ -1,0 +1,100 @@
+Two more QBR Prep issues need to be fixed immediately. Diagnose the real cause and fix it cleanly.
+
+Issue 1: Section 2 row data is mismatched
+In Section 2, "Where Conversions Actually Happen," one of the rows is mixing fields from different sources.
+
+What I’m seeing:
+- The page pattern is correct: /addiction-and-employment-get-help-dont-get-fired/
+- But the Type shows "Contact / Admissions"
+- And the Notes talk about a contact page receiving organic traffic and verifying contact form submit tracking
+
+So the page pattern appears to belong to one row, while the type and notes appear to belong to a different row classification.
+
+Important:
+I am NOT saying the same URL is surfacing twice.
+The actual problem is that the row fields are not lining up with each other.
+
+What needs to be true:
+For every Section 2 row, these fields must all describe the same exact candidate/page:
+- type
+- page / pattern
+- notes / what we’re learning
+- source tag / chip if applicable
+
+A row must never combine:
+- page from candidate A
+- notes from candidate B
+- type from candidate C
+
+Your job on Issue 1:
+1. Trace the exact generation logic for Section 2:
+- candidate collection
+- scoring
+- sorting
+- deduping
+- row mapping
+- type assignment
+- notes generation
+- final serialization into the preview/PDF payload
+
+2. Find the exact root cause of the mismatch.
+Likely possibilities to inspect:
+- row fields assembled from parallel arrays by index instead of a single object
+- notes/type derived after sorting from a stale pre-sort array
+- dedupe replacing URL but not replacing classification/notes
+- row normalization mutating shared objects
+- notes generator using a previous row’s classification
+- carryover logic from contact/admissions rows being reused for other URLs
+- switch/case or conditional that classifies based on one field but writes notes from another field
+- PDF renderer using wrong cell mapping for Section 2
+
+3. Fix it so each row is generated from a single normalized row object and all displayed fields stay bound to that one object.
+
+4. Add a guard:
+If a row’s page pattern is not actually a contact/admissions page, it must not be labeled Contact / Admissions and must not receive contact-page notes.
+
+5. Validate against the exact bad case:
+- /addiction-and-employment-get-help-dont-get-fired/ should have a type and notes that match that page, not contact page language.
+
+Issue 2: Too much white space at the bottom of the PDF
+The exported PDF is leaving excessive white space at the bottom of pages. That needs to be tightened up.
+
+Your job on Issue 2:
+1. Trace the print/PDF layout rules affecting page height and pagination.
+2. Find the exact cause of the extra bottom white space.
+
+Inspect for:
+- fixed page height containers
+- excessive bottom margins/padding
+- forced page-break spacing
+- min-height rules
+- margin-bottom on section wrappers
+- print-specific CSS
+- Puppeteer page size / margins
+- spacer divs
+- flex layouts stretching the page
+- orphan/widow avoidance hacks creating blank space
+- table containers forcing premature page breaks
+
+3. Fix it so the PDF uses the available page space more naturally and does not leave unnecessary blank space at the bottom.
+
+Important constraints:
+- Do not redesign the report
+- Do not change section order
+- Do not change content structure unless required
+- Fix the actual mapping/layout issue, not just the symptom
+- Keep preview and PDF aligned
+
+Return your report in this exact format:
+
+1. Root cause of Section 2 mismatch
+2. Files changed for Section 2
+3. Exact fix for Section 2
+4. Validation for Section 2
+
+5. Root cause of PDF white space
+6. Files changed for PDF spacing
+7. Exact fix for PDF spacing
+8. Validation for PDF spacing
+
+9. Any remaining risk

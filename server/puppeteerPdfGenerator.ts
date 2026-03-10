@@ -74,7 +74,11 @@ export async function generatePdfViaPuppeteer(token: string, renderPath?: string
 
     await new Promise(r => setTimeout(r, 400));
 
-    const contentHeight = await page.evaluate(() => document.documentElement.scrollHeight);
+    const contentHeight = await page.evaluate(() => {
+      const el = document.querySelector("[data-report-root]");
+      if (el) return Math.ceil((el as HTMLElement).getBoundingClientRect().bottom);
+      return document.documentElement.scrollHeight;
+    });
 
     const pdf = await page.pdf({
       width: "816px",

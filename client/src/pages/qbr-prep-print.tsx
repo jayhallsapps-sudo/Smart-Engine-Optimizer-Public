@@ -135,55 +135,10 @@ export default function QbrPrepPrint() {
   ];
 
   const hasTopicDeltas = s3.topTrafficTopics.some((r: any) => r.queryCount != null);
-
-  const s3aRows: ReactNode[][] = [
-    ...s3.topTrafficTopics.map((r: any, ri: number) => {
-      const baseCells = [cell(e(`s3a_${ri}_0`, r.topic))];
-      if (hasTopicDeltas) {
-        baseCells.push(
-          cell(String(r.queryCount ?? "—")),
-          cell(r.queryCountDelta ?? "—"),
-          cell(r.impressions != null ? r.impressions.toLocaleString("en-US") : "—"),
-          cell(r.impressionsDelta ?? "—"),
-        );
-      }
-      baseCells.push(
-        cell(e(`s3a_${ri}_1`, r.exampleQueries)),
-        cell(e(`s3a_${ri}_2`, r.connectionToAdmits)),
-        badgeCell(e(`s3a_${ri}_3`, r.insight), r.dataSource),
-      );
-      return baseCells;
-    }),
-    ...customRowsAsNodes(edits, "s3a"),
-  ];
+  const topicColCount = hasTopicDeltas ? 7 : 3;
 
   const hasPageDeltas = s3.topTrafficPages.some((r: any) => r.clicksDelta || r.impressions || r.queries);
-
-  const s3bRows: ReactNode[][] = [
-    ...s3.topTrafficPages.map((r: any, ri: number) => {
-      const cells: ReactNode[] = [
-        cell(e(`s3b_${ri}_0`, r.page)),
-        cell(e(`s3b_${ri}_1`, r.clicks)),
-      ];
-      if (hasPageDeltas) {
-        const deltaStyle = (v: string) => ({ color: v?.startsWith("-") ? "#DC2626" : "#16A34A", fontSize: "10px" });
-        cells.push(
-          <span key="cld" style={deltaStyle(r.clicksDelta ?? "")}>{r.clicksDelta ?? "—"}</span>,
-          <span key="imp" style={{ fontSize: "10px" }}>{r.impressions ?? "—"}</span>,
-          <span key="impd" style={deltaStyle(r.impressionsDelta ?? "")}>{r.impressionsDelta ?? "—"}</span>,
-          <span key="qr" style={{ fontSize: "10px" }}>{r.queries ?? "—"}</span>,
-          <span key="qrd" style={deltaStyle(r.queriesDelta ?? "")}>{r.queriesDelta ?? "—"}</span>,
-        );
-      }
-      cells.push(
-        cell(e(`s3b_${ri}_2`, r.ctr)),
-        cell(e(`s3b_${ri}_3`, r.connectionToAdmits)),
-        badgeCell(e(`s3b_${ri}_4`, r.insight), r.dataSource),
-      );
-      return cells;
-    }),
-    ...customRowsAsNodes(edits, "s3b"),
-  ];
+  const pageColCount = hasPageDeltas ? 9 : 4;
 
   const s4Rows = [
     ...s4.services.map((r: any, ri: number) => [e(`s4_${ri}_0`, r.service), e(`s4_${ri}_1`, r.examplePage)]),
@@ -201,7 +156,6 @@ export default function QbrPrepPrint() {
     ...customRowsAsNodes(edits, "s6"),
   ];
 
-  const statusColor = (st: string) => st === "Live" ? "#27ae60" : st === "Missing Setup" ? "#c0392b" : st === "Inferred Only" ? "#8e44ad" : "#e67e22";
   const s7Rows: ReactNode[][] = [
     ...s7.tracking.map((r: any, ri: number) => [
       cell(e(`s7_${ri}_0`, r.focusArea)),
@@ -210,9 +164,6 @@ export default function QbrPrepPrint() {
         {parseS7Sources(e(`s7_${ri}_2`, r.source)).map((src: string, si: number) => (
           <SourceBadge key={si} source={src} />
         ))}
-      </span>,
-      <span style={{ fontWeight: 600, fontSize: "0.75rem", color: statusColor(e(`s7_${ri}_3`, r.status ?? "Needs Verification")) }}>
-        {e(`s7_${ri}_3`, r.status ?? "Needs Verification")}
       </span>,
       cell(e(`s7_${ri}_4`, r.whyItMatters)),
     ]),
@@ -283,19 +234,104 @@ export default function QbrPrepPrint() {
 
           <SectionHeading num={3} title="Top Organic Traffic Drivers" />
           <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Traffic Topics</div>
-          <ReportTable
-            headers={hasTopicDeltas
-              ? ["Topic", "# Queries", "Δ Queries", "Impressions", "Δ Impressions", "Example Queries", "Connection to Admits", "Insight"]
-              : ["Topic", "Example Queries", "Connection to Admits", "Insight"]}
-            rows={s3aRows}
-          />
+          <div style={{ border: `1px solid ${ACCENT}28`, borderRadius: 4, overflow: "hidden", marginBottom: 12 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px" }}>
+              <thead>
+                <tr style={{ backgroundColor: `${ACCENT}0D` }}>
+                  {["Topic", ...(hasTopicDeltas ? ["# Queries", "Δ Queries", "Impressions", "Δ Impressions"] : []), "Example Queries", "Connection to Admits"].map((h: string) => (
+                    <th key={h} style={{ padding: "5px 8px", textAlign: "left", fontWeight: 600, fontSize: "9px", color: ACCENT, textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: `1px solid ${ACCENT}20`, whiteSpace: "nowrap" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {s3.topTrafficTopics.map((r: any, ri: number) => {
+                  const insightVal = edits[`s3a_${ri}_3`] ?? r.insight;
+                  const hasInsight = !!insightVal;
+                  const cellBorder = hasInsight ? "none" : "1px solid #F3EDED";
+                  const bg = ri % 2 === 1 ? "#FBF8F7" : "white";
+                  return (
+                    <React.Fragment key={`topic-${ri}`}>
+                      <tr style={{ backgroundColor: bg }}>
+                        <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4 }}>{cell(e(`s3a_${ri}_0`, r.topic))}</td>
+                        {hasTopicDeltas && <>
+                          <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4 }}>{r.queryCount ?? "—"}</td>
+                          <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4, color: r.queryCountDelta?.startsWith("-") ? "#DC2626" : "#16A34A" }}>{r.queryCountDelta ?? "—"}</td>
+                          <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4 }}>{r.impressions != null ? r.impressions.toLocaleString("en-US") : "—"}</td>
+                          <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4, color: r.impressionsDelta?.startsWith("-") ? "#DC2626" : "#16A34A" }}>{r.impressionsDelta ?? "—"}</td>
+                        </>}
+                        <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4 }}>{cell(e(`s3a_${ri}_1`, r.exampleQueries))}</td>
+                        <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4 }}>{cell(e(`s3a_${ri}_2`, r.connectionToAdmits))}</td>
+                      </tr>
+                      {hasInsight && (
+                        <tr style={{ backgroundColor: "#FFFBEB" }}>
+                          <td colSpan={topicColCount} style={{ padding: "4px 10px 6px 14px", borderBottom: "1px solid #F3EDED", borderLeft: `3px solid ${ACCENT}40`, fontSize: "9px", color: "#6B7280", lineHeight: 1.4 }}>
+                            <span style={{ fontWeight: 700, color: ACCENT, marginRight: 4 }}>Insight:</span>
+                            {cell(insightVal)}
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+                {getCustomRows(edits, "s3a").map((row: string[], ri: number) => (
+                  <tr key={`s3a-custom-${ri}`} style={{ backgroundColor: "white" }}>
+                    {row.map((c: string, ci: number) => <td key={ci} style={{ padding: "6px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4 }}>{c}</td>)}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
           <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Traffic Pages</div>
-          <ReportTable
-            headers={hasPageDeltas
-              ? ["Page", "Clicks", "Δ Clicks", "Impressions", "Δ Impressions", "# Queries", "Δ Queries", "CTR", "Connection to Admits", "Insight"]
-              : ["Page", "Clicks", "CTR", "Connection to Admits", "Insight"]}
-            rows={s3bRows}
-          />
+          <div style={{ border: `1px solid ${ACCENT}28`, borderRadius: 4, overflow: "hidden", marginBottom: 12 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px" }}>
+              <thead>
+                <tr style={{ backgroundColor: `${ACCENT}0D` }}>
+                  {["Page", "Clicks", ...(hasPageDeltas ? ["Δ Clicks", "Impressions", "Δ Impressions", "# Queries", "Δ Queries"] : []), "CTR", "Connection to Admits"].map((h: string) => (
+                    <th key={h} style={{ padding: "5px 8px", textAlign: "left", fontWeight: 600, fontSize: "9px", color: ACCENT, textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: `1px solid ${ACCENT}20`, whiteSpace: "nowrap" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {s3.topTrafficPages.map((r: any, ri: number) => {
+                  const insightVal = edits[`s3b_${ri}_4`] ?? r.insight;
+                  const hasInsight = !!insightVal;
+                  const cellBorder = hasInsight ? "none" : "1px solid #F3EDED";
+                  const bg = ri % 2 === 1 ? "#FBF8F7" : "white";
+                  return (
+                    <React.Fragment key={`page-${ri}`}>
+                      <tr style={{ backgroundColor: bg }}>
+                        <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4 }}>{cell(e(`s3b_${ri}_0`, r.page))}</td>
+                        <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4 }}>{cell(e(`s3b_${ri}_1`, r.clicks))}</td>
+                        {hasPageDeltas && <>
+                          <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4, color: r.clicksDelta?.startsWith("-") ? "#DC2626" : "#16A34A" }}>{r.clicksDelta ?? "—"}</td>
+                          <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4 }}>{r.impressions ?? "—"}</td>
+                          <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4, color: r.impressionsDelta?.startsWith("-") ? "#DC2626" : "#16A34A" }}>{r.impressionsDelta ?? "—"}</td>
+                          <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4 }}>{r.queries ?? "—"}</td>
+                          <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4, color: r.queriesDelta?.startsWith("-") ? "#DC2626" : "#16A34A" }}>{r.queriesDelta ?? "—"}</td>
+                        </>}
+                        <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4 }}>{cell(e(`s3b_${ri}_2`, r.ctr))}</td>
+                        <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4 }}>{cell(e(`s3b_${ri}_3`, r.connectionToAdmits))}</td>
+                      </tr>
+                      {hasInsight && (
+                        <tr style={{ backgroundColor: "#FFFBEB" }}>
+                          <td colSpan={pageColCount} style={{ padding: "4px 10px 6px 14px", borderBottom: "1px solid #F3EDED", borderLeft: `3px solid ${ACCENT}40`, fontSize: "9px", color: "#6B7280", lineHeight: 1.4 }}>
+                            <span style={{ fontWeight: 700, color: ACCENT, marginRight: 4 }}>Insight:</span>
+                            {cell(insightVal)}
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+                {getCustomRows(edits, "s3b").map((row: string[], ri: number) => (
+                  <tr key={`s3b-custom-${ri}`} style={{ backgroundColor: "white" }}>
+                    {row.map((c: string, ci: number) => <td key={ci} style={{ padding: "6px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4 }}>{c}</td>)}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
           <SectionHeading num={4} title="Site Service Overview" />
           <DataTable
@@ -319,36 +355,23 @@ export default function QbrPrepPrint() {
 
           <SectionHeading num={7} title="What We Track" />
           <ReportTable
-            headers={["Focus Area", "Metric", "Source", "Status", "Why It Matters"]}
+            headers={["Focus Area", "Metric", "Source", "Why It Matters"]}
             rows={s7Rows}
           />
 
-          {reportData.sectionQssb?.clientInsights?.length > 0 && (
-            <>
-              <SectionHeading num={8} title="Client Insights" />
-              <div style={{ fontSize: "11px", color: "#374151", marginBottom: 12 }} data-testid="qssb-insights-print">
-                {reportData.sectionQssb.clientInsights.map((insight: any, i: number) => (
-                  <div key={i} style={{ marginBottom: 6, paddingLeft: 12, borderLeft: `3px solid ${ACCENT}44` }}>
-                    {e(`qssb_insight_${i}`, insight.question)}
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-
-          {reportData.sectionQssb?.additionalOpportunities?.length > 0 && (
-            <>
-              <SectionHeading num={reportData.sectionQssb?.clientInsights?.length > 0 ? 9 : 8} title="Additional Opportunities" />
-              <ReportTable
-                headers={["Service", "Description", "Source"]}
-                rows={reportData.sectionQssb.additionalOpportunities.map((opp: any, i: number) => [
-                  cell(e(`qssb_opp_${i}_0`, opp.service)),
-                  cell(e(`qssb_opp_${i}_1`, opp.description)),
-                  <SourceBadge key={`src-${i}`} source={opp.source} />,
-                ])}
-              />
-            </>
-          )}
+          {(() => {
+            const s8Rows = getCustomRows(edits, "s8_opportunities");
+            if (s8Rows.length === 0) return null;
+            return (
+              <>
+                <SectionHeading num={8} title="Additional Opportunities" />
+                <ReportTable
+                  headers={["Description", "Purpose", "Est. Cost"]}
+                  rows={s8Rows.map((row: string[]) => row.map((c: string) => cell(c)))}
+                />
+              </>
+            );
+          })()}
 
           {genMeta && (
             <div style={{ fontSize: "9px", color: "#9CA3AF", marginTop: 16 }}>

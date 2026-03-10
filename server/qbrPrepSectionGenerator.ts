@@ -883,8 +883,16 @@ function inferProgram(sfData: Record<string, any>[], sfHeaders: string[]): strin
     title: String(r[titleCol] ?? "").toLowerCase(),
   }));
 
-  const hasWomens = urls.some(u => /women|woman|female/i.test(u.url) || /women|woman|female/i.test(u.title));
-  const hasMens = urls.some(u => /\bmen\b|male/i.test(u.url) || /\bmen\b|male/i.test(u.title));
+  // Gender detection is URL-only — page titles frequently mention both genders
+  // in passing (e.g. "how addiction affects men and women"), which causes false
+  // Co-ed classifications on single-gender sites.
+  //
+  // URL patterns require the gender keyword to appear as an actual path segment
+  // indicator of a program, not as incidental prose in a slug.
+  // Valid examples: /womens-rehab, /programs/men, /mens-detox, /for-women
+  // Would NOT match: /blog/men-and-women-in-recovery (path context wrong)
+  const hasWomens = urls.some(u => /\/women[s']?[-\/]|[-\/]women[s']?[-\/]|[-\/]women[s']?$/i.test(u.url));
+  const hasMens   = urls.some(u => /\/men[s']?[-\/]|[-\/]men[s']?[-\/]|[-\/]men[s']?$/i.test(u.url));
   const hasDualDiagnosis = urls.some(u => /dual.?diagnosis|co.?occurring/i.test(u.url));
 
   // Derive gender qualifier — avoid "Women's Men's" combined label

@@ -67,9 +67,33 @@ export function isBrandedQuery(query: string, client: Client): boolean {
   return brandTerms.some(b => q.includes(b));
 }
 
+/** Strict whitelist of path segments that identify genuine utility admissions/contact pages.
+ *  Only the ENTIRE first path segment is tested — embedded keywords in long content slugs
+ *  (e.g. /admissions-and-alcohol-rehab-insurance/) will NOT match. */
+const UTILITY_ADMISSIONS_SEGMENTS = new Set([
+  "contact", "contact-us", "contact-now", "contact-today", "contact-admissions",
+  "admissions", "admission", "admissions-form",
+  "get-help", "get-started", "gethelp",
+  "reach-out", "reachout",
+  "intake", "intake-form",
+  "admit",
+  "apply", "apply-now",
+  "need-help", "find-help", "help-now",
+  "start-now", "call-now", "start-treatment",
+  "refer", "referral",
+]);
+
+/** Returns true only when the URL's first path segment IS a utility admissions/contact slug,
+ *  not merely when a keyword appears somewhere inside a longer content slug. */
+export function isUtilityAdmissionsPage(url: string): boolean {
+  const path = url.replace(/^https?:\/\/[^/]+/, "");
+  const firstSegment = path.replace(/^\//, "").split(/[/?#]/)[0].toLowerCase();
+  return UTILITY_ADMISSIONS_SEGMENTS.has(firstSegment);
+}
+
 const PAGE_TYPE_PATTERNS: Array<{ pattern: RegExp; type: string }> = [
   { pattern: /verify.?insurance|vob|verification.?of.?benefits/i, type: "Verify Insurance" },
-  { pattern: /contact|admissions|get.?help(?![-\w])|reach.?out(?![-\w])|intake(?![-\w])/i, type: "Contact / Admissions" },
+  // Contact / Admissions is handled by isUtilityAdmissionsPage() before this loop — no entry here.
   { pattern: /detox|detoxification/i, type: "Detox" },
   { pattern: /residential|inpatient/i, type: "Residential / Inpatient" },
   { pattern: /php|iop|partial.?hospitalization|intensive.?outpatient/i, type: "PHP / IOP" },
@@ -86,6 +110,8 @@ const PAGE_TYPE_PATTERNS: Array<{ pattern: RegExp; type: string }> = [
 ];
 
 export function classifyPageType(url: string): string {
+  // Strict utility-page check must run before broad pattern loop.
+  if (isUtilityAdmissionsPage(url)) return "Contact / Admissions";
   const path = url.replace(/^https?:\/\/[^/]+/, "").toLowerCase();
   for (const { pattern, type } of PAGE_TYPE_PATTERNS) {
     if (pattern.test(path)) return type;

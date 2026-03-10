@@ -1,0 +1,87 @@
+The Section 2 bug is NOT fixed yet.
+
+Updated diagnosis:
+This is no longer a field alignment problem.
+Type and Notes now match each other.
+The real remaining problem is that the page classifier is still too broad and is incorrectly classifying content/resource URLs as "Contact / Admissions" when their slug merely contains words like:
+- admissions
+- contact
+- get-help
+- intake
+- reach-out
+- insurance
+
+Bad example currently still happening:
+- /admissions-and-alcohol-rehab-insurance/
+
+What is wrong:
+That URL is being treated like a true contact/admissions utility page.
+It is not.
+So the classifier is still matching generic keywords inside longer slugs instead of identifying actual utility-page paths.
+
+New requirement:
+Fix page-type classification so Contact / Admissions is assigned ONLY when the URL is an actual admissions/contact/help utility page, not when those words merely appear inside a longer content slug.
+
+What to do:
+1. Audit ALL Contact / Admissions classification logic across:
+- server/qbrPrepHelpers.ts
+- server/qbrPrepSectionGenerator.ts
+- any note-builder/helper used by Section 2
+- any fallback classifier used for Section 4 or related service/page classification
+
+2. Replace broad substring matching with path-segment-aware or slug-intent-aware logic.
+
+Allowed behavior:
+These should classify as Contact / Admissions:
+- /contact/
+- /contact-us/
+- /admissions/
+- /get-help/
+- /reach-out/
+- /intake/
+- /verify-insurance/
+- /insurance-verification/
+- obvious variants where the whole slug is clearly a utility page
+
+Disallowed behavior:
+These should NOT classify as Contact / Admissions just because they contain a keyword:
+- /admissions-and-alcohol-rehab-insurance/
+- /addiction-and-employment-get-help-dont-get-fired/
+- /can-you-be-an-alcoholic-and-not-drink-every-day/
+- any blog/resource/content slug with embedded keyword text
+
+3. Make the rule strict:
+A page should only be Contact / Admissions if:
+- the first path segment itself is a utility slug, or
+- the normalized slug strongly indicates a true conversion page,
+not merely because a keyword appears somewhere in a longer article slug.
+
+4. Add a defensive helper:
+Create a single helper like:
+- isUtilityAdmissionsPage(path)
+and use that everywhere instead of repeating regex fragments.
+
+5. Rebuild notes from final classified type only after the stricter classification is applied.
+
+6. Validate against these exact URLs and report the classification result:
+- /contact-us/
+- /get-help/
+- /verify-insurance/
+- /admissions-and-alcohol-rehab-insurance/
+- /addiction-and-employment-get-help-dont-get-fired/
+- /womens-addiction-treatment-center/detoxification/
+- /php-vs-iop/
+
+Expected:
+- first three = Contact / Admissions or equivalent utility type where appropriate
+- middle two = NOT Contact / Admissions
+- last two = Service Page
+
+Return your answer in this exact format:
+
+1. Root cause
+2. Files changed
+3. Exact classification rule before
+4. Exact classification rule after
+5. Validation table for the 6 URLs above
+6. Confirmation that Section 2 Type + Page + Notes now all describe the same page correctly

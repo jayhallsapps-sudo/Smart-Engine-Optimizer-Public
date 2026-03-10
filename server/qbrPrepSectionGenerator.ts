@@ -142,6 +142,7 @@ import {
   topicAdmitConnection,
   diagnoseTier,
   analyzeSfForTierInput,
+  isUtilityAdmissionsPage,
   type QuarterInfo,
   type TierDiagnosisInput,
 } from "./qbrPrepHelpers";
@@ -1138,8 +1139,8 @@ function generateSection2(
 
   // P3 — SF high-intent service pages (confidence 3) — better than GSC blog rows
   // Ordered by conversion importance: admissions → insurance → detox → residential → PHP → therapies → dual dx → outpatient
+  // Contact / Admissions is handled separately using isUtilityAdmissionsPage() — not a regex entry.
   const sfServicePriority: Array<{ pattern: RegExp; internalType: string }> = [
-    { pattern: /\/contact\b|\/admissions\b|\/get.?help(?![-\w])|\/admit\b/i, internalType: "Contact / Admissions" },
     { pattern: /\/verify.?insur|\/vob\b|\/insurance.?verif|\/check.?insur|\/insurance\b/i, internalType: "Verify Insurance" },
     { pattern: /\/detox/i, internalType: "Detox" },
     { pattern: /\/residential|\/inpatient/i, internalType: "Residential / Inpatient" },
@@ -1156,6 +1157,26 @@ function generateSection2(
       ? sfData.filter(r => { const s = Number(r[statusColHeader]); return !(s >= 300 && s < 400); })
       : sfData;
     const sfPageUrls = liveSfDataS2.map(r => String(r[urlCol] ?? "")).filter(isValidPageUrl);
+
+    // Contact / Admissions — strict utility-page check (first path segment must be a known utility slug)
+    const contactMatches = sfPageUrls.filter(u => isUtilityAdmissionsPage(u));
+    if (contactMatches.length > 0) {
+      contactMatches.sort((a, b) => scorePage4Url(b) - scorePage4Url(a));
+      const best = shortUrl(contactMatches[0]);
+      if (!seenPageKeys.has(best)) {
+        seenPageKeys.add(best);
+        pagePool.push({
+          confidence: 3,
+          row: {
+            type: clientReadableType("Contact / Admissions"),
+            page: best,
+            notes: buildConvertingPageNote("Contact / Admissions", "Multi-source", 0, 0),
+            dataSource: "Multi-source",
+          },
+        });
+      }
+    }
+
     for (const { pattern, internalType } of sfServicePriority) {
       const matches = sfPageUrls.filter(u => pattern.test(u));
       if (matches.length === 0) continue;
@@ -1751,6 +1772,7 @@ function generateSection4(
   const services: ServiceRow[] = [];
   const urlCol = sfHeaders.find(h => /^address$/i.test(h) || /^url$/i.test(h)) ?? sfHeaders[0] ?? "";
 
+  // Contact / Admissions handled separately below via isUtilityAdmissionsPage().
   const serviceTargets = [
     { service: "Detox", pattern: /\/detox/i },
     { service: "Residential / Inpatient", pattern: /\/residential|\/inpatient/i },
@@ -1758,7 +1780,6 @@ function generateSection4(
     { service: "Outpatient", pattern: /\/outpatient(?!.*intensive)/i },
     { service: "Dual Diagnosis", pattern: /\/dual.?diagnosis|\/co.?occurring/i },
     { service: "Verify Insurance", pattern: /\/verify.?insur|\/vob\b|\/insurance.?verif|\/check.?insur/i },
-    { service: "Contact / Admissions", pattern: /\/contact\b|\/admissions\b|\/get.?help(?![-\w])|\/admit\b/i },
     { service: "Primary Location", pattern: /\/location\b|\/campus\b|\/facility\b|\/our.?location/i },
     { service: "Therapies", pattern: /\/therap(y|ies)\b|\/treatment.?modalities|\/modalities/i },
     { service: "Conditions", pattern: /\/conditions\b|\/mental.?health\b|\/disorders\b/i },
@@ -1777,6 +1798,15 @@ function generateSection4(
     const pageUrls = allUrls.filter(isValidPageUrl);
 
     console.log(`[Section4] Total SF URLs: ${allUrls.length} (after redirect filter), valid page URLs after filtering: ${pageUrls.length}`);
+
+    // Contact / Admissions — strict first-segment utility check (no broad regex)
+    const contactCandidates4 = pageUrls.filter(u => isUtilityAdmissionsPage(u));
+    if (contactCandidates4.length > 0) {
+      contactCandidates4.sort((a, b) => scorePage4Url(b) - scorePage4Url(a));
+      const best = contactCandidates4[0];
+      console.log(`[Section4] Contact / Admissions → ${shortUrl(best)} (${contactCandidates4.length} candidates)`);
+      services.push({ service: "Contact / Admissions", examplePage: shortUrl(best) });
+    }
 
     for (const target of serviceTargets) {
       // Collect all candidates for this service

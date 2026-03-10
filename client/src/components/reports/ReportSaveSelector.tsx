@@ -10,6 +10,8 @@ import {
 } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
 import type { SavedReport } from "@shared/schema";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 interface ReportSaveSelectorProps {
   clientId: number | null | undefined;
@@ -20,6 +22,7 @@ interface ReportSaveSelectorProps {
 export function ReportSaveSelector({ clientId, reportType, onLoad }: ReportSaveSelectorProps) {
   const [selectedId, setSelectedId] = useState<string>("");
   const [isLoadingFull, setIsLoadingFull] = useState(false);
+  const { toast } = useToast();
 
   const { data: savedReports = [], isLoading } = useQuery<SavedReport[]>({
     queryKey: [`/api/saved-reports?clientId=${clientId}&reportType=${encodeURIComponent(reportType)}`],
@@ -30,7 +33,7 @@ export function ReportSaveSelector({ clientId, reportType, onLoad }: ReportSaveS
     if (!selectedId) return;
     setIsLoadingFull(true);
     try {
-      const res = await fetch(`/api/saved-reports/${selectedId}`);
+      const res = await apiRequest("GET", `/api/saved-reports/${selectedId}`);
       if (!res.ok) throw new Error("Failed to load report");
       const report: SavedReport = await res.json();
       onLoad(
@@ -39,7 +42,8 @@ export function ReportSaveSelector({ clientId, reportType, onLoad }: ReportSaveS
         report.id,
         report
       );
-    } catch {
+    } catch (err: any) {
+      toast({ title: "Could not load report", description: err?.message ?? "Unknown error", variant: "destructive" });
     } finally {
       setIsLoadingFull(false);
     }

@@ -135,6 +135,67 @@ async function downloadWorkbook(spreadsheetId: string): Promise<XLSX.WorkBook | 
   }
 }
 
+function getPrevQuarter(q: number, year: number): { q: number; year: number } {
+  if (q === 1) return { q: 4, year: year - 1 };
+  return { q: q - 1, year };
+}
+
+export async function fetchNsmGoalsForSpecificQuarter(clientName: string, q: number, year: number): Promise<NsmData> {
+  try {
+    const sheetUrl = await storage.getSetting("google_sheet_url");
+    if (!sheetUrl) return FALLBACK;
+    const match = sheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    if (!match) return FALLBACK;
+    const spreadsheetId = match[1];
+    const wb = await downloadWorkbook(spreadsheetId);
+    if (!wb) return FALLBACK;
+    const tabName = findBestNsmTab(wb.SheetNames, q, year);
+    if (!tabName) {
+      console.warn(`[sheetsClient] fetchNsmGoalsForSpecificQuarter: Q${q} ${year} tab not found`);
+      return FALLBACK;
+    }
+    const quarterLabel = tabName.replace(/^NSM Tracker /i, "").trim();
+    const ws = wb.Sheets[tabName];
+    const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+    if (rows.length < 2) return FALLBACK;
+    const rawHeaders: string[] = (rows[0] as any[]).map(h => String(h ?? "").trim());
+    const headers = rawHeaders.map(h => h.toLowerCase());
+    const clientRow = rows.slice(1).find(row => {
+      const cell = String(row[0] ?? "").trim();
+      return cell && fuzzyMatch(cell, clientName);
+    });
+    if (!clientRow) return FALLBACK;
+    const colSessGoal    = findCol(headers, /organic sessions nsm/i);
+    const colSessActual  = findCol(headers, /organic sessions actual/i);
+    const colSessPct     = findCol(headers, /% to organic sessions/i);
+    const colSessTrack   = findCol(headers, /organic sessions on track/i);
+    const colMvpType     = findCol(headers, /mvp nsm type/i);
+    const colMvpGoal     = findCol(headers, /^q\d \d{4} mvp nsm$|mvp nsm$/i);
+    const colMvpActual   = findCol(headers, /mvp nsm actual/i);
+    const colMvpPct      = findCol(headers, /% to mvp/i);
+    const colMvpTrack    = findCol(headers, /mvp nsm on track/i);
+    const colWebsite     = findCol(headers, /website/i);
+    const colCredits     = findCol(headers, /credits/i);
+    const mvpGoalCol = colMvpGoal >= 0 ? colMvpGoal : findCol(rawHeaders, /mvp nsm(?! actual)/i);
+    return {
+      quarter:         quarterLabel,
+      sessionsGoal:    cellStr(clientRow, colSessGoal),
+      sessionsActual:  cellStr(clientRow, colSessActual),
+      sessionsPercent: formatPercent(colSessPct >= 0 ? clientRow[colSessPct] : "—"),
+      sessionsOnTrack: cellStr(clientRow, colSessTrack),
+      mvpType:         cellStr(clientRow, colMvpType),
+      mvpGoal:         cellStr(clientRow, mvpGoalCol),
+      mvpActual:       cellStr(clientRow, colMvpActual),
+      mvpPercent:      formatPercent(colMvpPct >= 0 ? clientRow[colMvpPct] : "—"),
+      mvpOnTrack:      cellStr(clientRow, colMvpTrack),
+      website:         colWebsite >= 0 ? cellStr(clientRow, colWebsite) : "—",
+      credits:         colCredits >= 0 ? cellStr(clientRow, colCredits) : "—",
+    };
+  } catch {
+    return FALLBACK;
+  }
+}
+
 export async function fetchNsmGoals(clientName: string, forwardLooking?: boolean): Promise<NsmData> {
   try {
     const sheetUrl = await storage.getSetting("google_sheet_url");

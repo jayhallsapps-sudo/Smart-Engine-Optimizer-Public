@@ -1,7 +1,7 @@
 import { type GapContext, buildGapContext, gapContextToString } from "./gapAnswerContext";
 import { storage } from "./storage";
 import { getGoogleAccessToken } from "./googleToken";
-import { fetchNsmGoals } from "./sheetsClient";
+import { fetchNsmGoals, fetchNsmGoalsForSpecificQuarter } from "./sheetsClient";
 import { fetchAirtableWorkLog } from "./airtable";
 import { fetchAsanaWorkLog } from "./asanaClient";
 import { queryCallRail } from "./callrailClient";
@@ -264,6 +264,7 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
   const missingData: string[] = [];
 
   let nsmData: any = null;
+  let prevNsmData: any = null;
   try {
     nsmData = await fetchNsmGoals(client.name, input.forwardLooking);
     if (nsmData && nsmData.quarter !== "—") dataSources.push("Google Sheets NSM Tracker");
@@ -272,6 +273,21 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
     nsmData = null;
   }
   if (!nsmData) missingData.push("NSM Tracker");
+
+  // Fetch previous quarter NSM data for goal shift calculation
+  try {
+    const now = new Date(quarter.analysisEnd || new Date());
+    const month = now.getMonth() + 1;
+    const currYear = now.getFullYear();
+    const currQ = month <= 3 ? 1 : month <= 6 ? 2 : month <= 9 ? 3 : 4;
+    const prevQ = currQ === 1 ? 4 : currQ - 1;
+    const prevYear = currQ === 1 ? currYear - 1 : currYear;
+    prevNsmData = await fetchNsmGoalsForSpecificQuarter(client.name, prevQ, prevYear);
+    if (prevNsmData && prevNsmData.quarter === "—") prevNsmData = null;
+    console.log(`[NSM] Prev quarter data: Q${prevQ} ${prevYear}, mvpGoal=${prevNsmData?.mvpGoal ?? "n/a"}, sessGoal=${prevNsmData?.sessionsGoal ?? "n/a"}`);
+  } catch {
+    prevNsmData = null;
+  }
 
   let gscQueryRows: any[] = [];
   let gscPageRows: any[] = [];
@@ -413,10 +429,58 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
     generatedOn: input.generationDate,
   };
 
-  const section1 = generateSection1(nsmData, ga4FunnelCurr, quarter, client, callTrackingSources);
+  const section1 = generateSection1(nsmData, ga4FunnelCurr, quarter, client, callTrackingSources, prevNsmData);
   const section2 = generateSection2(ga4LandingRows, gscPageRows, sfData, sfHeaders, client, callTrackingLandingPages, callTrackingSources);
   const section3 = generateSection3(gscQueryRows, gscPageRows, ga4LandingRows, client, gscPrevQueryRows, gscPrevPageRows, gscQueryPageRows, gscPrevQueryPageRows);
   const section4 = generateSection4(sfData, sfHeaders, client);
+
+  // T003: Post-process tertiary goal reason with actual traffic data from section3
+  const tertiaryIdx = section1.rows.findIndex(r => r.goalType === "Tertiary Goal");
+  if (tertiaryIdx >= 0 && section3.topTrafficTopics.length > 0) {
+    const topTopic = section3.topTrafficTopics[0];
+    const topPage = section3.topTrafficPages[0];
+    // TrafficTopicRow has impressions (not clicks); use it as a relevance proxy
+    const topicsWithImp = section3.topTrafficTopics.filter(t => (t.impressions ?? 0) > 0);
+    const totalImp = topicsWithImp.reduce((sum, t) => sum + (t.impressions ?? 0), 0);
+    const topTopicPct = totalImp > 0 && topTopic.impressions
+      ? Math.round((topTopic.impressions / totalImp) * 100)
+      : null;
+
+    const topicsSnippet = topicsWithImp.slice(0, 3).map(t => `"${t.topic}"`).join(", ");
+    const pageSnippet = topPage?.page
+      ? topPage.page.replace(/^https?:\/\/[^/]+/, "").substring(0, 50) || topPage.page
+      : null;
+
+    let trafficContext = "";
+    if (topicsSnippet) {
+      trafficContext += ` Traffic is led by ${topicsSnippet} topics`;
+      if (topTopicPct) trafficContext += ` (${topTopicPct}% of clicks from "${topTopic.topic}")`;
+      trafficContext += ".";
+    }
+    if (pageSnippet) {
+      trafficContext += ` Top page: ${pageSnippet}.`;
+    }
+    // clicksDelta is already a % string like "-9.9%" — parse its numeric value directly
+    const parseDeltaPct = (s: string) => parseFloat(String(s).replace(/%/, ""));
+    const topDelta = section3.topTrafficPages.find(p => p.clicksDelta && Math.abs(parseDeltaPct(p.clicksDelta)) > 15);
+    if (topDelta && topDelta.clicksDelta) {
+      const deltaVal = parseDeltaPct(topDelta.clicksDelta);
+      const deltaDir = deltaVal > 0 ? "up" : "down";
+      const deltaAbs = Math.abs(Math.round(deltaVal));
+      const pagePart = (topDelta.page ?? "").split("/").filter(Boolean).slice(-1)[0] || "top page";
+      trafficContext += ` Notable delta: ${pagePart} ${deltaDir} ${deltaAbs}% QoQ.`;
+    }
+
+    if (trafficContext) {
+      const currentReason = section1.rows[tertiaryIdx].reason;
+      if (!currentReason.includes("Traffic is led")) {
+        section1.rows[tertiaryIdx] = {
+          ...section1.rows[tertiaryIdx],
+          reason: currentReason.trimEnd() + trafficContext,
+        };
+      }
+    }
+  }
 
   const sfTierInput = analyzeSfForTierInput(sfData, sfHeaders);
   const tierInput: TierDiagnosisInput = {
@@ -465,56 +529,158 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
   };
   const section7 = generateSection7(section6, section5, section7Evidence);
 
+  // T004: Generate account-specific client insights
+  function generateContextualClientInsights(params: {
+    client: Client;
+    section1: Section1Goals;
+    section3: Section3Traffic;
+    section4: Section4Services;
+    callTrackingSources: Array<{ source: string; calls: number }>;
+    nsmData: any;
+    sentiment: string;
+    qssbInsights: string[];
+  }): Array<{ question: string }> {
+    const { client, section1, section3, section4, callTrackingSources, nsmData, sentiment, qssbInsights } = params;
+    const insights: Array<{ question: string }> = [];
+
+    // 1. Primary goal performance question
+    const primaryRow = section1.rows.find(r => r.goalType === "Primary Goal");
+    const primaryKpi = nsmData?.mvpType ? normalizeKpiLabel(nsmData.mvpType) : "admits";
+    const callProvider = detectCallTrackingProvider(client);
+    if (primaryRow && primaryRow.goal && primaryRow.goal !== ME) {
+      if (callProvider) {
+        insights.push({ question: `We're tracking ${primaryKpi.toLowerCase()} via ${callProvider}. Are the calls coming in matching what your admissions team is actually seeing on their end?` });
+      } else {
+        insights.push({ question: `Your ${primaryKpi.toLowerCase()} goal this quarter is ${primaryRow.goal}. How are you currently measuring and validating those numbers internally?` });
+      }
+    }
+
+    // 2. Top traffic topic question
+    const topTopic = section3.topTrafficTopics[0];
+    if (topTopic && topTopic.topic) {
+      const connection = topTopic.connectionToAdmits ?? "Unknown";
+      if (connection === "Low" || connection === "Medium") {
+        insights.push({ question: `Most of your organic traffic is driven by "${topTopic.topic}" content — which has ${connection} admission intent. Is there a specific service area you'd like us to prioritize moving forward to better align traffic with admissions-ready visitors?` });
+      } else {
+        insights.push({ question: `"${topTopic.topic}" content is your top organic traffic driver right now. Is that aligned with what your team is seeing in terms of call and inquiry quality?` });
+      }
+    }
+
+    // 3. Service page question
+    const services = section4.services.slice(0, 3).map(s => s.service).filter(Boolean);
+    if (services.length > 0) {
+      insights.push({ question: `Your main service pages cover ${services.join(", ")}. Are there any new programs or treatment modalities you're planning to launch or expand that we should be building content around?` });
+    }
+
+    // 4. Sessions goal question
+    const tertiaryRow = section1.rows.find(r => r.goalType === "Tertiary Goal");
+    if (tertiaryRow && nsmData?.sessionsGoal && nsmData.sessionsGoal !== "—") {
+      const sessGoal = nsmData.sessionsGoal;
+      const sessActual = nsmData.sessionsActual !== "—" ? nsmData.sessionsActual : null;
+      if (sessActual) {
+        insights.push({ question: `You're at ${sessActual} organic sessions against a goal of ${sessGoal} this quarter. Are you seeing any patterns in the types of inquiries coming through — are they matching the services you're trying to fill?` });
+      } else {
+        insights.push({ question: `Your organic sessions target for this quarter is ${sessGoal}. What's your sense of whether the inquiry volume you're seeing is matching your census goals?` });
+      }
+    }
+
+    // 5. Sentiment-based question
+    if (sentiment === "Frustrated" || sentiment === "Concerned") {
+      insights.push({ question: `I want to make sure we're addressing what matters most to you. What's the #1 thing you wish was performing better right now?` });
+    } else if (sentiment === "Happy" || sentiment === "Neutral") {
+      insights.push({ question: `Looking ahead into next quarter, what's the most important new initiative you'd want SEO to support?` });
+    }
+
+    // 6. Geographic/competitive question
+    if (client.primaryLocation || client.name) {
+      const location = client.primaryLocation ?? "your market";
+      insights.push({ question: `Have you noticed any new competitors showing up in search results for your key treatment programs in ${location}? Is there anyone in particular we should be keeping a closer eye on?` });
+    }
+
+    // Supplement with QSSB insights (deduplicated), cap total at 6
+    for (const q of qssbInsights) {
+      if (insights.length >= 6) break;
+      if (!insights.some(i => i.question.toLowerCase().includes(q.toLowerCase().slice(0, 20)))) {
+        insights.push({ question: q });
+      }
+    }
+
+    return insights.slice(0, 6);
+  }
+
   let sectionQssb: SectionQssb | undefined;
   try {
     const [qssbData, strategyBank] = await Promise.all([
       fetchQssbData(),
       fetchStrategyBank(),
     ]);
-    if (qssbData.clientInsights.length > 0 || qssbData.additionalOpportunities.length > 0 || strategyBank.entries.length > 0) {
-      // Additional Opportunities: monetizable/scope-expanding items only, max 5.
-      // Only include things that could realistically be upsold or cross-sold as new scope.
-      // Internal notes, generic best-practices, and operational QA items are excluded.
-      const MONETIZABLE_SIGNALS = [
-        "paid media", "paid retargeting", "retargeting", "cro", "conversion rate",
-        "landing page", "landing page build", "technical cleanup", "technical sprint",
-        "review generation", "gbp expansion", "call tracking", "attribution",
-        "content expansion", "local seo", "local expansion", "dev support",
-        "schema markup", "page speed", "core web vitals", "link building",
-        "reputation management", "chat", "live chat", "video", "email marketing",
-        "sms", "competitor", "competitive", "authority", "backlink", "pr campaign",
-        "social", "influencer", "programmatic", "display ads",
-      ];
-      const isMonetizable = (title: string, desc: string): boolean => {
-        const combined = `${title} ${desc}`.toLowerCase();
-        return MONETIZABLE_SIGNALS.some(sig => combined.includes(sig));
-      };
-      const rawOpps: Array<{ title: string; description: string }> = [
-        ...qssbData.additionalOpportunities
-          .filter(o => isMonetizable(o.service, o.description))
-          .map(o => ({ title: o.service, description: o.description })),
-        ...strategyBank.entries
-          .filter(e => isMonetizable(e.service, e.description))
-          .map(e => ({ title: e.service, description: e.description })),
-      ];
-      // Deduplicate by title and limit to 5
-      const seen = new Set<string>();
-      const additionalOpportunities = rawOpps.filter(o => {
-        const key = o.title.toLowerCase().trim();
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      }).slice(0, 5);
 
+    const MONETIZABLE_SIGNALS = [
+      "paid media", "paid retargeting", "retargeting", "cro", "conversion rate",
+      "landing page", "landing page build", "technical cleanup", "technical sprint",
+      "review generation", "gbp expansion", "call tracking", "attribution",
+      "content expansion", "local seo", "local expansion", "dev support",
+      "schema markup", "page speed", "core web vitals", "link building",
+      "reputation management", "chat", "live chat", "video", "email marketing",
+      "sms", "competitor", "competitive", "authority", "backlink", "pr campaign",
+      "social", "influencer", "programmatic", "display ads",
+    ];
+    const isMonetizable = (title: string, desc: string): boolean => {
+      const combined = `${title} ${desc}`.toLowerCase();
+      return MONETIZABLE_SIGNALS.some(sig => combined.includes(sig));
+    };
+    const rawOpps: Array<{ title: string; description: string }> = [
+      ...qssbData.additionalOpportunities
+        .filter(o => isMonetizable(o.service, o.description))
+        .map(o => ({ title: o.service, description: o.description })),
+      ...strategyBank.entries
+        .filter(e => isMonetizable(e.service, e.description))
+        .map(e => ({ title: e.service, description: e.description })),
+    ];
+    const seen = new Set<string>();
+    const additionalOpportunities = rawOpps.filter(o => {
+      const key = o.title.toLowerCase().trim();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).slice(0, 5);
+
+    // T004: Generate contextual client insights from actual report data
+    const contextualInsights = generateContextualClientInsights({
+      client,
+      section1,
+      section3,
+      section4,
+      callTrackingSources,
+      nsmData,
+      sentiment: input.sentiment ?? "Neutral",
+      qssbInsights: qssbData.clientInsights,
+    });
+
+    if (contextualInsights.length > 0 || additionalOpportunities.length > 0) {
       sectionQssb = {
-        clientInsights: qssbData.clientInsights.map(q => ({ question: q })),
+        clientInsights: contextualInsights,
         additionalOpportunities,
       };
-      dataSources.push("QSSB");
+      if (qssbData.clientInsights.length > 0 || qssbData.additionalOpportunities.length > 0) dataSources.push("QSSB");
       if (strategyBank.entries.length > 0) dataSources.push("Strategy Bank");
-      console.log(`[QBR Prep] QSSB: ${sectionQssb.clientInsights.length} insights, ${sectionQssb.additionalOpportunities.length} opportunities`);
+      console.log(`[QBR Prep] Client Insights: ${sectionQssb.clientInsights.length} questions, Opportunities: ${sectionQssb.additionalOpportunities.length}`);
     }
   } catch (qssbErr: any) {
+    // Even without QSSB, generate contextual insights from report data
+    const contextualInsights = generateContextualClientInsights({
+      client,
+      section1,
+      section3,
+      section4,
+      callTrackingSources,
+      nsmData,
+      sentiment: input.sentiment ?? "Neutral",
+      qssbInsights: [],
+    });
+    if (contextualInsights.length > 0) {
+      sectionQssb = { clientInsights: contextualInsights, additionalOpportunities: [] };
+    }
     console.warn("[QBR Prep] QSSB/Strategy Bank fetch failed:", qssbErr.message);
   }
 
@@ -707,24 +873,32 @@ function detectCallTrackingProvider(client: Client): string | null {
   return null;
 }
 
-function generateSection1(nsmData: any, ga4Funnel: any, quarter: QuarterInfo, client: Client, callTrackingSources: Array<{ source: string; calls: number }> = []): Section1Goals {
+function computeGoalShiftPct(currentGoal: string, prevGoal: string): string {
+  const curr = parseInt(String(currentGoal).replace(/[^0-9]/g, ""), 10);
+  const prev = parseInt(String(prevGoal).replace(/[^0-9]/g, ""), 10);
+  if (isNaN(curr) || isNaN(prev) || prev === 0) return "—";
+  const pct = Math.round(((curr - prev) / prev) * 100);
+  if (pct === 0) return "0%";
+  return pct > 0 ? `+${pct}%` : `${pct}%`;
+}
+
+function generateSection1(nsmData: any, ga4Funnel: any, quarter: QuarterInfo, client: Client, callTrackingSources: Array<{ source: string; calls: number }> = [], prevNsmData: any = null): Section1Goals {
   const rows: GoalRow[] = [];
 
   const callTrackingProvider = detectCallTrackingProvider(client);
 
   console.log(`[Section1] client=${client.name}`);
   console.log(`[Section1] callTrackingProvider=${callTrackingProvider ?? "none"}`);
-  console.log(`[Section1] nsmData present=${!!nsmData}, ga4Funnel present=${!!ga4Funnel}`);
+  console.log(`[Section1] nsmData present=${!!nsmData}, prevNsmData present=${!!prevNsmData}, ga4Funnel present=${!!ga4Funnel}`);
 
   const primaryKpiLabel = nsmData ? normalizeKpiLabel(nsmData.mvpType) : "Admits";
   console.log(`[Section1] Primary KPI label from mvpType: "${primaryKpiLabel}" (raw mvpType: "${nsmData?.mvpType ?? "—"}")`);
 
   let admitsGoalDisplay: string = primaryKpiLabel;
   let admitsShift = "—";
-  const callTrackingProviderForPrimary = detectCallTrackingProvider(client);
-  let admitsSource = callTrackingProviderForPrimary ?? "Source pending confirmation";
-  let admitsReason = callTrackingProviderForPrimary
-    ? `${primaryKpiLabel} is the strategic primary KPI. ${callTrackingProviderForPrimary} call data is used as the operational tracking source for admissions-intent activity.`
+  let admitsSource = callTrackingProvider ?? "Source pending confirmation";
+  let admitsReason = callTrackingProvider
+    ? `${primaryKpiLabel} is the strategic primary KPI. ${callTrackingProvider} call data is used as the operational tracking source for admissions-intent activity.`
     : `${primaryKpiLabel} is the strategic primary KPI. Reporting source is not yet confirmed — this goal will be updated once a tracking source is connected.`;
 
   let nsmMvpActNum: number | null = null;
@@ -733,35 +907,47 @@ function generateSection1(nsmData: any, ga4Funnel: any, quarter: QuarterInfo, cl
   if (nsmData) {
     const mvpGoal = nsmData.mvpGoal !== "—" ? nsmData.mvpGoal : null;
     const mvpActual = nsmData.mvpActual !== "—" ? nsmData.mvpActual : null;
-    if (mvpGoal && mvpActual) {
-      const actN = parseInt(String(mvpActual).replace(/[^0-9]/g, ""), 10);
+    if (mvpGoal) {
       const goalN = parseInt(String(mvpGoal).replace(/[^0-9]/g, ""), 10);
-      if (!isNaN(actN) && !isNaN(goalN) && goalN > 0) {
-        nsmMvpActNum = actN;
-        nsmMvpGoalNum = goalN;
-      }
+      if (!isNaN(goalN) && goalN > 0) nsmMvpGoalNum = goalN;
+    }
+    if (mvpActual) {
+      const actN = parseInt(String(mvpActual).replace(/[^0-9]/g, ""), 10);
+      if (!isNaN(actN)) nsmMvpActNum = actN;
     }
   }
 
-  if (nsmMvpGoalNum !== null && nsmMvpActNum !== null) {
-    admitsSource = "NSM Tracker";
-    const pacing = nsmMvpActNum / nsmMvpGoalNum!;
+  if (nsmMvpGoalNum !== null) {
+    admitsSource = callTrackingProvider ?? "NSM Tracker";
     const kpiLower = primaryKpiLabel.toLowerCase();
-    if (pacing >= 0.9) {
-      const target = fmtNum(Math.round(nsmMvpGoalNum! * 1.05));
-      admitsGoalDisplay = `${target} ${kpiLower}`;
-      admitsShift = "+5%";
-      admitsReason = `${primaryKpiLabel} on pace (${nsmMvpActNum}/${nsmMvpGoalNum}). Slight increase is achievable given current trajectory.`;
-    } else if (pacing >= 0.7) {
-      const target = fmtNum(nsmMvpGoalNum!);
-      admitsGoalDisplay = `${target} ${kpiLower}`;
-      admitsShift = "Maintain";
-      admitsReason = `${primaryKpiLabel} tracking at ${nsmMvpActNum}/${nsmMvpGoalNum}. Maintaining goal while improving conversion paths.`;
+
+    // Compute goal shift vs previous quarter using actual goal-to-goal comparison
+    if (prevNsmData && prevNsmData.mvpGoal && prevNsmData.mvpGoal !== "—") {
+      admitsShift = computeGoalShiftPct(String(nsmMvpGoalNum), prevNsmData.mvpGoal);
+    }
+
+    if (nsmMvpActNum !== null) {
+      // Both goal and actual available — use pacing-based display
+      const pacing = nsmMvpActNum / nsmMvpGoalNum!;
+      const nextTarget = pacing >= 0.9
+        ? Math.round(nsmMvpGoalNum! * 1.05)
+        : pacing >= 0.7
+          ? nsmMvpGoalNum!
+          : Math.round(nsmMvpGoalNum! * 0.95);
+      admitsGoalDisplay = `${fmtNum(nextTarget)} ${kpiLower}`;
+      if (admitsShift === "—") {
+        admitsShift = pacing >= 0.9 ? "+5%" : pacing >= 0.7 ? "0%" : "-5%";
+      }
+      admitsReason = pacing >= 0.9
+        ? `${primaryKpiLabel} on pace (${nsmMvpActNum}/${nsmMvpGoalNum}). Slight increase is achievable given current trajectory. Calls are tracked via ${callTrackingProvider ?? "call tracking"}.`
+        : pacing >= 0.7
+          ? `${primaryKpiLabel} tracking at ${nsmMvpActNum}/${nsmMvpGoalNum} (${nsmData.mvpPercent !== "—" ? nsmData.mvpPercent : "partial"}). Maintaining goal while improving conversion paths.`
+          : `${primaryKpiLabel} behind pace (${nsmMvpActNum}/${nsmMvpGoalNum}). Modest adjustment reflects realistic expectations while improving admissions path quality.`;
     } else {
-      const target = fmtNum(Math.round(nsmMvpGoalNum! * 0.95));
-      admitsGoalDisplay = `${target} ${kpiLower}`;
-      admitsShift = "-5%";
-      admitsReason = `${primaryKpiLabel} behind pace (${nsmMvpActNum}/${nsmMvpGoalNum}). Modest adjustment reflects realistic expectations given current trajectory.`;
+      // Only goal available (actual not yet reported)
+      admitsGoalDisplay = `${fmtNum(nsmMvpGoalNum!)} ${kpiLower} (Q target)`;
+      if (admitsShift === "—") admitsShift = "—";
+      admitsReason = `${primaryKpiLabel} Q target is ${fmtNum(nsmMvpGoalNum!)} — tracking has not yet been recorded for this quarter. ${callTrackingProvider ? `${callTrackingProvider} is the measurement source.` : "Connect a call tracking source to begin tracking actuals."}`;
     }
   }
 
@@ -801,7 +987,7 @@ function generateSection1(nsmData: any, ga4Funnel: any, quarter: QuarterInfo, cl
 
   // ── Tertiary Goal: Organic Sessions ────────────────────────────────────
   let sessRecommended: string = ME;
-  let sessShift = "Maintain";
+  let sessShift = "—";
   let sessReason = ME;
 
   if (nsmData) {
@@ -811,6 +997,11 @@ function generateSection1(nsmData: any, ga4Funnel: any, quarter: QuarterInfo, cl
 
     sessRecommended = sessGoal ?? ME;
 
+    // Compute actual goal shift vs previous quarter
+    if (prevNsmData && prevNsmData.sessionsGoal && prevNsmData.sessionsGoal !== "—" && sessGoal) {
+      sessShift = computeGoalShiftPct(sessGoal, prevNsmData.sessionsGoal);
+    }
+
     if (sessGoal && sessActual && sessPct) {
       const actualNum = parseInt(String(sessActual).replace(/[^0-9]/g, ""), 10);
       const goalNum = parseInt(String(sessGoal).replace(/[^0-9]/g, ""), 10);
@@ -818,18 +1009,21 @@ function generateSection1(nsmData: any, ga4Funnel: any, quarter: QuarterInfo, cl
         const pacing = actualNum / goalNum;
         if (pacing >= 0.9) {
           sessRecommended = fmtNum(Math.round(goalNum * 1.05));
-          sessShift = "+5%";
+          if (sessShift === "—") sessShift = "+5%";
           sessReason = `On pace at ${sessPct} through current quarter. Modest increase is realistic given current trajectory.`;
         } else if (pacing >= 0.7) {
           sessRecommended = fmtNum(goalNum);
-          sessShift = "Maintain";
+          if (sessShift === "—") sessShift = "0%";
           sessReason = `Tracking at ${sessPct} — maintaining current goal is realistic while addressing site improvements.`;
         } else {
           sessRecommended = fmtNum(Math.round(goalNum * 0.95));
-          sessShift = "-5%";
+          if (sessShift === "—") sessShift = "-5%";
           sessReason = `Behind pace at ${sessPct}. Slight reduction reflects realistic expectations while focusing on site fundamentals.`;
         }
       }
+    } else if (sessGoal) {
+      sessRecommended = fmtNum(parseInt(String(sessGoal).replace(/[^0-9]/g, ""), 10));
+      sessReason = `Sessions Q target is ${sessRecommended}. Actuals not yet available for this quarter.`;
     }
   } else if (ga4Funnel) {
     sessRecommended = `${fmtNum(ga4Funnel.sessions)} organic sessions (QTD baseline)`;

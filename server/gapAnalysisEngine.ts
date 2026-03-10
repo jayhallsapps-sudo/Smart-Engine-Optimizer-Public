@@ -84,36 +84,47 @@ const QUESTION_TEMPLATES: GapQuestionTemplate[] = [
   },
   {
     templateId: "business_new_services",
-    prompt: "Are there any new services or products the client has launched that aren't yet reflected in the current SEO strategy?",
+    prompt: "Are there any new services or programs the client has launched that aren't yet reflected in their SEO content or site structure?",
     type: "boolean",
     priorityScore: 70,
-    rationale: "Missing new business areas in the report shows a lack of alignment with client growth.",
-    showRationaleToUser: false,
+    rationale: "Newly launched services need content coverage to rank and drive qualified admissions traffic.",
+    showRationaleToUser: true,
     sourceCategory: "business_context_gap",
     reportTypes: ["qbr_full", "mid_strategy"],
-    evaluator: () => true
+    evaluator: ({ amInputs }) => {
+      const t = (amInputs.amThoughts + " " + amInputs.priorityChecks).toLowerCase();
+      return t.includes("new program") || t.includes("new service") || t.includes("launch") || t.includes("opening") || t.includes("expansion");
+    }
   },
   {
     templateId: "business_competitor_shift",
-    prompt: "Have you noticed any new competitors appearing in the client's space recently that we should track?",
+    prompt: "Have you noticed new competitors showing up in organic results for this client's key treatment programs or service areas?",
     type: "short_text",
+    placeholder: "e.g. American Addiction Centers is now ranking #2 for 'detox near me' in our client's market",
     priorityScore: 60,
-    rationale: "Keeping up with competitor landscape is vital for long-term strategy.",
+    rationale: "Tracking emerging competitors helps us adjust keyword and content strategy proactively.",
     showRationaleToUser: false,
     sourceCategory: "business_context_gap",
     reportTypes: ["mid_strategy", "qbr_full"],
-    evaluator: () => true
+    evaluator: ({ amInputs }) => {
+      const t = amInputs.amThoughts.toLowerCase();
+      return t.includes("competitor") || t.includes("competing") || t.includes("outranked") || t.includes("losing position");
+    }
   },
   {
     templateId: "business_budget_changes",
-    prompt: "Has the client mentioned any upcoming budget changes or marketing shifts for the next quarter?",
+    prompt: "Has the client mentioned any changes to their content budget or marketing priorities for the next quarter?",
     type: "long_text",
+    placeholder: "e.g. Reducing spend on paid media, shifting budget toward SEO and content",
     priorityScore: 80,
-    rationale: "Anticipating budget shifts helps in resource planning and strategy adjustment.",
+    rationale: "Budget shifts affect what we can realistically commit to in the QBR planning section.",
     showRationaleToUser: false,
     sourceCategory: "business_context_gap",
     reportTypes: ["qbr_full", "qbr_prep"],
-    evaluator: () => true
+    evaluator: ({ amInputs }) => {
+      const t = (amInputs.amThoughts + " " + amInputs.priorityChecks).toLowerCase();
+      return t.includes("budget") || t.includes("spend") || t.includes("cost") || t.includes("reduce") || t.includes("increase scope");
+    }
   },
 
   // --- MISSING DATA GAPS ---
@@ -269,25 +280,31 @@ const QUESTION_TEMPLATES: GapQuestionTemplate[] = [
   // --- BLOCKER / DEPENDENCY GAPS ---
   {
     templateId: "blocker_client_delay",
-    prompt: "Are there any outstanding content approvals or technical implementations delayed by the client?",
+    prompt: "Are there outstanding content approvals or technical implementations that the client has delayed?",
     type: "boolean",
     priorityScore: 85,
-    rationale: "Highlighting client-side delays protects our performance narrative.",
-    showRationaleToUser: false,
+    rationale: "Documenting client-side delays protects our performance narrative and sets accurate expectations.",
+    showRationaleToUser: true,
     sourceCategory: "blocker_dependency_gap",
     reportTypes: ["biweekly", "monthly"],
-    evaluator: () => true
+    evaluator: ({ amInputs }) => {
+      const t = (amInputs.amThoughts + " " + amInputs.priorityChecks).toLowerCase();
+      return t.includes("approval") || t.includes("client hasn't") || t.includes("waiting on client") || t.includes("pending review") || t.includes("no response");
+    }
   },
   {
-     templateId: "blocker_resource_gap",
-     prompt: "Do we have all necessary resources (content hours, dev access) to complete the priorities listed?",
-     type: "boolean",
-     priorityScore: 75,
-     rationale: "Identifying resource gaps early prevents missed deadlines.",
-     showRationaleToUser: false,
-     sourceCategory: "blocker_dependency_gap",
-     reportTypes: ["monthly", "qbr_prep", "mid_strategy"],
-     evaluator: () => true
+    templateId: "blocker_resource_gap",
+    prompt: "Do we have the dev or content access needed to complete the priorities listed for next quarter?",
+    type: "boolean",
+    priorityScore: 75,
+    rationale: "Resource access constraints need to be called out to avoid overpromising in the QBR.",
+    showRationaleToUser: false,
+    sourceCategory: "blocker_dependency_gap",
+    reportTypes: ["monthly", "qbr_prep", "mid_strategy"],
+    evaluator: ({ amInputs }) => {
+      const t = (amInputs.amThoughts + " " + amInputs.priorityChecks).toLowerCase();
+      return t.includes("dev access") || t.includes("need access") || t.includes("can't publish") || t.includes("no cms") || t.includes("waiting on dev");
+    }
   },
 
   // --- MID-STRATEGY SPECIFIC ---
@@ -396,46 +413,106 @@ const ADDITIONAL_TEMPLATES: GapQuestionTemplate[] = [
     },
     showRationaleToUser: true
   },
-  // Blocker
+  // Blocker — only fire when AM explicitly mentions deadlines missed
   {
-    templateId: "blocker_internal_bandwidth",
-    prompt: "Are there any internal bandwidth issues preventing us from hitting the deadlines for this client?",
-    type: "boolean",
-    priorityScore: 70,
-    rationale: "Managing internal capacity to ensure client success.",
+    templateId: "blocker_client_delay_specific",
+    prompt: "Which specific deliverable is blocked, and what do you need from the client to unblock it?",
+    type: "short_text",
+    placeholder: "e.g. Content approval for 3 service pages pending since Jan 15",
+    priorityScore: 85,
+    rationale: "Specific blocker details protect our performance narrative and create a paper trail.",
     sourceCategory: "blocker_dependency_gap",
-    reportTypes: ["biweekly", "monthly"],
-    evaluator: () => true,
+    reportTypes: ["biweekly", "monthly", "qbr_prep"],
+    evaluator: ({ amInputs }) => {
+      const t = (amInputs.amThoughts + " " + amInputs.priorityChecks).toLowerCase();
+      return t.includes("waiting") || t.includes("blocked") || t.includes("pending") || t.includes("delayed") || t.includes("client needs to");
+    },
+    showRationaleToUser: true
+  },
+
+  // ── QBR PREP SPECIFIC ────────────────────────────────────────────────
+  {
+    templateId: "qbr_prep_call_volume_context",
+    prompt: "No call tracking data is connected. Can you provide the current call volume from your call tracking platform so we can validate admissions intent?",
+    type: "short_text",
+    placeholder: "e.g. 42 calls in Q1, tracked via CallRail",
+    priorityScore: 95,
+    rationale: "Call volume is the primary lead proxy for behavioral health clients. Without it, the primary goal row in Section 1 can't be accurately populated.",
+    sourceCategory: "missing_data",
+    reportTypes: ["qbr_prep"],
+    evaluator: ({ accountContext }) =>
+      !accountContext.availableDataSources.includes("callrail") &&
+      !accountContext.availableDataSources.includes("call_tracking_metrics") &&
+      !accountContext.availableDataSources.includes("nimbata"),
+    showRationaleToUser: true
+  },
+  {
+    templateId: "qbr_prep_nsm_missing",
+    prompt: "NSM Tracker data isn't available for this client. What are their current session and admit goals for this quarter?",
+    type: "long_text",
+    placeholder: "e.g. Q2 goal: 160 admits, 8,000 organic sessions",
+    priorityScore: 92,
+    rationale: "Without NSM goals, Section 1 Goal Planning will only show placeholder data. This is a required field for QBR Prep.",
+    sourceCategory: "missing_data",
+    reportTypes: ["qbr_prep"],
+    evaluator: ({ accountContext }) => !accountContext.availableDataSources.includes("nsm_tracker"),
+    showRationaleToUser: true
+  },
+  {
+    templateId: "qbr_prep_top_performing_page_context",
+    prompt: "Do you have any context on why a specific page or section is performing particularly well or poorly right now?",
+    type: "long_text",
+    placeholder: "e.g. The detox page jumped after we added schema markup; the residential page dipped after a redesign",
+    priorityScore: 75,
+    rationale: "AM context on traffic anomalies helps explain Section 3 data and improves narrative quality.",
+    sourceCategory: "report_narrative_gap",
+    reportTypes: ["qbr_prep"],
+    evaluator: ({ amInputs }) => {
+      const t = amInputs.amThoughts.toLowerCase();
+      return !t.includes("because") && !t.includes("due to") && !t.includes("after") && !t.includes("redesign") && !t.includes("launch");
+    },
+    showRationaleToUser: true
+  },
+  {
+    templateId: "qbr_prep_next_quarter_priority",
+    prompt: "What is the client's top business priority going into the planning quarter — census, new programs, market expansion, or something else?",
+    type: "single_select",
+    options: ["Census / admissions volume", "New program launch", "Market / geo expansion", "Brand authority", "Reputation / trust building", "Cost efficiency"],
+    priorityScore: 70,
+    rationale: "Knowing the client's top priority shapes which Section 6 recommendations are listed first.",
+    sourceCategory: "business_context_gap",
+    reportTypes: ["qbr_prep"],
+    evaluator: ({ amInputs }) => {
+      const t = amInputs.priorityChecks.toLowerCase();
+      return !t.includes("census") && !t.includes("new program") && !t.includes("expansion") && !t.includes("brand") && !t.includes("priority");
+    },
     showRationaleToUser: false
   },
-  // SEO HQ
   {
-    templateId: "hq_asana_sync",
-    prompt: "Are the priorities listed here synced with the Asana project for this client?",
-    type: "boolean",
-    priorityScore: 65,
-    rationale: "Maintaining a single source of truth for project tasks.",
-    sourceCategory: "SEO_HQ_alignment_gap",
-    reportTypes: ["biweekly", "monthly"],
-    evaluator: ({ accountContext }) => !!accountContext.client.asanaProjectId,
-    showRationaleToUser: false
-  }
+    templateId: "qbr_prep_screamingfrog_missing",
+    prompt: "No Screaming Frog crawl data is available. Are there known technical issues (crawl errors, indexation blocks, redirect chains) we should mention in the Technical Diagnosis section?",
+    type: "long_text",
+    placeholder: "e.g. Several 404s on old service pages, redirect chain on homepage, robots.txt blocking /blog/",
+    priorityScore: 68,
+    rationale: "Section 5 Tier Diagnosis relies on crawl data. Missing crawl data means the tier and technical issues may be under-reported.",
+    sourceCategory: "missing_data",
+    reportTypes: ["qbr_prep"],
+    evaluator: ({ accountContext }) => !accountContext.availableDataSources.includes("screaming_frog"),
+    showRationaleToUser: true
+  },
+  {
+    templateId: "qbr_prep_sentiment_frustrated_prep",
+    prompt: "Client is frustrated. Before the QBR, what's the one thing you'd want to proactively acknowledge or address in the report?",
+    type: "long_text",
+    placeholder: "e.g. Slow start to the quarter, but we have a plan — focusing the QBR on momentum and next steps",
+    priorityScore: 88,
+    rationale: "Proactively framing a frustration narrative in a QBR prevents the meeting from becoming reactive.",
+    sourceCategory: "sentiment_gap",
+    reportTypes: ["qbr_prep"],
+    evaluator: ({ amInputs }) => amInputs.clientSentiment === "Frustrated" || amInputs.clientSentiment === "Concerned",
+    showRationaleToUser: true
+  },
 ];
-
-// Add some generic filler ones to reach the count while still being somewhat useful
-for (let i = 1; i <= 50; i++) {
-  ADDITIONAL_TEMPLATES.push({
-    templateId: `generic_check_${i}`,
-    prompt: `Placeholder standard check ${i}: Does the current report narrative align with the long-term ${i % 2 === 0 ? 'growth' : 'retention'} goals?`,
-    type: "boolean",
-    priorityScore: 30 + (i % 20),
-    rationale: "Standard quality assurance check.",
-    sourceCategory: i % 3 === 0 ? "report_narrative_gap" : "SEO_HQ_alignment_gap",
-    reportTypes: ["qbr_full", "mid_strategy"],
-    evaluator: () => i < 10, // Only activate a few by default to not overwhelm
-    showRationaleToUser: false
-  });
-}
 
 const ALL_TEMPLATES = [...QUESTION_TEMPLATES, ...ADDITIONAL_TEMPLATES];
 
@@ -543,8 +620,8 @@ export async function analyzeReportGaps(
   // Sort by priority score descending
   selectedQuestions.sort((a, b) => b.priorityScore - a.priorityScore);
 
-  // Hard maximum of 6 questions to avoid session sprawl
-  const finalQuestions = selectedQuestions.slice(0, 6);
+  // Hard maximum of 5 questions to avoid session sprawl
+  const finalQuestions = selectedQuestions.slice(0, 5);
 
   // Calculate confidence score (simple heuristic)
   // Base 100, -10 per high priority question found

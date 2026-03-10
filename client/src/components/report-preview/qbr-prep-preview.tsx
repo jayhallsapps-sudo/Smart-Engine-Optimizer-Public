@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { EditableSection } from "./editable-section";
 import { AddableReportTable, SourceBadge } from "./report-table";
 import swoopHeaderFallback from "@assets/HEADER_IMAGE_1773063127856.png";
@@ -102,6 +102,86 @@ export interface QbrPrepPreviewProps {
   onEdit: (key: string, value: string) => void;
   generationMeta?: { dataSources: string[]; missingData: string[] };
   amInputs?: { clientSentiment?: string; amThoughts?: string; priorityChecks?: string; clientNotes?: string };
+}
+
+function QueryChipsCell({
+  editKey,
+  value,
+  edits,
+  onEdit,
+}: {
+  editKey: string;
+  value: string;
+  edits: Record<string, string>;
+  onEdit: (k: string, v: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const current = edits[editKey] ?? value;
+  const chips = current
+    .split(",")
+    .map((q) => q.trim())
+    .filter(Boolean);
+
+  function startEdit() {
+    setDraft(current);
+    setEditing(true);
+    setTimeout(() => inputRef.current?.focus(), 0);
+  }
+
+  function commit() {
+    onEdit(editKey, draft);
+    setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 4, width: "100%" }}>
+        <input
+          ref={inputRef}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") setEditing(false); }}
+          style={{ flex: 1, border: "1px solid #D1D5DB", borderRadius: 4, padding: "2px 6px", fontSize: "10px", outline: "none" }}
+          data-testid={`input-edit-${editKey}`}
+        />
+      </span>
+    );
+  }
+
+  return (
+    <span
+      onClick={startEdit}
+      title="Click to edit"
+      style={{ cursor: "pointer", display: "flex", flexWrap: "wrap", gap: 3 }}
+      data-testid={`chips-${editKey}`}
+    >
+      {chips.length > 0 ? chips.map((chip, ci) => (
+        <span
+          key={ci}
+          style={{
+            display: "inline-block",
+            background: `${ACCENT}12`,
+            border: `1px solid ${ACCENT}28`,
+            borderRadius: 10,
+            padding: "1px 7px",
+            fontSize: "9px",
+            color: "#374151",
+            fontWeight: 500,
+            whiteSpace: "nowrap",
+          }}
+          data-testid={`chip-query-${editKey}-${ci}`}
+        >
+          {chip}
+        </span>
+      )) : (
+        <span style={{ color: "#9CA3AF", fontSize: "10px", fontStyle: "italic" }}>—</span>
+      )}
+    </span>
+  );
 }
 
 function EditableCell({
@@ -240,7 +320,7 @@ export function QbrPrepPreview({
       );
     }
     baseCells.push(
-      <EditableCell key="eq" editKey={`s3a_${ri}_1`} value={r.exampleQueries} edits={edits} onEdit={onEdit} />,
+      <QueryChipsCell key="eq" editKey={`s3a_${ri}_1`} value={r.exampleQueries} edits={edits} onEdit={onEdit} />,
       <EditableCell key="c" editKey={`s3a_${ri}_2`} value={r.connectionToAdmits} edits={edits} onEdit={onEdit} />,
       <BadgeCell key="i" editKey={`s3a_${ri}_3`} value={r.insight} dataSource={r.dataSource} edits={edits} onEdit={onEdit} />,
     );
@@ -475,19 +555,31 @@ export function QbrPrepPreview({
               </>
             )}
 
-            {/* Additional Opportunities — commented out pending redesign
             {sectionQssb && sectionQssb.additionalOpportunities.length > 0 && (
               <>
                 <SectionHeading num={sectionQssb.clientInsights.length > 0 ? 9 : 8} title="Additional Opportunities" />
                 <div style={{ marginBottom: 16 }} data-testid="qssb-opportunities-table">
                   {sectionQssb.additionalOpportunities.map((opp, i) => (
-                    <div key={i} style={{ display: "flex", gap: 10, marginBottom: 12, alignItems: "flex-start" }}>
-                      <span style={{ fontWeight: 700, color: ACCENT, minWidth: 18, flexShrink: 0, fontSize: "11px" }}>{i + 1}.</span>
-                      <div>
-                        <div style={{ fontWeight: 700, fontSize: "11px", color: "#111827", marginBottom: 2 }}>
+                    <div
+                      key={i}
+                      style={{ display: "flex", gap: 10, marginBottom: 14, alignItems: "flex-start" }}
+                      data-testid={`opportunity-item-${i}`}
+                    >
+                      <span style={{
+                        fontWeight: 700,
+                        color: ACCENT,
+                        minWidth: 20,
+                        flexShrink: 0,
+                        fontSize: "12px",
+                        lineHeight: "1.4",
+                      }}>
+                        {i + 1}.
+                      </span>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 700, fontSize: "11px", color: "#111827", marginBottom: 3 }}>
                           <EditableCell editKey={`qssb_opp_${i}_0`} value={opp.title} edits={edits} onEdit={onEdit} />
                         </div>
-                        <div style={{ fontSize: "10px", color: "#4B5563" }}>
+                        <div style={{ fontSize: "10px", color: "#4B5563", lineHeight: "1.5" }}>
                           <EditableCell editKey={`qssb_opp_${i}_1`} value={opp.description} edits={edits} onEdit={onEdit} />
                         </div>
                       </div>
@@ -496,7 +588,6 @@ export function QbrPrepPreview({
                 </div>
               </>
             )}
-            */}
 
             {generationMeta && (
               <div style={{ fontSize: "9px", color: "#9CA3AF", marginTop: 16 }}>

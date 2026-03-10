@@ -240,8 +240,8 @@ export async function generateQbrPrepV2Docx(
     return cells;
   });
   const s3aHeaders = hasTopicDeltas
-    ? ["Topic", "# Queries", "Δ Queries", "Impressions", "Δ Impressions", "Example Queries", "Connection to Admits", "Insight"]
-    : ["Topic", "Example Queries", "Connection to Admits", "Insight"];
+    ? ["Topic", "# Queries", "Δ Queries", "Impressions", "Δ Impressions", "Example Queries", "🔗 Admits", "Insight"]
+    : ["Topic", "Example Queries", "🔗 Admits", "Insight"];
   docChildren.push(makeTable(s3aHeaders, s3aRows));
 
   docChildren.push(subHeading("Top Traffic Pages"));
@@ -262,8 +262,8 @@ export async function generateQbrPrepV2Docx(
     return cells;
   });
   const s3bHeaders = hasPageDeltas
-    ? ["Page", "Clicks", "Δ Clicks", "Impressions", "Δ Impressions", "# Queries", "Δ Queries", "CTR", "Connection to Admits", "Insight"]
-    : ["Page", "Clicks", "CTR", "Connection to Admits", "Insight"];
+    ? ["Page", "Clicks", "Δ Clicks", "Impressions", "Δ Impressions", "# Queries", "Δ Queries", "CTR", "🔗 Admits", "Insight"]
+    : ["Page", "Clicks", "CTR", "🔗 Admits", "Insight"];
   docChildren.push(makeTable(s3bHeaders, s3bRows));
 
   const s4 = reportData.section4Services;

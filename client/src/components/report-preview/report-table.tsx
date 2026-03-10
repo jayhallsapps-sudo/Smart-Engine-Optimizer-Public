@@ -202,6 +202,8 @@ export function ReportTable({
                     borderBottom: "1px solid #F3EDED",
                     verticalAlign: "top",
                     lineHeight: 1.4,
+                    wordBreak: "break-word",
+                    overflow: "hidden",
                   }}
                 >
                   {cell}

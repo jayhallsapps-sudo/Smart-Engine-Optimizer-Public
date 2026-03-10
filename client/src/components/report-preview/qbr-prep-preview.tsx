@@ -487,11 +487,30 @@ export function QbrPrepPreview({
             <SectionHeading num={3} title="Top Organic Traffic Drivers" />
             <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Traffic Topics</div>
             <div style={{ border: `1px solid ${ACCENT}28`, borderRadius: 6, overflow: "hidden", marginBottom: 12, backgroundColor: "#FFFDFB" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px", tableLayout: "fixed" }}>
+                <colgroup>
+                  {hasTopicDeltas ? (
+                    <>
+                      <col style={{ width: "22%" }} />
+                      <col style={{ width: "7%" }} />
+                      <col style={{ width: "9%" }} />
+                      <col style={{ width: "9%" }} />
+                      <col style={{ width: "12%" }} />
+                      <col style={{ width: "27%" }} />
+                      <col style={{ width: "14%" }} />
+                    </>
+                  ) : (
+                    <>
+                      <col style={{ width: "30%" }} />
+                      <col style={{ width: "52%" }} />
+                      <col style={{ width: "18%" }} />
+                    </>
+                  )}
+                </colgroup>
                 <thead>
                   <tr style={{ backgroundColor: `${ACCENT}0D` }}>
-                    {["Topic", ...(hasTopicDeltas ? ["# Queries", "QoQ Queries", "Impressions", "QoQ Impressions"] : []), "Example Queries", "Connection to Admits"].map(h => (
-                      <th key={h} style={{ padding: "5px 8px", textAlign: h === "Connection to Admits" ? "center" : "left", fontWeight: 600, fontSize: "9px", color: ACCENT, textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: `1px solid ${ACCENT}20`, whiteSpace: "nowrap" }}>{h}</th>
+                    {["Topic", ...(hasTopicDeltas ? ["# Queries", "QoQ Queries", "Impressions", "QoQ Impressions"] : []), "Example Queries", "🔗 Admits"].map(h => (
+                      <th key={h} style={{ padding: "5px 8px", textAlign: h === "🔗 Admits" ? "center" : "left", fontWeight: 600, fontSize: "9px", color: ACCENT, textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: `1px solid ${ACCENT}20`, wordBreak: "break-word" }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -504,19 +523,19 @@ export function QbrPrepPreview({
                     return (
                       <React.Fragment key={`topic-${ri}`}>
                         <tr style={{ backgroundColor: bg }}>
-                          <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4 }}>
+                          <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4, wordBreak: "break-word", overflow: "hidden" }}>
                             <EditableCell editKey={`s3a_${ri}_0`} value={r.topic} edits={edits} onEdit={onEdit} />
                           </td>
                           {hasTopicDeltas && <>
-                            <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4 }} data-testid={`text-query-count-${ri}`}>{r.queryCount ?? "—"}</td>
-                            <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4, color: r.queryCountDelta?.startsWith("-") ? "#DC2626" : "#16A34A" }} data-testid={`text-query-delta-${ri}`}>{r.queryCountDelta ?? "—"}</td>
-                            <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4 }} data-testid={`text-impressions-${ri}`}>{r.impressions != null ? r.impressions.toLocaleString("en-US") : "—"}</td>
-                            <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4, color: r.impressionsDelta?.startsWith("-") ? "#DC2626" : "#16A34A" }} data-testid={`text-impressions-delta-${ri}`}>{r.impressionsDelta ?? "—"}</td>
+                            <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4, wordBreak: "break-word", overflow: "hidden" }} data-testid={`text-query-count-${ri}`}>{r.queryCount ?? "—"}</td>
+                            <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4, wordBreak: "break-word", overflow: "hidden", color: r.queryCountDelta?.startsWith("-") ? "#DC2626" : "#16A34A" }} data-testid={`text-query-delta-${ri}`}>{r.queryCountDelta ?? "—"}</td>
+                            <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4, wordBreak: "break-word", overflow: "hidden" }} data-testid={`text-impressions-${ri}`}>{r.impressions != null ? r.impressions.toLocaleString("en-US") : "—"}</td>
+                            <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4, wordBreak: "break-word", overflow: "hidden", color: r.impressionsDelta?.startsWith("-") ? "#DC2626" : "#16A34A" }} data-testid={`text-impressions-delta-${ri}`}>{r.impressionsDelta ?? "—"}</td>
                           </>}
-                          <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4 }}>
+                          <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4, wordBreak: "break-word", overflow: "hidden" }}>
                             <QueryChipsCell editKey={`s3a_${ri}_1`} value={r.exampleQueries} edits={edits} onEdit={onEdit} />
                           </td>
-                          <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4, textAlign: "center" }}>
+                          <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4, textAlign: "center", wordBreak: "break-word", overflow: "hidden" }}>
                             <EditableCell editKey={`s3a_${ri}_2`} value={r.connectionToAdmits} edits={edits} onEdit={onEdit} />
                           </td>
                         </tr>
@@ -536,11 +555,33 @@ export function QbrPrepPreview({
             </div>
             <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Traffic Pages</div>
             <div style={{ border: `1px solid ${ACCENT}28`, borderRadius: 6, overflow: "hidden", marginBottom: 12, backgroundColor: "#FFFDFB" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px", tableLayout: "fixed" }}>
+                <colgroup>
+                  {hasPageDeltas ? (
+                    <>
+                      <col style={{ width: "22%" }} />
+                      <col style={{ width: "6%" }} />
+                      <col style={{ width: "8%" }} />
+                      <col style={{ width: "9%" }} />
+                      <col style={{ width: "11%" }} />
+                      <col style={{ width: "7%" }} />
+                      <col style={{ width: "9%" }} />
+                      <col style={{ width: "5%" }} />
+                      <col style={{ width: "12%" }} />
+                    </>
+                  ) : (
+                    <>
+                      <col style={{ width: "55%" }} />
+                      <col style={{ width: "11%" }} />
+                      <col style={{ width: "10%" }} />
+                      <col style={{ width: "18%" }} />
+                    </>
+                  )}
+                </colgroup>
                 <thead>
                   <tr style={{ backgroundColor: `${ACCENT}0D` }}>
-                    {["Page", "Clicks", ...(hasPageDeltas ? ["QoQ Clicks", "Impressions", "QoQ Impressions", "# Queries", "QoQ Queries"] : []), "CTR", "Connection to Admits"].map(h => (
-                      <th key={h} style={{ padding: "5px 8px", textAlign: h === "Connection to Admits" ? "center" : "left", fontWeight: 600, fontSize: "9px", color: ACCENT, textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: `1px solid ${ACCENT}20`, whiteSpace: "nowrap" }}>{h}</th>
+                    {["Page", "Clicks", ...(hasPageDeltas ? ["QoQ Clicks", "Impressions", "QoQ Impressions", "# Queries", "QoQ Queries"] : []), "CTR", "🔗 Admits"].map(h => (
+                      <th key={h} style={{ padding: "5px 8px", textAlign: h === "🔗 Admits" ? "center" : "left", fontWeight: 600, fontSize: "9px", color: ACCENT, textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: `1px solid ${ACCENT}20`, wordBreak: "break-word" }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -548,17 +589,17 @@ export function QbrPrepPreview({
                   {section3Traffic.topTrafficPages.map((r, ri) => (
                     <React.Fragment key={`page-${ri}`}>
                       <tr style={{ backgroundColor: ri % 2 === 1 ? "#FBF8F7" : "white" }}>
-                        <td style={{ padding: "6px 8px", borderBottom: (edits[`s3b_${ri}_4`] ?? r.insight) ? "none" : "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4 }}><EditableCell editKey={`s3b_${ri}_0`} value={r.page} edits={edits} onEdit={onEdit} /></td>
-                        <td style={{ padding: "6px 8px", borderBottom: (edits[`s3b_${ri}_4`] ?? r.insight) ? "none" : "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4 }}><EditableCell editKey={`s3b_${ri}_1`} value={r.clicks} edits={edits} onEdit={onEdit} /></td>
+                        <td style={{ padding: "6px 8px", borderBottom: (edits[`s3b_${ri}_4`] ?? r.insight) ? "none" : "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4, wordBreak: "break-word", overflow: "hidden" }}><EditableCell editKey={`s3b_${ri}_0`} value={r.page} edits={edits} onEdit={onEdit} /></td>
+                        <td style={{ padding: "6px 8px", borderBottom: (edits[`s3b_${ri}_4`] ?? r.insight) ? "none" : "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4, wordBreak: "break-word", overflow: "hidden" }}><EditableCell editKey={`s3b_${ri}_1`} value={r.clicks} edits={edits} onEdit={onEdit} /></td>
                         {hasPageDeltas && <>
-                          <td style={{ padding: "6px 8px", borderBottom: (edits[`s3b_${ri}_4`] ?? r.insight) ? "none" : "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4, color: r.clicksDelta?.startsWith("-") ? "#DC2626" : "#16A34A" }}>{r.clicksDelta ?? "—"}</td>
-                          <td style={{ padding: "6px 8px", borderBottom: (edits[`s3b_${ri}_4`] ?? r.insight) ? "none" : "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4 }}>{r.impressions ?? "—"}</td>
-                          <td style={{ padding: "6px 8px", borderBottom: (edits[`s3b_${ri}_4`] ?? r.insight) ? "none" : "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4, color: r.impressionsDelta?.startsWith("-") ? "#DC2626" : "#16A34A" }}>{r.impressionsDelta ?? "—"}</td>
-                          <td style={{ padding: "6px 8px", borderBottom: (edits[`s3b_${ri}_4`] ?? r.insight) ? "none" : "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4 }}>{r.queries ?? "—"}</td>
-                          <td style={{ padding: "6px 8px", borderBottom: (edits[`s3b_${ri}_4`] ?? r.insight) ? "none" : "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4, color: r.queriesDelta?.startsWith("-") ? "#DC2626" : "#16A34A" }}>{r.queriesDelta ?? "—"}</td>
+                          <td style={{ padding: "6px 8px", borderBottom: (edits[`s3b_${ri}_4`] ?? r.insight) ? "none" : "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4, wordBreak: "break-word", overflow: "hidden", color: r.clicksDelta?.startsWith("-") ? "#DC2626" : "#16A34A" }}>{r.clicksDelta ?? "—"}</td>
+                          <td style={{ padding: "6px 8px", borderBottom: (edits[`s3b_${ri}_4`] ?? r.insight) ? "none" : "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4, wordBreak: "break-word", overflow: "hidden" }}>{r.impressions ?? "—"}</td>
+                          <td style={{ padding: "6px 8px", borderBottom: (edits[`s3b_${ri}_4`] ?? r.insight) ? "none" : "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4, wordBreak: "break-word", overflow: "hidden", color: r.impressionsDelta?.startsWith("-") ? "#DC2626" : "#16A34A" }}>{r.impressionsDelta ?? "—"}</td>
+                          <td style={{ padding: "6px 8px", borderBottom: (edits[`s3b_${ri}_4`] ?? r.insight) ? "none" : "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4, wordBreak: "break-word", overflow: "hidden" }}>{r.queries ?? "—"}</td>
+                          <td style={{ padding: "6px 8px", borderBottom: (edits[`s3b_${ri}_4`] ?? r.insight) ? "none" : "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4, wordBreak: "break-word", overflow: "hidden", color: r.queriesDelta?.startsWith("-") ? "#DC2626" : "#16A34A" }}>{r.queriesDelta ?? "—"}</td>
                         </>}
-                        <td style={{ padding: "6px 8px", borderBottom: (edits[`s3b_${ri}_4`] ?? r.insight) ? "none" : "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4 }}><EditableCell editKey={`s3b_${ri}_2`} value={r.ctr} edits={edits} onEdit={onEdit} /></td>
-                        <td style={{ padding: "6px 8px", borderBottom: (edits[`s3b_${ri}_4`] ?? r.insight) ? "none" : "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4, textAlign: "center" }}><EditableCell editKey={`s3b_${ri}_3`} value={r.connectionToAdmits} edits={edits} onEdit={onEdit} /></td>
+                        <td style={{ padding: "6px 8px", borderBottom: (edits[`s3b_${ri}_4`] ?? r.insight) ? "none" : "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4, wordBreak: "break-word", overflow: "hidden" }}><EditableCell editKey={`s3b_${ri}_2`} value={r.ctr} edits={edits} onEdit={onEdit} /></td>
+                        <td style={{ padding: "6px 8px", borderBottom: (edits[`s3b_${ri}_4`] ?? r.insight) ? "none" : "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4, textAlign: "center", wordBreak: "break-word", overflow: "hidden" }}><EditableCell editKey={`s3b_${ri}_3`} value={r.connectionToAdmits} edits={edits} onEdit={onEdit} /></td>
                       </tr>
                       {(edits[`s3b_${ri}_4`] ?? r.insight) && (
                         <tr key={`${ri}-i`} style={{ backgroundColor: "#FFFBEB" }}>

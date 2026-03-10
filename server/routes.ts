@@ -1425,6 +1425,7 @@ export async function registerRoutes(
     const { clientId, generationDate, currentCrawlAssetId, gapAnswers, gapSessionId } = req.body;
     const sentimentVal = req.body.sentiment ?? req.body.clientSentiment;
     const amThoughtsVal = req.body.amThoughts ?? req.body.hypothesis ?? "";
+    const prevQtrAssessmentVal = req.body.prevQtrAssessment ?? "";
     const priorityChecksVal = req.body.priorityChecks ?? req.body.auditNotes ?? "";
     const clientNotesVal = req.body.clientNotes ?? "";
     if (!clientId) return res.status(400).json({ message: "clientId is required" });
@@ -1467,6 +1468,7 @@ export async function registerRoutes(
         generationDate: generationDate ?? new Date().toISOString().split("T")[0],
         sentiment: sentimentVal,
         hypothesis: amThoughtsVal,
+        prevQtrAssessment: prevQtrAssessmentVal || undefined,
         auditNotes: priorityChecksVal,
         clientNotes: clientNotesVal,
         forwardLooking: true,

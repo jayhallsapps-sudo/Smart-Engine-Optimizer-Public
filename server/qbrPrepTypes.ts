@@ -160,8 +160,13 @@ export interface SourceSnapshot {
   asana: Record<string, any> | null;
   manualInputs: {
     sentiment?: string;
+    clientSentiment?: string;
     hypothesis?: string;
+    amThoughts?: string;
+    prevQtrAssessment?: string;
     auditNotes?: string;
+    priorityChecks?: string;
+    clientNotes?: string;
   } | null;
 }
 

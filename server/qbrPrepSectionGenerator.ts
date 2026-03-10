@@ -29,6 +29,7 @@ import type {
   ServiceRow,
   PriorityRow,
   TrackingRow,
+  AdditionalOpportunity,
 } from "./qbrPrepTypes";
 
 const JUNK_UNICODE_RE = /[\uFFFD\uFFFE\uFFFF\uF8FF\u00AD\u2060]/g;
@@ -765,6 +766,12 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
     return !usedInContent.has(norm);
   });
   report.generationMeta!.missingData = finalMissing;
+
+  // Post-processing pass: evaluate completed report data for upsell / cross-sell opportunities.
+  const additionalOpportunities = generateAdditionalOpportunities(report);
+  if (additionalOpportunities.length > 0) {
+    report.additionalOpportunities = additionalOpportunities;
+  }
 
   return report;
 }
@@ -2473,4 +2480,176 @@ function generateSection7(section6: Section6Priorities, section5: Section5Diagno
   }
 
   return { tracking: tracking.slice(0, 7) };
+}
+
+// ─── POST-PROCESSING: Additional Opportunities ────────────────────────────────
+// Runs after the full report is assembled. Reads completed section data and
+// evaluates whether evidence supports upsell or cross-sell recommendations.
+// Returns 0–3 opportunities. Returns empty array when evidence is insufficient.
+function generateAdditionalOpportunities(report: QbrPrepReportData): AdditionalOpportunity[] {
+  const s1 = report.section1Goals;
+  const s2 = report.section2Conversions;
+  const s3 = report.section3Traffic;
+  const s4 = report.section4Services;
+  const s5 = report.section5Diagnosis;
+  const s6 = report.section6Priorities;
+
+  function parseClicks(val: string): number {
+    return parseInt(String(val ?? "").replace(/[^0-9]/g, ""), 10) || 0;
+  }
+
+  // ── Signal extraction ──────────────────────────────────────────────────────
+  const primaryRow = s1.rows.find(r => r.goalType.toLowerCase().includes("primary"));
+  const isBehindPace = !!primaryRow && (
+    primaryRow.goalShift === "-5%" ||
+    (primaryRow.reason ?? "").toLowerCase().includes("behind pace")
+  );
+
+  const conversionFallback = s2.topConvertingPages[0]?.type === "No qualified data yet";
+  const hasGA4Conversions = s2.topConvertingPages.some(p => p.dataSource === "GA4");
+  const hasCallTracking = s2.topConvertingPages.some(p =>
+    ["CallRail", "CTM", "Nimbata", "CallTrackingMetrics"].includes(p.dataSource ?? "")
+  );
+  const hasConversionTracking = hasGA4Conversions || hasCallTracking;
+
+  const highAdmitTopics = s3.topTrafficTopics.filter(t => t.connectionToAdmits === "High");
+  const topPages = s3.topTrafficPages;
+  const pagesOver100 = topPages.filter(p => parseClicks(p.clicks) >= 100);
+  const lowMidPages = topPages.filter(p =>
+    p.connectionToAdmits === "Low" || p.connectionToAdmits === "Medium"
+  );
+  const totalInfoClicks = lowMidPages.reduce((sum, p) => sum + parseClicks(p.clicks), 0);
+
+  const tier = s5.tier;
+  const missingServices = s4.services.filter(s =>
+    s.examplePage === MANUAL_ENTRY || s.examplePage === "Manual entry needed"
+  );
+
+  const hasLinkBuildingInScope = s6.priorities.some(p =>
+    p.initiative.toLowerCase().includes("link") ||
+    p.initiative.toLowerCase().includes("authority") ||
+    p.initiative.toLowerCase().includes("digital pr")
+  );
+  const hasContentInitiative = s6.priorities.some(p =>
+    p.initiative.toLowerCase().includes("content") ||
+    p.initiative.toLowerCase().includes("service page") ||
+    p.initiative.toLowerCase().includes("hub")
+  );
+
+  const candidates: AdditionalOpportunity[] = [];
+
+  // ── UPSELL: Authority Building / Link Acquisition ─────────────────────────
+  // Tier 1–2 means domain authority is the strategic bottleneck — standard content
+  // production cannot close the gap fast enough. Link acquisition / digital PR is
+  // more SEO depth, not a different channel.
+  if (tier <= 2 && !hasLinkBuildingInScope && (isBehindPace || highAdmitTopics.length >= 2)) {
+    const evidenceItems: string[] = [
+      `Tier ${tier} site diagnosis (${s5.tierName}) — domain authority is limiting ranking potential on high-intent service terms`,
+    ];
+    if (isBehindPace && primaryRow) {
+      evidenceItems.push(`Primary goal (${primaryRow.goal}) is behind pace — content production alone is unlikely to close the gap within the quarter`);
+    }
+    if (highAdmitTopics.length >= 2) {
+      evidenceItems.push(`${highAdmitTopics.length} confirmed high-intent topic clusters where authority, not content volume, is the ranking constraint`);
+    }
+    candidates.push({
+      type: "upsell",
+      title: "Authority Building & Link Acquisition",
+      why_now: `Site is at Tier ${tier} — organic rankings on the highest-value service terms are constrained by domain authority, which content production alone cannot resolve within a quarter.`,
+      evidence: evidenceItems,
+      recommendation: "A targeted link acquisition or digital PR initiative focused on high-intent service pages — more SEO depth than the standard content roadmap provides.",
+      framing: "Optional acceleration lever for clients who need ranking results on competitive service terms faster than standard SEO timelines allow.",
+    });
+  }
+
+  // ── UPSELL: Conversion Infrastructure & CRO ──────────────────────────────
+  // Traffic exists but no conversion measurement — the organic-to-admit pipeline is
+  // invisible. Requires additional SEO scope: tracking setup, CRO support.
+  if (conversionFallback && pagesOver100.length >= 2) {
+    const totalClicks = pagesOver100.reduce((sum, p) => sum + parseClicks(p.clicks), 0);
+    candidates.push({
+      type: "upsell",
+      title: "Conversion Infrastructure & Tracking Setup",
+      why_now: `The site generates meaningful organic traffic across ${pagesOver100.length} high-traffic pages but has no confirmed conversion measurement — the link between SEO and admits is currently invisible.`,
+      evidence: [
+        `${pagesOver100.length} pages with 100+ organic clicks (${totalClicks.toLocaleString()} combined clicks) with no confirmed conversion events`,
+        "No GA4 conversion events or call-tracking landing-page data detected — Top Converting Pages cannot be qualified",
+      ],
+      recommendation: "A structured conversion infrastructure project — GA4 event tracking on high-traffic service and VOB pages, call-tracking attribution setup, and a confirmed organic-to-admit measurement baseline.",
+      framing: "Without measurement, SEO investment cannot be tied to admits. This is the foundational lever before any growth acceleration is meaningful.",
+    });
+  }
+
+  // ── UPSELL: Expanded Content Production ───────────────────────────────────
+  // Multiple confirmed high-intent clusters exist but the roadmap covers only 1–2
+  // content initiatives. Content production capacity — not strategy — is the constraint.
+  if (
+    highAdmitTopics.length >= 3 &&
+    hasContentInitiative &&
+    tier >= 3 &&
+    missingServices.length <= 2
+  ) {
+    candidates.push({
+      type: "upsell",
+      title: "Expanded Content Production Initiative",
+      why_now: `${highAdmitTopics.length} high-intent topic clusters are confirmed in organic search data but the current roadmap addresses only one or two content initiatives — production capacity is the constraint.`,
+      evidence: [
+        `High-admit-connection clusters: ${highAdmitTopics.slice(0, 3).map(t => `"${t.topic}"`).join(", ")}`,
+        "Section 6 roadmap contains limited content initiatives — full cluster coverage requires additional production capacity beyond current scope",
+      ],
+      recommendation: "An expanded content production program to systematically build out service page clusters, topic depth, and conversion-path pages across all confirmed high-intent areas.",
+      framing: "Optional acceleration lever for clients who want to build content infrastructure faster than the standard monthly roadmap allows.",
+    });
+  }
+
+  // ── CROSS-SELL: Paid Search Demand Capture ───────────────────────────────
+  // High-intent organic demand confirmed + primary goal behind pace — paid search
+  // captures the same treatment-intent demand now, not after organic compounds.
+  if (isBehindPace && highAdmitTopics.length >= 1 && !conversionFallback) {
+    const topTopic = highAdmitTopics[0];
+    candidates.push({
+      type: "cross_sell",
+      title: "Paid Search Demand Capture",
+      why_now: "Primary goal is behind pace while treatment-intent organic traffic is confirmed — paid search can capture the same demand immediately rather than waiting for organic rankings to compound.",
+      evidence: [
+        `High-intent topic cluster "${topTopic.topic}" confirmed in organic search data (${topTopic.connectionToAdmits} admit connection)`,
+        `Primary goal tracking behind pace — organic growth alone may not close the gap within the current quarter`,
+      ],
+      recommendation: "A targeted paid search campaign on confirmed high-intent service terms (detox, residential, PHP/IOP, insurance verification) to generate qualified leads faster than organic timelines allow.",
+      framing: "Optional acceleration lever — paid search does not replace the SEO roadmap but captures immediate demand while organic authority compounds.",
+    });
+  }
+
+  // ── CROSS-SELL: Retargeting & Content Promotion ───────────────────────────
+  // Large informational organic traffic with confirmed conversion tracking but weak
+  // admit connection — retargeting closes the loop on traffic already earned.
+  if (totalInfoClicks >= 300 && hasConversionTracking && lowMidPages.length >= 2) {
+    candidates.push({
+      type: "cross_sell",
+      title: "Retargeting & Content Promotion",
+      why_now: `${totalInfoClicks.toLocaleString()} organic clicks are landing on informational pages with low-to-medium admit connection — this traffic is earned but not converting through organic paths alone.`,
+      evidence: [
+        `${lowMidPages.length} informational pages with ${totalInfoClicks.toLocaleString()} combined organic clicks and low-to-medium admit connection`,
+        "Organic traffic is reaching the site through informational content but not progressing to admissions or VOB pages",
+      ],
+      recommendation: "A retargeting or paid social promotion program to re-engage users who visited through informational content but did not convert, moving them toward service and VOB pages.",
+      framing: "Optional lever to extract value from traffic already earned through SEO — no new audience acquisition required.",
+    });
+  }
+
+  // ── Rank and cap ──────────────────────────────────────────────────────────
+  // Priority: high-evidence upsells first, then cross-sells. Within each tier,
+  // opportunities tied to primary goal pace rank higher.
+  function score(o: AdditionalOpportunity): number {
+    let s = 0;
+    if (o.type === "upsell") s += 2;
+    if (
+      o.why_now.toLowerCase().includes("behind pace") ||
+      o.why_now.toLowerCase().includes("invisible")
+    ) s += 3;
+    s += Math.min(o.evidence.length, 2);
+    return s;
+  }
+
+  return candidates.sort((a, b) => score(b) - score(a)).slice(0, 3);
 }

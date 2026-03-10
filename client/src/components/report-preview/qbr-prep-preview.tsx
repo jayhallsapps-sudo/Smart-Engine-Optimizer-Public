@@ -88,6 +88,15 @@ interface QssbInsight { question: string; }
 interface QssbOpportunity { title: string; description: string; }
 interface SectionQssb { clientInsights: QssbInsight[]; additionalOpportunities: QssbOpportunity[]; }
 
+interface AdditionalOpportunity {
+  type: "upsell" | "cross_sell";
+  title: string;
+  why_now: string;
+  evidence: string[];
+  recommendation: string;
+  framing: string;
+}
+
 export interface QbrPrepPreviewProps {
   meta: QbrPrepMeta;
   section1Goals: { rows: GoalRow[] };
@@ -98,6 +107,7 @@ export interface QbrPrepPreviewProps {
   section6Priorities: { priorities: PriorityRow[] };
   section7Tracking: { tracking: TrackingRow[] };
   sectionQssb?: SectionQssb;
+  additionalOpportunities?: AdditionalOpportunity[];
   edits: Record<string, string>;
   onEdit: (key: string, value: string) => void;
   generationMeta?: { dataSources: string[]; missingData: string[] };
@@ -271,6 +281,7 @@ export function QbrPrepPreview({
   section6Priorities,
   section7Tracking,
   sectionQssb,
+  additionalOpportunities,
   edits,
   onEdit,
   generationMeta,
@@ -681,7 +692,74 @@ export function QbrPrepPreview({
             )}
             */}
 
-            {showSection8 && (
+            {/* Section 8: Additional Opportunities
+                  — auto-generated cards appear when the post-processing pass finds
+                    justified upsell/cross-sell opportunities.
+                  — manual AddableReportTable always stays below for AM additions. */}
+            {(additionalOpportunities?.length ?? 0) > 0 ? (
+              <>
+                <div
+                  style={{ color: ACCENT, fontWeight: 700, fontSize: "14px", borderBottom: `2px solid ${ACCENT}`, paddingBottom: 4, marginBottom: 12, marginTop: 28 }}
+                  data-testid="section-heading-8"
+                >
+                  8. Additional Opportunities
+                </div>
+
+                {/* Auto-generated opportunity cards */}
+                <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
+                  {additionalOpportunities!.map((opp, i) => (
+                    <div
+                      key={i}
+                      style={{ border: "1px solid #E5E7EB", borderRadius: 6, overflow: "hidden", fontSize: "11px" }}
+                      data-testid={`card-additional-opportunity-${i}`}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", backgroundColor: "#F9FAFB", borderBottom: "1px solid #E5E7EB" }}>
+                        <span
+                          style={{
+                            display: "inline-block", padding: "1px 8px", borderRadius: 10,
+                            fontSize: "9px", fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.06em",
+                            backgroundColor: opp.type === "upsell" ? "#FEF3C7" : "#DBEAFE",
+                            color: opp.type === "upsell" ? "#92400E" : "#1E40AF",
+                          }}
+                          data-testid={`badge-opp-type-${i}`}
+                        >
+                          {opp.type === "upsell" ? "Upsell" : "Cross-sell"}
+                        </span>
+                        <span style={{ fontWeight: 700, fontSize: "12px", color: "#111827" }} data-testid={`text-opp-title-${i}`}>{opp.title}</span>
+                      </div>
+                      <div style={{ padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
+                        <div style={{ color: "#374151", fontStyle: "italic" }} data-testid={`text-opp-whynow-${i}`}>{opp.why_now}</div>
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: "10px", color: "#6B7280", textTransform: "uppercase" as const, letterSpacing: "0.05em", marginBottom: 3 }}>Evidence</div>
+                          <ul style={{ margin: 0, paddingLeft: 16, color: "#374151" }}>
+                            {opp.evidence.map((ev, j) => (
+                              <li key={j} style={{ marginBottom: 2 }} data-testid={`text-opp-evidence-${i}-${j}`}>{ev}</li>
+                            ))}
+                          </ul>
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: "10px", color: "#6B7280", textTransform: "uppercase" as const, letterSpacing: "0.05em", marginBottom: 3 }}>Recommendation</div>
+                          <div style={{ color: "#1B3A6B" }} data-testid={`text-opp-recommendation-${i}`}>{opp.recommendation}</div>
+                        </div>
+                        <div style={{ fontSize: "10px", color: "#9CA3AF", borderTop: "1px solid #F3F4F6", paddingTop: 6, fontStyle: "italic" }}>{opp.framing}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Manual additions below auto-generated cards */}
+                <div style={{ fontSize: "10px", color: "#6B7280", marginBottom: 6, fontWeight: 600, textTransform: "uppercase" as const, letterSpacing: "0.04em" }}>
+                  Additional manual entries
+                </div>
+                <AddableReportTable
+                  tableId="s8_opportunities"
+                  headers={["Description", "Purpose", "Est. Cost"]}
+                  sourceRows={[]}
+                  edits={edits}
+                  onEdit={onEdit}
+                />
+              </>
+            ) : showSection8 ? (
               <>
                 <div
                   style={{
@@ -703,15 +781,7 @@ export function QbrPrepPreview({
                     onClick={() => setShowSection8(false)}
                     title="Remove section"
                     data-testid="button-remove-section8"
-                    style={{
-                      color: "#9CA3AF",
-                      background: "none",
-                      border: "none",
-                      cursor: "pointer",
-                      fontSize: 16,
-                      lineHeight: 1,
-                      padding: "0 2px",
-                    }}
+                    style={{ color: "#9CA3AF", background: "none", border: "none", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: "0 2px" }}
                   >
                     ×
                   </button>
@@ -724,7 +794,7 @@ export function QbrPrepPreview({
                   onEdit={onEdit}
                 />
               </>
-            )}
+            ) : null}
 
             {generationMeta && (
               <div style={{ fontSize: "9px", color: "#9CA3AF", marginTop: 16 }}>

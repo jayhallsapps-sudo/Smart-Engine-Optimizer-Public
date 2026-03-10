@@ -770,6 +770,7 @@ export default function QbrPrepPage() {
             section6Priorities={reportData.section6Priorities}
             section7Tracking={reportData.section7Tracking}
             sectionQssb={reportData.sectionQssb}
+            additionalOpportunities={reportData.additionalOpportunities}
             edits={edits}
             onEdit={handleEdit}
             generationMeta={reportData.generationMeta}

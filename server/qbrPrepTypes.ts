@@ -171,6 +171,15 @@ export interface GenerationMeta {
   missingData: string[];
 }
 
+export interface AdditionalOpportunity {
+  type: "upsell" | "cross_sell";
+  title: string;
+  why_now: string;
+  evidence: string[];
+  recommendation: string;
+  framing: string;
+}
+
 export interface QbrPrepReportData {
   meta: QbrPrepMeta;
   section1Goals: Section1Goals;
@@ -181,6 +190,7 @@ export interface QbrPrepReportData {
   section6Priorities: Section6Priorities;
   section7Tracking: Section7Tracking;
   sectionQssb?: SectionQssb;
+  additionalOpportunities?: AdditionalOpportunity[];
   gapContext?: GapContext;
   sourceSnapshot: SourceSnapshot;
   generationMeta: GenerationMeta;

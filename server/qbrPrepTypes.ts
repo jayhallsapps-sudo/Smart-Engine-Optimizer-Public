@@ -63,6 +63,7 @@ export interface TrafficTopicRow {
   queryCountDelta?: string;
   impressions?: number;
   impressionsDelta?: string;
+  pageCount?: number;
 }
 
 export interface TrafficPageRow {

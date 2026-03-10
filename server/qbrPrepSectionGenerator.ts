@@ -435,7 +435,7 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
   };
 
   const section1 = generateSection1(nsmData, ga4FunnelCurr, quarter, client, callTrackingSources, prevNsmData);
-  const section2 = generateSection2(ga4LandingRows, gscPageRows, sfData, sfHeaders, client, callTrackingLandingPages, callTrackingSources);
+  const section2 = generateSection2(ga4LandingRows, gscPageRows, client, callTrackingLandingPages, callTrackingSources);
   const section3 = generateSection3(gscQueryRows, gscPageRows, ga4LandingRows, client, gscPrevQueryRows, gscPrevPageRows, gscQueryPageRows, gscPrevQueryPageRows);
   const section4 = generateSection4(sfData, sfHeaders, client);
 
@@ -1102,8 +1102,6 @@ const ADMIT_CONNECTION_DEFINITIONS: Record<string, string> = {
 function generateSection2(
   ga4Landing: any[],
   gscPages: any[],
-  sfData: Record<string, any>[],
-  sfHeaders: string[],
   client: Client,
   callLandingPages: Array<{ page: string; calls: number }> = [],
   callSources: Array<{ source: string; calls: number }> = []
@@ -1113,7 +1111,7 @@ function generateSection2(
 
   // --- TOP CONVERTING PAGES ---
   // Confidence-scored candidate pool. Higher = stronger conversion evidence.
-  // 5 = GA4-backed, 4 = call-tracking-backed, 3 = SF service page, 2 = GSC high-intent, 1 = GSC informational
+  // 5 = GA4-backed, 4 = call-tracking-backed, 2 = GSC high-intent, 1 = GSC informational
   interface PageCandidate { row: ConvertingPageRow; confidence: number; }
   const pagePool: PageCandidate[] = [];
   const seenPageKeys = new Set<string>();
@@ -1166,68 +1164,7 @@ function generateSection2(
     }
   }
 
-  // P3 — SF high-intent service pages (confidence 3) — better than GSC blog rows
-  // Ordered by conversion importance: admissions → insurance → detox → residential → PHP → therapies → dual dx → outpatient
-  // Contact / Admissions is handled separately using isUtilityAdmissionsPage() — not a regex entry.
-  const sfServicePriority: Array<{ pattern: RegExp; internalType: string }> = [
-    { pattern: /\/verify.?insur|\/vob\b|\/insurance.?verif|\/check.?insur|\/insurance\b/i, internalType: "Verify Insurance" },
-    { pattern: /\/detox/i, internalType: "Detox" },
-    { pattern: /\/residential|\/inpatient/i, internalType: "Residential / Inpatient" },
-    { pattern: /\/php(?!p)|\/iop|\/partial.?hospital|\/intensive.?out/i, internalType: "PHP / IOP" },
-    { pattern: /\/therap(y|ies)\b|\/modalities/i, internalType: "Therapies" },
-    { pattern: /\/dual.?diagnosis|\/co.?occurring/i, internalType: "Dual Diagnosis" },
-    { pattern: /\/outpatient(?!.*intensive)/i, internalType: "Outpatient" },
-  ];
-
-  if (sfData.length > 0) {
-    const urlCol = sfHeaders.find(h => /^address$/i.test(h) || /^url$/i.test(h)) ?? sfHeaders[0] ?? "";
-    const statusColHeader = sfHeaders.find(h => /^status code$/i.test(h) || /^status$/i.test(h));
-    const liveSfDataS2 = statusColHeader
-      ? sfData.filter(r => { const s = Number(r[statusColHeader]); return !(s >= 300 && s < 400); })
-      : sfData;
-    const sfPageUrls = liveSfDataS2.map(r => String(r[urlCol] ?? "")).filter(isValidPageUrl);
-
-    // Contact / Admissions — strict utility-page check (first path segment must be a known utility slug)
-    const contactMatches = sfPageUrls.filter(u => isUtilityAdmissionsPage(u));
-    if (contactMatches.length > 0) {
-      contactMatches.sort((a, b) => scorePage4Url(b) - scorePage4Url(a));
-      const best = shortUrl(contactMatches[0]);
-      if (!seenPageKeys.has(best)) {
-        seenPageKeys.add(best);
-        pagePool.push({
-          confidence: 3,
-          row: {
-            type: clientReadableType("Contact / Admissions"),
-            page: best,
-            conversionSource: "Multi-source",
-            notes: buildConvertingPageNote("Contact / Admissions", "Multi-source", 0, 0),
-            dataSource: "Multi-source",
-          },
-        });
-      }
-    }
-
-    for (const { pattern, internalType } of sfServicePriority) {
-      const matches = sfPageUrls.filter(u => pattern.test(u));
-      if (matches.length === 0) continue;
-      matches.sort((a, b) => scorePage4Url(b) - scorePage4Url(a));
-      const best = shortUrl(matches[0]);
-      if (seenPageKeys.has(best)) continue;
-      seenPageKeys.add(best);
-      pagePool.push({
-        confidence: 3,
-        row: {
-          type: clientReadableType(internalType),
-          page: best,
-          conversionSource: "Multi-source",
-          notes: buildConvertingPageNote(internalType, "Multi-source", 0, 0),
-          dataSource: "Multi-source",
-        },
-      });
-    }
-  }
-
-  // P4/P5 — GSC pages split into high-intent (2) and informational (1)
+  // P3/P4 — GSC pages split into high-intent (2) and informational (1)
   const HIGH_INTENT_TYPES = new Set(["Verify Insurance", "Contact / Admissions", "Detox", "Residential / Inpatient", "PHP / IOP", "Outpatient", "Dual Diagnosis", "Therapies"]);
   if (gscPages.length > 0) {
     const sortedGsc = [...gscPages].sort((a: any, b: any) => (b.clicks ?? 0) - (a.clicks ?? 0));
@@ -1278,7 +1215,7 @@ function generateSection2(
     topConvertingPages.push({ type: ME, page: ME, conversionSource: "—", notes: ME, dataSource: undefined });
   }
 
-  console.log(`[Section2] Top Converting Pages: ${topConvertingPages.length} rows (pool had ${pagePool.length} candidates; GA4=${pagePool.filter(c=>c.confidence===5).length}, callTracking=${pagePool.filter(c=>c.confidence===4).length}, SF=${pagePool.filter(c=>c.confidence===3).length}, GSC-hi=${pagePool.filter(c=>c.confidence===2).length}, GSC-info=${pagePool.filter(c=>c.confidence===1).length})`);
+  console.log(`[Section2] Top Converting Pages: ${topConvertingPages.length} rows (pool had ${pagePool.length} candidates; GA4=${pagePool.filter(c=>c.confidence===5).length}, callTracking=${pagePool.filter(c=>c.confidence===4).length}, GSC-hi=${pagePool.filter(c=>c.confidence===2).length}, GSC-info=${pagePool.filter(c=>c.confidence===1).length})`);
   for (const r of topConvertingPages) {
     console.log(`[Section2]   → [${r.dataSource}] ${r.type} | ${r.page}`);
   }
@@ -1483,7 +1420,6 @@ function buildConvertingPageNote(internalType: string, dataSource: string, conve
   const isCallTracking = ["CallRail", "CTM", "Nimbata", "CallTrackingMetrics"].includes(dataSource);
   const isGA4 = dataSource === "GA4";
   const isGSC = dataSource === "GSC";
-  const isSF = dataSource === "Multi-source";
   const cvr = isGA4 && sessions > 0 ? ` ${(conversions / sessions * 100).toFixed(1)}% CVR.` : "";
 
   if (isGA4) {
@@ -1502,13 +1438,6 @@ function buildConvertingPageNote(internalType: string, dataSource: string, conve
     if (internalType === "Verify Insurance") return "Insurance page is driving direct call behavior — users checking coverage before calling admissions. One of the clearest non-homepage conversion paths.";
     if (internalType === "Contact / Admissions") return "Direct admissions contact page generating phone clicks — users landing here are actively seeking intake contact.";
     return "One of the clearest non-homepage conversion paths — users are moving from service evaluation to direct action.";
-  }
-
-  if (isSF) {
-    if (internalType === "Contact / Admissions") return "Priority admissions page confirmed in site crawl — no direct conversion tracking detected yet. Adding contact form submit tracking here would directly validate admit attribution.";
-    if (internalType === "Verify Insurance") return "Priority VOB/insurance page confirmed in site crawl — highest-value conversion target on the site. Adding Verify Insurance / VOB form submit tracking here would directly measure admissions pipeline activity.";
-    if (internalType === "Detox" || internalType === "Residential / Inpatient" || internalType === "PHP / IOP" || internalType === "Service Page") return "Priority service page confirmed in site crawl — high-intent organic candidate. Track user engagement and exits to identify friction in the admissions path.";
-    return "Strategic page confirmed in site crawl — conversion tracking needed to validate admit contribution.";
   }
 
   if (isGSC) {

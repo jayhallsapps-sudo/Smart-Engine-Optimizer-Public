@@ -64,7 +64,7 @@ export interface IStorage {
   deleteQbrPrepReport(id: number): Promise<boolean>;
   getAllQbrPrepReports(): Promise<QbrPrepReport[]>;
 
-  createGapSession(data: { clientId: number; reportType: string; questions: GapQuestion[]; seoHqChecksApplied?: string[] }): Promise<GapAnalysisSession>;
+  createGapSession(data: { clientId: number; reportType: string; questions: GapQuestion[]; seoHqChecksApplied?: string[]; seoHqLoadStatus?: string }): Promise<GapAnalysisSession>;
   updateGapSession(id: number, data: { answers?: GapAnswer[]; linkedReportId?: number; linkedReportType?: string }): Promise<GapAnalysisSession | undefined>;
   getGapSession(id: number): Promise<GapAnalysisSession | undefined>;
   getGapSessionsByClient(clientId: number): Promise<GapAnalysisSession[]>;
@@ -254,12 +254,13 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(qbrPrepReports).orderBy(desc(qbrPrepReports.createdAt));
   }
 
-  async createGapSession(data: { clientId: number; reportType: string; questions: GapQuestion[]; seoHqChecksApplied?: string[] }): Promise<GapAnalysisSession> {
+  async createGapSession(data: { clientId: number; reportType: string; questions: GapQuestion[]; seoHqChecksApplied?: string[]; seoHqLoadStatus?: string }): Promise<GapAnalysisSession> {
     const [session] = await db.insert(gapAnalysisSessions).values({
       clientId: data.clientId,
       reportType: data.reportType,
       questionsJson: data.questions as any,
       seoHqChecksApplied: data.seoHqChecksApplied ?? [],
+      seoHqLoadStatus: data.seoHqLoadStatus ?? null,
       generatedOn: new Date().toISOString(),
     }).returning();
     return session;

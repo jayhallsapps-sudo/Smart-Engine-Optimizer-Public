@@ -1190,10 +1190,10 @@ export async function registerRoutes(
         recentReports: [], // Could be populated if needed
       };
 
-      const seoHqContext = await loadSEOHQContext();
+      const { context: seoHqContext, status: seoHqLoadStatus } = await loadSEOHQContext();
       const result = await analyzeReportGaps(reportType, validation.amInputs as any, accountContext, seoHqContext);
 
-      res.json(result);
+      res.json({ ...result, seoHqLoadStatus });
     } catch (err: any) {
       console.error("[GapAnalysis] Error:", err);
       res.status(500).json({ message: "Failed to run gap analysis: " + err.message });
@@ -1202,7 +1202,7 @@ export async function registerRoutes(
 
   app.post("/api/reports/gap-analysis/session", async (req, res) => {
     try {
-      const { clientId, reportType, questions, answers, seoHqChecksApplied } = req.body;
+      const { clientId, reportType, questions, answers, seoHqChecksApplied, seoHqLoadStatus } = req.body;
       if (!clientId || !reportType || !questions) {
         return res.status(400).json({ message: "clientId, reportType, and questions are required" });
       }
@@ -1212,6 +1212,7 @@ export async function registerRoutes(
         reportType,
         questions,
         seoHqChecksApplied,
+        seoHqLoadStatus: seoHqLoadStatus ? JSON.stringify(seoHqLoadStatus) : undefined,
       });
 
       if (answers && answers.length > 0) {

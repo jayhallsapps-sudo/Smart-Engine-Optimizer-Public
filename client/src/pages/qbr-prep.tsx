@@ -36,6 +36,7 @@ import { ReportSaveSelector } from "@/components/reports/ReportSaveSelector";
 import { CrawlAssetSelector } from "@/components/reports/CrawlAssetSelector";
 import { useFillInTheGaps } from "@/hooks/useFillInTheGaps";
 import { FillInTheGapsModal } from "@/components/FillInTheGapsModal";
+import { ClarificationTrail } from "@/components/ClarificationTrail";
 import { Checkbox } from "@/components/ui/checkbox";
 
 interface CrawlAsset {
@@ -127,6 +128,8 @@ export default function QbrPrepPage() {
     runGapAnalysis,
     submitAnswers,
     sessionId,
+    seoHqLoadStatus,
+    answers,
     closeModal,
   } = useFillInTheGaps({ reportType: "qbr_prep" });
 
@@ -648,6 +651,15 @@ export default function QbrPrepPage() {
           />
         )}
       </div>
+
+      {fillInGapsEnabled && sessionId && questions.length > 0 && (
+        <ClarificationTrail
+          questions={questions}
+          answers={answers}
+          seoHqLoadStatus={seoHqLoadStatus}
+          enabled={fillInGapsEnabled}
+        />
+      )}
 
       {showModal && (
         <FillInTheGapsModal

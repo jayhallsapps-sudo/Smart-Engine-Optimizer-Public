@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   Dialog,
   DialogContent,
@@ -25,8 +25,10 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ChevronDown, ChevronUp, Paperclip, Link as LinkIcon, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Paperclip, Link as LinkIcon, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import type { GapQuestion, GapAnswer, GapQuestionType } from "@shared/schema";
+import { ALLOWED_GAP_FILE_TYPES, MAX_GAP_FILE_SIZE_BYTES } from "@shared/schema";
+import { useToast } from "@/hooks/use-toast";
 
 interface FillInTheGapsModalProps {
   questions: GapQuestion[];
@@ -44,9 +46,25 @@ export function FillInTheGapsModal({
   const [currentStep, setCurrentStep] = useState(0);
   const [answers, setAnswers] = useState<Record<string, GapAnswer>>({});
   const [showRationale, setShowRationale] = useState(false);
+  const { toast } = useToast();
 
   const currentQuestion = questions[currentStep];
   const progress = ((currentStep + 1) / questions.length) * 100;
+
+  const urlError = useMemo(() => {
+    const url = answers[currentQuestion.id]?.supportingLink;
+    if (!url) return null;
+    try {
+      let normalizedUrl = url.trim();
+      if (!/^https?:\/\//i.test(normalizedUrl)) {
+        normalizedUrl = `https://${normalizedUrl}`;
+      }
+      new URL(normalizedUrl);
+      return null;
+    } catch (e) {
+      return "Invalid URL format";
+    }
+  }, [answers, currentQuestion.id]);
 
   const handleAnswerChange = (value: any) => {
     setAnswers((prev) => ({
@@ -59,6 +77,9 @@ export function FillInTheGapsModal({
         supportingLink: prev[currentQuestion.id]?.supportingLink,
         supportingDocumentName: prev[currentQuestion.id]?.supportingDocumentName,
         supportingDocumentData: prev[currentQuestion.id]?.supportingDocumentData,
+        supportingDocumentMimeType: prev[currentQuestion.id]?.supportingDocumentMimeType,
+        supportingDocumentSizeBytes: prev[currentQuestion.id]?.supportingDocumentSizeBytes,
+        supportingDocumentUploadedAt: prev[currentQuestion.id]?.supportingDocumentUploadedAt,
       },
     }));
   };
@@ -77,24 +98,76 @@ export function FillInTheGapsModal({
     }));
   };
 
+  const handleUrlChange = (url: string) => {
+    let normalizedUrl = url.trim();
+    if (normalizedUrl && !/^https?:\/\//i.test(normalizedUrl)) {
+      normalizedUrl = `https://${normalizedUrl}`;
+    }
+    
+    // We update the state with the raw input for the user to see, 
+    // but the useMemo will calculate the error
+    handleMetadataChange("supportingLink", url);
+  };
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        handleMetadataChange("supportingDocumentName", file.name);
-        handleMetadataChange("supportingDocumentData", reader.result as string);
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+
+    if (!ALLOWED_GAP_FILE_TYPES.includes(file.type as any)) {
+      toast({
+        title: "Invalid file type",
+        description: `Allowed types: PDF, TXT, CSV, DOC, PNG, JPG`,
+        variant: "destructive",
+      });
+      return;
     }
+
+    if (file.size > MAX_GAP_FILE_SIZE_BYTES) {
+      toast({
+        title: "File too large",
+        description: "Maximum file size is 5MB",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      handleMetadataChange("supportingDocumentName", file.name);
+      handleMetadataChange("supportingDocumentData", reader.result as string);
+      handleMetadataChange("supportingDocumentMimeType", file.type);
+      handleMetadataChange("supportingDocumentSizeBytes", file.size);
+      handleMetadataChange("supportingDocumentUploadedAt", new Date().toISOString());
+    };
+    reader.readAsDataURL(file);
   };
 
   const next = () => {
+    if (urlError) {
+      toast({
+        title: "Invalid URL",
+        description: "Please provide a valid URL or clear the field.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (currentStep < questions.length - 1) {
       setCurrentStep(currentStep + 1);
       setShowRationale(false);
     } else {
-      onComplete(Object.values(answers));
+      // Final normalization of URLs before completion
+      const finalAnswers = Object.values(answers).map(ans => {
+        if (ans.supportingLink) {
+          let url = ans.supportingLink.trim();
+          if (!/^https?:\/\//i.test(url)) {
+            url = `https://${url}`;
+          }
+          return { ...ans, supportingLink: url };
+        }
+        return ans;
+      });
+      onComplete(finalAnswers);
     }
   };
 
@@ -214,9 +287,17 @@ export function FillInTheGapsModal({
   const isNextDisabled = () => {
     const answer = answers[currentQuestion.id];
     if (!answer || answer.skipped) return false; // Allowed to skip or move forward if skipping
+    if (urlError) return true;
     if (currentQuestion.type === "multi_select") return (answer.value as string[]).length === 0;
     if (currentQuestion.type === "boolean") return answer.value === null;
     return !(answer.value as string)?.trim();
+  };
+
+  const formatFileSize = (bytes?: number | null) => {
+    if (!bytes) return "";
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
   return (
@@ -250,44 +331,79 @@ export function FillInTheGapsModal({
 
           <div className="space-y-3 pt-2 border-t mt-4">
             <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-2">
-                <LinkIcon className="w-3 h-3 text-muted-foreground" />
-                <Input
-                  placeholder="Supporting link (optional)"
-                  className="h-8 text-xs"
-                  value={answers[currentQuestion.id]?.supportingLink || ""}
-                  onChange={(e) => handleMetadataChange("supportingLink", e.target.value)}
-                  data-testid="input-gap-link"
-                />
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <LinkIcon className="w-3 h-3 text-muted-foreground" />
+                  <div className="relative flex-1">
+                    <Input
+                      placeholder="Supporting link (optional)"
+                      className={`h-8 text-xs pr-8 ${urlError ? "border-destructive focus-visible:ring-destructive" : ""}`}
+                      value={answers[currentQuestion.id]?.supportingLink || ""}
+                      onChange={(e) => handleUrlChange(e.target.value)}
+                      data-testid="input-gap-link"
+                    />
+                    {answers[currentQuestion.id]?.supportingLink && !urlError && (
+                      <CheckCircle2 className="w-3 h-3 text-green-500 absolute right-2.5 top-2.5" />
+                    )}
+                    {urlError && (
+                      <AlertCircle className="w-3 h-3 text-destructive absolute right-2.5 top-2.5" />
+                    )}
+                  </div>
+                </div>
+                {urlError && (
+                  <p className="text-[10px] text-destructive ml-5">{urlError}</p>
+                )}
+                {answers[currentQuestion.id]?.supportingLink && !urlError && (
+                  <p className="text-[10px] text-green-600 ml-5 flex items-center gap-1">
+                    Valid link: <span className="truncate max-w-[200px]">{answers[currentQuestion.id]?.supportingLink}</span>
+                  </p>
+                )}
               </div>
+
               <div className="flex items-center gap-2">
                 <Paperclip className="w-3 h-3 text-muted-foreground" />
-                <div className="flex-1 flex items-center gap-2">
-                  <Input
-                    type="file"
-                    className="hidden"
-                    id="gap-file-upload"
-                    onChange={handleFileUpload}
-                  />
-                  <Label
-                    htmlFor="gap-file-upload"
-                    className="h-8 flex items-center px-3 border rounded-md text-xs cursor-pointer hover:bg-muted transition-colors flex-1"
-                    data-testid="label-gap-file"
-                  >
-                    {answers[currentQuestion.id]?.supportingDocumentName || "Attach file (optional)"}
-                  </Label>
-                  {answers[currentQuestion.id]?.supportingDocumentName && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 px-2 text-destructive"
-                      onClick={() => {
-                        handleMetadataChange("supportingDocumentName", null);
-                        handleMetadataChange("supportingDocumentData", null);
-                      }}
+                <div className="flex-1 flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="file"
+                      className="hidden"
+                      id="gap-file-upload"
+                      onChange={handleFileUpload}
+                      accept={ALLOWED_GAP_FILE_TYPES.join(",")}
+                    />
+                    <Label
+                      htmlFor="gap-file-upload"
+                      className="h-8 flex items-center px-3 border rounded-md text-xs cursor-pointer hover:bg-muted transition-colors flex-1"
+                      data-testid="label-gap-file"
                     >
-                      Remove
-                    </Button>
+                      {answers[currentQuestion.id]?.supportingDocumentName ? (
+                        <span className="flex items-center gap-2 text-green-600">
+                          <CheckCircle2 className="w-3 h-3" />
+                          <span className="truncate max-w-[200px]">{answers[currentQuestion.id]?.supportingDocumentName}</span>
+                        </span>
+                      ) : "Attach file (optional)"}
+                    </Label>
+                    {answers[currentQuestion.id]?.supportingDocumentName && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 px-2 text-destructive"
+                        onClick={() => {
+                          handleMetadataChange("supportingDocumentName", null);
+                          handleMetadataChange("supportingDocumentData", null);
+                          handleMetadataChange("supportingDocumentMimeType", null);
+                          handleMetadataChange("supportingDocumentSizeBytes", null);
+                          handleMetadataChange("supportingDocumentUploadedAt", null);
+                        }}
+                      >
+                        Remove
+                      </Button>
+                    )}
+                  </div>
+                  {answers[currentQuestion.id]?.supportingDocumentName && (
+                    <p className="text-[10px] text-muted-foreground ml-1">
+                      {formatFileSize(answers[currentQuestion.id]?.supportingDocumentSizeBytes)} • {answers[currentQuestion.id]?.supportingDocumentMimeType?.split("/")[1]?.toUpperCase()}
+                    </p>
                   )}
                 </div>
               </div>
@@ -354,3 +470,4 @@ export function FillInTheGapsModal({
     </Dialog>
   );
 }
+

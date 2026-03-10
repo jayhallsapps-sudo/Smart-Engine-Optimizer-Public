@@ -1,0 +1,143 @@
+Refine the existing “Fill in the gaps” feature with the following production-hardening updates.
+
+Important:
+Do not rebuild the feature from scratch.
+Apply these as targeted improvements to the existing implementation.
+
+1. Question sprawl control
+Add a hard maximum of 6 questions per gap session.
+
+Rules:
+- Show the modal only if there is at least 1 useful question
+- Ask no more than 6 questions total
+- If more than 6 candidate questions are generated, rank them and keep only the 6 highest-value questions
+- Ranking should prioritize:
+  - business impact relevance
+  - SEO HQ / QSSB alignment importance
+  - missing AM judgment that the system should not invent
+  - client sentiment / blocker / dependency relevance
+  - ability to materially improve the final report
+- Do not include filler or low-confidence questions just to reach 6
+- If only 2 questions are truly useful, only ask 2
+
+2. SEO HQ / Notion failure handling
+Make sure the system fails gracefully if SEO HQ / Notion / QSSB context is unavailable, stale, partial, or slow.
+
+Requirements:
+- Report generation must still work even if SEO HQ context cannot be loaded
+- Gap analysis should continue using normal account/report inputs if SEO HQ context fails
+- Log whether SEO HQ context was:
+  - successfully loaded
+  - partially loaded
+  - unavailable
+  - timed out
+- Store this state in the gap session metadata
+- Do not show a user-facing error unless the core report generation itself fails
+- Do not block the report because strategic context loading failed
+
+3. Attachment and link safety
+Add lightweight internal safety and validation for supporting documents and links.
+
+For file uploads:
+- enforce allowed file types
+- enforce file size limits
+- reject unsupported file types with a clear message
+- reject oversized files with a clear message
+- store file metadata including:
+  - original filename
+  - mime type
+  - size
+  - upload timestamp
+  - associated questionId
+- do not require virus scanning
+
+For supporting links:
+- validate that the link is a properly formed URL
+- normalize the URL where appropriate
+- reject malformed URLs with a clear message
+- store the associated questionId
+
+For generation:
+- do not blindly dump full attachments into prompt context
+- extract or summarize only the relevant usable content where needed
+- respect token limits and prompt budget
+- keep the question-to-attachment relationship fully traceable
+
+4. Traceability in the UI
+Add an internal QA-facing “Clarification Trail” panel on generated reports.
+
+Purpose:
+Make it easy to inspect what happened during the Fill in the gaps session and how it influenced the report.
+
+Show:
+- whether Fill in the gaps was enabled
+- whether SEO HQ context was loaded successfully
+- total questions asked
+- which questions were answered
+- which questions were skipped
+- what supporting file or link was attached to each question
+- which answers were merged into report context
+- which answers materially influenced report output, if available
+
+Requirements:
+- keep it compact and readable
+- internal-only, not client-facing
+- preserve question-to-supporting-material relationship visually
+- allow QA/debug review without needing to inspect raw database rows
+
+5. Regeneration and idempotency hardening
+Lock down duplicate-session and retry issues.
+
+Requirements:
+- prevent duplicate gap sessions from being created by double-clicking Generate
+- prevent duplicate report generation if the final action is triggered multiple times
+- preserve in-progress modal state safely if the user navigates back or refreshes during the session, where feasible
+- ensure reopening the same in-progress gap session does not create a second orphan session
+- ensure uploads remain tied to the correct session and question
+- ensure retries do not duplicate stored answers, links, or files
+- use idempotency safeguards for final generation submission
+
+6. Output influence verification
+Add testing and logic checks to prove clarification inputs actually affect the report correctly.
+
+Create test coverage for scenarios including:
+- all questions skipped
+- one critical question answered
+- multiple useful questions answered
+- clarification answers that conflict with connected source data
+- supporting file or link changes the interpretation of a section
+- SEO HQ context available vs unavailable
+
+Validate that:
+- skipped questions do not create invented assumptions
+- answered questions change the final report where appropriate
+- conflicts between AM clarification and source data are handled transparently
+- supporting documents and links can influence the report without breaking traceability
+- SEO HQ context changes question selection and/or framing when available
+- the final report meaningfully reflects clarification context where relevant
+
+7. Guardrails
+- Never exceed 6 questions
+- Never ask low-value questions just because space remains
+- Never block report generation due to SEO HQ loading failure
+- Never accept unsupported or oversized files
+- Never accept malformed supporting links
+- Never lose the question-to-attachment relationship
+- Never create duplicate sessions or duplicate reports from repeated submission
+- Never store clarification context without making it inspectable in the Clarification Trail
+- Never pretend an answer influenced the report if it did not
+
+8. Acceptance criteria
+This refinement is complete when:
+- Fill in the gaps asks a maximum of 6 questions
+- question ranking trims excess candidates correctly
+- SEO HQ / Notion / QSSB loading failures degrade gracefully
+- upload and link validation is enforced
+- file/link metadata is stored and tied to questionId
+- generated reports include an internal Clarification Trail panel
+- duplicate session/report creation is prevented
+- in-progress sessions behave safely across retries/reopens
+- test coverage proves clarification context affects output properly
+- the existing user experience remains lightweight and unchanged unless Fill in the gaps is enabled
+
+Implement these updates cleanly on top of the current feature, without regressing the existing working flow.

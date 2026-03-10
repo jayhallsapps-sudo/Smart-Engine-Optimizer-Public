@@ -447,14 +447,57 @@ for (let i = 1; i <= 50; i++) {
 
 const ALL_TEMPLATES = [...QUESTION_TEMPLATES, ...ADDITIONAL_TEMPLATES];
 
-// Helper to load SEO HQ Context
-export async function loadSEOHQContext(): Promise<SeoHqContext> {
-  const [strategyBank, qssb] = await Promise.all([
-    fetchStrategyBank().catch(e => ({ entries: [], fetchedAt: "" })),
-    fetchQssbData().catch(e => ({ clientInsights: [], additionalOpportunities: [], fetchedAt: "" }))
-  ]);
+export type SeoHqOverallStatus = "loaded" | "partial" | "unavailable" | "timed_out";
 
-  return { strategyBank, qssb };
+export interface SeoHqLoadStatus {
+  strategyBank: "loaded" | "failed";
+  qssb: "loaded" | "failed";
+  overallStatus: SeoHqOverallStatus;
+}
+
+const SEO_HQ_TIMEOUT_MS = 5000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`SEO HQ context load timed out after ${ms}ms`)), ms)
+    ),
+  ]);
+}
+
+// Helper to load SEO HQ Context with timeout + status tracking
+export async function loadSEOHQContext(): Promise<{ context: SeoHqContext; status: SeoHqLoadStatus }> {
+  let sbStatus: "loaded" | "failed" = "loaded";
+  let qssbStatus: "loaded" | "failed" = "loaded";
+
+  let strategyBankResult: any;
+  let qssbResult: any;
+
+  try {
+    [strategyBankResult, qssbResult] = await withTimeout(
+      Promise.all([
+        fetchStrategyBank().catch(e => { sbStatus = "failed"; return { entries: [], fetchedAt: "" }; }),
+        fetchQssbData().catch(e => { qssbStatus = "failed"; return { clientInsights: [], additionalOpportunities: [], fetchedAt: "" }; }),
+      ]),
+      SEO_HQ_TIMEOUT_MS
+    );
+  } catch (timeoutErr) {
+    sbStatus = "failed";
+    qssbStatus = "failed";
+    strategyBankResult = { entries: [], fetchedAt: "" };
+    qssbResult = { clientInsights: [], additionalOpportunities: [], fetchedAt: "" };
+  }
+
+  const overallStatus: SeoHqOverallStatus =
+    sbStatus === "loaded" && qssbStatus === "loaded" ? "loaded" :
+    sbStatus === "failed" && qssbStatus === "failed" ? "unavailable" :
+    "partial";
+
+  const status: SeoHqLoadStatus = { strategyBank: sbStatus, qssb: qssbStatus, overallStatus };
+  console.log(`[GapAnalysis] SEO HQ context status: ${JSON.stringify(status)}`);
+
+  return { context: { strategyBank: strategyBankResult, qssb: qssbResult }, status };
 }
 
 /**
@@ -500,8 +543,8 @@ export async function analyzeReportGaps(
   // Sort by priority score descending
   selectedQuestions.sort((a, b) => b.priorityScore - a.priorityScore);
 
-  // Limit to 10 questions to avoid fatigue
-  const finalQuestions = selectedQuestions.slice(0, 10);
+  // Hard maximum of 6 questions to avoid session sprawl
+  const finalQuestions = selectedQuestions.slice(0, 6);
 
   // Calculate confidence score (simple heuristic)
   // Base 100, -10 per high priority question found

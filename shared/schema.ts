@@ -265,7 +265,23 @@ export interface GapAnswer {
   supportingLink?: string | null;
   supportingDocumentName?: string | null;
   supportingDocumentData?: string | null;
+  supportingDocumentMimeType?: string | null;
+  supportingDocumentSizeBytes?: number | null;
+  supportingDocumentUploadedAt?: string | null;
 }
+
+export const ALLOWED_GAP_FILE_TYPES = [
+  "application/pdf",
+  "text/plain",
+  "text/csv",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "image/png",
+  "image/jpeg",
+  "image/jpg",
+] as const;
+
+export const MAX_GAP_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
 
 export interface GapAnalysisResult {
   shouldAskQuestions: boolean;
@@ -282,6 +298,7 @@ export const gapAnalysisSessions = pgTable("gap_analysis_sessions", {
   questionsJson: jsonb("questions_json").notNull(),
   answersJson: jsonb("answers_json"),
   seoHqChecksApplied: text("seo_hq_checks_applied").array(),
+  seoHqLoadStatus: text("seo_hq_load_status"),
   linkedReportId: integer("linked_report_id"),
   linkedReportType: text("linked_report_type"),
   generatedOn: text("generated_on").notNull(),

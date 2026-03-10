@@ -31,6 +31,7 @@ import { ReportSaveSelector } from "@/components/reports/ReportSaveSelector";
 import { CrawlAssetSelector } from "@/components/reports/CrawlAssetSelector";
 import { useFillInTheGaps } from "@/hooks/useFillInTheGaps";
 import { FillInTheGapsModal } from "@/components/FillInTheGapsModal";
+import { ClarificationTrail } from "@/components/ClarificationTrail";
 import { Checkbox } from "@/components/ui/checkbox";
 
 function toYMD(d: Date): string {
@@ -94,6 +95,8 @@ export default function BiweeklyPage() {
     runGapAnalysis,
     submitAnswers,
     sessionId,
+    seoHqLoadStatus,
+    answers,
     closeModal,
   } = useFillInTheGaps({ reportType: "biweekly" });
 
@@ -596,6 +599,15 @@ export default function BiweeklyPage() {
           />
         )}
       </div>
+
+      {fillInGapsEnabled && sessionId && questions.length > 0 && (
+        <ClarificationTrail
+          questions={questions}
+          answers={answers}
+          seoHqLoadStatus={seoHqLoadStatus}
+          enabled={fillInGapsEnabled}
+        />
+      )}
 
       {showModal && (
         <FillInTheGapsModal

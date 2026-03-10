@@ -36,6 +36,7 @@ import { ReportSaveSelector } from "@/components/reports/ReportSaveSelector";
 import { CrawlAssetSelector } from "@/components/reports/CrawlAssetSelector";
 import { useFillInTheGaps } from "@/hooks/useFillInTheGaps";
 import { FillInTheGapsModal } from "@/components/FillInTheGapsModal";
+import { ClarificationTrail } from "@/components/ClarificationTrail";
 import { Checkbox } from "@/components/ui/checkbox";
 
 export default function MidStrategyPage() {
@@ -82,6 +83,8 @@ export default function MidStrategyPage() {
     runGapAnalysis,
     submitAnswers,
     sessionId,
+    seoHqLoadStatus,
+    answers,
     closeModal,
   } = useFillInTheGaps({ reportType: "mid_strategy_seo" });
 
@@ -616,6 +619,15 @@ export default function MidStrategyPage() {
           </div>
         )}
       </div>
+
+      {fillInGapsEnabled && sessionId && questions.length > 0 && (
+        <ClarificationTrail
+          questions={questions}
+          answers={answers}
+          seoHqLoadStatus={seoHqLoadStatus}
+          enabled={fillInGapsEnabled}
+        />
+      )}
 
       {showModal && (
         <FillInTheGapsModal

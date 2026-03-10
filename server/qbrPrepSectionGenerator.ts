@@ -2499,14 +2499,22 @@ function generateSection7(section6: Section6Priorities, section5: Section5Diagno
 //   strategicFit    (0–1, weight 10%): alignment with client's tier, goals, and situation
 //
 //   total = bi*40 + es*30 + u*20 + sf*10  →  range 0–100
-//   MINIMUM_THRESHOLD = 55 — candidates below this are suppressed entirely
+//   MINIMUM_THRESHOLD = 65 — candidates below this are suppressed entirely.
+//   Raised from 55: eliminates weak on-pace paid-promotion noise and prevents
+//   authority-building from firing on tier status alone.
+//
+// Pre-score gating: every signal must clear three hard gates before being scored.
+//   gate 1 — businessRelevance: direct tie to admits / VOBs / leads / conversion quality
+//   gate 2 — evidenceSufficient: the finding must be confirmed in report data
+//   gate 3 — leverFit: the recommended channel or service must be the right answer
+//   Any gate failure suppresses the candidate before scoring runs.
 //
 // Conversion / tracking gaps: intentionally NOT surfaced as upsells.
 // Missing tracking is a foundational recommendation inside standard scope, not an
 // Additional Opportunity, unless packaged as a distinct paid CRO project with
 // clear client context — which is not determinable from report data alone.
 function generateAdditionalOpportunities(report: QbrPrepReportData): AdditionalOpportunity[] {
-  const MINIMUM_THRESHOLD = 55;
+  const MINIMUM_THRESHOLD = 65;
 
   // ── Raw report facts ──────────────────────────────────────────────────────
   const s1 = report.section1Goals;
@@ -2559,39 +2567,50 @@ function generateAdditionalOpportunities(report: QbrPrepReportData): AdditionalO
   // ══════════════════════════════════════════════════════════════════════════
   // SIGNAL A — Authority gap (Tier 1–2 diagnosis)
   //
-  // Standard-scope test: normal content and CRO can improve positions on Tier 3+
-  // sites over time. On Tier 1–2, domain authority is the hard limit — standard
-  // content production alone cannot break through it. Fails standard-scope test.
+  // Standard-scope test: content and CRO improve positions on Tier 3+ sites over
+  // time. On Tier 1–2, domain authority is the hard ceiling — standard content
+  // cannot break through it alone. Fails standard-scope test.
   //
-  // Classification: UPSELL — custom authority-building (digital PR / link acquisition)
-  // is more SEO depth, not a different channel.
+  // Classification: UPSELL — link acquisition / digital PR is more SEO depth.
   //
-  // Business connection: service-page rankings directly constrain admit pipeline.
-  // Evidence anchor: tier diagnosis (report fact, not section wording).
+  // PRE-SCORE GATES (all three must pass or candidate is suppressed):
+  //   gate 1 — businessRelevance: must have a confirmed demand signal (≥1 high-intent
+  //             cluster) OR a pace risk (isBehindPace). Tier status alone is not enough.
+  //   gate 2 — evidenceSufficient: ≥1 confirmed high-intent topic cluster required.
+  //             Without a confirmed demand signal, the authority gap is theoretical.
+  //   gate 3 — leverFit: tier must be 1 or 2 (authority is the bottleneck).
+  //
+  // "On pace + zero confirmed high-intent clusters" → all three gates fail → suppressed.
   // ══════════════════════════════════════════════════════════════════════════
-  if (tier <= 2) {
-    const bi = tier === 1 ? 1.0 : 0.85;
-    const es = highAdmitTopics.length >= 2 ? 0.9 : (highAdmitTopics.length === 1 ? 0.75 : 0.62);
-    const u  = isBehindPace ? 1.0 : (tier === 1 ? 0.78 : 0.58);
-    const sf = 0.85;
+  {
+    const gateBusinessRelevance = highAdmitTopics.length >= 1 || isBehindPace;
+    const gateEvidenceSufficient = highAdmitTopics.length >= 1;
+    const gateLeverFit = tier <= 2;
 
-    const evidenceItems: string[] = [
-      `Tier ${tier} site diagnosis (${tierName}) — domain authority is the primary constraint on service-page rankings, which content production alone cannot break through`,
-    ];
-    if (isBehindPace && primaryRow) {
-      evidenceItems.push(`Primary goal (${primaryRow.goal}) is behind pace — content-only work cannot accelerate service-page rankings within the quarter`);
-    } else if (highAdmitTopics.length >= 1) {
-      evidenceItems.push(`${highAdmitTopics.length} confirmed high-intent topic cluster${highAdmitTopics.length > 1 ? "s" : ""} identified — authority, not content volume, is limiting ranking potential on these terms`);
+    if (gateBusinessRelevance && gateEvidenceSufficient && gateLeverFit) {
+      const bi = tier === 1 ? 1.0 : 0.85;
+      const es = highAdmitTopics.length >= 2 ? 0.9 : 0.75;
+      const u  = isBehindPace ? 1.0 : (tier === 1 ? 0.78 : 0.60);
+      const sf = 0.85;
+
+      const evidenceItems: string[] = [
+        `Tier ${tier} site diagnosis (${tierName}) — domain authority is the primary constraint on service-page rankings, which content production alone cannot break through`,
+      ];
+      if (isBehindPace && primaryRow) {
+        evidenceItems.push(`Primary goal (${primaryRow.goal}) is behind pace — standard content-only work cannot accelerate service-page rankings within the quarter`);
+      } else {
+        evidenceItems.push(`${highAdmitTopics.length} confirmed high-intent topic cluster${highAdmitTopics.length > 1 ? "s" : ""} identified — authority, not content volume, is the primary ranking constraint on these terms`);
+      }
+
+      pool.push(candidate({
+        type: "upsell",
+        title: "Custom Authority-Building Initiative",
+        why_now: `Site is at Tier ${tier} — service-page rankings on high-value treatment terms are directly constrained by domain authority, which the standard content roadmap alone cannot resolve within a quarter.`,
+        evidence: evidenceItems,
+        recommendation: "A focused link acquisition or digital PR project targeting high-intent service pages — a deeper SEO investment than the standard monthly content roadmap includes.",
+        framing: "Optional acceleration lever for clients who need rankings on competitive treatment terms faster than organic content compounding alone.",
+      }, bi, es, u, sf));
     }
-
-    pool.push(candidate({
-      type: "upsell",
-      title: "Custom Authority-Building Initiative",
-      why_now: `Site is at Tier ${tier} — service-page rankings on high-value treatment terms are directly constrained by domain authority, which the standard content roadmap alone cannot resolve within a quarter.`,
-      evidence: evidenceItems,
-      recommendation: "A focused link acquisition or digital PR project targeting high-intent service pages — a deeper SEO investment than the standard monthly content roadmap includes.",
-      framing: "Optional acceleration lever for clients who need rankings on competitive treatment terms faster than organic content compounding alone.",
-    }, bi, es, u, sf));
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -2602,11 +2621,12 @@ function generateAdditionalOpportunities(report: QbrPrepReportData): AdditionalO
   // confirmed in organic search data, organic timelines become the constraint —
   // paid search captures the same demand now. Fails standard-scope test.
   //
-  // Classification: CROSS-SELL — paid search demand capture is a different
-  // channel (not SEO depth), providing faster-to-lead performance.
+  // Classification: CROSS-SELL — paid search is a different channel, faster-to-lead.
   //
-  // Business connection: high — directly targets admit-intent demand.
-  // Evidence anchor: primary goal pace + confirmed high-intent organic clusters.
+  // PRE-SCORE GATES:
+  //   gate 1 — businessRelevance: isBehindPace (primary goal at risk this quarter)
+  //   gate 2 — evidenceSufficient: ≥1 confirmed high-intent organic cluster
+  //   gate 3 — leverFit: paid search can capture the confirmed demand immediately
   // ══════════════════════════════════════════════════════════════════════════
   if (isBehindPace && highAdmitTopics.length >= 1) {
     const topTopic = highAdmitTopics[0];
@@ -2667,53 +2687,63 @@ function generateAdditionalOpportunities(report: QbrPrepReportData): AdditionalO
   // ══════════════════════════════════════════════════════════════════════════
   // SIGNAL D — Substantial informational traffic not converting to admits
   //
-  // Standard-scope test: blog-to-conversion path improvements (CTAs, internal
-  // links, journey mapping, conversion overlays) are standard SEO scope.
+  // Standard-scope test: CTAs, internal links, journey fixes are standard scope.
   // Retargeting is a paid channel — not SEO. Fails standard-scope test.
   //
   // Classification: CROSS-SELL — retargeting / audience building.
   //
-  // Guard A: conversion tracking MUST be confirmed before firing. Without
-  //   tracking, the "not converting" finding is unconfirmed — the gap could
-  //   simply be a measurement problem (which belongs in standard recommendations).
-  // Guard B: minimum traffic threshold (400 clicks) to justify retargeting cost.
-  //
-  // Business connection: captures value from already-earned organic traffic.
-  // Evidence anchor: confirmed click data + conversion tracking confirming the gap.
+  // PRE-SCORE GATES (all three must pass):
+  //   gate 1 — businessRelevance: isBehindPace OR totalInfoClicks ≥ 750.
+  //             "On pace + only 400 clicks" is too soft a business case for
+  //             retargeting — suppress those cases.
+  //   gate 2 — evidenceSufficient: conversion tracking confirmed, ≥400 clicks,
+  //             ≥2 low/mid pages. Without tracking the gap is unconfirmed.
+  //   gate 3 — leverFit: retargeting is the right lever (organic already earns traffic).
   // ══════════════════════════════════════════════════════════════════════════
-  if (totalInfoClicks >= 400 && hasConversionTracking && lowMidPages.length >= 2) {
-    const bi = totalInfoClicks >= 1000 ? 0.75 : 0.6;
-    const es = 0.8;
-    const u  = isBehindPace ? 0.75 : 0.45;
-    const sf = 0.7;
+  {
+    const gateBusinessRelevance = isBehindPace || totalInfoClicks >= 750;
+    const gateEvidenceSufficient = hasConversionTracking && totalInfoClicks >= 400 && lowMidPages.length >= 2;
+    const gateLeverFit = true;
 
-    pool.push(candidate({
-      type: "cross_sell",
-      title: "Retargeting & Content Promotion",
-      why_now: `${totalInfoClicks.toLocaleString()} confirmed organic clicks are reaching informational pages with low-to-medium admit connection — this traffic is earned through SEO but is not converting through organic paths alone.`,
-      evidence: [
-        `${lowMidPages.length} informational pages with ${totalInfoClicks.toLocaleString()} combined organic clicks and low-to-medium admit connection — confirmed via GA4 or call tracking`,
-        "Organic users are reaching the site through informational content but are not progressing to admissions, VOB, or contact pages without an additional touchpoint",
-      ],
-      recommendation: "A retargeting or paid social promotion program to re-engage confirmed organic visitors who did not convert, delivering service-focused messaging to move them toward admissions.",
-      framing: "Optional lever to extract conversion value from organic traffic already being generated — no additional audience acquisition required.",
-    }, bi, es, u, sf));
+    if (gateBusinessRelevance && gateEvidenceSufficient && gateLeverFit) {
+      const bi = totalInfoClicks >= 1000 ? 0.75 : 0.6;
+      const es = 0.8;
+      const u  = isBehindPace ? 0.75 : 0.5;
+      const sf = 0.7;
+
+      pool.push(candidate({
+        type: "cross_sell",
+        title: "Retargeting & Content Promotion",
+        why_now: `${totalInfoClicks.toLocaleString()} confirmed organic clicks are reaching informational pages with low-to-medium admit connection — this traffic is earned through SEO but is not converting through organic paths alone.`,
+        evidence: [
+          `${lowMidPages.length} informational pages with ${totalInfoClicks.toLocaleString()} combined organic clicks and low-to-medium admit connection — confirmed via GA4 or call tracking`,
+          "Organic users are reaching the site through informational content but are not progressing to admissions, VOB, or contact pages without an additional touchpoint",
+        ],
+        recommendation: "A retargeting or paid social promotion program to re-engage confirmed organic visitors who did not convert, delivering service-focused messaging to move them toward admissions.",
+        framing: "Optional lever to extract conversion value from organic traffic already being generated — no additional audience acquisition required.",
+      }, bi, es, u, sf));
+    }
   }
 
   // ══════════════════════════════════════════════════════════════════════════
   // SIGNAL E — Content outpacing organic visibility
   //
-  // Standard-scope test: technical SEO, metadata, and CTR optimization are
-  // inside standard scope. Paid social or content promotion is a different
-  // channel. Fails standard-scope test for the paid promotion recommendation.
+  // Standard-scope test: technical SEO and metadata optimization address
+  // indexing lag. Paid social promotion is a different channel. Fails standard-scope.
   //
   // Classification: CROSS-SELL — paid social / content promotion.
   //
-  // Condition: ≥2 topic clusters have confirmed content (queryCount > 0) but
-  //   low impressions (< 1,000), indicating content is being produced faster
-  //   than organic indexing / ranking is distributing it.
+  // PRE-SCORE GATES (all three must pass — tighter than prior version):
+  //   gate 1 — businessRelevance: isBehindPace required. "On pace" cases are not
+  //             strong enough — content distribution lag is not a quarter-defining gap
+  //             without an active goal-pace risk.
+  //   gate 2 — evidenceSufficient: ≥3 low-reach clusters (not just 2).
+  //             Two clusters is too thin an evidence base for a cross-sell recommendation.
+  //   gate 3 — leverFit: Tier 3+ only (Tier 1–2 sites should fix authority first).
   //
-  // Business connection: medium — accelerates reach on content already produced.
+  // Note: with threshold = 65 and the gates above, Signal E only fires in the
+  // narrow case of: behind pace + 3+ clusters with low reach + Tier 3+ site.
+  // This is intentional — it is a strong signal case.
   // ══════════════════════════════════════════════════════════════════════════
   {
     const lowReachClusters = allTopics.filter(t => {
@@ -2721,22 +2751,78 @@ function generateAdditionalOpportunities(report: QbrPrepReportData): AdditionalO
       return imp > 0 && imp < 1000;
     });
 
-    if (lowReachClusters.length >= 2 && allTopics.length >= 3 && tier >= 3) {
-      const bi = 0.55;
-      const es = lowReachClusters.length >= 3 ? 0.7 : 0.55;
-      const u  = isBehindPace ? 0.65 : 0.35;
+    const gateBusinessRelevance = isBehindPace;
+    const gateEvidenceSufficient = lowReachClusters.length >= 3;
+    const gateLeverFit = tier >= 3;
+
+    if (gateBusinessRelevance && gateEvidenceSufficient && gateLeverFit) {
+      const bi = 0.70;
+      const es = 0.75;
+      const u  = 0.70;
       const sf = 0.65;
 
       pool.push(candidate({
         type: "cross_sell",
         title: "Paid Social & Content Promotion",
-        why_now: `${lowReachClusters.length} topic cluster${lowReachClusters.length > 1 ? "s" : ""} have confirmed content but limited organic reach — content production is outpacing organic visibility, and paid promotion would accelerate distribution.`,
+        why_now: `${lowReachClusters.length} topic clusters have confirmed content but limited organic reach, and the primary goal is behind pace — paid promotion would accelerate distribution on content that is already produced.`,
         evidence: [
-          `${lowReachClusters.length} clusters with confirmed search activity but sub-1,000 organic impressions — distribution is lagging behind content output`,
-          "Content is being produced ahead of organic indexing speed — paid social or content promotion would increase reach without waiting for rankings to compound",
+          `${lowReachClusters.length} clusters with confirmed search activity but sub-1,000 organic impressions — content distribution is lagging behind content output`,
+          "Primary goal is behind pace and organic indexing speed alone is unlikely to close the visibility gap within the quarter",
         ],
-        recommendation: "A paid social or content promotion campaign targeting treatment-seeking audiences to amplify organic content that is already produced but not yet reaching full distribution.",
-        framing: "Optional lever to amplify content already produced — captures audience value faster than waiting for organic rankings to compound.",
+        recommendation: "A paid social or content promotion campaign to amplify organic content that is already produced but not yet reaching its full treatment-seeking audience.",
+        framing: "Optional lever to accelerate reach on content already earned — no additional content creation required.",
+      }, bi, es, u, sf));
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // SIGNAL F — Broader scan: behind pace but no high-intent organic demand confirmed
+  //
+  // This is a broader issue scan pass. It catches accounts where organic traffic
+  // exists (some topics are present) but NONE are classified as High admit connection,
+  // AND the primary goal is behind pace. This is a structural demand-capture gap —
+  // the organic program is not positioned against the highest-value treatment terms.
+  //
+  // Standard-scope test: service page targeting and keyword strategy are inside
+  // standard scope. But paid search can capture intent-matched demand NOW without
+  // waiting for organic positioning to shift. Fails standard-scope test for immediacy.
+  //
+  // Classification: CROSS-SELL — paid search demand capture on terms not yet ranked.
+  //
+  // Guard: only fires when there IS some organic activity (allTopics > 0) — otherwise
+  // there is no evidence of demand at all, and a paid recommendation would be
+  // too speculative.
+  //
+  // This does NOT fire when Signal B is already firing (which covers the same lever
+  // with stronger evidence — high-intent organic confirmed + behind pace). Signal B
+  // takes priority; Signal F only fires when Signal B could not.
+  // ══════════════════════════════════════════════════════════════════════════
+  {
+    const signalBAlreadyFired = isBehindPace && highAdmitTopics.length >= 1;
+
+    const gateBusinessRelevance = isBehindPace;
+    const gateEvidenceSufficient = highAdmitTopics.length === 0 && allTopics.length > 0;
+    const gateLeverFit = !signalBAlreadyFired;
+
+    if (gateBusinessRelevance && gateEvidenceSufficient && gateLeverFit) {
+      const mediumTopics = allTopics.filter(t => t.connectionToAdmits === "Medium");
+      const topTopic = mediumTopics[0] ?? allTopics[0];
+
+      const bi = 0.80;
+      const es = allTopics.length >= 3 ? 0.70 : 0.60;
+      const u  = 0.90;
+      const sf = hasConversionTracking ? 0.75 : 0.60;
+
+      pool.push(candidate({
+        type: "cross_sell",
+        title: "Paid Search Demand Capture",
+        why_now: `Primary goal is behind pace and organic search data does not confirm any high-intent treatment clusters — paid search can target treatment-intent terms directly while the organic program develops positioning.`,
+        evidence: [
+          `Primary goal is behind pace with no confirmed high-intent organic traffic — organic coverage is not yet reaching the highest-value treatment search terms`,
+          `${allTopics.length} topic cluster${allTopics.length > 1 ? "s" : ""} tracked organically${topTopic ? ` (strongest: "${topTopic.topic}")` : ""} — none classified as High admit connection`,
+        ],
+        recommendation: `Targeted paid search on high-intent treatment terms (detox, residential, PHP/IOP, insurance verification) to capture admit-intent demand that organic rankings have not yet reached.`,
+        framing: "Optional acceleration lever — captures treatment-intent demand immediately while the organic program builds toward the same terms.",
       }, bi, es, u, sf));
     }
   }

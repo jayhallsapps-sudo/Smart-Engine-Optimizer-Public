@@ -226,8 +226,12 @@ export interface QbrPrepGenerateInput {
   sentiment?: string;
   hypothesis?: string;
   auditNotes?: string;
+  clientNotes?: string;
   forwardLooking?: boolean;
   gapAnswers?: import("@shared/schema").GapAnswer[];
+  /** Monthly content credits resolved in routes.ts from CLIENT_CREDIT_MAP (the canonical source).
+   *  Defaults to 5 if not supplied. */
+  monthlyCredits?: number;
 }
 
 export function normalizeKpiLabel(mvpType: string): string {
@@ -519,18 +523,31 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
 
   const completedWork = [...airtableItems.map(i => i.task), ...asanaTasks.filter((t: any) => t.completed).map((t: any) => t.name)];
 
-  // Pre-fetch strategy bank for S6 cross-sell preview (served from cache on second QSSB call)
+  // Pre-fetch strategy bank for S6 cross-sell preview.
+  // Source of truth: Notion Strategy Bank page configured via strategy_bank_page_id setting.
+  // Failure is non-blocking but is surfaced to the AM (strategyBankFetchFailed flag).
   let s6StrategyBankEntries: Array<{ service: string; description: string }> = [];
+  let s6StrategyBankFetchFailed = false;
   try {
     const bank = await fetchStrategyBank();
+    if (bank.error || (bank.source === "none" && bank.entries.length === 0)) {
+      // Fetch returned an error or the page ID is not configured — surface to AM
+      s6StrategyBankFetchFailed = !!bank.error;
+    }
     s6StrategyBankEntries = (bank.entries ?? []).map((e: any) => ({ service: e.service ?? e.title ?? "", description: e.description ?? "" }));
-  } catch { /* cross-sell preview is additive — failure here does not block generation */ }
+  } catch {
+    // Network or auth failure — surface to AM
+    s6StrategyBankFetchFailed = true;
+  }
 
-  const s6MonthlyCredits = getMonthlyCredits(client.name);
+  // Monthly credits: resolved in routes.ts from the canonical CLIENT_CREDIT_MAP
+  // (per data-handling-rules skill). Passed via input.monthlyCredits. Defaults to 5.
+  const s6MonthlyCredits = input.monthlyCredits ?? 5;
+
   const section6 = generateSection6(
     section1, section2, section3, section4, section5, tierInput,
     completedWork, input.sentiment, input.hypothesis, input.auditNotes,
-    s6MonthlyCredits, s6StrategyBankEntries
+    s6MonthlyCredits, s6StrategyBankEntries, s6StrategyBankFetchFailed
   );
   const section7Evidence: Section7EvidenceFlags = {
     ga4Active: ga4LandingRows.length > 0 || ga4FunnelCurr !== null,
@@ -1352,106 +1369,66 @@ function generateSection2(
   topConversionPatterns.push(...candidatePatterns.slice(0, 2));
 
   // --- TOP CONVERTING SOURCES ---
+  // Sources = actual acquisition/attribution categories, not page types.
+  // Priority order: call tracking sources (P1) → GA4 on-site conversions (P2, single aggregate row) → fallback.
+  //
+  // Table is capped at 2 rows. Edge case: when no source data exists, 1 manual-entry placeholder is used.
   const moneyPages: string[] = (client as any).moneyPages ?? [];
 
-  // Priority 1: GA4 page-type aggregation (conversions)
-  if (ga4WithConversions.length > 0) {
-    const sourceMap = new Map<string, { conversions: number; pages: string[] }>();
-    for (const row of ga4WithConversions) {
-      const pageType = classifyPageType(row.page);
-      if (!sourceMap.has(pageType)) sourceMap.set(pageType, { conversions: 0, pages: [] });
-      const entry = sourceMap.get(pageType)!;
-      entry.conversions += row.conversions;
-      entry.pages.push(shortUrl(row.page));
-    }
-    for (const [source, data] of [...sourceMap.entries()]
-      .sort((a, b) => b[1].conversions - a[1].conversions)
-      .slice(0, 5)) {
+  // P1: Call tracking source channels — these are real traffic-source categories
+  // (Organic Search, Direct, Paid Search, Referral, etc.) sorted by call volume descending.
+  const PPC_KEYWORDS = /\bppc\b|\bpaid\b|\bcpc\b|\badwords\b|\bgoogle\s*ads\b|\bbing\s*ads\b/i;
+  if (callSources.length > 0) {
+    const totalCalls = callSources.reduce((s, r) => s + r.calls, 0);
+    for (const src of callSources.sort((a, b) => b.calls - a.calls).slice(0, 4)) {
+      if (topConvertingSources.length >= 4) break;
+      const pct = totalCalls > 0 ? Math.round(src.calls / totalCalls * 100) : 0;
+      const isPPC = PPC_KEYWORDS.test(src.source);
       topConvertingSources.push({
-        source,
-        whatsConverting: `${fmtNum(data.conversions)} conversions across ${data.pages.length} page${data.pages.length !== 1 ? "s" : ""}`,
-        notes: classifyAdmitConnection(source, data.conversions, totalGa4Conversions) === "High"
-          ? "Directly tied to admission pathway"
-          : "Supports conversion through content/awareness",
+        source: src.source,
+        whatsConverting: `${fmtNum(src.calls)} inbound calls (${pct}% of all tracked calls)`,
+        notes: isPPC
+          ? "Paid channel — verify call quality and cost-per-contact with admissions team"
+          : "Organic / direct channel — confirm with admissions team that these are admission-qualified calls",
+        dataSource: callTrackingSource,
+      });
+    }
+  }
+
+  // P2: GA4 on-site conversions — reported as a single aggregate source row.
+  // Not broken down by page type (page type is already covered by the Pages table).
+  // Source label reflects GA4 as the measurement channel, not a traffic channel.
+  if (ga4WithConversions.length > 0 && topConvertingSources.length < 4) {
+    const totalConversions = ga4WithConversions.reduce((s, r) => s + (r.conversions ?? 0), 0);
+    const existingSources = new Set(topConvertingSources.map(s => s.dataSource));
+    if (!existingSources.has("GA4")) {
+      topConvertingSources.push({
+        source: "Organic / On-Site Conversions",
+        whatsConverting: `${fmtNum(totalConversions)} GA4 conversion events across ${ga4WithConversions.length} landing page${ga4WithConversions.length !== 1 ? "s" : ""}`,
+        notes: "GA4 tracks form submissions and goal completions — source/medium breakdown requires a separate channel report",
         dataSource: "GA4",
       });
     }
   }
 
-  // Priority 2: CallRail sources (call volume by source)
-  const PPC_KEYWORDS = /\bppc\b|\bpaid\b|\bcpc\b|\badwords\b|\bgoogle\s*ads\b|\bbing\s*ads\b/i;
-  if (callSources.length > 0 && topConvertingSources.length < 5) {
-    const existingSources = new Set(topConvertingSources.map(s => s.source));
-    const totalCalls = callSources.reduce((s, r) => s + r.calls, 0);
-    for (const src of callSources.sort((a, b) => b.calls - a.calls).slice(0, 5)) {
-      if (topConvertingSources.length >= 5) break;
-      if (existingSources.has(src.source)) continue;
-      const pct = totalCalls > 0 ? Math.round(src.calls / totalCalls * 100) : 0;
-      const isPPC = PPC_KEYWORDS.test(src.source);
-      const channelLabel = isPPC ? "tracked calls" : "organic calls";
+  // P3: Fallback — when neither call tracking nor GA4 conversions are available,
+  // acknowledge the gap explicitly rather than fabricating source labels from page types.
+  if (topConvertingSources.length === 0) {
+    if (moneyPages.length > 0) {
       topConvertingSources.push({
-        source: src.source,
-        whatsConverting: `${fmtNum(src.calls)} ${channelLabel} (${pct}% of tracked calls)`,
-        notes: isPPC
-          ? "Paid source — tracked calls, not organic attribution"
-          : "Call tracking source — confirm with admissions team",
-        dataSource: "CallRail",
+        source: "Priority Pages (Configured)",
+        whatsConverting: `${moneyPages.length} priority page${moneyPages.length !== 1 ? "s" : ""} configured — no live tracking data`,
+        notes: "Conversion source attribution is not yet available. Implement GA4 events and/or call tracking to get real source data.",
+        dataSource: "Manual entry needed",
       });
-      existingSources.add(src.source);
-    }
-  }
-
-  // Priority 3: Infer from CallRail landing page types if still empty
-  if (topConvertingSources.length === 0 && callLandingPages.length > 0) {
-    const typeMap = new Map<string, { calls: number; pages: number }>();
-    for (const row of callLandingPages) {
-      const pt = classifyPageType(row.page);
-      if (!typeMap.has(pt)) typeMap.set(pt, { calls: 0, pages: 0 });
-      const e = typeMap.get(pt)!;
-      e.calls += row.calls;
-      e.pages++;
-    }
-    for (const [pageType, data] of [...typeMap.entries()]
-      .sort((a, b) => b[1].calls - a[1].calls)
-      .slice(0, 5)) {
+    } else {
       topConvertingSources.push({
-        source: pageType,
-        whatsConverting: `${fmtNum(data.calls)} calls from ${data.pages} page${data.pages !== 1 ? "s" : ""} (CallRail)`,
-        notes: classifyAdmitConnection(pageType, data.calls, callLandingPages.reduce((s, r) => s + r.calls, 0)) === "High"
-          ? "Directly tied to admission pathway"
-          : "Supports conversion through content/awareness",
-        dataSource: "CallRail",
-      });
-    }
-  }
-
-  // Priority 4: Infer from money page types
-  if (topConvertingSources.length === 0 && moneyPages.length > 0) {
-    const typeSet = new Map<string, number>();
-    for (const mp of moneyPages) {
-      const pt = classifyPageType(mp);
-      typeSet.set(pt, (typeSet.get(pt) ?? 0) + 1);
-    }
-    for (const [pt, cnt] of [...typeSet.entries()].slice(0, 4)) {
-      topConvertingSources.push({
-        source: pt,
-        whatsConverting: `${cnt} configured priority page${cnt !== 1 ? "s" : ""} (no tracking data)`,
-        notes: classifyAdmitConnection(pt, 0, 0) === "High"
-          ? "Directly tied to admission pathway"
-          : "Supports conversion through content/awareness",
+        source: ME,
+        whatsConverting: "No call tracking or GA4 conversion source data available for this account",
+        notes: "Implement call tracking (CallRail/CTM) and GA4 conversion events to unlock real source attribution",
         dataSource: "Manual entry needed",
       });
     }
-  }
-
-  // Final fallback
-  if (topConvertingSources.length === 0) {
-    topConvertingSources.push({
-      source: ME,
-      whatsConverting: `${ME}: no source attribution available from GA4, CallRail, or config`,
-      notes: ME,
-      dataSource: "Manual entry needed",
-    });
   }
 
   // Trim sources to exactly top 2 (QSSB requirement)
@@ -2168,24 +2145,9 @@ function sortByBusinessOrder(priorities: PriorityRow[]): void {
   priorities.forEach((p, i) => { p.priority = i + 1; });
 }
 
-/** Monthly content credits per client — mirrors CLIENT_CREDIT_MAP in routes.ts.
- *  Used to apply a realistic quarterly capacity cap to content-type initiatives. */
-const GENERATOR_CREDIT_MAP: Record<string, number> = {
-  "anchored tides": 4,
-  "bliss recovery": 8,
-  "heartland healing": 5,
-  "sol women": 5,
-  "sol womens": 5,
-  "williamsburg house": 3,
-  "horseshoe ridge": 4,
-  "iris healing": 5,
-};
-
-function getMonthlyCredits(clientName: string): number {
-  const lower = clientName.toLowerCase();
-  return Object.entries(GENERATOR_CREDIT_MAP).find(([k]) => lower.includes(k))?.[1] ?? 5;
-}
-
+/** generateSection6 — content credit cap is enforced against `monthlyCredits` (passed from
+ *  routes.ts CLIENT_CREDIT_MAP, the canonical source per data-handling-rules skill).
+ *  Default of 5 applies only when the client is unknown. */
 function generateSection6(
   section1: Section1Goals,
   section2: Section2Conversions,
@@ -2198,7 +2160,8 @@ function generateSection6(
   hypothesis?: string,
   auditNotes?: string,
   monthlyCredits: number = 5,
-  strategyBankEntries: Array<{ service: string; description: string }> = []
+  strategyBankEntries: Array<{ service: string; description: string }> = [],
+  strategyBankFetchFailed: boolean = false
 ): Section6Priorities {
   const priorities: PriorityRow[] = [];
   const completedLower = completedWork.map(w => w.toLowerCase());
@@ -2414,53 +2377,47 @@ function generateSection6(
   const auditMissing = !auditNotes?.trim();
 
   // Cross-sell / upsell preview from Strategy Bank.
-  // Match bank entries against the current account snapshot signals.
+  // ONLY emits items where at least one account-condition signal confirms relevance.
+  // Generic keyword matches without a matching account condition are excluded.
   const crossSellPreview: CrossSellPreviewItem[] = [];
   if (strategyBankEntries.length > 0) {
-    const UPSELL_SIGNALS = [
-      "paid media", "paid retargeting", "retargeting", "cro", "conversion rate",
-      "landing page build", "review generation", "gbp expansion", "call tracking setup",
-      "link building", "reputation management", "live chat", "video", "email marketing",
-      "pr campaign", "social media", "display ads", "programmatic",
-    ];
-    const CROSS_SELL_SIGNALS = [
-      "technical sprint", "technical cleanup", "core web vitals", "schema markup",
-      "page speed", "local seo", "local expansion", "content expansion", "dev support",
-    ];
-
     const hasTrackingGap = hasTrackingGaps(section2);
     const hasTierIssues = section5.tier <= 2;
     const hasLocalOpportunity = section4.services.some(s => s.service === "Primary Location");
+    const hasHighErrorCount = tierInput.errors4xx5xx > 10;
 
     for (const entry of strategyBankEntries) {
       if (crossSellPreview.length >= 3) break;
       const combined = `${entry.service} ${entry.description}`.toLowerCase();
-      const isUpsell = UPSELL_SIGNALS.some(sig => combined.includes(sig));
-      const isCrossSell = CROSS_SELL_SIGNALS.some(sig => combined.includes(sig));
 
-      if (!isUpsell && !isCrossSell) continue;
-
-      // Match relevance to account snapshot
+      // Build a specific, condition-backed relevance string.
+      // If no account condition fires, the entry is skipped — no generic fallback allowed.
       let relevance = "";
-      if (isUpsell && combined.includes("call tracking") && hasTrackingGap) {
-        relevance = `Attribution gaps in Section 2 suggest call tracking setup is not complete — ${entry.description.slice(0, 100)}.`;
-      } else if (isCrossSell && combined.includes("technical") && hasTierIssues) {
-        relevance = `Tier ${section5.tier} site health diagnosis aligns with technical sprint opportunity — ${entry.description.slice(0, 100)}.`;
-      } else if (combined.includes("local") && hasLocalOpportunity) {
-        relevance = `Site has a configured location presence — local SEO expansion aligns with current setup.`;
-      } else if (isUpsell) {
-        relevance = `${entry.description.slice(0, 120)} — assess fit against current account performance trajectory.`;
-      } else {
-        relevance = `${entry.description.slice(0, 120)} — may complement current quarterly priorities.`;
-      }
+      let suggestedCategory: "upsell" | "cross-sell" = "cross-sell";
 
+      if ((combined.includes("call tracking") || combined.includes("attribution")) && hasTrackingGap) {
+        relevance = `Section 2 conversion data is partially inferred due to attribution gaps — call tracking setup would directly close this measurement blind spot.`;
+        suggestedCategory = "upsell";
+      } else if ((combined.includes("technical") || combined.includes("core web vitals") || combined.includes("page speed") || combined.includes("schema")) && hasTierIssues) {
+        relevance = `Tier ${section5.tier} site health diagnosis indicates unresolved technical drag — a dedicated technical sprint would address crawl efficiency and page-quality issues affecting conversion pages.`;
+        suggestedCategory = "cross-sell";
+      } else if ((combined.includes("technical") || combined.includes("404") || combined.includes("redirect")) && hasHighErrorCount) {
+        relevance = `${tierInput.errors4xx5xx} error pages detected in site crawl — technical remediation sprint aligns directly with identified structural issues.`;
+        suggestedCategory = "cross-sell";
+      } else if ((combined.includes("local seo") || combined.includes("local expansion") || combined.includes("gbp")) && hasLocalOpportunity) {
+        relevance = `Site has a configured location presence with local organic potential — local SEO expansion would compound existing geographic authority.`;
+        suggestedCategory = "cross-sell";
+      } else if ((combined.includes("cro") || combined.includes("conversion rate") || combined.includes("landing page")) && hasTrackingGap) {
+        relevance = `With conversion tracking gaps in Section 2, CRO-level improvements to landing pages could have an outsized impact once measurement is fully instrumented.`;
+        suggestedCategory = "upsell";
+      } else if ((combined.includes("paid media") || combined.includes("retargeting") || combined.includes("display ads")) && !hasTrackingGap && section5.tier >= 3) {
+        relevance = `Site structure is at Tier ${section5.tier} with established organic foundations — paid media amplification could accelerate lead volume while organic compounds.`;
+        suggestedCategory = "upsell";
+      }
+      // No generic fallback: if none of the above conditions matched, skip this entry
       if (!relevance) continue;
 
-      crossSellPreview.push({
-        opportunity: entry.service,
-        relevance,
-        suggestedCategory: isUpsell ? "upsell" : "cross-sell",
-      });
+      crossSellPreview.push({ opportunity: entry.service, relevance, suggestedCategory });
     }
   }
 
@@ -2468,6 +2425,7 @@ function generateSection6(
     priorities: cappedPriorities.slice(0, 7),
     crossSellPreview: crossSellPreview.length > 0 ? crossSellPreview : undefined,
     auditMissing: auditMissing || undefined,
+    strategyBankFetchFailed: strategyBankFetchFailed || undefined,
   };
 }
 

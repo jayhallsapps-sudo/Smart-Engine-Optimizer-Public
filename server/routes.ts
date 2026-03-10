@@ -1456,6 +1456,21 @@ export async function registerRoutes(
     }
 
     try {
+      // Resolve monthly content credits from canonical CLIENT_CREDIT_MAP
+      // (source of truth per data-handling-rules skill — same map used by NSM dashboard).
+      const QBR_CLIENT_CREDIT_MAP: Record<string, number> = {
+        "anchored tides": 4,
+        "bliss recovery": 8,
+        "heartland healing": 5,
+        "sol women": 5,
+        "williamsburg house": 3,
+        "horseshoe ridge": 4,
+        "iris healing": 5,
+      };
+      const clientForCredits = await import("./storage").then(m => m.storage.getClient(Number(clientId)));
+      const clientNameLower = (clientForCredits?.name ?? "").toLowerCase();
+      const resolvedMonthlyCredits = Object.entries(QBR_CLIENT_CREDIT_MAP).find(([k]) => clientNameLower.includes(k))?.[1] ?? 5;
+
       const reportData = await generateQbrPrepReport({
         clientId: Number(clientId),
         generationDate: generationDate ?? new Date().toISOString().split("T")[0],
@@ -1465,6 +1480,7 @@ export async function registerRoutes(
         clientNotes: clientNotesVal,
         forwardLooking: true,
         gapAnswers,
+        monthlyCredits: resolvedMonthlyCredits,
       });
       if (gapAnswers?.length && gapSessionId) {
         storage.updateGapSession(Number(gapSessionId), { answerUsage: getAnswerUsageMap(gapAnswers) }).catch(() => {});

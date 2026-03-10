@@ -118,6 +118,7 @@ export interface Section6Priorities {
   priorities: PriorityRow[];
   crossSellPreview?: CrossSellPreviewItem[];
   auditMissing?: boolean;
+  strategyBankFetchFailed?: boolean;
 }
 
 export interface TrackingRow {

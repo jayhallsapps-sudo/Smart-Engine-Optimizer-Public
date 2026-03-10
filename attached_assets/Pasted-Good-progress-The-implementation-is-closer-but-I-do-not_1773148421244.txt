@@ -1,0 +1,122 @@
+Good progress. The implementation is closer, but I do not want to mark this fully complete yet. Please do one final hardening pass so the implementation matches the actual requirements, not just the UI.
+
+There are 5 issues to fix.
+
+1. AUDIT INTAKE MUST BECOME A REAL GATE
+
+Current behavior is advisory only:
+- Section 6 still generates when audit notes are blank
+- Save/export/PDF still work
+- The amber warning is informational only
+
+Required change:
+- If auditNotes is empty or whitespace-only, Section 6 must not be treated as finalized
+- Disable Save / Export / PDF actions while auditMissing is true
+- Show a clear inline message explaining that a recent audit screenshot or short audit summary is required before finalizing quarterly priorities
+- Keep previewing earlier sections if needed, but the report cannot be finalized/exported with auditMissing = true
+
+Acceptable implementation options:
+A. Frontend gate only:
+- disable save/export/download buttons when reportData.section6Priorities.auditMissing === true
+
+B. Stronger option:
+- also prevent generation finalization server-side by returning a validation state when Section 6 requires audit input
+
+I prefer both:
+- frontend disabled buttons
+- server-side validation guard
+
+2. CONTENT CREDIT CAPACITY MUST USE THE REAL SOURCE OF TRUTH
+
+Current behavior uses a hardcoded GENERATOR_CREDIT_MAP based on client-name substring matches.
+That does not satisfy the requirement to use Skill.md / existing project logic as the source of truth.
+
+Required change:
+- Remove the hardcoded client-name map as the primary source
+- Pull content credit capacity from the real existing source already defined in the project
+- If there is a fallback, make it explicit and secondary, not primary
+- Document exactly where capacity now comes from
+
+Also:
+- keep capacity as a real decision constraint on Section 6 priorities
+- do not allow unrealistic content-heavy roadmaps relative to true capacity
+
+3. FIX “TOP CONVERTING SOURCES” SO IT ACTUALLY REPRESENTS SOURCES
+
+Current audit says the sources table can be built from GA4 page-type buckets.
+That is not cleanly compliant with the idea of “sources.”
+
+Required change:
+- Make the Top Converting Sources table represent actual source categories, not page-type groupings disguised as sources
+- Use the strongest actual source attribution available
+- Examples may include:
+  - GA4-attributed conversion source categories
+  - call tracking source groupings
+  - organic-assisted source behavior
+  - direct / referral / paid only if actually supported by the data
+- If true source attribution is weak, keep the table honest and caveated rather than faking precision
+
+Also confirm:
+- the table still remains capped at 2 rows
+- the rows are actual sources, not page classes
+
+4. HARDEN STRATEGY BANK MATCHING AND FAILURE HANDLING
+
+Current behavior:
+- fetch failure silently returns empty array
+- preview is skipped with no user indication
+- relevance matching is mostly keyword-bucket driven
+
+Required change:
+- If Strategy Bank fetch fails, surface a clear non-blocking message to the AM such as:
+  “Strategy Bank opportunities could not be checked right now.”
+- Distinguish between:
+  A. no strong opportunities found
+  B. Strategy Bank fetch failed
+- Keep the max preview at 3 items
+- Tighten relevance filtering so generic keyword matches do not create weak suggestions
+- Prefer account-condition-backed matches over generic keyword matches
+
+5. MAKE AM CONFIRMATION ACTUALLY REQUIRED WHEN PREVIEW ITEMS EXIST
+
+Current behavior:
+- preview items appear
+- AM can classify them
+- Apply to Report writes confirmed items
+- but the AM can also ignore the panel and still move on/export
+
+Required change:
+- If crossSellPreview exists and contains 1 or more items, require the AM to either:
+  - classify and apply, or
+  - explicitly dismiss / mark all as not relevant
+- Do not allow final export/PDF until that preview state has been resolved
+- The goal is not to force cross-sells into the report
+- The goal is to force an AM decision
+
+6. EDGE CASE CLEANUP
+
+Please fix or clarify these edge cases:
+- If Top Converting Pages has zero candidates, do not claim the table is “exactly 2 rows” unless you truly make it 2 rows
+- If you keep placeholder rows, decide on one of these:
+  A. always render 2 rows, with placeholders if needed
+  B. explicitly document that low-data edge cases may render fewer than 2 rows
+- Whichever route you choose, make it consistent across pages / patterns / sources
+
+TESTING / ACCEPTANCE CRITERIA FOR THIS FINAL PASS
+
+1. Report cannot be finalized/exported while auditMissing is true
+2. Report cannot be finalized/exported while unresolved crossSellPreview items still need AM classification
+3. Content credit capacity now comes from the real project source of truth, not the hardcoded client-name map
+4. Top Converting Sources now represent real sources, not page-type buckets
+5. Strategy Bank fetch failures are surfaced to the AM instead of silently disappearing
+6. Section 2 row behavior is consistent and truthfully documented for edge cases
+7. PDF export still works end to end after these gates are added
+
+After implementation, give me:
+- files changed
+- exact gating logic for auditMissing
+- exact gating logic for unresolved crossSellPreview items
+- exact content credit source of truth now being used
+- exact Top Converting Sources ranking logic after the fix
+- exact Strategy Bank failure behavior
+- confirmation that PDF export still works

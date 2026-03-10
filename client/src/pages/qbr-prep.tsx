@@ -594,106 +594,146 @@ export default function QbrPrepPage() {
           )}
         </div>
 
-        {/* Audit missing warning */}
-        {reportData?.section6Priorities?.auditMissing && (
-          <div className="px-4 pt-3 pb-0">
-            <div className="rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 p-3 text-[11px] text-amber-800 dark:text-amber-300 space-y-1" data-testid="audit-missing-warning">
-              <div className="flex items-center gap-1.5 font-semibold">
-                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                Audit input not provided
-              </div>
-              <p>Before finalizing quarterly priorities, provide a recent site audit screenshot or a short audit summary so the strategy can account for technical blockers, internal linking gaps, page quality issues, or structural weaknesses.</p>
-              <p className="text-[10px] opacity-75">Enter audit notes in the "Priority Checks / Audit Notes" field above, then regenerate.</p>
-            </div>
-          </div>
-        )}
+        {/* Derived gate state */}
+        {(() => {
+          const auditMissing = reportData?.section6Priorities?.auditMissing === true;
+          const crossSellPreview: any[] = reportData?.section6Priorities?.crossSellPreview ?? [];
+          const crossSellPending = crossSellPreview.length > 0 && edits["s6_crossSells_confirmed"] === undefined;
+          const strategyBankFailed = reportData?.section6Priorities?.strategyBankFetchFailed === true;
+          const canExport = !!reportData && !auditMissing && !crossSellPending;
 
-        {/* Cross-sell / upsell preview & AM confirmation */}
-        {reportData?.section6Priorities?.crossSellPreview?.length > 0 && (
-          <div className="px-4 pt-3 pb-0">
-            <div className="rounded-md border border-blue-200 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-800 p-3 space-y-3" data-testid="crosssell-preview-panel">
-              <div className="text-[11px] font-semibold text-blue-900 dark:text-blue-200">
-                Potential Opportunities — Classify Before Exporting
-              </div>
-              <p className="text-[10px] text-blue-800 dark:text-blue-300">
-                The SEO Strategy Bank flagged these items as potentially relevant to this account. Classify each before the report is finalized.
-              </p>
-              {(reportData.section6Priorities.crossSellPreview as any[]).map((item: any, i: number) => (
-                <div key={i} className="space-y-1" data-testid={`crosssell-item-${i}`}>
-                  <div className="text-[11px] font-medium text-blue-900 dark:text-blue-100">{item.opportunity}</div>
-                  <div className="text-[10px] text-blue-700 dark:text-blue-300">{item.relevance}</div>
-                  <Select
-                    value={crossSellClassifications[i] ?? item.suggestedCategory}
-                    onValueChange={(v) => setCrossSellClassifications(prev => ({ ...prev, [i]: v }))}
-                  >
-                    <SelectTrigger className="h-7 text-[11px]" data-testid={`select-crosssell-${i}`}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="in-scope SEO work">In-scope SEO work</SelectItem>
-                      <SelectItem value="cross-sell">Cross-sell</SelectItem>
-                      <SelectItem value="upsell">Upsell</SelectItem>
-                      <SelectItem value="not relevant">Not relevant</SelectItem>
-                    </SelectContent>
-                  </Select>
+          return (
+            <>
+              {/* Audit gate — blocks export until resolved */}
+              {auditMissing && (
+                <div className="px-4 pt-3 pb-0">
+                  <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 p-3 text-[11px] text-amber-800 dark:text-amber-300 space-y-1.5" data-testid="audit-missing-warning">
+                    <div className="flex items-center gap-1.5 font-semibold">
+                      <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                      Audit input required — export disabled
+                    </div>
+                    <p>Section 6 quarterly priorities cannot be finalized without a recent site audit. Provide a short audit summary or screenshot notes covering: technical blockers, internal linking gaps, page quality issues, or redirect problems.</p>
+                    <p className="font-medium">Enter audit notes in "Priority Checks / Audit Notes" above, then regenerate.</p>
+                  </div>
                 </div>
-              ))}
-              <Button
-                size="sm"
-                className="w-full text-xs h-7"
-                data-testid="button-apply-crosssell"
-                onClick={() => {
-                  const preview = reportData.section6Priorities.crossSellPreview as any[];
-                  const confirmed = preview
-                    .map((item: any, i: number) => ({
-                      recommendation: item.opportunity,
-                      type: crossSellClassifications[i] ?? item.suggestedCategory,
-                      relevance: item.relevance,
-                    }))
-                    .filter((c: any) => c.type === "cross-sell" || c.type === "upsell");
-                  setEdits(prev => ({ ...prev, s6_crossSells_confirmed: JSON.stringify(confirmed) }));
-                }}
-              >
-                Apply Confirmed Opportunities to Report
-              </Button>
-            </div>
-          </div>
-        )}
+              )}
 
-        {reportData && (
-          <div className="p-4 border-t space-y-2">
-            <Button
-              variant="outline"
-              className="w-full text-xs"
-              onClick={downloadDocx}
-              disabled={docxDownloading}
-              data-testid="button-download-docx"
-            >
-              {docxDownloading ? <Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> : <Download className="w-3 h-3 mr-1.5" />}
-              Download DOCX
-            </Button>
-            <Button
-              variant="outline"
-              className="w-full text-xs"
-              onClick={downloadPdf}
-              disabled={pdfDownloading}
-              data-testid="button-download-pdf"
-            >
-              {pdfDownloading ? <Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> : <Download className="w-3 h-3 mr-1.5" />}
-              Download PDF
-            </Button>
-            <Button
-              variant="outline"
-              className="w-full text-xs"
-              onClick={() => uploadMutation.mutate()}
-              disabled={uploadMutation.isPending}
-              data-testid="button-upload-to-drive"
-            >
-              {uploadMutation.isPending ? <Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> : <CloudUpload className="w-3 h-3 mr-1.5" />}
-              Save to Google Drive
-            </Button>
-          </div>
-        )}
+              {/* Strategy Bank fetch failure — non-blocking, informational */}
+              {strategyBankFailed && (
+                <div className="px-4 pt-3 pb-0">
+                  <div className="rounded-md border border-slate-200 bg-slate-50 dark:bg-slate-800/40 dark:border-slate-700 p-2.5 text-[11px] text-slate-600 dark:text-slate-400 flex items-start gap-1.5" data-testid="strategy-bank-failed-warning">
+                    <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5 text-slate-400" />
+                    <span>Strategy Bank opportunities could not be checked right now. Cross-sell preview is unavailable for this report.</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Cross-sell / upsell preview — blocks export until AM classifies */}
+              {crossSellPreview.length > 0 && (
+                <div className="px-4 pt-3 pb-0">
+                  <div className={`rounded-md border p-3 space-y-3 ${crossSellPending ? "border-blue-300 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-700" : "border-emerald-200 bg-emerald-50 dark:bg-emerald-950/30 dark:border-emerald-700"}`} data-testid="crosssell-preview-panel">
+                    <div className={`text-[11px] font-semibold flex items-center gap-1.5 ${crossSellPending ? "text-blue-900 dark:text-blue-200" : "text-emerald-800 dark:text-emerald-200"}`}>
+                      {crossSellPending
+                        ? <><AlertTriangle className="w-3.5 h-3.5 shrink-0" /> Classify opportunities before exporting</>
+                        : <><CheckCircle2 className="w-3.5 h-3.5 shrink-0" /> Opportunities classified</>
+                      }
+                    </div>
+                    {crossSellPending && (
+                      <p className="text-[10px] text-blue-800 dark:text-blue-300">
+                        The SEO Strategy Bank flagged these account-matched opportunities. Classify each one — even if all are "not relevant" — then click Apply to unlock export.
+                      </p>
+                    )}
+                    {crossSellPreview.map((item: any, i: number) => (
+                      <div key={i} className="space-y-1" data-testid={`crosssell-item-${i}`}>
+                        <div className="text-[11px] font-medium text-blue-900 dark:text-blue-100">{item.opportunity}</div>
+                        <div className="text-[10px] text-blue-700 dark:text-blue-300">{item.relevance}</div>
+                        <Select
+                          value={crossSellClassifications[i] ?? item.suggestedCategory}
+                          onValueChange={(v) => setCrossSellClassifications(prev => ({ ...prev, [i]: v }))}
+                        >
+                          <SelectTrigger className="h-7 text-[11px]" data-testid={`select-crosssell-${i}`}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="in-scope SEO work">In-scope SEO work</SelectItem>
+                            <SelectItem value="cross-sell">Cross-sell</SelectItem>
+                            <SelectItem value="upsell">Upsell</SelectItem>
+                            <SelectItem value="not relevant">Not relevant</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ))}
+                    {crossSellPending && (
+                      <Button
+                        size="sm"
+                        className="w-full text-xs h-7"
+                        data-testid="button-apply-crosssell"
+                        onClick={() => {
+                          const confirmed = crossSellPreview
+                            .map((item: any, i: number) => ({
+                              recommendation: item.opportunity,
+                              type: crossSellClassifications[i] ?? item.suggestedCategory,
+                              relevance: item.relevance,
+                            }))
+                            .filter((c: any) => c.type === "cross-sell" || c.type === "upsell");
+                          setEdits(prev => ({ ...prev, s6_crossSells_confirmed: JSON.stringify(confirmed) }));
+                        }}
+                      >
+                        Apply Classification &amp; Unlock Export
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Export / save buttons — all gated on canExport */}
+              {reportData && (
+                <div className="p-4 border-t space-y-2">
+                  {!canExport && (
+                    <p className="text-[10px] text-muted-foreground flex items-start gap-1" data-testid="text-export-blocked">
+                      <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5 text-amber-500" />
+                      {auditMissing && crossSellPending
+                        ? "Provide audit notes and classify Strategy Bank opportunities to unlock export."
+                        : auditMissing
+                          ? "Provide audit notes and regenerate to unlock export."
+                          : "Classify Strategy Bank opportunities to unlock export."}
+                    </p>
+                  )}
+                  <Button
+                    variant="outline"
+                    className="w-full text-xs"
+                    onClick={downloadDocx}
+                    disabled={docxDownloading || !canExport}
+                    data-testid="button-download-docx"
+                  >
+                    {docxDownloading ? <Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> : <Download className="w-3 h-3 mr-1.5" />}
+                    Download DOCX
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="w-full text-xs"
+                    onClick={downloadPdf}
+                    disabled={pdfDownloading || !canExport}
+                    data-testid="button-download-pdf"
+                  >
+                    {pdfDownloading ? <Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> : <Download className="w-3 h-3 mr-1.5" />}
+                    Download PDF
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="w-full text-xs"
+                    onClick={() => uploadMutation.mutate()}
+                    disabled={uploadMutation.isPending || !canExport}
+                    data-testid="button-upload-to-drive"
+                  >
+                    {uploadMutation.isPending ? <Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> : <CloudUpload className="w-3 h-3 mr-1.5" />}
+                    Save to Google Drive
+                  </Button>
+                </div>
+              )}
+            </>
+          );
+        })()}
       </aside>
 
       <div className="flex-1 min-w-0 overflow-auto">

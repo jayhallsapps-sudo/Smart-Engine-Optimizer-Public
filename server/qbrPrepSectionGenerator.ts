@@ -1003,22 +1003,25 @@ function buildPrimaryGoalReason(p: {
     parts.push(`Last quarter goal: ${prevMvpGoal}.`);
   }
 
-  // ── Sentence 2: This quarter target + pacing ──────────────────────────────
+  // ── Sentence 2: This quarter pacing and what it signals ─────────────────
   if (nsmMvpGoalNum !== null && nsmMvpActNum !== null) {
     const pacing = nsmMvpActNum / nsmMvpGoalNum;
-    const shiftNote = admitsShift !== "—" ? ` (${admitsShift} vs last quarter)` : "";
-    const pacingDesc = pacing >= 0.9 ? "on pace" : pacing >= 0.7 ? "below pace" : "behind pace";
-    parts.push(`Target: ${fmtNum(nsmMvpGoalNum)} ${kpiLower}${shiftNote} — ${pacingDesc} at ${nsmMvpActNum}/${nsmMvpGoalNum} via ${admitsSource}.`);
+    const pacingPct = Math.round(pacing * 100);
+    const shiftNote = admitsShift !== "—" && admitsShift !== "Par" ? ` (${admitsShift} vs last quarter)` : admitsShift === "Par" ? " (Par vs last quarter)" : "";
+    if (pacing >= 0.9) {
+      parts.push(`Quarter-to-date: ${nsmMvpActNum} of ${fmtNum(nsmMvpGoalNum)} ${kpiLower}${shiftNote} — on-pace at ${pacingPct}%, indicating the prior-quarter goal level remains achievable and the trajectory supports the current target.`);
+    } else if (pacing >= 0.7) {
+      parts.push(`Quarter-to-date: ${nsmMvpActNum} of ${fmtNum(nsmMvpGoalNum)} ${kpiLower}${shiftNote} — tracking at ${pacingPct}% of goal, a shortfall that is more consistent with attribution or conversion-path constraints than a structural collapse in demand.`);
+    } else {
+      parts.push(`Quarter-to-date: ${nsmMvpActNum} of ${fmtNum(nsmMvpGoalNum)} ${kpiLower}${shiftNote} — at ${pacingPct}% of goal, the gap is material enough that holding the prior target unchanged would set unrealistic expectations without meaningful corrective evidence.`);
+    }
   } else if (nsmMvpGoalNum !== null) {
-    const shiftNote = admitsShift !== "—" ? ` (${admitsShift} vs last quarter)` : "";
-    parts.push(`Target: ${fmtNum(nsmMvpGoalNum)} ${kpiLower}${shiftNote} via ${admitsSource}. Actuals pending.`);
+    const shiftNote = admitsShift !== "—" && admitsShift !== "Par" ? ` (${admitsShift} vs last quarter)` : admitsShift === "Par" ? " (Par vs last quarter)" : "";
+    parts.push(`Quarter-to-date: no tracked ${kpiLower} activity has been recorded yet this period${shiftNote}. The prior-quarter benchmark is the most reliable anchor for setting the current-quarter projection until in-quarter signal accumulates.`);
   } else if (nsmData) {
-    parts.push(`${primaryKpiLabel} tracked via ${admitsSource}. Goal pending NSM entry.`);
+    parts.push(`No goal has been entered in the NSM tracker for this period — the projection is directional until a confirmed target is logged.`);
   } else {
-    const sourceNote = callTrackingProvider
-      ? `${callTrackingProvider} configured as tracking source.`
-      : "Connect a call tracking source to begin tracking.";
-    parts.push(`${primaryKpiLabel} is the primary KPI. ${sourceNote}`);
+    parts.push(`No NSM goal or tracking data is available for this period — the projection below is a planning estimate based on prior context.`);
   }
 
   // ── Sentence 3: Shift classification rationale ────────────────────────────
@@ -1036,7 +1039,7 @@ function buildPrimaryGoalReason(p: {
       parts.push(`Goal held at par despite softer pacing at ${pacingPct}% — the performance gap appears tied to conversion path and tracking quality rather than a collapse in underlying demand, so the target is maintained while those constraints are addressed.`);
     }
   } else if (shiftClass === "PAR" && nsmMvpGoalNum !== null) {
-    parts.push(`Goal held at par from prior quarter — actuals not yet recorded for this period, so the prior-quarter goal serves as the planning anchor until in-quarter pacing data becomes available.`);
+    parts.push(`Goal held at par from prior quarter — no quarter-to-date performance signal has emerged yet, so the prior-quarter goal is maintained as the planning anchor. It will be revised once tracked activity provides evidence for a directional adjustment.`);
   } else if (shiftClass === "UP" && nsmMvpGoalNum !== null && nsmMvpActNum !== null) {
     const pacing = nsmMvpActNum / nsmMvpGoalNum;
     if (pacing >= 0.9) {
@@ -1052,7 +1055,7 @@ function buildPrimaryGoalReason(p: {
 
   return parts.length > 0
     ? parts.join(" ")
-    : `${primaryKpiLabel} is the primary strategic KPI, measured via ${admitsSource}.`;
+    : `No prior-quarter data is available to anchor the projection — the goal represents a planning estimate that should be updated as in-quarter tracking data is confirmed.`;
 }
 
 function generateSection1(nsmData: any, ga4Funnel: any, quarter: QuarterInfo, client: Client, callTrackingSources: Array<{ source: string; calls: number }> = [], prevNsmData: any = null, prevQtrAssessment?: string, amThoughts?: string, clientNotes?: string, clientSentiment?: string): Section1Goals {
@@ -1117,12 +1120,15 @@ function generateSection1(nsmData: any, ga4Funnel: any, quarter: QuarterInfo, cl
           ? `${primaryKpiLabel} tracking at ${nsmMvpActNum}/${nsmMvpGoalNum} (${nsmData.mvpPercent !== "—" ? nsmData.mvpPercent : "partial"}). Maintaining goal while improving conversion paths.`
           : `${primaryKpiLabel} behind pace (${nsmMvpActNum}/${nsmMvpGoalNum}). Modest adjustment reflects realistic expectations while improving admissions path quality.`;
     } else {
-      // Only goal available (actual not yet reported)
+      // Only goal available (no QTD actuals yet)
       admitsGoalDisplay = `${fmtNum(nsmMvpGoalNum!)} ${kpiLower} (Q target)`;
-      if (admitsShift === "—") admitsShift = "—";
-      admitsReason = `${primaryKpiLabel} Q target is ${fmtNum(nsmMvpGoalNum!)} — tracking has not yet been recorded for this quarter. ${callTrackingProvider ? `${callTrackingProvider} is the measurement source.` : "Connect a call tracking source to begin tracking actuals."}`;
+      if (admitsShift === "—") admitsShift = "Par";
+      admitsReason = `No tracked ${kpiLower} activity has been recorded quarter-to-date. Goal held at par from prior quarter — the prior benchmark is maintained as the planning anchor until in-quarter activity confirms a directional adjustment.`;
     }
   }
+
+  // Final safety: goalShift must never be "—"
+  if (admitsShift === "—") admitsShift = "Par";
 
   console.log(`[Section1] Primary Goal=${primaryKpiLabel}, goal=${admitsGoalDisplay}, source=${admitsSource}, shift=${admitsShift}`);
 
@@ -1154,16 +1160,40 @@ function generateSection1(nsmData: any, ga4Funnel: any, quarter: QuarterInfo, cl
   // ── Secondary Goal: Calls ──────────────────────────────────────────────
   const callsSource = callTrackingProvider ?? ME;
   let callsGoal: string = ME;
-  let callsShift = "—";
+  let callsShift = "Par";
   let callsReason = callTrackingProvider
-    ? `Qualified organic calls tracked via ${callTrackingProvider}. Calls serve as the primary operational proxy for ${primaryKpiLabel.toLowerCase()} until a direct tracking source is confirmed.`
+    ? `No quarter-to-date call volume has been recorded yet. Q2 call goal is held at par from the prior quarter — the prior-quarter benchmark remains the most reliable planning anchor until tracked volume accumulates this period.`
     : `${ME}: Call tracking provider not configured`;
 
   if (callTrackingSources.length > 0) {
     const totalCalls = callTrackingSources.reduce((s, r) => s + r.calls, 0);
     callsGoal = `${fmtNum(totalCalls)} tracked calls (QTD)`;
-    callsReason = `${fmtNum(totalCalls)} organic calls tracked via ${callTrackingProvider ?? "call tracking"} this quarter. Calls are the primary measurable operational proxy for ${primaryKpiLabel.toLowerCase()}.`;
+
+    // Derive call shift from prior NSM sessions pacing as a proxy, or from primary goal pacing
+    const prevCallsGoalRaw = (prevNsmData as any)?.callsGoal ?? null;
+    if (prevCallsGoalRaw && prevCallsGoalRaw !== "—") {
+      callsShift = computeGoalShiftPct(String(totalCalls), String(prevCallsGoalRaw));
+    } else if (nsmMvpGoalNum !== null && nsmMvpActNum !== null) {
+      const pacing = nsmMvpActNum / nsmMvpGoalNum;
+      callsShift = pacing >= 0.9 ? "+5%" : pacing >= 0.7 ? "Par" : "-5%";
+    }
+
+    const callsPacingDesc =
+      callsShift.startsWith("+") ? "tracking ahead of the prior benchmark" :
+      callsShift === "Par" ? "tracking at a level consistent with the prior benchmark" :
+      "tracking below the prior benchmark";
+
+    if (callsShift.startsWith("+")) {
+      callsReason = `Quarter-to-date: ${fmtNum(totalCalls)} inbound calls recorded — ${callsPacingDesc}. The volume trend supports holding or modestly raising the call target, as the current run rate indicates prior-quarter performance was not a ceiling.`;
+    } else if (callsShift === "Par") {
+      callsReason = `Quarter-to-date: ${fmtNum(totalCalls)} inbound calls recorded — ${callsPacingDesc}. Call volume does not yet provide a strong signal for expansion or reduction, so Q2 is being held at par while conversion-path improvements are evaluated.`;
+    } else {
+      callsReason = `Quarter-to-date: ${fmtNum(totalCalls)} inbound calls recorded — ${callsPacingDesc}. The shortfall appears more consistent with attribution or conversion-path friction than a fundamental drop in inbound demand, so Q2 is adjusted modestly rather than held flat at an unrealistic prior target.`;
+    }
   }
+
+  // Final safety: goalShift must never be "—"
+  if (callsShift === "—") callsShift = "Par";
 
   console.log(`[Section1] Secondary Goal=Calls, source=${callsSource}, shift=${callsShift}`);
 
@@ -1213,20 +1243,24 @@ function generateSection1(nsmData: any, ga4Funnel: any, quarter: QuarterInfo, cl
       }
     } else if (sessGoal) {
       sessRecommended = fmtNum(parseInt(String(sessGoal).replace(/[^0-9]/g, ""), 10));
-      sessReason = `Sessions Q target is ${sessRecommended}. Actuals not yet available for this quarter.`;
+      if (sessShift === "—") sessShift = "Par";
+      sessReason = `Quarter-to-date: no session data has been recorded yet this period. Goal held at par from the prior quarter — the prior-quarter organic traffic benchmark is maintained as the planning anchor until in-quarter volume provides a directional signal.`;
     }
   } else if (ga4Funnel) {
     sessRecommended = `${fmtNum(ga4Funnel.sessions)} organic sessions (QTD baseline)`;
-    sessReason = `${fmtNum(ga4Funnel.sessions)} organic sessions recorded QTD via GA4. Sessions are the key top-of-funnel indicator reflecting organic traffic volume and content reach. Goal target to be validated against prior quarter baseline.`;
+    if (sessShift === "—") sessShift = "Par";
+    sessReason = `Quarter-to-date: ${fmtNum(ga4Funnel.sessions)} organic sessions recorded. No prior-quarter NSM goal is available to compute a shift, so Q2 is held at par — the current run rate serves as the baseline for target-setting until a prior benchmark is confirmed.`;
   } else {
-    sessReason = `Organic sessions via GA4 and GSC are the primary top-of-funnel indicator, reflecting organic traffic volume and content reach driving admissions pipeline.`;
+    if (sessShift === "—") sessShift = "Par";
+    sessReason = `No session data or prior-quarter goal is available for this period. Q2 session goal is held at par — it should be updated once current-quarter organic traffic data is confirmed in the NSM tracker.`;
   }
 
   // Fallback reason when NSM data exists but session sub-fields are incomplete
   if (sessReason === ME) {
+    if (sessShift === "—") sessShift = "Par";
     sessReason = ga4Funnel
-      ? `${fmtNum(ga4Funnel.sessions)} organic sessions recorded QTD via GA4. Organic sessions are the top-of-funnel leading indicator for pipeline quality and content reach — higher organic traffic means more qualified admissions inquiries.`
-      : `Organic sessions via GA4 and GSC are the top-of-funnel leading indicator for pipeline quality. Increasing organic traffic directly drives more qualified admissions inquiries.`;
+      ? `Quarter-to-date: ${fmtNum(ga4Funnel.sessions)} organic sessions recorded. The available data does not yet provide a strong signal for raising or lowering the session target, so Q2 is held at par while content and technical improvements work through the ranking cycle.`
+      : `No session actuals or prior-quarter goal are available. Q2 is held at par as a conservative planning anchor — revise once current-quarter GSC and GA4 data confirms the organic traffic trajectory.`;
   }
 
   console.log(`[Section1] Tertiary Goal=Organic Sessions, target=${sessRecommended}, source=GA4 / GSC, shift=${sessShift}`);
@@ -1460,8 +1494,8 @@ export function generateSection2(
       pattern: "Care Access Pages",
       whyItMatters: "Direct contact, intake, and insurance-verification pages are the last digital step before a prospective client reaches the admissions team. Conversion friction on these pages costs admits directly.",
       evidence: hasGA4Signal
-        ? "GA4 conversion events confirm on-site form activity on admissions-path pages."
-        : `${callTrackingSource} landing-page data shows call volume attributable to admissions or VOB pages.`,
+        ? "High-confidence inference: Admissions-path pages show confirmed on-site conversion activity — this pattern suggests the account's strongest demand capture is concentrated at the point of direct intent, making friction reduction on these pages the highest-leverage conversion opportunity."
+        : `High-confidence inference: Call tracking data attributes inbound volume to admissions or VOB pages, suggesting users are reaching the direct intake path and converting via phone — a pattern that typically indicates strong admissions intent at the point of first digital contact.`,
     });
   }
 
@@ -1470,8 +1504,8 @@ export function generateSection2(
       pattern: "Insurance Verification Pathway",
       whyItMatters: "VOB pages are the clearest digital pre-admission signal — completing a benefits check substantially increases the probability of an intake conversation.",
       evidence: hasGA4Signal
-        ? "GA4 shows Verify Insurance page driving the largest share of on-site conversion events."
-        : `${callTrackingSource} data confirms call activity originating from the insurance verification page.`,
+        ? "High-confidence inference: The insurance verification page is generating the largest measurable on-site conversion signal, suggesting benefits-check completion is a primary pre-intake behaviour and that users reaching this page are in late-stage decision-making."
+        : `High-confidence inference: Call activity is originating from the insurance verification page, suggesting users who check benefits are converting to direct phone contact — a pattern that typically represents the strongest admissions-intent signal in the account.`,
     });
   }
 
@@ -1480,8 +1514,8 @@ export function generateSection2(
       pattern: "Service Page Conversion Capture",
       whyItMatters: "Core service pages (Detox, Residential, PHP/IOP) are the primary entry point for treatment-intent searches. Visitors landing here are actively evaluating fit — page quality and clear conversion paths determine whether they move toward admissions.",
       evidence: hasCallSignal
-        ? `${callTrackingSource} confirms service pages are driving qualified inbound calls.`
-        : "GA4 conversion data shows service page sessions converting at measurable rates.",
+        ? `Moderate-confidence inference: Service pages are generating inbound call volume, suggesting that treatment-intent searchers who land on these pages are converting to phone contact at a meaningful rate — indicating the pages are functioning as active demand-capture points rather than passive informational stops.`
+        : `Moderate-confidence inference: Service page sessions are associated with on-site conversion activity, suggesting that treatment-intent traffic landing on these pages is producing measurable admit-path actions — though page-level attribution should be verified to confirm the depth of that signal.`,
     });
   }
 
@@ -1490,8 +1524,8 @@ export function generateSection2(
       pattern: "Informational Assist to Conversion",
       whyItMatters: "Educational and resource content plays a supporting role in the patient decision journey — high-ranking informational pages build trust and often precede direct admit actions. Internal linking from these pages toward conversion pages amplifies their value.",
       evidence: hasCallSignal
-        ? `${callTrackingSource} shows informational pages generating pre-call engagement that converts to inbound contact.`
-        : "GA4 session data shows informational pages participating in the conversion path before admission-intent actions.",
+        ? `Moderate-confidence inference: Informational pages are appearing in the call conversion path, suggesting this content is playing an assist role in the admissions journey — users likely enter through educational content and convert via phone after building trust, making the internal linking from these pages to conversion pages a priority.`
+        : `Moderate-confidence inference: Informational pages are participating in the on-site conversion path, suggesting this content supports later admit-intent actions rather than converting directly — the pattern implies these pages carry pipeline value that would not be visible without multi-touch attribution.`,
     });
   }
 
@@ -1500,8 +1534,8 @@ export function generateSection2(
       pattern: "Homepage as Brand Verification Signal",
       whyItMatters: "Homepage conversion events or direct traffic through the homepage indicates strong brand recall or referral-driven behavior — users who already know the brand and are returning to take action.",
       evidence: hasGA4Signal
-        ? "GA4 shows homepage sessions contributing to conversion events — confirm these are admit-aligned actions."
-        : `${callTrackingSource} data shows inbound calls attributed to homepage sessions.`,
+        ? `Moderate-confidence inference: Homepage sessions are contributing to measurable on-site conversion activity, suggesting a portion of inbound traffic arrives with pre-existing intent — likely driven by brand recall, referrals, or prior exposure — rather than being first-touch organic visits.`
+        : `Moderate-confidence inference: Inbound calls are being attributed to homepage sessions, suggesting the homepage is functioning as a brand confirmation stop for users who already have intent — a pattern that indicates referral, direct, or returning-visitor behaviour is contributing meaningfully to call volume.`,
     });
   }
 
@@ -1510,14 +1544,14 @@ export function generateSection2(
     candidatePatterns.push({
       pattern: "High-Intent Organic Traffic Capture",
       whyItMatters: "Treatment-intent organic queries (e.g., detox near me, rehab programs, insurance-covered treatment) represent the strongest mid-funnel intent. Pages ranking for these terms need optimized conversion paths to close the gap between clicks and contacts.",
-      evidence: "GA4 event tracking is not yet confirmed on key pages — connect GA4 or call tracking to qualify conversion-driving pages.",
+      evidence: "Directional inference: Treatment-intent organic traffic is likely the strongest conversion-support pattern in this account because these queries sit closest to admission decision-making — however, page-level GA4 conversion verification is incomplete, so the full conversion contribution of this traffic remains inferred rather than confirmed.",
     });
   }
   if (candidatePatterns.length < 2) {
     candidatePatterns.push({
       pattern: "Tracking Gap as Conversion Floor",
       whyItMatters: "When conversion tracking is incomplete, high-value actions (form submits, call initiations, chat starts) go unattributed. This understates the true conversion rate and creates a systematic blind spot in reporting.",
-      evidence: "GA4 conversion events are not yet confirmed on key admissions-path pages — call tracking or GA4 setup is needed to qualify these pages.",
+      evidence: "Moderate-confidence inference: Tracking gaps appear to be suppressing visibility into true conversion behaviour — high-intent entry patterns are present but page-level event confirmation is incomplete, which means the reported conversion floor is likely understating actual admissions-intent activity.",
     });
   }
 
@@ -1535,16 +1569,28 @@ export function generateSection2(
   const PPC_KEYWORDS = /\bppc\b|\bpaid\b|\bcpc\b|\badwords\b|\bgoogle\s*ads\b|\bbing\s*ads\b/i;
   if (callSources.length > 0) {
     const totalCalls = callSources.reduce((s, r) => s + r.calls, 0);
-    for (const src of callSources.sort((a, b) => b.calls - a.calls).slice(0, 4)) {
+    const sortedSources = callSources.sort((a, b) => b.calls - a.calls);
+    const topSource = sortedSources[0];
+    for (const src of sortedSources.slice(0, 4)) {
       if (topConvertingSources.length >= 4) break;
       const pct = totalCalls > 0 ? Math.round(src.calls / totalCalls * 100) : 0;
       const isPPC = PPC_KEYWORDS.test(src.source);
+      const isDominant = src === topSource && pct >= 35;
+      const isSecondary = src !== topSource && pct >= 15;
+      let notes: string;
+      if (isPPC) {
+        notes = `Paid channel is contributing ${pct}% of all tracked calls — a share that warrants monitoring cost-per-contact relative to organic channels to ensure admissions-path efficiency is not being subsidised by spend that organic search should eventually displace.`;
+      } else if (isDominant) {
+        notes = `This source is generating a disproportionately large share of tracked call activity at ${pct}% — a concentration that suggests this channel is the primary driver of phone-based leads and should be treated as a protection priority rather than a passive background source.`;
+      } else if (isSecondary) {
+        notes = `This source is contributing a meaningful secondary share of tracked calls at ${pct}% — a level that indicates it plays a consistent assist role in total call volume, so any deterioration here would likely weaken overall call performance even if the dominant source remains stable.`;
+      } else {
+        notes = `This source accounts for ${pct}% of tracked calls — a smaller but non-trivial share that suggests it is supporting total call volume in a supplementary capacity. Monitor for trend changes rather than treating it as background noise.`;
+      }
       topConvertingSources.push({
         source: src.source,
         whatsConverting: `${fmtNum(src.calls)} inbound calls (${pct}% of all tracked calls)`,
-        notes: isPPC
-          ? "Paid channel — verify call quality and cost-per-contact with admissions team"
-          : "Organic / direct channel — confirm with admissions team that these are admission-qualified calls",
+        notes,
         dataSource: callTrackingSource,
       });
     }
@@ -1560,7 +1606,7 @@ export function generateSection2(
       topConvertingSources.push({
         source: "Organic / On-Site Conversions",
         whatsConverting: `${fmtNum(totalConversions)} GA4 conversion events across ${ga4WithConversions.length} landing page${ga4WithConversions.length !== 1 ? "s" : ""}`,
-        notes: "GA4 tracks form submissions and goal completions — source/medium breakdown requires a separate channel report",
+        notes: `On-site conversion events are concentrated across ${ga4WithConversions.length} landing page${ga4WithConversions.length !== 1 ? "s" : ""} — a pattern that suggests organic search is successfully delivering intent-matched traffic to conversion-relevant pages. The concentration of events on a small number of pages implies the account's demand capture is narrow enough that improving even one underperforming page could meaningfully expand total conversions.`,
         dataSource: "GA4",
       });
     }
@@ -1573,14 +1619,14 @@ export function generateSection2(
       topConvertingSources.push({
         source: "Priority Pages (Configured)",
         whatsConverting: `${moneyPages.length} priority page${moneyPages.length !== 1 ? "s" : ""} configured — no live tracking data`,
-        notes: "Conversion source attribution is not yet available. Implement GA4 events and/or call tracking to get real source data.",
+        notes: `Directional inference: Source attribution is not yet confirmed by live tracking data, but the configured priority pages suggest where conversion activity is most likely occurring. Until tracking is active, the source mix cannot be quantified — meaning any channel that is actually driving conversions remains invisible in the data and its relative contribution is being undervalued.`,
         dataSource: "Manual entry needed",
       });
     } else {
       topConvertingSources.push({
         source: ME,
         whatsConverting: "No call tracking or GA4 conversion source data available for this account",
-        notes: "Implement call tracking (CallRail/CTM) and GA4 conversion events to unlock real source attribution",
+        notes: `Directional inference: The absence of source data means conversion attribution is entirely blind at this stage — the account may be generating admissions-intent activity across multiple channels, but without tracking in place, there is no signal to distinguish which sources are performing and which are incidental. This creates a planning blind spot that affects both prioritisation and investment decisions.`,
         dataSource: "Manual entry needed",
       });
     }

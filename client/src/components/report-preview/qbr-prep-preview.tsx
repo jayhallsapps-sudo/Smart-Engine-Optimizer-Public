@@ -447,7 +447,7 @@ export function QbrPrepPreview({
             <SectionHeading num={1} title="What Matters Most This Quarter" />
             <AddableReportTable
               tableId="s1"
-              headers={["Goal Type", "Goal", "Measurement Source", "Goal Shift vs Last Quarter", "Reason"]}
+              headers={["Goal Type", "Goal", "Source", "Goal Shift vs Last Quarter", "Reason"]}
               sourceRows={s1SourceRows}
               edits={edits}
               onEdit={onEdit}

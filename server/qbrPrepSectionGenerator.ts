@@ -973,61 +973,37 @@ function buildPrimaryGoalReason(p: {
 }): string {
   const {
     primaryKpiLabel, kpiLower, nsmMvpGoalNum, nsmMvpActNum, nsmData,
-    prevNsmData, prevQtrAssessment, amThoughts, clientNotes, clientSentiment,
-    callTrackingProvider, admitsShift, admitsSource,
+    prevNsmData, callTrackingProvider, admitsShift, admitsSource,
   } = p;
   const parts: string[] = [];
 
-  // ── Part 1: Prior quarter data context from NSM sheet ─────────────────────
+  // ── Sentence 1: Prior quarter actuals (data only) ─────────────────────────
   const prevMvpGoal = prevNsmData?.mvpGoal !== "—" ? prevNsmData?.mvpGoal : null;
   const prevMvpAct  = prevNsmData?.mvpActual !== "—" ? prevNsmData?.mvpActual : null;
   if (prevMvpGoal && prevMvpAct) {
     const prevPct = prevNsmData?.mvpPercent && prevNsmData.mvpPercent !== "—"
-      ? ` (${prevNsmData.mvpPercent} to target)` : "";
-    parts.push(`Last quarter: ${primaryKpiLabel} tracked at ${prevMvpAct}/${prevMvpGoal}${prevPct}.`);
+      ? ` (${prevNsmData.mvpPercent})` : "";
+    parts.push(`Last quarter: ${prevMvpAct}/${prevMvpGoal}${prevPct}.`);
   } else if (prevMvpGoal) {
-    parts.push(`Last quarter: ${primaryKpiLabel} goal was ${prevMvpGoal}.`);
+    parts.push(`Last quarter goal: ${prevMvpGoal}.`);
   }
 
-  // ── Part 2: AM's narrative of last quarter ────────────────────────────────
-  if (prevQtrAssessment?.trim()) {
-    const assessed = prevQtrAssessment.trim().replace(/[.!\s]+$/, "");
-    parts.push(`${assessed}.`);
-  }
-
-  // ── Part 3: This quarter's goal and pacing ────────────────────────────────
+  // ── Sentence 2: This quarter target + pacing ──────────────────────────────
   if (nsmMvpGoalNum !== null && nsmMvpActNum !== null) {
     const pacing = nsmMvpActNum / nsmMvpGoalNum;
     const shiftNote = admitsShift !== "—" ? ` (${admitsShift} vs last quarter)` : "";
-    const pacingDesc = pacing >= 0.9 ? "on pace" : pacing >= 0.7 ? "tracking below pace" : "behind pace";
-    parts.push(`This quarter targets ${fmtNum(nsmMvpGoalNum)} ${kpiLower}${shiftNote} — currently ${pacingDesc} at ${nsmMvpActNum}/${nsmMvpGoalNum}, measured via ${admitsSource}.`);
+    const pacingDesc = pacing >= 0.9 ? "on pace" : pacing >= 0.7 ? "below pace" : "behind pace";
+    parts.push(`Target: ${fmtNum(nsmMvpGoalNum)} ${kpiLower}${shiftNote} — ${pacingDesc} at ${nsmMvpActNum}/${nsmMvpGoalNum} via ${admitsSource}.`);
   } else if (nsmMvpGoalNum !== null) {
     const shiftNote = admitsShift !== "—" ? ` (${admitsShift} vs last quarter)` : "";
-    parts.push(`This quarter targets ${fmtNum(nsmMvpGoalNum)} ${kpiLower}${shiftNote}, measured via ${admitsSource}. Actuals not yet recorded for this quarter.`);
+    parts.push(`Target: ${fmtNum(nsmMvpGoalNum)} ${kpiLower}${shiftNote} via ${admitsSource}. Actuals pending.`);
   } else if (nsmData) {
-    // NSM data exists but goal field is empty — tracking type is known, goal TBD
-    parts.push(`${primaryKpiLabel} is the configured primary KPI, tracked via ${admitsSource}. Goal is pending entry in the NSM Tracker for this quarter.`);
+    parts.push(`${primaryKpiLabel} tracked via ${admitsSource}. Goal pending NSM entry.`);
   } else {
-    // No NSM data at all
     const sourceNote = callTrackingProvider
-      ? `${callTrackingProvider} is configured as the tracking source.`
-      : "Connect a call tracking source to begin tracking actuals.";
-    parts.push(`${primaryKpiLabel} is the primary KPI for this account. ${sourceNote}`);
-  }
-
-  // ── Part 4: AM hypothesis alignment ──────────────────────────────────────
-  if (amThoughts?.trim()) {
-    const h = amThoughts.toLowerCase();
-    const isRelevant = /admissions|conversion|care access|vob|insurance|form|cta|service page|trust|content|refresh|ranking|position|clicks|traffic|pipeline|leads/.test(h);
-    if (isRelevant) {
-      const truncated = amThoughts.trim().replace(/[.!\s]+$/, "").slice(0, 120);
-      parts.push(`AM focus: ${truncated}.`);
-    }
-  }
-
-  // ── Part 5: Sentiment pulse (only when elevated — avoids noise) ───────────
-  if (clientSentiment === "Frustrated" || clientSentiment === "Concerned") {
-    parts.push(`Client is ${clientSentiment.toLowerCase()} — clear progress evidence and realistic expectations are the priority this quarter.`);
+      ? `${callTrackingProvider} configured as tracking source.`
+      : "Connect a call tracking source to begin tracking.";
+    parts.push(`${primaryKpiLabel} is the primary KPI. ${sourceNote}`);
   }
 
   return parts.length > 0
@@ -1134,7 +1110,7 @@ function generateSection1(nsmData: any, ga4Funnel: any, quarter: QuarterInfo, cl
   // ── Secondary Goal: Calls ──────────────────────────────────────────────
   const callsSource = callTrackingProvider ?? ME;
   let callsGoal: string = ME;
-  let callsShift = "Maintain";
+  let callsShift = "0%";
   let callsReason = callTrackingProvider
     ? `Qualified organic calls tracked via ${callTrackingProvider}. Calls serve as the primary operational proxy for ${primaryKpiLabel.toLowerCase()} until a direct tracking source is confirmed.`
     : `${ME}: Call tracking provider not configured`;
@@ -2056,24 +2032,6 @@ function enrichWithAmContext(priorities: PriorityRow[], amCtx: AmContext): void 
       p.reason += ` AM focus area aligns: ${amCtx.hypothesisSummary.slice(0, 80).replace(/\.$/, "")}.`;
     }
 
-    if (amCtx.auditSignals.includes("metadata") && /title|meta/.test(initLower)) {
-      p.reason += " Manual audit confirms: metadata gaps present — title and description optimization will improve click-through on current impressions.";
-    }
-    if (amCtx.auditSignals.includes("internal_linking") && /internal link/.test(initLower)) {
-      p.reason += " Manual audit confirms: internal linking gaps identified — high-traffic pages are not passing authority to conversion pages.";
-    }
-    if (amCtx.auditSignals.includes("thin_content") && /content refresh/.test(initLower)) {
-      p.reason += " Manual audit confirms: thin or duplicate content detected — refreshing these pages directly improves crawl quality and topical authority.";
-    }
-    if (amCtx.auditSignals.includes("crawl_errors") && /technical cleanup/.test(initLower)) {
-      p.reason += " Manual audit confirms: redirect chains and error pages identified — resolving these improves crawl efficiency and page equity flow.";
-    }
-    if (amCtx.auditSignals.includes("admissions_path") && /admissions|conversion path|vob/.test(initLower)) {
-      p.reason += " Manual audit flags the admissions/VOB path as a friction point — aligns with this initiative.";
-    }
-    if (amCtx.auditSignals.includes("service_page") && /service page|service foundation/.test(initLower)) {
-      p.reason += " Manual audit flagged service page gaps — consolidation and refresh are confirmed priorities.";
-    }
   }
 }
 
@@ -2122,7 +2080,7 @@ function addNetNewAmPriorities(
       initiative: "Core Web Vitals / Page Speed",
       tier: "Tier 3",
       action: "Audit and improve LCP, CLS, and FID scores on primary service and admissions pages to meet Google's performance threshold",
-      reason: "Manual audit flagged page speed as an issue — slow load times on high-intent pages suppress both rankings and on-site conversion rates",
+      reason: "Slow load times on high-intent pages suppress both rankings and on-site conversion rates — LCP, CLS, and FID improvements directly impact user experience signals.",
       source: "Manual entry needed",
     });
   }
@@ -2135,7 +2093,7 @@ function addNetNewAmPriorities(
       initiative: "Schema Markup Implementation",
       tier: "Tier 3",
       action: "Implement LocalBusiness, MedicalOrganization, and FAQ schema on core service and admissions pages",
-      reason: "Manual audit identified missing structured data — schema markup improves SERP feature eligibility and helps Google confirm treatment center entity context",
+      reason: "Schema markup improves SERP feature eligibility and helps Google confirm treatment center entity context across service and admissions pages.",
       source: "Manual entry needed",
     });
   }

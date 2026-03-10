@@ -240,7 +240,7 @@ export default function QbrPrepPrint() {
 
           <SectionHeading num={1} title="What Matters Most This Quarter" />
           <DataTable
-            headers={["Goal Type", "Goal", "Measurement Source", "Goal Shift vs Last Quarter", "Reason"]}
+            headers={["Goal Type", "Goal", "Source", "Goal Shift vs Last Quarter", "Reason"]}
             rows={s1Rows}
           />
 

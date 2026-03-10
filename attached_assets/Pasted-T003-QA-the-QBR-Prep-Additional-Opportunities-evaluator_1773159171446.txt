@@ -1,0 +1,205 @@
+T003 — QA the QBR Prep Additional Opportunities evaluator with mocked report states
+
+Objective
+
+Do not redesign the feature.
+Do not change the UI.
+Do not change the AdditionalOpportunity output schema.
+
+Your job is to pressure-test the current Additional Opportunities evaluator in server/qbrPrepSectionGenerator.ts using mocked QBR Prep report states and verify that the logic behaves correctly across positive, negative, and edge-case scenarios.
+
+What to test
+
+Run the current generateAdditionalOpportunities() logic against at least 10 mocked report states that cover both valid and invalid recommendation cases.
+
+The goal is to verify:
+- false positives do not appear
+- valid opportunities do appear
+- standard-scope issues stay out of Additional Opportunities
+- upsell vs cross-sell classification is correct
+- top-1-to-3 ranking works correctly
+- threshold and gating behave as intended
+- phrasing does not overclaim what the report evidence actually proves
+
+Required test matrix
+
+Create mocked report states for at least these 10 cases:
+
+CASE 1 — Weak account, on pace, weak evidence
+Expected result:
+- no additional opportunities
+Purpose:
+- verifies weak / on-pace cases stay suppressed
+
+CASE 2 — Tier 1 or Tier 2 site, behind pace, confirmed high-intent demand
+Expected result:
+- Authority-Building upsell appears
+Purpose:
+- verifies Signal A fires only when real demand and business pressure exist
+
+CASE 3 — Tier 2 site, on pace, zero high-intent clusters
+Expected result:
+- no Authority-Building upsell
+Purpose:
+- verifies the previous false positive is suppressed
+
+CASE 4 — Behind pace, confirmed high-intent organic demand
+Expected result:
+- Paid Search Demand Capture cross-sell appears
+Purpose:
+- verifies valid demand-capture logic
+
+CASE 5 — Tier 3+ site, multiple confirmed high-intent clusters, on pace
+Expected result:
+- Expanded Content Production upsell can appear
+Purpose:
+- verifies content scale upsell works without depending on Section 6 wording
+
+CASE 6 — Strong informational traffic, confirmed conversion tracking, conversion gap
+Expected result:
+- Retargeting / Content Promotion cross-sell can appear
+Purpose:
+- verifies retargeting logic with sufficient evidence
+
+CASE 7 — On-pace site with moderate informational traffic and no conversion tracking
+Expected result:
+- no Retargeting / Content Promotion opportunity
+- no tracking/infrastructure upsell
+Purpose:
+- verifies tracking gaps stay in standard recommendations and weak retargeting does not fire
+
+CASE 8 — On-pace site with low-reach clusters only
+Expected result:
+- no Paid Social / Content Promotion opportunity
+Purpose:
+- verifies weak Signal E is suppressed
+
+CASE 9 — Local visibility weakness only
+Expected result:
+- no additional opportunities
+Purpose:
+- verifies standard local SEO issues stay in normal scope
+
+CASE 10 — Low CTR / metadata issue only
+Expected result:
+- no additional opportunities unless there is a stronger separate paid-search case
+Purpose:
+- verifies standard CTR optimization stays in normal scope
+
+Add at least 2 more edge cases of your own choosing.
+Those additional cases should specifically test ranking collisions where 2 to 4 valid candidates could appear at once, and confirm that:
+- only top 1 to 3 opportunities are returned
+- ranking order is sensible
+- weaker candidates are suppressed when stronger ones exist
+
+Testing requirements
+
+For each mocked report state, show:
+
+1. short case name
+2. core mocked report conditions
+3. which signals were considered
+4. which gates passed or failed
+5. which candidates entered scoring
+6. each candidate’s score breakdown:
+   - businessImpact
+   - evidenceStrength
+   - urgency
+   - strategicFit
+   - total
+7. final output opportunities, in returned order
+8. whether the result matches the expected outcome
+
+Important QA rules
+
+1. Do not just print whether a signal fired
+Show the reasoning chain.
+
+2. Do not overclaim demand evidence
+Especially for the broader scan / Signal F case:
+- if there are zero confirmed high-intent organic clusters, the recommendation wording must NOT claim confirmed treatment-intent demand from SEO data
+- it may frame paid search as a way to test and capture priority demand faster
+- it may not imply the report proved organic treatment-intent demand when it did not
+
+3. Standard-scope issues must stay out
+Examples that should usually remain standard scope:
+- local SEO cleanup
+- CTR optimization
+- metadata improvements
+- technical cleanup
+- CTA/internal-link fixes
+- content refreshes
+- normal geo-page improvements
+- normal blog-to-service journey fixes
+
+4. Tracking gaps must stay out
+Missing conversion tracking must not appear as an Additional Opportunity unless there is already explicit logic for a distinct packaged paid CRO / analytics project, which currently does not exist.
+So the expected behavior in testing is that tracking gaps remain excluded.
+
+5. No filler
+If a mocked case is weak, the correct result is no opportunity.
+
+Implementation instructions
+
+Create a temporary QA harness or test helper around generateAdditionalOpportunities().
+
+You may:
+- create a temporary test file
+- create a temporary script
+- create a temporary dev-only function
+- use inline mocked report objects if that is fastest
+
+Do whatever is simplest and safest, but do not break production code.
+
+Preferred approach:
+- add a temporary test script or internal dev helper
+- feed in mocked QbrPrepReportData-like objects
+- print structured results for each case
+
+If you discover a genuine logic bug while running the cases, fix it.
+But do not make speculative changes.
+Only change logic if a case clearly proves the current behavior is wrong.
+
+What to validate specifically
+
+Validate all of the following:
+
+A. Signal A cannot fire for Tier 2, on pace, zero-cluster cases
+B. weak on-pace Signal E cases remain suppressed
+C. tracking gaps still do not surface as upsells
+D. local visibility-only cases remain standard scope
+E. low-CTR-only cases remain standard scope
+F. content upsell does not depend on Section 6 wording
+G. ranking logic returns only the top 1 to 3
+H. weaker candidates can lose to stronger ones in the same mocked report
+I. Signal F wording does not overstate what was proven by the report evidence
+
+Expected deliverables in your response
+
+After running the QA pass, report back with:
+
+1. exact file(s) changed
+2. whether the production logic changed or not
+3. the exact 10+ mocked cases used
+4. the result of each case
+5. any logic bugs found
+6. any fixes applied
+7. whether Signal F wording had to be tightened
+8. confirmation that top-3 capping works
+9. confirmation that standard-scope-only cases produce no additional opportunities
+10. a final verdict:
+   - production-safe as is
+   - production-safe after the fixes you made
+   - not yet production-safe
+
+Important final instruction
+
+Do not stop at “the code compiles.”
+Run the mocked cases and judge the actual behavior.
+
+A passing result means:
+- strong cases surface the right opportunities
+- weak cases stay quiet
+- standard-scope issues stay out
+- wording stays honest
+- ranking behaves predictably

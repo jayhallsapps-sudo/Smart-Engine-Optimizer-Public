@@ -105,6 +105,7 @@ export default function QbrPrepPage() {
   const [reportData, setReportData] = useState<any>(null);
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [dataOrigin, setDataOrigin] = useState<"live" | "saved" | null>(null);
+  const [crossSellClassifications, setCrossSellClassifications] = useState<Record<number, string>>({});
 
   const quarter = inferQuarterClient(generationDate);
 
@@ -592,6 +593,72 @@ export default function QbrPrepPage() {
             </p>
           )}
         </div>
+
+        {/* Audit missing warning */}
+        {reportData?.section6Priorities?.auditMissing && (
+          <div className="px-4 pt-3 pb-0">
+            <div className="rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 p-3 text-[11px] text-amber-800 dark:text-amber-300 space-y-1" data-testid="audit-missing-warning">
+              <div className="flex items-center gap-1.5 font-semibold">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                Audit input not provided
+              </div>
+              <p>Before finalizing quarterly priorities, provide a recent site audit screenshot or a short audit summary so the strategy can account for technical blockers, internal linking gaps, page quality issues, or structural weaknesses.</p>
+              <p className="text-[10px] opacity-75">Enter audit notes in the "Priority Checks / Audit Notes" field above, then regenerate.</p>
+            </div>
+          </div>
+        )}
+
+        {/* Cross-sell / upsell preview & AM confirmation */}
+        {reportData?.section6Priorities?.crossSellPreview?.length > 0 && (
+          <div className="px-4 pt-3 pb-0">
+            <div className="rounded-md border border-blue-200 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-800 p-3 space-y-3" data-testid="crosssell-preview-panel">
+              <div className="text-[11px] font-semibold text-blue-900 dark:text-blue-200">
+                Potential Opportunities — Classify Before Exporting
+              </div>
+              <p className="text-[10px] text-blue-800 dark:text-blue-300">
+                The SEO Strategy Bank flagged these items as potentially relevant to this account. Classify each before the report is finalized.
+              </p>
+              {(reportData.section6Priorities.crossSellPreview as any[]).map((item: any, i: number) => (
+                <div key={i} className="space-y-1" data-testid={`crosssell-item-${i}`}>
+                  <div className="text-[11px] font-medium text-blue-900 dark:text-blue-100">{item.opportunity}</div>
+                  <div className="text-[10px] text-blue-700 dark:text-blue-300">{item.relevance}</div>
+                  <Select
+                    value={crossSellClassifications[i] ?? item.suggestedCategory}
+                    onValueChange={(v) => setCrossSellClassifications(prev => ({ ...prev, [i]: v }))}
+                  >
+                    <SelectTrigger className="h-7 text-[11px]" data-testid={`select-crosssell-${i}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="in-scope SEO work">In-scope SEO work</SelectItem>
+                      <SelectItem value="cross-sell">Cross-sell</SelectItem>
+                      <SelectItem value="upsell">Upsell</SelectItem>
+                      <SelectItem value="not relevant">Not relevant</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              ))}
+              <Button
+                size="sm"
+                className="w-full text-xs h-7"
+                data-testid="button-apply-crosssell"
+                onClick={() => {
+                  const preview = reportData.section6Priorities.crossSellPreview as any[];
+                  const confirmed = preview
+                    .map((item: any, i: number) => ({
+                      recommendation: item.opportunity,
+                      type: crossSellClassifications[i] ?? item.suggestedCategory,
+                      relevance: item.relevance,
+                    }))
+                    .filter((c: any) => c.type === "cross-sell" || c.type === "upsell");
+                  setEdits(prev => ({ ...prev, s6_crossSells_confirmed: JSON.stringify(confirmed) }));
+                }}
+              >
+                Apply Confirmed Opportunities to Report
+              </Button>
+            </div>
+          </div>
+        )}
 
         {reportData && (
           <div className="p-4 border-t space-y-2">

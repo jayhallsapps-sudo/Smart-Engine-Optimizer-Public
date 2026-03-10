@@ -120,9 +120,19 @@ export default function QbrPrepPrint() {
     ...s2.topConvertingPages.map((r: any, ri: number) => [
       badgeCell(e(`s2a_${ri}_0`, r.type), r.dataSource),
       cell(e(`s2a_${ri}_1`, r.page)),
+      cell(e(`s2a_${ri}_3`, r.conversionSource ?? r.dataSource ?? "—")),
       cell(e(`s2a_${ri}_2`, r.notes)),
     ]),
     ...customRowsAsNodes(edits, "s2a"),
+  ];
+
+  const s2cRows: ReactNode[][] = [
+    ...(s2.topConversionPatterns ?? []).map((r: any, ri: number) => [
+      cell(e(`s2c_${ri}_0`, r.pattern)),
+      cell(e(`s2c_${ri}_1`, r.whyItMatters)),
+      cell(e(`s2c_${ri}_2`, r.evidence)),
+    ]),
+    ...customRowsAsNodes(edits, "s2c"),
   ];
 
   const s2bRows: ReactNode[][] = [
@@ -204,8 +214,13 @@ export default function QbrPrepPrint() {
           <SectionHeading num={2} title="Where Conversions Actually Happen" />
           <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Converting Pages</div>
           <ReportTable
-            headers={["Type", "Page / Pattern", "Notes / What We're Learning"]}
+            headers={["Type", "Page / Pattern", "Conversion Source", "Notes / What We're Learning"]}
             rows={s2aRows}
+          />
+          <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Conversion Patterns</div>
+          <ReportTable
+            headers={["Pattern", "Why It Matters", "Evidence"]}
+            rows={s2cRows}
           />
           <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Converting Sources</div>
           <ReportTable
@@ -338,6 +353,42 @@ export default function QbrPrepPrint() {
             headers={["#", "Initiative", "Tier", "Action", "Reason"]}
             rows={s6Rows}
           />
+          {(() => {
+            const raw = edits["s6_crossSells_confirmed"];
+            if (!raw) return null;
+            let items: { recommendation: string; type: string; relevance: string }[] = [];
+            try { items = JSON.parse(raw); } catch { return null; }
+            if (!items.length) return null;
+            return (
+              <div style={{ marginBottom: 16, border: "1px solid #3B82F640", borderRadius: 4, overflow: "hidden" }}>
+                <div style={{ backgroundColor: "#EFF6FF", padding: "6px 10px", fontSize: "10px", fontWeight: 700, color: "#1D4ED8", borderBottom: "1px solid #3B82F640", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                  Confirmed Opportunities (Cross-sell / Upsell)
+                </div>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px" }}>
+                  <thead>
+                    <tr style={{ backgroundColor: "#EFF6FF80" }}>
+                      {["Opportunity", "Type", "Relevance"].map((h: string) => (
+                        <th key={h} style={{ padding: "5px 8px", textAlign: "left", fontWeight: 600, fontSize: "9px", color: "#1D4ED8", textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: "1px solid #3B82F640" }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map((item: { recommendation: string; type: string; relevance: string }, i: number) => (
+                      <tr key={i} style={{ backgroundColor: i % 2 === 1 ? "#F8FAFF" : "white" }}>
+                        <td style={{ padding: "6px 8px", borderBottom: "1px solid #EFF6FF", verticalAlign: "top", lineHeight: 1.4 }}>{item.recommendation}</td>
+                        <td style={{ padding: "6px 8px", borderBottom: "1px solid #EFF6FF", verticalAlign: "top", lineHeight: 1.4 }}>
+                          <span style={{ display: "inline-block", padding: "1px 6px", borderRadius: 10, fontSize: "9px", fontWeight: 600, backgroundColor: item.type === "upsell" ? "#FEF3C7" : "#DBEAFE", color: item.type === "upsell" ? "#92400E" : "#1E40AF" }}>
+                            {item.type}
+                          </span>
+                        </td>
+                        <td style={{ padding: "6px 8px", borderBottom: "1px solid #EFF6FF", verticalAlign: "top", lineHeight: 1.4, color: "#4B5563" }}>{item.relevance}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
 
           <SectionHeading num={7} title="What We Track" />
           <ReportTable

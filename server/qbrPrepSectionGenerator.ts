@@ -518,9 +518,19 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
   };
 
   const completedWork = [...airtableItems.map(i => i.task), ...asanaTasks.filter((t: any) => t.completed).map((t: any) => t.name)];
+
+  // Pre-fetch strategy bank for S6 cross-sell preview (served from cache on second QSSB call)
+  let s6StrategyBankEntries: Array<{ service: string; description: string }> = [];
+  try {
+    const bank = await fetchStrategyBank();
+    s6StrategyBankEntries = (bank.entries ?? []).map((e: any) => ({ service: e.service ?? e.title ?? "", description: e.description ?? "" }));
+  } catch { /* cross-sell preview is additive — failure here does not block generation */ }
+
+  const s6MonthlyCredits = getMonthlyCredits(client.name);
   const section6 = generateSection6(
     section1, section2, section3, section4, section5, tierInput,
-    completedWork, input.sentiment, input.hypothesis, input.auditNotes
+    completedWork, input.sentiment, input.hypothesis, input.auditNotes,
+    s6MonthlyCredits, s6StrategyBankEntries
   );
   const section7Evidence: Section7EvidenceFlags = {
     ga4Active: ga4LandingRows.length > 0 || ga4FunnelCurr !== null,
@@ -1111,6 +1121,7 @@ function generateSection2(
       row: {
         type: clientReadableType(internalType),
         page: buildPagePattern(row.page, internalType, "GA4"),
+        conversionSource: "GA4",
         notes: buildConvertingPageNote(internalType, "GA4", row.conversions, row.sessions),
         dataSource: "GA4",
       },
@@ -1130,6 +1141,7 @@ function generateSection2(
         row: {
           type: clientReadableType(internalType),
           page: buildPagePattern(row.page, internalType, callTrackingSource),
+          conversionSource: callTrackingSource,
           notes: buildConvertingPageNote(internalType, callTrackingSource, row.calls, 0),
           dataSource: callTrackingSource,
         },
@@ -1170,6 +1182,7 @@ function generateSection2(
           row: {
             type: clientReadableType("Contact / Admissions"),
             page: best,
+            conversionSource: "Multi-source",
             notes: buildConvertingPageNote("Contact / Admissions", "Multi-source", 0, 0),
             dataSource: "Multi-source",
           },
@@ -1189,6 +1202,7 @@ function generateSection2(
         row: {
           type: clientReadableType(internalType),
           page: best,
+          conversionSource: "Multi-source",
           notes: buildConvertingPageNote(internalType, "Multi-source", 0, 0),
           dataSource: "Multi-source",
         },
@@ -1213,6 +1227,7 @@ function generateSection2(
         row: {
           type: clientReadableType(internalType),
           page: shortUrl(pageUrl),
+          conversionSource: "GSC",
           notes: buildConvertingPageNote(internalType, "GSC", 0, 0),
           dataSource: "GSC",
         },
@@ -1220,36 +1235,121 @@ function generateSection2(
     }
   }
 
-  // Sort pool by confidence descending, then apply diversity rules and fill up to 5 rows
+  // Sort pool by confidence descending, then pick exactly top 2 (QSSB requirement)
   pagePool.sort((a, b) => b.confidence - a.confidence);
 
   const typeCount = new Map<string, number>();
   let gscInfoCount = 0;
 
   for (const { row, confidence } of pagePool) {
-    if (topConvertingPages.length >= 5) break;
-    // Cap purely-informational GSC rows at 2 to prevent them dominating
+    if (topConvertingPages.length >= 2) break;
+    // Cap purely-informational GSC rows to prevent them dominating
     if (confidence <= 1) {
-      if (gscInfoCount >= 2) continue;
+      if (gscInfoCount >= 1) continue;
       gscInfoCount++;
     }
-    // Diversity cap: no more than 2 rows of the same type if confidence < 4
+    // Diversity cap: no more than 1 row of the same type if confidence < 4
     const typeKey = row.type;
     const currentCount = typeCount.get(typeKey) ?? 0;
-    if (currentCount >= 2 && confidence < 4) continue;
+    if (currentCount >= 1 && confidence < 4) continue;
     typeCount.set(typeKey, currentCount + 1);
     topConvertingPages.push(row);
   }
 
   // Final fallback
   if (topConvertingPages.length === 0) {
-    topConvertingPages.push({ type: ME, page: ME, notes: ME, dataSource: undefined });
+    topConvertingPages.push({ type: ME, page: ME, conversionSource: "—", notes: ME, dataSource: undefined });
   }
 
   console.log(`[Section2] Top Converting Pages: ${topConvertingPages.length} rows (pool had ${pagePool.length} candidates; GA4=${pagePool.filter(c=>c.confidence===5).length}, callTracking=${pagePool.filter(c=>c.confidence===4).length}, SF=${pagePool.filter(c=>c.confidence===3).length}, GSC-hi=${pagePool.filter(c=>c.confidence===2).length}, GSC-info=${pagePool.filter(c=>c.confidence===1).length})`);
   for (const r of topConvertingPages) {
     console.log(`[Section2]   → [${r.dataSource}] ${r.type} | ${r.page}`);
   }
+
+  // --- TOP CONVERSION PATTERNS ---
+  // Infer exactly 2 recurring conversion themes from the page pool and sources.
+  const topConversionPatterns: ConversionPatternRow[] = [];
+  const poolTypes = new Set(pagePool.map(c => c.row.dataSource ?? ""));
+  const pageTypes = new Set(pagePool.map(c => c.row.type));
+  const hasGA4Signal = pagePool.some(c => c.confidence === 5);
+  const hasCallSignal = pagePool.some(c => c.confidence === 4);
+  const hasAdmissions = pageTypes.has("Contact / Admissions");
+  const hasVob = pageTypes.has("Verify Insurance");
+  const hasServicePage = pageTypes.has("Service Page");
+  const hasInfoPage = pageTypes.has("Blog / Resource");
+  const hasHomepage = pageTypes.has("Homepage");
+
+  const candidatePatterns: ConversionPatternRow[] = [];
+
+  if (hasAdmissions || hasVob) {
+    candidatePatterns.push({
+      pattern: "Admissions-Gated Entry Points",
+      whyItMatters: "Direct contact, intake, and insurance-verification pages are the last digital step before a prospective client reaches the admissions team. Conversion friction on these pages costs admits directly.",
+      evidence: hasGA4Signal
+        ? "GA4 conversion events confirm on-site form activity on admissions-path pages."
+        : hasCallSignal
+          ? `${callTrackingSource} landing-page data shows call volume attributable to admissions or VOB pages.`
+          : "Site crawl confirms presence of admissions and/or VOB utility pages on the primary domain.",
+    });
+  }
+
+  if (hasVob && !hasAdmissions) {
+    candidatePatterns.push({
+      pattern: "Insurance Verification Pathway",
+      whyItMatters: "VOB pages are the clearest digital pre-admission signal — completing a benefits check substantially increases the probability of an intake conversation.",
+      evidence: hasGA4Signal
+        ? "GA4 shows Verify Insurance page driving the largest share of on-site conversion events."
+        : "Site crawl confirms a dedicated VOB/insurance verification page is indexed and accessible.",
+    });
+  }
+
+  if (hasServicePage) {
+    candidatePatterns.push({
+      pattern: "Service Page Conversion Capture",
+      whyItMatters: "Core service pages (Detox, Residential, PHP/IOP) are the primary entry point for treatment-intent searches. Visitors landing here are actively evaluating fit — page quality and clear conversion paths determine whether they move toward admissions.",
+      evidence: hasCallSignal
+        ? `${callTrackingSource} confirms service pages are driving qualified inbound calls.`
+        : hasGA4Signal
+          ? "GA4 conversion data shows service page sessions converting at measurable rates."
+          : "GSC shows service pages receiving treatment-intent organic clicks from relevant queries.",
+    });
+  }
+
+  if (hasInfoPage) {
+    candidatePatterns.push({
+      pattern: "Informational Assist to Conversion",
+      whyItMatters: "Educational and resource content plays a supporting role in the patient decision journey — high-ranking informational pages build trust and often precede direct admit actions. Internal linking from these pages toward conversion pages amplifies their value.",
+      evidence: `GSC data shows informational pages generating organic impressions and clicks, suggesting they participate in the pre-admission research phase.`,
+    });
+  }
+
+  if (hasHomepage && candidatePatterns.length < 2) {
+    candidatePatterns.push({
+      pattern: "Homepage as Brand Verification Signal",
+      whyItMatters: "Homepage conversion events or direct traffic through the homepage indicates strong brand recall or referral-driven behavior — users who already know the brand and are returning to take action.",
+      evidence: hasGA4Signal
+        ? "GA4 shows homepage sessions contributing to conversion events — confirm these are admit-aligned actions."
+        : "Homepage is among the top-traffic pages by GSC click volume, suggesting brand or direct-navigation intent.",
+    });
+  }
+
+  // Fallback pattern if pool is sparse
+  if (candidatePatterns.length === 0) {
+    candidatePatterns.push({
+      pattern: "High-Intent Organic Traffic Capture",
+      whyItMatters: "Treatment-intent organic queries (e.g., detox near me, rehab programs, insurance-covered treatment) represent the strongest mid-funnel intent. Pages ranking for these terms need optimized conversion paths to close the gap between clicks and contacts.",
+      evidence: "GSC data provides the primary signal — confirm GA4 event tracking is active on key pages.",
+    });
+  }
+  if (candidatePatterns.length < 2) {
+    candidatePatterns.push({
+      pattern: "Tracking Gap as Conversion Floor",
+      whyItMatters: "When conversion tracking is incomplete, high-value actions (form submits, call initiations, chat starts) go unattributed. This understates the true conversion rate and creates a systematic blind spot in reporting.",
+      evidence: `${poolTypes.has("GSC") ? "GSC" : "Available data"} is the primary signal — GA4 conversion events are not yet confirmed on key admissions-path pages.`,
+    });
+  }
+
+  topConversionPatterns.push(...candidatePatterns.slice(0, 2));
 
   // --- TOP CONVERTING SOURCES ---
   const moneyPages: string[] = (client as any).moneyPages ?? [];
@@ -1354,13 +1454,16 @@ function generateSection2(
     });
   }
 
-  const allNotes = [...topConvertingPages.map(p => p.notes), ...topConvertingSources.map(s => s.notes)].join(" ").toLowerCase();
+  // Trim sources to exactly top 2 (QSSB requirement)
+  const finalSources = topConvertingSources.slice(0, 2);
+
+  const allNotes = [...topConvertingPages.map(p => p.notes), ...finalSources.map(s => s.notes)].join(" ").toLowerCase();
   const hasGaps = TRACKING_GAP_PHRASES.some(phrase => allNotes.includes(phrase));
   const trackingDisclaimer = hasGaps
-    ? "Due to missing tracking data, connection to admits is inferred from page intent and journey position. Confidence level may be lower than reported."
+    ? "Direct admit attribution remains partially inferred where tracking is incomplete, so some Section 2 conclusions are confidence-weighted rather than fully verified."
     : undefined;
 
-  return { topConvertingPages, topConvertingSources, trackingDisclaimer };
+  return { topConvertingPages, topConversionPatterns, topConvertingSources: finalSources, trackingDisclaimer };
 }
 
 function clientReadableType(internalType: string): string {
@@ -2065,6 +2168,24 @@ function sortByBusinessOrder(priorities: PriorityRow[]): void {
   priorities.forEach((p, i) => { p.priority = i + 1; });
 }
 
+/** Monthly content credits per client — mirrors CLIENT_CREDIT_MAP in routes.ts.
+ *  Used to apply a realistic quarterly capacity cap to content-type initiatives. */
+const GENERATOR_CREDIT_MAP: Record<string, number> = {
+  "anchored tides": 4,
+  "bliss recovery": 8,
+  "heartland healing": 5,
+  "sol women": 5,
+  "sol womens": 5,
+  "williamsburg house": 3,
+  "horseshoe ridge": 4,
+  "iris healing": 5,
+};
+
+function getMonthlyCredits(clientName: string): number {
+  const lower = clientName.toLowerCase();
+  return Object.entries(GENERATOR_CREDIT_MAP).find(([k]) => lower.includes(k))?.[1] ?? 5;
+}
+
 function generateSection6(
   section1: Section1Goals,
   section2: Section2Conversions,
@@ -2075,7 +2196,9 @@ function generateSection6(
   completedWork: string[],
   sentiment?: string,
   hypothesis?: string,
-  auditNotes?: string
+  auditNotes?: string,
+  monthlyCredits: number = 5,
+  strategyBankEntries: Array<{ service: string; description: string }> = []
 ): Section6Priorities {
   const priorities: PriorityRow[] = [];
   const completedLower = completedWork.map(w => w.toLowerCase());
@@ -2272,7 +2395,80 @@ function generateSection6(
 
   sortByBusinessOrder(priorities);
 
-  return { priorities: priorities.slice(0, 7) };
+  // Apply content credit capacity cap.
+  // quarterlyCapacity = monthlyCredits × 3 months. Content-type initiatives (new pages, refresh)
+  // count against this budget. Non-content (technical, tracking) are uncapped.
+  const CONTENT_INITIATIVE_KEYWORDS = ["content refresh", "service page", "hub structure", "admissions pathway", "conditions hub", "therapies hub", "location page"];
+  const quarterlyCapacity = monthlyCredits * 3;
+  let contentInitiativeCount = 0;
+  const cappedPriorities = priorities.filter(p => {
+    const isContent = CONTENT_INITIATIVE_KEYWORDS.some(kw => p.initiative.toLowerCase().includes(kw.toLowerCase()));
+    if (isContent) {
+      if (contentInitiativeCount >= quarterlyCapacity) return false;
+      contentInitiativeCount++;
+    }
+    return true;
+  });
+
+  // Audit missing flag — surface when no audit context was provided
+  const auditMissing = !auditNotes?.trim();
+
+  // Cross-sell / upsell preview from Strategy Bank.
+  // Match bank entries against the current account snapshot signals.
+  const crossSellPreview: CrossSellPreviewItem[] = [];
+  if (strategyBankEntries.length > 0) {
+    const UPSELL_SIGNALS = [
+      "paid media", "paid retargeting", "retargeting", "cro", "conversion rate",
+      "landing page build", "review generation", "gbp expansion", "call tracking setup",
+      "link building", "reputation management", "live chat", "video", "email marketing",
+      "pr campaign", "social media", "display ads", "programmatic",
+    ];
+    const CROSS_SELL_SIGNALS = [
+      "technical sprint", "technical cleanup", "core web vitals", "schema markup",
+      "page speed", "local seo", "local expansion", "content expansion", "dev support",
+    ];
+
+    const hasTrackingGap = hasTrackingGaps(section2);
+    const hasTierIssues = section5.tier <= 2;
+    const hasLocalOpportunity = section4.services.some(s => s.service === "Primary Location");
+
+    for (const entry of strategyBankEntries) {
+      if (crossSellPreview.length >= 3) break;
+      const combined = `${entry.service} ${entry.description}`.toLowerCase();
+      const isUpsell = UPSELL_SIGNALS.some(sig => combined.includes(sig));
+      const isCrossSell = CROSS_SELL_SIGNALS.some(sig => combined.includes(sig));
+
+      if (!isUpsell && !isCrossSell) continue;
+
+      // Match relevance to account snapshot
+      let relevance = "";
+      if (isUpsell && combined.includes("call tracking") && hasTrackingGap) {
+        relevance = `Attribution gaps in Section 2 suggest call tracking setup is not complete — ${entry.description.slice(0, 100)}.`;
+      } else if (isCrossSell && combined.includes("technical") && hasTierIssues) {
+        relevance = `Tier ${section5.tier} site health diagnosis aligns with technical sprint opportunity — ${entry.description.slice(0, 100)}.`;
+      } else if (combined.includes("local") && hasLocalOpportunity) {
+        relevance = `Site has a configured location presence — local SEO expansion aligns with current setup.`;
+      } else if (isUpsell) {
+        relevance = `${entry.description.slice(0, 120)} — assess fit against current account performance trajectory.`;
+      } else {
+        relevance = `${entry.description.slice(0, 120)} — may complement current quarterly priorities.`;
+      }
+
+      if (!relevance) continue;
+
+      crossSellPreview.push({
+        opportunity: entry.service,
+        relevance,
+        suggestedCategory: isUpsell ? "upsell" : "cross-sell",
+      });
+    }
+  }
+
+  return {
+    priorities: cappedPriorities.slice(0, 7),
+    crossSellPreview: crossSellPreview.length > 0 ? crossSellPreview : undefined,
+    auditMissing: auditMissing || undefined,
+  };
 }
 
 interface Section7EvidenceFlags {

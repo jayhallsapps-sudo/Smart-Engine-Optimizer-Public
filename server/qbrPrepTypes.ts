@@ -28,8 +28,15 @@ export interface Section1Goals {
 export interface ConvertingPageRow {
   type: string;
   page: string;
+  conversionSource: string;
   notes: string;
   dataSource?: string;
+}
+
+export interface ConversionPatternRow {
+  pattern: string;
+  whyItMatters: string;
+  evidence: string;
 }
 
 export interface ConvertingSourceRow {
@@ -41,6 +48,7 @@ export interface ConvertingSourceRow {
 
 export interface Section2Conversions {
   topConvertingPages: ConvertingPageRow[];
+  topConversionPatterns: ConversionPatternRow[];
   topConvertingSources: ConvertingSourceRow[];
   trackingDisclaimer?: string;
 }
@@ -100,8 +108,16 @@ export interface PriorityRow {
   source?: string;
 }
 
+export interface CrossSellPreviewItem {
+  opportunity: string;
+  relevance: string;
+  suggestedCategory: string;
+}
+
 export interface Section6Priorities {
   priorities: PriorityRow[];
+  crossSellPreview?: CrossSellPreviewItem[];
+  auditMissing?: boolean;
 }
 
 export interface TrackingRow {

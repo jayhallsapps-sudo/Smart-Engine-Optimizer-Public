@@ -1,0 +1,369 @@
+Refactor the existing QBR Prep “Additional Opportunities” implementation so it follows the intended strategy and fixes the current classification problems.
+
+Current implementation summary
+
+The existing implementation already:
+- defines AdditionalOpportunity in server/qbrPrepTypes.ts
+- generates opportunities in server/qbrPrepSectionGenerator.ts
+- passes and renders them in the QBR prep preview and print views
+
+Keep the existing data shape and UI wiring unless a change is absolutely necessary. The main task is to fix the logic, not to redesign the section.
+
+Primary objective
+
+The Additional Opportunities section must only surface justified upsells or cross-sells after the full QBR Prep report is assembled and evaluated.
+
+The section must:
+- filter standard SEO scope issues out first
+- only escalate when justified
+- separate upsell vs cross-sell cleanly
+- score and rank opportunities
+- output only the top 1 to 3
+- avoid filler
+- avoid forced sales language
+
+Critical fixes required
+
+Fix 1 — Conversion tracking / infrastructure cannot be treated as an upsell by default
+
+Right now, “Conversion Infrastructure & Tracking Setup” is being surfaced as an upsell. That is wrong in the default case.
+
+Missing or weak conversion tracking should generally be treated as a foundational recommendation inside standard scope or standard report recommendations, not as an Additional Opportunity.
+
+Only allow a tracking-related Additional Opportunity if the recommendation is clearly being packaged as a distinct paid analytics / CRO implementation project outside the normal SEO roadmap. If that level of packaging is not clearly supported in the report, do not surface it in Additional Opportunities.
+
+Fix 2 — Expand trigger coverage beyond the current hard-coded set
+
+The current implementation is too narrow. It needs broader coverage so legitimate opportunities are not missed.
+
+The logic must support the full intended categories below:
+
+Potential standard-scope issue patterns:
+- flat or declining organic traffic
+- rankings but weak admissions / weak conversion
+- over-reliance on branded search
+- low organic CTR
+- high bounce / low engagement
+- strong content with low visibility
+- limited local visibility
+- content not driving leads
+- technical SEO holding growth back
+- competitive market / saturated SERP environment
+- organic traffic not converting by location
+- authority gap vs competitors
+
+Potential upsell patterns:
+- need for deeper strategic coverage
+- brand authority / signature content opportunity
+- early traction or flat traffic caused by low content volume
+- strong traffic with low conversion where landing page build / CRO support is beyond standard roadmap
+- custom authority-building project such as digital PR / selective link acquisition when clearly justified
+
+Potential cross-sell patterns:
+- flat organic growth despite rankings where paid media can test and scale faster
+- high-ranking pages with no local visibility where local paid search could drive direct admits
+- strong performing blog / SEO content where retargeting, audience building, or content boosting makes sense
+- organic CTR weakness where search ads could protect or capture demand
+- content production outpacing visibility where paid social / content promotion fits
+
+Fix 3 — Build a true “standard scope first” classification layer
+
+The current implementation appears to jump from a small set of signals directly into upsell or cross-sell decisions.
+
+That must change.
+
+Every major gap must go through a three-stage model:
+
+Stage 1: standard scope vs escalation candidate
+Stage 2: if escalation candidate, determine upsell vs cross-sell
+Stage 3: score and rank opportunities
+
+No issue should become an Additional Opportunity unless it first fails the standard-scope test.
+
+Required Stage 1 logic
+
+For every meaningful report gap, ask:
+
+1. Is this issue already reasonably solvable inside normal SEO scope?
+Examples:
+- service page gaps
+- CTA / internal link / trust signal weaknesses
+- local SEO improvements
+- technical cleanup
+- metadata / CTR work
+- content refreshes
+- blog-to-service journey fixes
+- geo-page improvements
+- normal roadmap content planning
+
+If yes, keep it out of Additional Opportunities unless there is strong evidence that ordinary scope is insufficient.
+
+2. Is the issue tied to a business outcome?
+Valid ties include:
+- admits
+- VOBs
+- qualified calls
+- lead quality
+- conversion quality
+- local acquisition
+- meaningful demand capture
+- meaningful growth acceleration
+
+Traffic-only logic is not enough.
+
+3. Is there enough report evidence to justify escalation?
+Do not escalate weak, vague, or incomplete findings.
+
+Only if the issue is:
+- business-relevant
+- evidence-backed
+- not adequately handled by standard scope alone
+
+…can it move to Stage 2.
+
+Fix 4 — Remove circular dependency on Section 6 or other specific section phrasing
+
+The Additional Opportunities generator must evaluate the final report data directly.
+
+Do not require an opportunity to already appear in Section 6 or any other section before it can be surfaced here.
+
+Examples of bad logic that must be removed:
+- content upsell only firing if a content initiative already exists in S6
+- opportunity logic depending on wording from another section instead of underlying report evidence
+
+The post-processing pass must inspect report facts, not prior phrasing.
+
+Fix 5 — Add an actual scoring and ranking system
+
+The current summary describes fire conditions, but not a real ranking system. That is not enough.
+
+If multiple valid opportunities exist, score each candidate across the following dimensions:
+
+1. Business impact
+How directly could this improve admits, qualified leads, VOBs, conversion quality, or local acquisition?
+
+2. Evidence strength
+How clearly is the opportunity supported by the report data?
+
+3. Urgency
+How time-sensitive is the opportunity based on pace to goal, missed demand, or current quarter risk?
+
+4. Strategic fit
+How well does the opportunity align with the client’s current goals, tier, account state, and report narrative?
+
+Use a transparent weighted score.
+
+Recommended default weighting:
+- business impact: 40%
+- evidence strength: 30%
+- urgency: 20%
+- strategic fit: 10%
+
+Return only the top 1 to 3 highest-scoring opportunities that pass the minimum threshold.
+
+Minimum threshold requirement
+
+Do not output an Additional Opportunity unless:
+- business impact score is meaningful
+- evidence score is meaningful
+- total weighted score crosses a reasonable minimum threshold
+
+If nothing crosses the threshold, return no additional opportunities.
+
+Required classification framework
+
+Use the following framework exactly.
+
+STANDARD SCOPE
+An issue belongs in standard scope when it should reasonably be addressed through the normal SEO roadmap:
+- content refreshes
+- service page improvements
+- CTA improvements
+- internal linking
+- technical fixes
+- local SEO improvements
+- metadata and CTR optimization
+- geo-page strategy
+- blog-to-conversion path improvements
+- normal CRO recommendations
+- normal content planning
+
+Do not surface these in Additional Opportunities unless there is strong evidence that standard scope is insufficient and additional investment is needed to materially accelerate results.
+
+UPSELL
+An issue becomes an upsell only when SEO is still the right lever, but the current scope is too limited in depth, scale, specialization, or speed.
+
+Valid upsell classes:
+- Expanded Service / Funnel Coverage
+- Signature / Authority Content
+- Expanded Content Production
+- Advanced Landing Page / CRO Project
+- Custom Authority-Building Project
+
+Important:
+Tracking / instrumentation alone is not an upsell by default.
+
+CROSS_SELL
+An issue becomes a cross-sell only when another channel outside SEO is the more direct acceleration lever.
+
+Valid cross-sell classes:
+- Paid Search Demand Capture
+- Local Paid Search
+- Retargeting / Audience Building
+- Search Ads Protection / Demand Capture
+- Paid Social / Content Promotion
+
+No-opportunity rules
+
+Return no Additional Opportunity when any of the following is true:
+- the issue is already adequately addressed by standard SEO scope
+- the evidence is weak
+- the issue has no clear business tie
+- the recommendation would read like a forced sales pitch
+- the opportunity is really just a basic housekeeping or tracking prerequisite
+- there is not enough confirmed report data to cite
+
+Implementation instructions
+
+Update the existing generator in server/qbrPrepSectionGenerator.ts.
+
+Refactor the current generateAdditionalOpportunities(report) logic into a clearer pipeline:
+
+1. collect candidate issues from final report data
+2. classify each issue as standard-scope vs escalation-candidate
+3. for escalation-candidates, classify as upsell vs cross-sell
+4. assign title, evidence, recommendation, and framing
+5. score each candidate
+6. sort descending by total score
+7. keep only top 1 to 3 above threshold
+8. attach them to report.additionalOpportunities only if at least one valid opportunity remains
+
+Do not break the current preview / print rendering contract.
+
+Suggested implementation structure
+
+You may split the logic into small helpers if that improves maintainability. For example:
+
+- collectAdditionalOpportunitySignals(report)
+- classifyStandardScopeVsEscalation(signal, report)
+- classifyEscalationType(signal, report)
+- buildOpportunityFromSignal(signal, classification, report)
+- scoreOpportunityCandidate(candidate, report)
+- rankAdditionalOpportunities(candidates)
+
+Recommended signal model
+
+Build normalized signal objects from the report so the generator is driven by report evidence rather than section wording.
+
+Each signal should include fields like:
+- signalType
+- sourceSection
+- severity
+- businessConnection
+- evidence[]
+- confidence
+- relatedGoals
+- relatedPages / clusters / local signals if available
+
+Recommended opportunity candidate model
+
+Before final conversion to AdditionalOpportunity, use an internal candidate shape like:
+
+{
+  type: "upsell" | "cross_sell",
+  class: "expanded_content" | "authority_building" | "paid_search" | etc,
+  title: string,
+  why_now: string,
+  evidence: string[],
+  recommendation: string,
+  framing: string,
+  scores: {
+    businessImpact: number,
+    evidenceStrength: number,
+    urgency: number,
+    strategicFit: number,
+    total: number
+  }
+}
+
+Required output schema
+
+Keep the final AdditionalOpportunity output as:
+
+{
+  "type": "upsell" | "cross_sell",
+  "title": "Short opportunity name",
+  "why_now": "One sentence explaining why this is timely based on current report evidence",
+  "evidence": [
+    "Specific report finding",
+    "Specific report finding"
+  ],
+  "recommendation": "Brief explanation of the service or channel being recommended",
+  "framing": "Optional acceleration lever if the client wants to move faster"
+}
+
+Content requirements for generated opportunities
+
+Every surfaced opportunity must include:
+- a title that sounds consultative and specific
+- a why_now sentence grounded in present report conditions
+- exactly 2 evidence bullets when possible, both tied to actual report findings
+- a recommendation tied to a specific service or channel
+- a framing line that sounds optional and advisor-led
+
+Tone requirements
+
+Use brief, consultative, evidence-based language.
+
+Good tone:
+- optional acceleration lever
+- if the client wants to move faster
+- based on the current performance pattern
+- supported by the current report findings
+
+Bad tone:
+- hard sell
+- deficiency framing
+- vague growth fluff
+- traffic-only reasoning
+- aggressive sales copy
+
+Special handling rules
+
+Rule A — tracking gaps
+Missing conversion tracking should usually stay in standard recommendations, not Additional Opportunities.
+
+Rule B — authority-building
+Authority-building can be an upsell when there is a confirmed authority gap vs competitors and normal scope is not enough.
+
+Rule C — content expansion
+Expanded content production can be an upsell when report data confirms multiple high-intent opportunities and current production depth is too limited. Do not make it depend on Section 6 phrasing.
+
+Rule D — paid search
+Paid Search can be a cross-sell when the report shows meaningful demand and quarter risk, and another channel would close the gap faster than organic alone.
+
+Rule E — retargeting / promotion
+Retargeting or paid promotion can be a cross-sell when content engagement exists but conversion capture or distribution is lagging.
+
+Deliverables required in your response
+
+After implementation, report back with:
+
+1. exact file(s) changed
+2. exact new classification pipeline
+3. exact scoring model
+4. exact threshold logic
+5. 3 example outputs based on hypothetical report states
+6. confirmation that tracking / conversion infrastructure is no longer treated as an upsell by default
+7. confirmation that opportunities no longer depend on Section 6 phrasing
+8. confirmation that standard-scope filtering happens before upsell / cross-sell classification
+9. confirmation that only top 1 to 3 opportunities can appear
+
+Important final rule
+
+Do not merely patch the current hard-coded triggers.
+Rebuild the logic so the generator behaves like a real post-report evaluator:
+- standard scope first
+- escalation only when justified
+- upsell vs cross-sell second
+- scoring and ranking last

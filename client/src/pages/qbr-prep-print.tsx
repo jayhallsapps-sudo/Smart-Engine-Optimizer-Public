@@ -99,6 +99,7 @@ export default function QbrPrepPrint() {
   const s6 = reportData.section6Priorities ?? { priorities: [] };
   const s7 = reportData.section7Tracking ?? { tracking: [] };
   const genMeta = reportData.generationMeta;
+  const amPrint = reportData.sourceSnapshot?.manualInputs ?? {};
 
   const e = (key: string, val: string) => applyEdits(val, key, edits);
 
@@ -205,6 +206,38 @@ export default function QbrPrepPrint() {
             <div><strong>Generated On:</strong> {meta.generatedOn}</div>
           </div>
 
+          {(amPrint.amThoughts || amPrint.hypothesis || amPrint.prevQtrAssessment || amPrint.clientNotes || amPrint.clientSentiment || amPrint.sentiment) && (
+            <div style={{ border: `1px solid ${ACCENT}28`, borderRadius: 6, padding: "10px 14px", marginBottom: 20, backgroundColor: "#FFFDFB", fontSize: "10px" }}>
+              <div style={{ fontWeight: 700, fontSize: "9px", color: ACCENT, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
+                Account Manager Context
+              </div>
+              {(amPrint.amThoughts || amPrint.hypothesis) && (
+                <div style={{ marginBottom: 6 }}>
+                  <span style={{ fontWeight: 700, color: "#374151" }}>AM's Hypothesis: </span>
+                  <span style={{ color: "#4B5563" }}>{amPrint.amThoughts ?? amPrint.hypothesis}</span>
+                </div>
+              )}
+              {amPrint.prevQtrAssessment && (
+                <div style={{ marginBottom: 6 }}>
+                  <span style={{ fontWeight: 700, color: "#374151" }}>Previous Quarter Assessment: </span>
+                  <span style={{ color: "#4B5563" }}>{amPrint.prevQtrAssessment}</span>
+                </div>
+              )}
+              {amPrint.clientNotes && (
+                <div style={{ marginBottom: 6 }}>
+                  <span style={{ fontWeight: 700, color: "#374151" }}>Client Insights: </span>
+                  <span style={{ color: "#4B5563" }}>{amPrint.clientNotes}</span>
+                </div>
+              )}
+              {(amPrint.clientSentiment || amPrint.sentiment) && (
+                <div>
+                  <span style={{ fontWeight: 700, color: "#374151" }}>Client Sentiment: </span>
+                  <span style={{ color: "#4B5563" }}>{amPrint.clientSentiment ?? amPrint.sentiment}</span>
+                </div>
+              )}
+            </div>
+          )}
+
           <SectionHeading num={1} title="What Matters Most This Quarter" />
           <DataTable
             headers={["Goal Type", "Goal", "Measurement Source", "Goal Shift vs Last Quarter", "Reason"]}
@@ -239,8 +272,8 @@ export default function QbrPrepPrint() {
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px" }}>
               <thead>
                 <tr style={{ backgroundColor: `${ACCENT}0D` }}>
-                  {["Topic", ...(hasTopicDeltas ? ["# Queries", "Δ Queries", "Impressions", "Δ Impressions"] : []), "Example Queries", "Connection to Admits"].map((h: string) => (
-                    <th key={h} style={{ padding: "5px 8px", textAlign: "left", fontWeight: 600, fontSize: "9px", color: ACCENT, textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: `1px solid ${ACCENT}20`, whiteSpace: "nowrap" }}>{h}</th>
+                  {["Topic", ...(hasTopicDeltas ? ["# Queries", "QoQ Queries", "Impressions", "QoQ Impressions"] : []), "Example Queries", "Connection to Admits"].map((h: string) => (
+                    <th key={h} style={{ padding: "5px 8px", textAlign: h === "Connection to Admits" ? "center" : "left", fontWeight: 600, fontSize: "9px", color: ACCENT, textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: `1px solid ${ACCENT}20`, whiteSpace: "nowrap" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -260,12 +293,18 @@ export default function QbrPrepPrint() {
                           <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4 }}>{r.impressions != null ? r.impressions.toLocaleString("en-US") : "—"}</td>
                           <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4, color: r.impressionsDelta?.startsWith("-") ? "#DC2626" : "#16A34A" }}>{r.impressionsDelta ?? "—"}</td>
                         </>}
-                        <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4 }}>{cell(e(`s3a_${ri}_1`, r.exampleQueries))}</td>
-                        <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4 }}>{cell(e(`s3a_${ri}_2`, r.connectionToAdmits))}</td>
+                        <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4 }}>
+                          <span style={{ display: "inline-flex", flexWrap: "wrap", gap: 3 }}>
+                            {(e(`s3a_${ri}_1`, r.exampleQueries) || "").split(",").map((q: string, qi: number) => q.trim() ? (
+                              <span key={qi} style={{ background: `${ACCENT}14`, border: `1px solid ${ACCENT}30`, borderRadius: 10, padding: "1px 6px", fontSize: "8px", color: "#374151", whiteSpace: "nowrap" }}>{q.trim()}</span>
+                            ) : null)}
+                          </span>
+                        </td>
+                        <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4, textAlign: "center" }}>{cell(e(`s3a_${ri}_2`, r.connectionToAdmits))}</td>
                       </tr>
                       {hasInsight && (
                         <tr style={{ backgroundColor: "#FFFBEB" }}>
-                          <td colSpan={topicColCount} style={{ padding: "4px 10px 6px 14px", borderBottom: "1px solid #F3EDED", borderLeft: `3px solid ${ACCENT}40`, fontSize: "9px", color: "#6B7280", lineHeight: 1.4 }}>
+                          <td colSpan={topicColCount} style={{ padding: "4px 10px 6px 14px", borderBottom: "1px solid #F3EDED", borderLeft: `3px solid ${ACCENT}40`, fontSize: "9px", color: "#6B7280", lineHeight: 1.4, wordBreak: "break-word", whiteSpace: "normal", maxWidth: 0 }}>
                             <span style={{ fontWeight: 700, color: ACCENT, marginRight: 4 }}>Insight:</span>
                             {cell(insightVal)}
                           </td>
@@ -288,8 +327,8 @@ export default function QbrPrepPrint() {
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px" }}>
               <thead>
                 <tr style={{ backgroundColor: `${ACCENT}0D` }}>
-                  {["Page", "Clicks", ...(hasPageDeltas ? ["Δ Clicks", "Impressions", "Δ Impressions", "# Queries", "Δ Queries"] : []), "CTR", "Connection to Admits"].map((h: string) => (
-                    <th key={h} style={{ padding: "5px 8px", textAlign: "left", fontWeight: 600, fontSize: "9px", color: ACCENT, textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: `1px solid ${ACCENT}20`, whiteSpace: "nowrap" }}>{h}</th>
+                  {["Page", "Clicks", ...(hasPageDeltas ? ["QoQ Clicks", "Impressions", "QoQ Impressions", "# Queries", "QoQ Queries"] : []), "CTR", "Connection to Admits"].map((h: string) => (
+                    <th key={h} style={{ padding: "5px 8px", textAlign: h === "Connection to Admits" ? "center" : "left", fontWeight: 600, fontSize: "9px", color: ACCENT, textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: `1px solid ${ACCENT}20`, whiteSpace: "nowrap" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -312,11 +351,11 @@ export default function QbrPrepPrint() {
                           <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4, color: r.queriesDelta?.startsWith("-") ? "#DC2626" : "#16A34A" }}>{r.queriesDelta ?? "—"}</td>
                         </>}
                         <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4 }}>{cell(e(`s3b_${ri}_2`, r.ctr))}</td>
-                        <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4 }}>{cell(e(`s3b_${ri}_3`, r.connectionToAdmits))}</td>
+                        <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4, textAlign: "center" }}>{cell(e(`s3b_${ri}_3`, r.connectionToAdmits))}</td>
                       </tr>
                       {hasInsight && (
                         <tr style={{ backgroundColor: "#FFFBEB" }}>
-                          <td colSpan={pageColCount} style={{ padding: "4px 10px 6px 14px", borderBottom: "1px solid #F3EDED", borderLeft: `3px solid ${ACCENT}40`, fontSize: "9px", color: "#6B7280", lineHeight: 1.4 }}>
+                          <td colSpan={pageColCount} style={{ padding: "4px 10px 6px 14px", borderBottom: "1px solid #F3EDED", borderLeft: `3px solid ${ACCENT}40`, fontSize: "9px", color: "#6B7280", lineHeight: 1.4, wordBreak: "break-word", whiteSpace: "normal", maxWidth: 0 }}>
                             <span style={{ fontWeight: 700, color: ACCENT, marginRight: 4 }}>Insight:</span>
                             {cell(insightVal)}
                           </td>

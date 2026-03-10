@@ -1,0 +1,336 @@
+QBR Prep ADR revision pass — apply Olivia’s notes exactly. Treat this as a full implementation pass, not a partial patch. Preserve the current export flow, PDF functionality, audit/export gating, and overall report architecture unless one of the items below requires a local structural change.
+
+Primary goal:
+Bring the QBR Prep workflow, labels, logic, and presentation into alignment with ADR feedback.
+
+Do not change:
+- audit/export gating
+- Strategy Bank flow
+- core PDF/print layout unless required by the items below
+- current Section 2 / Section 6 table architecture unless explicitly stated
+- working server-side validation/export enforcement
+
+==================================================
+1. LEFT SIDEBAR / MANUAL INPUTS
+==================================================
+
+Update the initial generation sidebar to include these manual inputs in this order:
+
+1. AM’s Hypothesis
+2. Previous Quarter Assessment
+3. Priority Checks
+4. Client Notes
+5. Client Sentiment
+
+A. AM’s Hypothesis
+Rename any existing “AM’s Thoughts” field to:
+AM’s Hypothesis
+
+Definition:
+- 2–3 sentence breakdown of how the AM feels about the account
+- strategic, concise, interpretive
+- should appear in the report before Section 1
+
+B. Previous Quarter Assessment
+Add a new manual-entry field directly after AM’s Hypothesis.
+
+Definition:
+- short AM-written assessment of what happened last quarter
+- should help ground why the current quarter’s priorities are changing or continuing
+- should appear in the report before Section 1
+
+C. Priority Checks
+Keep / add Priority Checks as a long-form AM instruction field.
+
+Rules:
+- background instructions only
+- must influence generation
+- must NOT appear anywhere in the final report
+- treat as hidden generator guidance
+
+D. Client Notes
+Keep optional.
+
+E. Client Sentiment
+Add / keep as optional manual input grouped with Client Notes.
+
+Placement in report before Section 1:
+- AM’s Hypothesis
+- Previous Quarter Assessment
+- Client Notes
+- Client Sentiment
+
+Priority Checks must never render in the report.
+
+==================================================
+2. SECTION 1 — WHAT MATTERS MOST THIS QUARTER
+==================================================
+
+A. Goal naming changes
+Rename:
+- Primary Goal → Primary Goal/MVP NSM
+- Tertiary Goal → Tertiary Goal/Secondary NSM
+
+B. Tertiary Goal/Secondary NSM data source
+Use GA4 only.
+Do not combine GSC with this metric.
+
+C. Reason copy rewrite
+Section 1 Reason must be very clear and comparative.
+
+Required behavior:
+- explain what happened last quarter
+- explain what the previous focus was
+- explain what changed
+- explain why the current quarter’s goal is changing now by comparison
+
+Inputs that should influence this:
+- Previous Quarter Assessment
+- AM’s Hypothesis
+- current account conditions
+- client notes / sentiment when relevant
+
+Avoid vague strategy language.
+Make the logic easy for an ADR or AM to follow quickly.
+
+==================================================
+3. SECTION 2 — TOP CONVERTING PAGES / PATTERNS / SOURCES
+==================================================
+
+A. Top Converting Pages qualification logic
+Top Converting Pages must be qualified by GA4 and/or call tracking only.
+
+Allowed sources for inclusion:
+- GA4 conversion-backed landing pages
+- call tracking landing pages (CallRail / CTM / Nimbata)
+
+Do NOT allow:
+- Screaming Frog
+- GSC
+
+Keep the fallback placeholder row when no qualified GA4 or call-tracking data exists.
+
+B. Placeholder wording
+If no qualified GA4 or call-tracking page data exists, keep a single fallback row with clear wording rather than dashes.
+
+Use the current improved wording or equivalent concise wording of the same quality.
+
+C. Terminology change
+Rename:
+Admissions-Gated Entry Points
+to:
+Care Access Pages
+
+Apply wherever relevant in Section 2 and any linked copy.
+
+D. Evidence column meaning
+Where Section 2 uses “Evidence,” make sure the meaning is:
+evidence of efficacy / performance
+NOT evidence that the page type exists
+
+E. Conversion evidence rule
+Section 2 conversion logic must be grounded in:
+- GA4
+- call tracking
+
+Do not use Screaming Frog or GSC as conversion evidence for Top Converting Pages.
+
+F. Pattern evidence copy
+Pattern evidence should reflect performance signals from the qualified pool, not site-existence logic.
+Keep pattern generation aligned with the current GA4 / call-tracking-only approach.
+
+==================================================
+4. LABEL / DELTA / COMPARISON FIXES
+==================================================
+
+A. Rename “Δ QUERIES”
+Change to:
+QoQ QUERIES
+
+B. Top Traffic Pages clicks delta
+Current logic was previously using a matched prior-period window.
+Change it to true quarter-over-quarter logic.
+
+Required:
+- clicks delta shown in Top Traffic Pages must use actual QoQ comparison logic
+- remove the old pseudo-QoQ / matched prior-period behavior from report-facing output
+- clean up any report labels, helper text, or logs that still imply QoQ while using non-QoQ logic
+
+Use a truthful label and truthful calculation together.
+
+==================================================
+5. EXAMPLE QUERIES UI
+==================================================
+
+Example queries should render as visually distinct colored tags / pills.
+
+Rules:
+- do not render as comma-separated inline text
+- provide enough spacing and contrast to make each query readable
+- support wrapping cleanly when many tags exist
+
+==================================================
+6. TABLE FORMATTING / WRAPPING
+==================================================
+
+A. Top Traffic Pages insights wrapping
+Insights are spilling over.
+Fix the table cell behavior so longer insight text wraps cleanly inside the cell.
+
+B. Related table overflow
+Clean up any nearby table cell overflow caused by the same styling issue.
+
+C. Connection to Admits alignment
+Center the entries in the Connection to Admits column if Olivia requested centered entries there.
+
+==================================================
+7. SECTION 4 — SITE SERVICE OVERVIEW
+==================================================
+
+A. Residential / Inpatient matching improvement
+Current behavior falls back to “Manual entry needed” too often because matching is too narrow.
+
+Improve the representative URL matching for the Residential / Inpatient row.
+
+Required:
+- broaden matching beyond only /residential and /inpatient
+- cover common behavioral health URL conventions such as treatment / rehab / program-style slugs where appropriate
+- support broader fallback matching or client-specific aliases if cleanly possible
+- preserve the current behavior of always showing the row
+- only show “Manual entry needed” when broader matching still fails
+
+Clarification:
+- missing match here is a matching-coverage problem, not proof the service is missing
+- do not remove the row just because no regex match is found
+
+==================================================
+8. SECTION 3 / TOP TRAFFIC PAGES CLARITY
+==================================================
+
+A. QoQ clicks period clarity
+After switching to true QoQ logic, make sure the label and displayed metric are explicit and honest.
+
+B. Insights wrapping
+Already covered above, but make sure Top Traffic Pages no longer has spillover.
+
+==================================================
+9. SECTION 6 — WHAT WE NEED TO DO NEXT
+==================================================
+
+A. Micro-task recommendations need multiple page examples
+For items like:
+- internal linking
+- schema work
+- cluster refreshes
+- similar micro / tactical tasks
+
+Do not give a vague one-page recommendation only.
+
+Required:
+- include multiple example pages where possible
+- minimum 3 examples
+- maximum 6 examples
+- keep examples targeted and relevant
+
+B. Cluster notation must include page count
+Whenever referring to a cluster, include the page count in parentheses immediately after the cluster name.
+
+Example format:
+"Substance-Specific Education" cluster (5) (55% of clicks)
+
+Rules:
+- cluster name
+- then page count in parentheses
+- then performance context in its own parentheses if applicable
+
+==================================================
+10. REPORT ORDER / PRESENTATION
+==================================================
+
+Before Section 1, render this manual-context block in the report:
+
+- AM’s Hypothesis
+- Previous Quarter Assessment
+- Client Notes
+- Client Sentiment
+
+Do NOT render Priority Checks anywhere in the final report.
+
+==================================================
+11. DATA / LOGIC GUARDRAILS
+==================================================
+
+- do not reintroduce Screaming Frog into Top Converting Pages logic
+- do not allow GSC to qualify Top Converting Pages
+- keep Section 2 conversion evidence grounded in GA4 and call tracking only
+- do not label anything QoQ unless the calculation is truly QoQ
+- do not leave Section 1 Reason vague; make the comparison explicit
+- do not render Example Queries as comma text
+- do not allow table insights to overflow cells
+- do not remove Residential / Inpatient just because matching is imperfect
+- preserve current export behavior
+- preserve current audit/export gating
+- preserve current Strategy Bank logic for now
+
+==================================================
+12. TESTING / ACCEPTANCE CRITERIA
+==================================================
+
+1. Sidebar now includes:
+- AM’s Hypothesis
+- Previous Quarter Assessment
+- Priority Checks
+- Client Notes
+- Client Sentiment
+
+2. Priority Checks influences generation but does not render in the final report
+
+3. AM’s Hypothesis, Previous Quarter Assessment, Client Notes, and Client Sentiment appear before Section 1 in the report
+
+4. Section 1 goal labels are updated to:
+- Primary Goal/MVP NSM
+- Tertiary Goal/Secondary NSM
+
+5. Tertiary Goal/Secondary NSM is GA4-only
+
+6. Section 1 Reason clearly explains:
+- what happened last quarter
+- why the goal is changing now by comparison
+
+7. Top Converting Pages is now qualified by GA4 and call tracking only
+
+8. “Admissions-Gated Entry Points” is renamed to “Care Access Pages”
+
+9. Evidence language now reflects evidence of efficacy/performance, not mere existence
+
+10. Δ QUERIES is renamed to QoQ QUERIES
+
+11. Top Traffic Pages clicks delta now uses true QoQ logic, not matched prior-period logic
+
+12. Example Queries render as colored tags/pills
+
+13. Insights wrap cleanly in tables
+
+14. Residential / Inpatient matching improves and uses “Manual entry needed” only when broader matching still fails
+
+15. Section 6 tactical items include 3–6 example pages where appropriate
+
+16. Cluster references include page count like Cluster Name (X)
+
+17. Existing export flow still works
+
+==================================================
+13. AFTER IMPLEMENTATION, REPORT BACK WITH:
+==================================================
+
+- files changed
+- exact new sidebar/manual input structure
+- exact report-order placement of AM’s Hypothesis / Previous Quarter Assessment / Client Notes / Client Sentiment
+- exact Section 1 reason-generation logic
+- exact Top Converting Pages ranking logic
+- exact new QoQ clicks comparison logic
+- exact Residential / Inpatient matching improvements
+- exact Section 6 page-example generation logic
+- confirmation that Priority Checks does not render in the final report
+- confirmation that export still works
+- any unresolved edge cases

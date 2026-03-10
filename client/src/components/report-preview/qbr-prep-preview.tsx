@@ -111,7 +111,7 @@ export interface QbrPrepPreviewProps {
   edits: Record<string, string>;
   onEdit: (key: string, value: string) => void;
   generationMeta?: { dataSources: string[]; missingData: string[] };
-  amInputs?: { clientSentiment?: string; amThoughts?: string; priorityChecks?: string; clientNotes?: string };
+  amInputs?: { clientSentiment?: string; amThoughts?: string; prevQtrAssessment?: string; priorityChecks?: string; clientNotes?: string };
 }
 
 function QueryChipsCell({
@@ -404,8 +404,45 @@ export function QbrPrepPreview({
               <div><strong>Generated On:</strong> {meta.generatedOn}</div>
             </div>
 
-            {/* AM Inputs are used internally to guide report generation only.
-                They are not rendered as a visible section in the client-facing report. */}
+            {/* AM Context Block — appears before Section 1; Priority Checks intentionally excluded */}
+            {amInputs && (amInputs.amThoughts || amInputs.prevQtrAssessment || amInputs.clientNotes || amInputs.clientSentiment) && (
+              <div style={{
+                border: `1px solid ${ACCENT}28`,
+                borderRadius: 6,
+                padding: "10px 14px",
+                marginBottom: 20,
+                backgroundColor: "#FFFDFB",
+                fontSize: "10px",
+              }} data-testid="am-context-block">
+                <div style={{ fontWeight: 700, fontSize: "9px", color: ACCENT, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
+                  Account Manager Context
+                </div>
+                {amInputs.amThoughts && (
+                  <div style={{ marginBottom: 6 }}>
+                    <span style={{ fontWeight: 700, color: "#374151" }}>AM's Hypothesis: </span>
+                    <span style={{ color: "#4B5563" }}>{amInputs.amThoughts}</span>
+                  </div>
+                )}
+                {amInputs.prevQtrAssessment && (
+                  <div style={{ marginBottom: 6 }}>
+                    <span style={{ fontWeight: 700, color: "#374151" }}>Previous Quarter Assessment: </span>
+                    <span style={{ color: "#4B5563" }}>{amInputs.prevQtrAssessment}</span>
+                  </div>
+                )}
+                {amInputs.clientNotes && (
+                  <div style={{ marginBottom: 6 }}>
+                    <span style={{ fontWeight: 700, color: "#374151" }}>Client Insights: </span>
+                    <span style={{ color: "#4B5563" }}>{amInputs.clientNotes}</span>
+                  </div>
+                )}
+                {amInputs.clientSentiment && (
+                  <div>
+                    <span style={{ fontWeight: 700, color: "#374151" }}>Client Sentiment: </span>
+                    <span style={{ color: "#4B5563" }}>{amInputs.clientSentiment}</span>
+                  </div>
+                )}
+              </div>
+            )}
 
             <SectionHeading num={1} title="What Matters Most This Quarter" />
             <AddableReportTable
@@ -453,8 +490,8 @@ export function QbrPrepPreview({
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px" }}>
                 <thead>
                   <tr style={{ backgroundColor: `${ACCENT}0D` }}>
-                    {["Topic", ...(hasTopicDeltas ? ["# Queries", "Δ Queries", "Impressions", "Δ Impressions"] : []), "Example Queries", "Connection to Admits"].map(h => (
-                      <th key={h} style={{ padding: "5px 8px", textAlign: "left", fontWeight: 600, fontSize: "9px", color: ACCENT, textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: `1px solid ${ACCENT}20`, whiteSpace: "nowrap" }}>{h}</th>
+                    {["Topic", ...(hasTopicDeltas ? ["# Queries", "QoQ Queries", "Impressions", "QoQ Impressions"] : []), "Example Queries", "Connection to Admits"].map(h => (
+                      <th key={h} style={{ padding: "5px 8px", textAlign: h === "Connection to Admits" ? "center" : "left", fontWeight: 600, fontSize: "9px", color: ACCENT, textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: `1px solid ${ACCENT}20`, whiteSpace: "nowrap" }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -479,13 +516,13 @@ export function QbrPrepPreview({
                           <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4 }}>
                             <QueryChipsCell editKey={`s3a_${ri}_1`} value={r.exampleQueries} edits={edits} onEdit={onEdit} />
                           </td>
-                          <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4 }}>
+                          <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4, textAlign: "center" }}>
                             <EditableCell editKey={`s3a_${ri}_2`} value={r.connectionToAdmits} edits={edits} onEdit={onEdit} />
                           </td>
                         </tr>
                         {hasInsight && (
                           <tr style={{ backgroundColor: "#FFFBEB" }}>
-                            <td colSpan={topicColCount} style={{ padding: "4px 10px 6px 14px", borderBottom: "1px solid #F3EDED", borderLeft: `3px solid ${ACCENT}40`, fontSize: "9px", color: "#6B7280", lineHeight: 1.4 }}>
+                            <td colSpan={topicColCount} style={{ padding: "4px 10px 6px 14px", borderBottom: "1px solid #F3EDED", borderLeft: `3px solid ${ACCENT}40`, fontSize: "9px", color: "#6B7280", lineHeight: 1.4, wordBreak: "break-word", whiteSpace: "normal", maxWidth: 0 }}>
                               <span style={{ fontWeight: 700, color: ACCENT, marginRight: 4 }}>Insight:</span>
                               <EditableCell editKey={`s3a_${ri}_3`} value={r.insight} edits={edits} onEdit={onEdit} />
                             </td>
@@ -502,8 +539,8 @@ export function QbrPrepPreview({
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px" }}>
                 <thead>
                   <tr style={{ backgroundColor: `${ACCENT}0D` }}>
-                    {["Page", "Clicks", ...(hasPageDeltas ? ["Δ Clicks", "Impressions", "Δ Impressions", "# Queries", "Δ Queries"] : []), "CTR", "Connection to Admits"].map(h => (
-                      <th key={h} style={{ padding: "5px 8px", textAlign: "left", fontWeight: 600, fontSize: "9px", color: ACCENT, textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: `1px solid ${ACCENT}20`, whiteSpace: "nowrap" }}>{h}</th>
+                    {["Page", "Clicks", ...(hasPageDeltas ? ["QoQ Clicks", "Impressions", "QoQ Impressions", "# Queries", "QoQ Queries"] : []), "CTR", "Connection to Admits"].map(h => (
+                      <th key={h} style={{ padding: "5px 8px", textAlign: h === "Connection to Admits" ? "center" : "left", fontWeight: 600, fontSize: "9px", color: ACCENT, textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: `1px solid ${ACCENT}20`, whiteSpace: "nowrap" }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -521,11 +558,11 @@ export function QbrPrepPreview({
                           <td style={{ padding: "6px 8px", borderBottom: (edits[`s3b_${ri}_4`] ?? r.insight) ? "none" : "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4, color: r.queriesDelta?.startsWith("-") ? "#DC2626" : "#16A34A" }}>{r.queriesDelta ?? "—"}</td>
                         </>}
                         <td style={{ padding: "6px 8px", borderBottom: (edits[`s3b_${ri}_4`] ?? r.insight) ? "none" : "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4 }}><EditableCell editKey={`s3b_${ri}_2`} value={r.ctr} edits={edits} onEdit={onEdit} /></td>
-                        <td style={{ padding: "6px 8px", borderBottom: (edits[`s3b_${ri}_4`] ?? r.insight) ? "none" : "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4 }}><EditableCell editKey={`s3b_${ri}_3`} value={r.connectionToAdmits} edits={edits} onEdit={onEdit} /></td>
+                        <td style={{ padding: "6px 8px", borderBottom: (edits[`s3b_${ri}_4`] ?? r.insight) ? "none" : "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4, textAlign: "center" }}><EditableCell editKey={`s3b_${ri}_3`} value={r.connectionToAdmits} edits={edits} onEdit={onEdit} /></td>
                       </tr>
                       {(edits[`s3b_${ri}_4`] ?? r.insight) && (
                         <tr key={`${ri}-i`} style={{ backgroundColor: "#FFFBEB" }}>
-                          <td colSpan={pageColCount} style={{ padding: "4px 10px 6px 14px", borderBottom: "1px solid #F3EDED", borderLeft: `3px solid ${ACCENT}40`, fontSize: "9px", color: "#6B7280", lineHeight: 1.4 }}>
+                          <td colSpan={pageColCount} style={{ padding: "4px 10px 6px 14px", borderBottom: "1px solid #F3EDED", borderLeft: `3px solid ${ACCENT}40`, fontSize: "9px", color: "#6B7280", lineHeight: 1.4, wordBreak: "break-word", whiteSpace: "normal", maxWidth: 0 }}>
                             <span style={{ fontWeight: 700, color: ACCENT, marginRight: 4 }}>Insight:</span>
                             <EditableCell editKey={`s3b_${ri}_4`} value={r.insight} edits={edits} onEdit={onEdit} />
                           </td>

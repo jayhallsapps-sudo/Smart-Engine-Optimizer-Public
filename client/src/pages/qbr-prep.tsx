@@ -96,6 +96,7 @@ export default function QbrPrepPage() {
   const [generationDate, setGenerationDate] = useState(new Date().toISOString().split("T")[0]);
   const [sentiment, setSentiment] = useState<string>("");
   const [amThoughts, setAmThoughts] = useState("");
+  const [prevQtrAssessment, setPrevQtrAssessment] = useState("");
   const [priorityChecks, setPriorityChecks] = useState("");
   const [clientNotes, setClientNotes] = useState("");
   const [currentCrawlId, setCurrentCrawlId] = useState<number | null>(null);
@@ -181,6 +182,7 @@ export default function QbrPrepPage() {
         generationDate,
         sentiment,
         amThoughts,
+        prevQtrAssessment: prevQtrAssessment || undefined,
         priorityChecks,
         clientNotes: clientNotes || undefined,
         currentCrawlAssetId: currentCrawlId ?? undefined,
@@ -470,6 +472,16 @@ export default function QbrPrepPage() {
                   {amValidationErrors.amThoughts && <p className="text-destructive text-[10px] mt-0.5">{amValidationErrors.amThoughts}</p>}
                 </div>
                 <div>
+                  <Label className="text-xs mb-1 block text-muted-foreground">Previous Quarter Assessment <span className="text-muted-foreground text-[10px]">(optional)</span></Label>
+                  <Textarea
+                    className="text-xs min-h-[60px]"
+                    placeholder="Brief assessment of what happened last quarter — helps ground why this quarter's goals are changing or continuing…"
+                    value={prevQtrAssessment}
+                    onChange={e => setPrevQtrAssessment(e.target.value)}
+                    data-testid="textarea-prev-qtr-assessment"
+                  />
+                </div>
+                <div>
                   <Label className="text-xs mb-1 block">Priority Checks <span className="text-destructive">*</span></Label>
                   <Textarea
                     className={`text-xs min-h-[60px] ${amValidationErrors.priorityChecks ? "border-destructive" : ""}`}
@@ -520,6 +532,7 @@ export default function QbrPrepPage() {
                   const savedInputs = data?.sourceSnapshot?.manualInputs ?? {};
                   if (savedInputs.sentiment || savedInputs.clientSentiment) setSentiment(savedInputs.clientSentiment ?? savedInputs.sentiment ?? "");
                   if (savedInputs.amThoughts || savedInputs.hypothesis) setAmThoughts(savedInputs.amThoughts ?? savedInputs.hypothesis ?? "");
+                  if (savedInputs.prevQtrAssessment) setPrevQtrAssessment(savedInputs.prevQtrAssessment ?? "");
                   if (savedInputs.priorityChecks || savedInputs.auditNotes) setPriorityChecks(savedInputs.priorityChecks ?? savedInputs.auditNotes ?? "");
                   if (savedInputs.clientNotes) setClientNotes(savedInputs.clientNotes ?? "");
                   toast({ title: "Report loaded" });
@@ -777,6 +790,7 @@ export default function QbrPrepPage() {
             amInputs={reportData.sourceSnapshot?.manualInputs ? {
               clientSentiment: reportData.sourceSnapshot.manualInputs.clientSentiment ?? reportData.sourceSnapshot.manualInputs.sentiment,
               amThoughts: reportData.sourceSnapshot.manualInputs.amThoughts ?? reportData.sourceSnapshot.manualInputs.hypothesis,
+              prevQtrAssessment: reportData.sourceSnapshot.manualInputs.prevQtrAssessment,
               priorityChecks: reportData.sourceSnapshot.manualInputs.priorityChecks ?? reportData.sourceSnapshot.manualInputs.auditNotes,
               clientNotes: reportData.sourceSnapshot.manualInputs.clientNotes,
             } : undefined}

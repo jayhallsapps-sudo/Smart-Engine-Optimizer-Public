@@ -226,6 +226,7 @@ export interface QbrPrepGenerateInput {
   generationDate: string;
   sentiment?: string;
   hypothesis?: string;
+  prevQtrAssessment?: string;
   auditNotes?: string;
   clientNotes?: string;
   forwardLooking?: boolean;
@@ -435,7 +436,7 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
     generatedOn: input.generationDate,
   };
 
-  const section1 = generateSection1(nsmData, ga4FunnelCurr, quarter, client, callTrackingSources, prevNsmData);
+  const section1 = generateSection1(nsmData, ga4FunnelCurr, quarter, client, callTrackingSources, prevNsmData, input.prevQtrAssessment);
   const section2 = generateSection2(ga4LandingRows, gscPageRows, client, callTrackingLandingPages, callTrackingSources);
   const section3 = generateSection3(gscQueryRows, gscPageRows, ga4LandingRows, client, gscPrevQueryRows, gscPrevPageRows, gscQueryPageRows, gscPrevQueryPageRows);
   const section4 = generateSection4(sfData, sfHeaders, client);
@@ -728,6 +729,7 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
     manualInputs: {
       clientSentiment: input.sentiment,
       amThoughts: input.hypothesis,
+      prevQtrAssessment: input.prevQtrAssessment,
       priorityChecks: input.auditNotes,
       clientNotes: (input as any).clientNotes ?? "",
       sentiment: input.sentiment,
@@ -925,7 +927,7 @@ function computeGoalShiftPct(currentGoal: string, prevGoal: string): string {
   return pct > 0 ? `+${pct}%` : `${pct}%`;
 }
 
-function generateSection1(nsmData: any, ga4Funnel: any, quarter: QuarterInfo, client: Client, callTrackingSources: Array<{ source: string; calls: number }> = [], prevNsmData: any = null): Section1Goals {
+function generateSection1(nsmData: any, ga4Funnel: any, quarter: QuarterInfo, client: Client, callTrackingSources: Array<{ source: string; calls: number }> = [], prevNsmData: any = null, prevQtrAssessment?: string): Section1Goals {
   const rows: GoalRow[] = [];
 
   const callTrackingProvider = detectCallTrackingProvider(client);
@@ -996,12 +998,17 @@ function generateSection1(nsmData: any, ga4Funnel: any, quarter: QuarterInfo, cl
 
   console.log(`[Section1] Primary Goal=${primaryKpiLabel}, goal=${admitsGoalDisplay}, source=${admitsSource}, shift=${admitsShift}`);
 
+  // Inject prior-quarter context into Primary Goal reason when AM provided it
+  const primaryReason = prevQtrAssessment?.trim()
+    ? `Prior quarter: ${prevQtrAssessment.trim()} — ${admitsReason}`
+    : admitsReason;
+
   rows.push({
-    goalType: "Primary Goal",
+    goalType: "Primary Goal/MVP NSM",
     goal: admitsGoalDisplay,
     measurementSource: admitsSource,
     goalShift: admitsShift,
-    reason: admitsReason,
+    reason: primaryReason,
   });
 
   // ── Secondary Goal: Calls ──────────────────────────────────────────────
@@ -1085,9 +1092,9 @@ function generateSection1(nsmData: any, ga4Funnel: any, quarter: QuarterInfo, cl
   console.log(`[Section1] Tertiary Goal=Organic Sessions, target=${sessRecommended}, source=GA4 / GSC, shift=${sessShift}`);
 
   rows.push({
-    goalType: "Tertiary Goal",
+    goalType: "Tertiary Goal/Secondary NSM",
     goal: sessRecommended !== ME ? `${sessRecommended} organic sessions` : ME,
-    measurementSource: "GA4 / GSC",
+    measurementSource: "GA4",
     goalShift: sessShift,
     reason: sessReason,
   });
@@ -1228,7 +1235,7 @@ function generateSection2(
 
   if (hasAdmissions || hasVob) {
     candidatePatterns.push({
-      pattern: "Admissions-Gated Entry Points",
+      pattern: "Care Access Pages",
       whyItMatters: "Direct contact, intake, and insurance-verification pages are the last digital step before a prospective client reaches the admissions team. Conversion friction on these pages costs admits directly.",
       evidence: hasGA4Signal
         ? "GA4 conversion events confirm on-site form activity on admissions-path pages."
@@ -1773,7 +1780,7 @@ function generateSection4(
   // Contact / Admissions handled separately below via isUtilityAdmissionsPage().
   const serviceTargets = [
     { service: "Detox", pattern: /\/detox/i },
-    { service: "Residential / Inpatient", pattern: /\/residential|\/inpatient/i },
+    { service: "Residential / Inpatient", pattern: /\/residential|\/inpatient|\/treatment[-\/]|\/long-?term[-\/]|\/recovery[-_]program|\/rehab[-\/]/i },
     { service: "PHP / IOP", pattern: /\/php(?!p)|\/iop|\/partial.?hospital|\/intensive.?out/i },
     { service: "Outpatient", pattern: /\/outpatient(?!.*intensive)/i },
     { service: "Dual Diagnosis", pattern: /\/dual.?diagnosis|\/co.?occurring/i },
@@ -2182,15 +2189,41 @@ function generateSection6(
   const topTrafficTopic = section3.topTrafficTopics.find(t => t.connectionToAdmits === "Low" || t.connectionToAdmits === "Medium");
   const thinPagesNote = hasThinPages ? ` (${tierInput.thinPages} thin pages detected in crawl)` : "";
 
+  // Build a short list of example page slugs for tactical recommendations (3–6 pages)
+  function examplePageList(pages: typeof unclearTrafficPages, max = 5): string {
+    const slugs = pages.slice(0, max).map(p => p.page.replace(/^https?:\/\/[^/]+/, "").replace(/\/$/, "") || p.page);
+    if (slugs.length === 0) return "";
+    return ` (e.g. ${slugs.join(", ")})`;
+  }
+
+  // Cluster notation helper: "Topic Name (N queries) (X% of clicks)"
+  // insight already contains the click share as its first token (e.g. "12% of clicks...")
+  function clusterRef(topic: typeof topTrafficTopic): string {
+    if (!topic) return "";
+    const queryCount = topic.queryCount ?? 0;
+    // Extract click share from insight string — format is "NN% of clicks..."
+    const clickShareMatch = topic.insight.match(/^(\d+(?:\.\d+)?%\s+of\s+clicks)/i);
+    const clickStr = clickShareMatch ? ` (${clickShareMatch[1]})` : "";
+    return `"${topic.topic}" cluster (${queryCount} queries)${clickStr}`;
+  }
+
+  // For internal linking: use up to 5 unclear pages for richer examples
+  const internalLinkExamples = examplePageList(unclearTrafficPages, 5);
+  // For content refresh: also pull top traffic pages as refresh targets
+  const refreshExamples = examplePageList(
+    section3.topTrafficPages.filter(p => p.connectionToAdmits !== "High").slice(0, 5),
+    5
+  );
+
   const evidenceFillers: Array<{ initiative: string; tier: string; action: string; reason: string; condition: boolean; source: string }> = [
     {
       initiative: "Internal Linking — High-Traffic to Conversion",
       tier: `Tier ${Math.min(section5.tier, 3)}`,
-      action: topUnclearPage
-        ? `Add internal links from "${topUnclearPage.page}" (${topUnclearPage.clicks} clicks, ${topUnclearPage.connectionToAdmits.toLowerCase()} admit connection) to primary service and VOB pages`
+      action: unclearTrafficPages.length > 0
+        ? `Add internal links from high-traffic pages with low admit connection to primary service and VOB pages${internalLinkExamples}`
         : "Add internal links from high-traffic informational pages to primary service and VOB pages",
       reason: topUnclearPage
-        ? `${topUnclearPage.clicks} organic clicks land on a page with limited path to admissions — targeted internal links to service and VOB pages are the lowest-cost lever to convert that existing traffic`
+        ? `${unclearTrafficPages.length} page${unclearTrafficPages.length > 1 ? "s" : ""} (led by ${topUnclearPage.page}, ${topUnclearPage.clicks} clicks) carry organic traffic with limited path to admissions — targeted internal links to service and VOB pages are the lowest-cost lever to convert that existing traffic`
         : "Traffic data shows high-volume informational pages with weak admit connection — internal linking is the lowest-cost conversion lever",
       condition: unclearTrafficPages.length > 0 && !priorities.find(p => p.initiative.includes("Internal Link")),
       source: "GSC",
@@ -2211,10 +2244,10 @@ function generateSection6(
       initiative: "Content Refresh — Highest-Traffic Assisted Pages",
       tier: `Tier ${Math.min(section5.tier + 1, 5)}`,
       action: topTrafficTopic
-        ? `Refresh content in the "${topTrafficTopic.topic}" cluster (${topTrafficTopic.insight.split(".")[0]}) to improve engagement and strengthen links to service pages`
-        : `Refresh highest-traffic assisted-conversion pages${thinPagesNote}`,
+        ? `Refresh content in the ${clusterRef(topTrafficTopic)} to improve engagement and strengthen links to service pages${refreshExamples}`
+        : `Refresh highest-traffic assisted-conversion pages${thinPagesNote}${refreshExamples}`,
       reason: topTrafficTopic
-        ? `The "${topTrafficTopic.topic}" topic drives meaningful traffic but shows ${topTrafficTopic.connectionToAdmits.toLowerCase()} admit connection — refreshed content with stronger CTAs and internal links captures more value from existing impressions`
+        ? `The ${clusterRef(topTrafficTopic)} drives meaningful traffic but shows ${topTrafficTopic.connectionToAdmits.toLowerCase()} admit connection — refreshed content with stronger CTAs and internal links captures more value from existing impressions`
         : `Existing high-traffic pages${hasThinPages ? ` and ${tierInput.thinPages} detected thin pages` : ""} are the fastest path to improving organic conversion without new content investment`,
       condition: !priorities.find(p => p.initiative.includes("Content Refresh")) && !isAlreadyDone("content refresh"),
       source: "GSC",
@@ -2223,8 +2256,8 @@ function generateSection6(
       initiative: "Title & Meta Optimization",
       tier: "Tier 1",
       action: hasMissingH1s
-        ? `Fix ${tierInput.missingH1s} pages with missing H1 tags and audit meta descriptions on top-traffic pages to improve CTR`
-        : "Audit title tags and meta descriptions on highest-impression pages to improve organic CTR",
+        ? `Fix ${tierInput.missingH1s} pages with missing H1 tags and audit meta descriptions on top-traffic pages to improve CTR${examplePageList(section3.topTrafficPages.slice(0, 4), 4)}`
+        : `Audit title tags and meta descriptions on highest-impression pages to improve organic CTR${examplePageList(section3.topTrafficPages.slice(0, 4), 4)}`,
       reason: hasMissingH1s
         ? `Crawl shows ${tierInput.missingH1s} pages without H1 tags — these pages are structurally weak and likely suppressed in rankings; fixing them requires low effort for potentially high impact`
         : "CTR improvements on existing impression volume require no new traffic — they are free growth on what the site already earns",

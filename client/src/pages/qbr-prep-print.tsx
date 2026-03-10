@@ -214,25 +214,25 @@ export default function QbrPrepPrint() {
               {(amPrint.amThoughts || amPrint.hypothesis) && (
                 <div style={{ marginBottom: 6 }}>
                   <span style={{ fontWeight: 700, color: "#374151" }}>AM's Hypothesis: </span>
-                  <span style={{ color: "#4B5563" }}>{amPrint.amThoughts ?? amPrint.hypothesis}</span>
+                  <span style={{ color: "#4B5563", whiteSpace: "pre-wrap" }}>{amPrint.amThoughts ?? amPrint.hypothesis}</span>
                 </div>
               )}
               {amPrint.prevQtrAssessment && (
                 <div style={{ marginBottom: 6 }}>
                   <span style={{ fontWeight: 700, color: "#374151" }}>Previous Quarter Assessment: </span>
-                  <span style={{ color: "#4B5563" }}>{amPrint.prevQtrAssessment}</span>
+                  <span style={{ color: "#4B5563", whiteSpace: "pre-wrap" }}>{amPrint.prevQtrAssessment}</span>
                 </div>
               )}
               {amPrint.clientNotes && (
                 <div style={{ marginBottom: 6 }}>
                   <span style={{ fontWeight: 700, color: "#374151" }}>Client Insights: </span>
-                  <span style={{ color: "#4B5563" }}>{amPrint.clientNotes}</span>
+                  <span style={{ color: "#4B5563", whiteSpace: "pre-wrap" }}>{amPrint.clientNotes}</span>
                 </div>
               )}
               {(amPrint.clientSentiment || amPrint.sentiment) && (
                 <div>
                   <span style={{ fontWeight: 700, color: "#374151" }}>Client Sentiment: </span>
-                  <span style={{ color: "#4B5563" }}>{amPrint.clientSentiment ?? amPrint.sentiment}</span>
+                  <span style={{ color: "#4B5563", whiteSpace: "pre-wrap" }}>{amPrint.clientSentiment ?? amPrint.sentiment}</span>
                 </div>
               )}
             </div>

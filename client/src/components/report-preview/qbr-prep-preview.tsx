@@ -420,25 +420,25 @@ export function QbrPrepPreview({
                 {amInputs.amThoughts && (
                   <div style={{ marginBottom: 6 }}>
                     <span style={{ fontWeight: 700, color: "#374151" }}>AM's Hypothesis: </span>
-                    <span style={{ color: "#4B5563" }}>{amInputs.amThoughts}</span>
+                    <span style={{ color: "#4B5563", whiteSpace: "pre-wrap" }}>{amInputs.amThoughts}</span>
                   </div>
                 )}
                 {amInputs.prevQtrAssessment && (
                   <div style={{ marginBottom: 6 }}>
                     <span style={{ fontWeight: 700, color: "#374151" }}>Previous Quarter Assessment: </span>
-                    <span style={{ color: "#4B5563" }}>{amInputs.prevQtrAssessment}</span>
+                    <span style={{ color: "#4B5563", whiteSpace: "pre-wrap" }}>{amInputs.prevQtrAssessment}</span>
                   </div>
                 )}
                 {amInputs.clientNotes && (
                   <div style={{ marginBottom: 6 }}>
                     <span style={{ fontWeight: 700, color: "#374151" }}>Client Insights: </span>
-                    <span style={{ color: "#4B5563" }}>{amInputs.clientNotes}</span>
+                    <span style={{ color: "#4B5563", whiteSpace: "pre-wrap" }}>{amInputs.clientNotes}</span>
                   </div>
                 )}
                 {amInputs.clientSentiment && (
                   <div>
                     <span style={{ fontWeight: 700, color: "#374151" }}>Client Sentiment: </span>
-                    <span style={{ color: "#4B5563" }}>{amInputs.clientSentiment}</span>
+                    <span style={{ color: "#4B5563", whiteSpace: "pre-wrap" }}>{amInputs.clientSentiment}</span>
                   </div>
                 )}
               </div>

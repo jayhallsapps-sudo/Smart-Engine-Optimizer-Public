@@ -104,6 +104,7 @@ export default function QbrPrepPage() {
 
   const [reportData, setReportData] = useState<any>(null);
   const [edits, setEdits] = useState<Record<string, string>>({});
+  const [dataOrigin, setDataOrigin] = useState<"live" | "saved" | null>(null);
 
   const quarter = inferQuarterClient(generationDate);
 
@@ -148,6 +149,7 @@ export default function QbrPrepPage() {
     setCurrentCrawlId(null);
     setReportData(null);
     setEdits({});
+    setDataOrigin(null);
     reportSave.setSavedReportId(null);
   }, [clientId]);
 
@@ -189,6 +191,7 @@ export default function QbrPrepPage() {
     onSuccess: (data: any) => {
       setReportData(data.reportData);
       setEdits({});
+      setDataOrigin("live");
       const periodLabel = quarter.analysisWindowLabel;
       const meta = {
         reportPeriodLabel: periodLabel,
@@ -501,6 +504,7 @@ export default function QbrPrepPage() {
                 onLoad={(data, savedEdits, id) => {
                   setReportData(data);
                   setEdits(savedEdits);
+                  setDataOrigin("saved");
                   reportSave.setSavedReportId(id);
                   reportSave.pendingPayloadRef.current = {
                     reportData: data,
@@ -573,6 +577,18 @@ export default function QbrPrepPage() {
             <p className="text-[11px] text-amber-600 dark:text-amber-400 flex items-center gap-1" data-testid="text-sf-stale-warning">
               <AlertTriangle className="w-3 h-3 shrink-0" />
               Crawl is too old (over {SF_FRESHNESS_DAYS} days). Upload a fresh crawl to generate.
+            </p>
+          )}
+          {reportData && dataOrigin === "live" && (
+            <p className="text-[11px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1" data-testid="text-data-origin-live">
+              <CheckCircle2 className="w-3 h-3 shrink-0" />
+              Fresh — generated this session. Safe to export.
+            </p>
+          )}
+          {reportData && dataOrigin === "saved" && (
+            <p className="text-[11px] text-amber-600 dark:text-amber-400 flex items-center gap-1" data-testid="text-data-origin-saved">
+              <AlertTriangle className="w-3 h-3 shrink-0" />
+              Loaded from saved. Click Regenerate before exporting to apply latest generator logic.
             </p>
           )}
         </div>

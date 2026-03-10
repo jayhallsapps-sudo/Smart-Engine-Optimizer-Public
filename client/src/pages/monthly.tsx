@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -91,6 +91,10 @@ export default function MonthlyPage() {
     seoHqLoadStatus,
     answers,
     closeModal,
+    draftAnswers,
+    handleAnswersChange,
+    answerUsage,
+    fetchAnswerUsage,
   } = useFillInTheGaps({ reportType: "monthly" });
 
   const reportRef = useRef(report);
@@ -158,6 +162,9 @@ export default function MonthlyPage() {
       reportSave.pendingPayloadRef.current = { reportData: data, edits: {}, meta };
       reportSave.save(data, {}, meta);
       toast({ title: "Report generated", description: "9 slides ready — click any text to edit." });
+    },
+    onSettled: () => {
+      if (sessionId) fetchAnswerUsage(sessionId);
     },
     onError: (err: any) => {
       toast({ title: "Generation failed", description: err.message, variant: "destructive" });
@@ -629,6 +636,7 @@ export default function MonthlyPage() {
           answers={answers}
           seoHqLoadStatus={seoHqLoadStatus}
           enabled={fillInGapsEnabled}
+          answerUsage={answerUsage}
         />
       )}
 
@@ -638,6 +646,8 @@ export default function MonthlyPage() {
           onComplete={handleGapComplete}
           onCancel={closeModal}
           isGenerating={generateMut.isPending}
+          initialAnswers={draftAnswers}
+          onAnswersChange={handleAnswersChange}
         />
       )}
     </div>

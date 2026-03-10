@@ -1,13 +1,14 @@
 import { useState } from "react";
-import { ChevronDown, ChevronRight, FileText, Link, SkipForward } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { ChevronDown, ChevronRight, FileText, Link, SkipForward, CheckCircle2 } from "lucide-react";
 import type { GapQuestion, GapAnswer } from "@shared/schema";
+import { GAP_CONTEXT_FIELD_LABELS } from "@shared/schema";
 
 interface ClarificationTrailProps {
   questions: GapQuestion[];
   answers: GapAnswer[];
   seoHqLoadStatus?: any;
   enabled: boolean;
+  answerUsage?: Record<string, string> | null;
 }
 
 const SOURCE_CATEGORY_LABELS: Record<string, string> = {
@@ -34,19 +35,19 @@ const SOURCE_CATEGORY_COLORS: Record<string, string> = {
   content_strategy: "bg-indigo-100 text-indigo-700",
 };
 
-function formatSeoHqStatus(status: any): string {
-  if (!status) return "Not loaded";
-  if (typeof status === "string") return status;
+function formatSeoHqStatus(status: any): { text: string; color: string } {
+  if (!status) return { text: "Not loaded", color: "text-gray-500" };
+  if (typeof status === "string") return { text: status, color: "text-gray-500" };
   if (status.overallStatus) {
-    const map: Record<string, string> = {
-      loaded: "Loaded",
-      partial: "Partial (one source failed)",
-      unavailable: "Unavailable",
-      timed_out: "Timed out",
+    const map: Record<string, { text: string; color: string }> = {
+      loaded: { text: "Loaded", color: "text-green-600" },
+      partial: { text: "Partial (one source failed)", color: "text-amber-600" },
+      unavailable: { text: "Unavailable", color: "text-red-500" },
+      timed_out: { text: "Timed out (5s)", color: "text-amber-600" },
     };
-    return map[status.overallStatus] ?? status.overallStatus;
+    return map[status.overallStatus] ?? { text: status.overallStatus, color: "text-gray-500" };
   }
-  return "Unknown";
+  return { text: "Unknown", color: "text-gray-400" };
 }
 
 function formatAnswerValue(answer: GapAnswer): string {
@@ -64,22 +65,18 @@ function formatFileSize(bytes?: number | null): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
 }
 
-export function ClarificationTrail({ questions, answers, seoHqLoadStatus, enabled }: ClarificationTrailProps) {
+export function ClarificationTrail({ questions, answers, seoHqLoadStatus, enabled, answerUsage }: ClarificationTrailProps) {
   const [collapsed, setCollapsed] = useState(true);
 
   if (!enabled || questions.length === 0) return null;
 
   const answeredCount = answers.filter(a => !a.skipped).length;
   const skippedCount = answers.filter(a => a.skipped).length;
+  const usedCount = answerUsage ? Object.keys(answerUsage).length : 0;
 
   const answerMap = new Map(answers.map(a => [a.questionId, a]));
 
-  const seoHqStatusText = formatSeoHqStatus(seoHqLoadStatus);
-  const seoHqStatusColor =
-    !seoHqLoadStatus ? "text-gray-500" :
-    typeof seoHqLoadStatus === "object" && seoHqLoadStatus.overallStatus === "loaded" ? "text-green-600" :
-    typeof seoHqLoadStatus === "object" && seoHqLoadStatus.overallStatus === "unavailable" ? "text-red-500" :
-    "text-amber-600";
+  const seoHqStatus = formatSeoHqStatus(seoHqLoadStatus);
 
   return (
     <aside
@@ -98,6 +95,12 @@ export function ClarificationTrail({ questions, answers, seoHqLoadStatus, enable
           <span className="text-[10px] font-semibold uppercase tracking-wide bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded">
             Internal
           </span>
+          {answerUsage && usedCount > 0 && (
+            <span className="text-[10px] font-semibold uppercase tracking-wide bg-green-100 text-green-700 px-1.5 py-0.5 rounded flex items-center gap-1">
+              <CheckCircle2 className="h-3 w-3" />
+              {usedCount} used in report
+            </span>
+          )}
         </span>
         <span className="text-xs text-gray-400">
           {questions.length} question{questions.length !== 1 ? "s" : ""} · {answeredCount} answered · {skippedCount} skipped
@@ -113,7 +116,7 @@ export function ClarificationTrail({ questions, answers, seoHqLoadStatus, enable
             </span>
             <span>
               <span className="font-semibold text-gray-700">SEO HQ Context:</span>{" "}
-              <span className={seoHqStatusColor}>{seoHqStatusText}</span>
+              <span className={seoHqStatus.color}>{seoHqStatus.text}</span>
             </span>
             <span>
               <span className="font-semibold text-gray-700">Questions asked:</span> {questions.length}
@@ -131,6 +134,8 @@ export function ClarificationTrail({ questions, answers, seoHqLoadStatus, enable
               const categoryLabel = SOURCE_CATEGORY_LABELS[q.sourceCategory] ?? q.sourceCategory;
               const categoryColor = SOURCE_CATEGORY_COLORS[q.sourceCategory] ?? "bg-gray-100 text-gray-600";
               const answerText = answer ? formatAnswerValue(answer) : "No answer recorded";
+              const usedField = answerUsage?.[q.id];
+              const usedFieldLabel = usedField ? (GAP_CONTEXT_FIELD_LABELS[usedField] ?? usedField) : null;
 
               return (
                 <li
@@ -143,9 +148,21 @@ export function ClarificationTrail({ questions, answers, seoHqLoadStatus, enable
                       <span className="text-gray-400 mr-1.5">Q{idx + 1}.</span>
                       {q.prompt}
                     </p>
-                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded shrink-0 ${categoryColor}`}>
-                      {categoryLabel}
-                    </span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {usedFieldLabel && !skipped && (
+                        <span
+                          className="flex items-center gap-1 text-[10px] font-semibold bg-green-50 text-green-700 border border-green-200 px-1.5 py-0.5 rounded"
+                          data-testid={`usage-badge-${q.id}`}
+                          title={`Used in: ${usedFieldLabel}`}
+                        >
+                          <CheckCircle2 className="h-3 w-3" />
+                          {usedFieldLabel}
+                        </span>
+                      )}
+                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${categoryColor}`}>
+                        {categoryLabel}
+                      </span>
+                    </div>
                   </div>
 
                   <div className="flex items-start gap-1.5 text-xs">

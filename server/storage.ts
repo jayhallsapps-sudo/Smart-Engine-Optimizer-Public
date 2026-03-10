@@ -65,7 +65,7 @@ export interface IStorage {
   getAllQbrPrepReports(): Promise<QbrPrepReport[]>;
 
   createGapSession(data: { clientId: number; reportType: string; questions: GapQuestion[]; seoHqChecksApplied?: string[]; seoHqLoadStatus?: string }): Promise<GapAnalysisSession>;
-  updateGapSession(id: number, data: { answers?: GapAnswer[]; linkedReportId?: number; linkedReportType?: string }): Promise<GapAnalysisSession | undefined>;
+  updateGapSession(id: number, data: { answers?: GapAnswer[]; linkedReportId?: number; linkedReportType?: string; answerUsage?: Record<string, string> }): Promise<GapAnalysisSession | undefined>;
   getGapSession(id: number): Promise<GapAnalysisSession | undefined>;
   getGapSessionsByClient(clientId: number): Promise<GapAnalysisSession[]>;
 }
@@ -266,11 +266,12 @@ export class DatabaseStorage implements IStorage {
     return session;
   }
 
-  async updateGapSession(id: number, data: { answers?: GapAnswer[]; linkedReportId?: number; linkedReportType?: string }): Promise<GapAnalysisSession | undefined> {
+  async updateGapSession(id: number, data: { answers?: GapAnswer[]; linkedReportId?: number; linkedReportType?: string; answerUsage?: Record<string, string> }): Promise<GapAnalysisSession | undefined> {
     const updateData: Record<string, any> = {};
     if (data.answers !== undefined) updateData.answersJson = data.answers;
     if (data.linkedReportId !== undefined) updateData.linkedReportId = data.linkedReportId;
     if (data.linkedReportType !== undefined) updateData.linkedReportType = data.linkedReportType;
+    if (data.answerUsage !== undefined) updateData.answerUsageJson = data.answerUsage;
     const [updated] = await db.update(gapAnalysisSessions).set(updateData).where(eq(gapAnalysisSessions.id, id)).returning();
     return updated;
   }

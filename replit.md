@@ -89,15 +89,16 @@ SmartEO integrates with the following external services and APIs:
 - **Feature**: Optional preflight clarification step for all 5 report types (Bi-Weekly, Monthly, QBR Prep, QBR Full, Mid-Strategy)
 - **UI**: Checkbox labeled "Fill in the gaps" above Generate button in every report sidebar; unchecked by default; helper text explains the purpose
 - **Flow**: When enabled, clicking Generate first calls `POST /api/reports/gap-analysis` → evaluates inputs → if questions found, opens `FillInTheGapsModal`; if no questions, generates immediately
-- **Engine**: `server/gapAnalysisEngine.ts` — 80+ rule-based question templates across 9 categories; hard cap of 6 questions (was 10); 5-second timeout on SEO HQ context load; returns `SeoHqLoadStatus` (`{strategyBank, qssb, overallStatus}`)
-- **Modal**: `client/src/components/FillInTheGapsModal.tsx` — step-by-step one-question-at-a-time; file validation (MIME type + 5MB size limit); URL validation/normalization; attachment confirmation state with file metadata (mimeType, sizeBytes, uploadedAt)
-- **Hook**: `client/src/hooks/useFillInTheGaps.ts` — idempotency guards (`isRunningRef`, `isSubmittingRef`, `sessionIdRef`); `seoHqLoadStatus` state captured from analysis response; exposed for Clarification Trail
-- **Clarification Trail**: `client/src/components/ClarificationTrail.tsx` — internal-only collapsible QA panel (screen only, `print:hidden`); shows Fill in the Gaps status, SEO HQ context status, Q&A summary, supporting links/files per answer; integrated into all 5 report pages after report preview
-- **Context**: `server/gapAnswerContext.ts` — converts answers to structured `GapContext` injected into all generators
-- **Persistence**: `gap_analysis_sessions` DB table — `seoHqLoadStatus` column (text) stores serialized status JSON; questions, answers, links, session state; linked to generated report by ID
-- **Constants**: `ALLOWED_GAP_FILE_TYPES`, `MAX_GAP_FILE_SIZE_BYTES` (5MB) in shared/schema.ts
-- **Routes**: `POST /api/reports/gap-analysis` returns `seoHqLoadStatus`; `POST /api/reports/gap-analysis/session` accepts and stores it
-- **Generators**: All 5 generators accept `gapAnswers: GapAnswer[]` + `gapSessionId` in payload and weave context into report narrative
+- **Engine**: `server/gapAnalysisEngine.ts` — 80+ rule-based question templates across 9 categories; hard cap of 6 questions; 5-second timeout on SEO HQ context load; `overallStatus: "timed_out"` vs `"unavailable"` are distinct; returns `SeoHqLoadStatus` (`{strategyBank, qssb, overallStatus}`)
+- **Modal**: `client/src/components/FillInTheGapsModal.tsx` — step-by-step one-question-at-a-time; file validation (MIME type + 5MB size limit); strict URL scheme enforcement (http/https only; blocks javascript:, data:, file:, ftp:, mailto:); supports `initialAnswers` + `onAnswersChange` props for draft recovery
+- **Hook**: `client/src/hooks/useFillInTheGaps.ts` — idempotency guards (`isRunningRef`, `isSubmittingRef`, `sessionIdRef`); localStorage draft recovery (2hr TTL, keyed by `gap_draft_{reportType}_{clientId}`); `answerUsage` state; `fetchAnswerUsage(sessionId)` fetches usage map after generation; `seoHqLoadStatus` state
+- **Clarification Trail**: `client/src/components/ClarificationTrail.tsx` — internal-only collapsible QA panel (screen only, `print:hidden`); shows Fill in the Gaps status, SEO HQ context status (with distinct "Timed out (5s)" label), Q&A summary, supporting links/files per answer; "Used in report" green badges per answer (with field label from `GAP_CONTEXT_FIELD_LABELS`); integrated into all 5 report pages after report preview
+- **Server-side Validation**: `server/gapAnswerValidator.ts` — `validateAndSanitizeGapAnswers()` validates MIME types, file sizes, URL schemes; used in session creation route
+- **Context + Usage**: `server/gapAnswerContext.ts` — `buildGapContext()` converts answers to structured `GapContext`; `getAnswerUsageMap(answers)` maps questionId → report field name; usage stored in `answerUsageJson` column
+- **Persistence**: `gap_analysis_sessions` DB table — `seoHqLoadStatus`, `answerUsageJson` columns; usage populated after report generation; `GET /api/reports/gap-analysis/session/:id` returns session + answerUsage
+- **Constants**: `ALLOWED_GAP_FILE_TYPES`, `MAX_GAP_FILE_SIZE_BYTES` (5MB), `ALLOWED_URL_SCHEMES`, `GAP_CONTEXT_FIELD_LABELS` in shared/schema.ts
+- **Routes**: `POST /api/reports/gap-analysis` + session; `GET /api/reports/gap-analysis/session/:id`; all 5 generate routes accept `gapSessionId` and call `storage.updateGapSession` with `answerUsage` after generation via `onSettled`
+- **Draft Recovery**: localStorage key `gap_draft_{reportType}_{clientId}` stores `{questions, partialAnswers, seoHqLoadStatus, savedAt}`; 2hr TTL; cleared on submit; modal hydrates from draft when question IDs match
 
 ## Removed / Legacy
 - QBR Prep v1 routes (`/generate`, `/docx`, `/upload-to-drive`, `/saved/*`) — removed; use v2 routes only

@@ -487,6 +487,14 @@ export async function loadSEOHQContext(): Promise<{ context: SeoHqContext; statu
     qssbStatus = "failed";
     strategyBankResult = { entries: [], fetchedAt: "" };
     qssbResult = { clientInsights: [], additionalOpportunities: [], fetchedAt: "" };
+    const timedOut = String(timeoutErr).includes("timed out");
+    const status: SeoHqLoadStatus = {
+      strategyBank: "failed",
+      qssb: "failed",
+      overallStatus: timedOut ? "timed_out" : "unavailable",
+    };
+    console.log(`[GapAnalysis] SEO HQ context status: ${JSON.stringify(status)}`);
+    return { context: { strategyBank: strategyBankResult, qssb: qssbResult }, status };
   }
 
   const overallStatus: SeoHqOverallStatus =

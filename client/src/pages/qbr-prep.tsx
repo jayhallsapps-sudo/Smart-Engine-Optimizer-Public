@@ -131,6 +131,10 @@ export default function QbrPrepPage() {
     seoHqLoadStatus,
     answers,
     closeModal,
+    draftAnswers,
+    handleAnswersChange,
+    answerUsage,
+    fetchAnswerUsage,
   } = useFillInTheGaps({ reportType: "qbr_prep" });
 
   useEffect(() => {
@@ -197,6 +201,9 @@ export default function QbrPrepPage() {
       reportSave.pendingPayloadRef.current = { reportData: data.reportData, edits: {}, meta };
       reportSave.save(data.reportData, {}, meta);
       toast({ title: "QBR Prep generated", description: "Preview ready — click any text to edit." });
+    },
+    onSettled: () => {
+      if (sessionId) fetchAnswerUsage(sessionId);
     },
     onError: (err: any) => {
       toast({ title: "Generation failed", description: err.message, variant: "destructive" });
@@ -658,6 +665,7 @@ export default function QbrPrepPage() {
           answers={answers}
           seoHqLoadStatus={seoHqLoadStatus}
           enabled={fillInGapsEnabled}
+          answerUsage={answerUsage}
         />
       )}
 
@@ -667,6 +675,8 @@ export default function QbrPrepPage() {
           onComplete={handleGapComplete}
           onCancel={closeModal}
           isGenerating={generateMutation.isPending}
+          initialAnswers={draftAnswers}
+          onAnswersChange={handleAnswersChange}
         />
       )}
     </div>

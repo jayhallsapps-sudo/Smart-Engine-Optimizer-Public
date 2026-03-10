@@ -283,6 +283,19 @@ export const ALLOWED_GAP_FILE_TYPES = [
 
 export const MAX_GAP_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
 
+export const ALLOWED_URL_SCHEMES = ["http:", "https:"] as const;
+
+export const GAP_CONTEXT_FIELD_LABELS: Record<string, string> = {
+  sentimentContext: "Sentiment framing",
+  businessChanges: "Business context",
+  trackingNotes: "Tracking notes",
+  priorityContext: "Priority framing",
+  blockers: "Blockers / dependencies",
+  narrativeNotes: "Report narrative",
+  competitorContext: "Competitive context",
+  conversionContext: "Conversion context",
+};
+
 export interface GapAnalysisResult {
   shouldAskQuestions: boolean;
   questions: GapQuestion[];
@@ -299,6 +312,7 @@ export const gapAnalysisSessions = pgTable("gap_analysis_sessions", {
   answersJson: jsonb("answers_json"),
   seoHqChecksApplied: text("seo_hq_checks_applied").array(),
   seoHqLoadStatus: text("seo_hq_load_status"),
+  answerUsageJson: jsonb("answer_usage_json"),
   linkedReportId: integer("linked_report_id"),
   linkedReportType: text("linked_report_type"),
   generatedOn: text("generated_on").notNull(),

@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -86,6 +86,10 @@ export default function MidStrategyPage() {
     seoHqLoadStatus,
     answers,
     closeModal,
+    draftAnswers,
+    handleAnswersChange,
+    answerUsage,
+    fetchAnswerUsage,
   } = useFillInTheGaps({ reportType: "mid_strategy_seo" });
 
   const reportRef = useRef(report);
@@ -162,6 +166,9 @@ export default function MidStrategyPage() {
         title: "Mid-Strategy Report Generated",
         description: `${(data.slides ?? []).length} slides ready${sources ? ` · Sources: ${sources}` : ""}${missing > 0 ? ` · ${missing} fields need manual entry` : ""}`,
       });
+    },
+    onSettled: () => {
+      if (sessionId) fetchAnswerUsage(sessionId);
     },
     onError: (err: any) => {
       setBuildStep("idle");
@@ -626,6 +633,7 @@ export default function MidStrategyPage() {
           answers={answers}
           seoHqLoadStatus={seoHqLoadStatus}
           enabled={fillInGapsEnabled}
+          answerUsage={answerUsage}
         />
       )}
 
@@ -635,6 +643,8 @@ export default function MidStrategyPage() {
           onComplete={handleGapComplete}
           onCancel={closeModal}
           isGenerating={generateMut.isPending}
+          initialAnswers={draftAnswers}
+          onAnswersChange={handleAnswersChange}
         />
       )}
     </div>

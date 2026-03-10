@@ -35,7 +35,8 @@ import { generateBiweeklyPdf, generateMonthlyPdf } from "./pdfGenerator";
 import { generatePdfViaPuppeteer } from "./puppeteerPdfGenerator";
 import type { SectionData } from "./reportGenerators";
 import { getSampleBiweeklySections, getSampleMonthlySections, getSampleQbrSections, getSampleQbrPrepJson, SAMPLE_CLIENT_NAME, SAMPLE_ATTENDEES } from "./sampleData";
-import { type GapContext, buildGapContext, gapContextToString } from "./gapAnswerContext";
+import { type GapContext, buildGapContext, gapContextToString, getAnswerUsageMap } from "./gapAnswerContext";
+import { validateAndSanitizeGapAnswers } from "./gapAnswerValidator";
 import { generateQbrPrep } from "./qbrPrepGenerator";
 import type { QbrPrepJson } from "./qbrPrepGenerator";
 import { generateBiweekly } from "./biweeklyGenerator";
@@ -1216,13 +1217,33 @@ export async function registerRoutes(
       });
 
       if (answers && answers.length > 0) {
-        await storage.updateGapSession(session.id, { answers });
+        const validation = validateAndSanitizeGapAnswers(answers);
+        if (validation.errors.length > 0) {
+          const errMsg = validation.errors.map(e => `Q${e.questionId} ${e.field}: ${e.message}`).join("; ");
+          console.warn(`[GapSession] Validation warnings (sanitized): ${errMsg}`);
+        }
+        await storage.updateGapSession(session.id, { answers: validation.valid });
       }
 
       res.status(201).json({ sessionId: session.id });
     } catch (err: any) {
       console.error("[GapAnalysis] Session creation error:", err);
       res.status(500).json({ message: "Failed to create gap session: " + err.message });
+    }
+  });
+
+  app.get("/api/reports/gap-analysis/session/:id", async (req, res) => {
+    try {
+      const session = await storage.getGapSession(Number(req.params.id));
+      if (!session) return res.status(404).json({ message: "Session not found" });
+      const raw = (session as any).answerUsageJson;
+      const answerUsage: Record<string, string> | null =
+        raw && typeof raw === "object" ? raw :
+        raw && typeof raw === "string" ? (() => { try { return JSON.parse(raw); } catch { return null; } })() :
+        null;
+      res.json({ sessionId: session.id, answerUsage });
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to fetch session: " + err.message });
     }
   });
 
@@ -1390,7 +1411,7 @@ export async function registerRoutes(
   const SF_FRESHNESS_DAYS = 90;
 
   app.post("/api/reports/qbr-prep/generate-v2", async (req, res) => {
-    const { clientId, generationDate, currentCrawlAssetId, gapAnswers } = req.body;
+    const { clientId, generationDate, currentCrawlAssetId, gapAnswers, gapSessionId } = req.body;
     const sentimentVal = req.body.sentiment ?? req.body.clientSentiment;
     const amThoughtsVal = req.body.amThoughts ?? req.body.hypothesis ?? "";
     const priorityChecksVal = req.body.priorityChecks ?? req.body.auditNotes ?? "";
@@ -1436,6 +1457,9 @@ export async function registerRoutes(
         forwardLooking: true,
         gapAnswers,
       });
+      if (gapAnswers?.length && gapSessionId) {
+        storage.updateGapSession(Number(gapSessionId), { answerUsage: getAnswerUsageMap(gapAnswers) }).catch(() => {});
+      }
 
       res.json({ reportData });
     } catch (err: any) {
@@ -1529,7 +1553,7 @@ export async function registerRoutes(
   });
 
   app.post("/api/reports/biweekly/generate", async (req, res) => {
-    const { clientId, startDate, endDate, preparedBy, gapAnswers } = req.body;
+    const { clientId, startDate, endDate, preparedBy, gapAnswers, gapSessionId } = req.body;
     if (!clientId) return res.status(400).json({ message: "clientId is required" });
 
     const amValidation = validateAmInputs(req.body);
@@ -1549,6 +1573,9 @@ export async function registerRoutes(
         amInputs: ("error" in amValidation) ? {} : amValidation.amInputs,
         gapContext: gapAnswers ? buildGapContext(gapAnswers) : undefined,
       });
+      if (gapAnswers?.length && gapSessionId) {
+        storage.updateGapSession(Number(gapSessionId), { answerUsage: getAnswerUsageMap(gapAnswers) }).catch(() => {});
+      }
       res.json(output);
     } catch (err: any) {
       console.error("Biweekly generation error:", err);
@@ -1689,7 +1716,7 @@ export async function registerRoutes(
   });
 
   app.post("/api/reports/monthly/generate", async (req, res) => {
-    const { clientId, month, year, timezone, amInputs, currentCrawlAssetId, comparisonCrawlAssetId, gapAnswers } = req.body;
+    const { clientId, month, year, timezone, amInputs, currentCrawlAssetId, comparisonCrawlAssetId, gapAnswers, gapSessionId } = req.body;
     if (!clientId || !month || !year) return res.status(400).json({ message: "clientId, month, year are required" });
 
     const amValidation = validateAmInputs(req.body);
@@ -1706,6 +1733,9 @@ export async function registerRoutes(
         comparisonCrawlAssetId: comparisonCrawlAssetId ?? null,
         gapContext: gapAnswers ? buildGapContext(gapAnswers) : undefined,
       });
+      if (gapAnswers?.length && gapSessionId) {
+        storage.updateGapSession(Number(gapSessionId), { answerUsage: getAnswerUsageMap(gapAnswers) }).catch(() => {});
+      }
       res.json(output);
     } catch (err: any) {
       console.error("Monthly generation error:", err);
@@ -1804,7 +1834,7 @@ export async function registerRoutes(
   });
 
   app.post("/api/reports/qbr-full/generate", async (req, res) => {
-    const { clientId, quarter, year, timezone, amInputs, currentCrawlAssetId, comparisonCrawlAssetId, gapAnswers } = req.body;
+    const { clientId, quarter, year, timezone, amInputs, currentCrawlAssetId, comparisonCrawlAssetId, gapAnswers, gapSessionId } = req.body;
     if (!clientId || !quarter || !year) return res.status(400).json({ message: "clientId, quarter, year are required" });
 
     const amValidation = validateAmInputs(req.body);
@@ -1821,6 +1851,9 @@ export async function registerRoutes(
         comparisonCrawlAssetId: comparisonCrawlAssetId ?? null,
         gapContext: gapAnswers ? buildGapContext(gapAnswers) : undefined,
       });
+      if (gapAnswers?.length && gapSessionId) {
+        storage.updateGapSession(Number(gapSessionId), { answerUsage: getAnswerUsageMap(gapAnswers) }).catch(() => {});
+      }
       res.json(output);
     } catch (err: any) {
       console.error("QBR Full generation error:", err);
@@ -1902,7 +1935,7 @@ export async function registerRoutes(
 
   // ─── Mid-Strategy SEO Report ─────────────────────────────────────────────
   app.post("/api/reports/mid-strategy/generate", async (req, res) => {
-    const { clientId, currentCrawlAssetId, comparisonCrawlAssetId, amInputs, gapAnswers } = req.body;
+    const { clientId, currentCrawlAssetId, comparisonCrawlAssetId, amInputs, gapAnswers, gapSessionId } = req.body;
     if (!clientId) return res.status(400).json({ message: "clientId is required" });
 
     const amValidation = validateAmInputs(req.body);
@@ -1919,6 +1952,9 @@ export async function registerRoutes(
         amInputs: ("error" in amValidation) ? {} : amValidation.amInputs,
         gapContext: gapAnswers ? buildGapContext(gapAnswers) : undefined,
       });
+      if (gapAnswers?.length && gapSessionId) {
+        storage.updateGapSession(Number(gapSessionId), { answerUsage: getAnswerUsageMap(gapAnswers) }).catch(() => {});
+      }
       if (!output || !Array.isArray(output.slides) || output.slides.length < 1) {
         return res.status(500).json({ message: "Mid-Strategy generator produced no slides. Ensure at least one data source or manual input is provided." });
       }

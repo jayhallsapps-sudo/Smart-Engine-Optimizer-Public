@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -35,6 +35,8 @@ interface FillInTheGapsModalProps {
   onComplete: (answers: GapAnswer[]) => void;
   onCancel: () => void;
   isGenerating?: boolean;
+  initialAnswers?: Record<string, GapAnswer>;
+  onAnswersChange?: (answers: Record<string, GapAnswer>) => void;
 }
 
 export function FillInTheGapsModal({
@@ -42,27 +44,40 @@ export function FillInTheGapsModal({
   onComplete,
   onCancel,
   isGenerating = false,
+  initialAnswers = {},
+  onAnswersChange,
 }: FillInTheGapsModalProps) {
   const [currentStep, setCurrentStep] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, GapAnswer>>({});
+  const [answers, setAnswers] = useState<Record<string, GapAnswer>>(initialAnswers);
   const [showRationale, setShowRationale] = useState(false);
   const { toast } = useToast();
 
   const currentQuestion = questions[currentStep];
   const progress = ((currentStep + 1) / questions.length) * 100;
 
+  useEffect(() => {
+    if (onAnswersChange) onAnswersChange(answers);
+  }, [answers]);
+
+
   const urlError = useMemo(() => {
     const url = answers[currentQuestion.id]?.supportingLink;
     if (!url) return null;
     try {
       let normalizedUrl = url.trim();
+      if (normalizedUrl.match(/^(javascript|data|file|ftp|mailto):/i)) {
+        return "Only http:// and https:// URLs are allowed.";
+      }
       if (!/^https?:\/\//i.test(normalizedUrl)) {
         normalizedUrl = `https://${normalizedUrl}`;
       }
-      new URL(normalizedUrl);
+      const parsed = new URL(normalizedUrl);
+      if (!["http:", "https:"].includes(parsed.protocol)) {
+        return `URL scheme "${parsed.protocol}" is not allowed. Only http:// and https:// are permitted.`;
+      }
       return null;
     } catch (e) {
-      return "Invalid URL format";
+      return "Invalid URL format — must be a valid web address.";
     }
   }, [answers, currentQuestion.id]);
 
@@ -156,14 +171,25 @@ export function FillInTheGapsModal({
       setCurrentStep(currentStep + 1);
       setShowRationale(false);
     } else {
-      // Final normalization of URLs before completion
+      // Final normalization + scheme safety check before completion
       const finalAnswers = Object.values(answers).map(ans => {
         if (ans.supportingLink) {
           let url = ans.supportingLink.trim();
+          if (url.match(/^(javascript|data|file|ftp|mailto):/i)) {
+            return { ...ans, supportingLink: null };
+          }
           if (!/^https?:\/\//i.test(url)) {
             url = `https://${url}`;
           }
-          return { ...ans, supportingLink: url };
+          try {
+            const parsed = new URL(url);
+            if (!["http:", "https:"].includes(parsed.protocol)) {
+              return { ...ans, supportingLink: null };
+            }
+            return { ...ans, supportingLink: parsed.toString() };
+          } catch {
+            return { ...ans, supportingLink: null };
+          }
         }
         return ans;
       });

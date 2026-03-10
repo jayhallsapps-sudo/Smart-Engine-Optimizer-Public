@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -98,6 +98,10 @@ export default function BiweeklyPage() {
     seoHqLoadStatus,
     answers,
     closeModal,
+    draftAnswers,
+    handleAnswersChange,
+    answerUsage,
+    fetchAnswerUsage,
   } = useFillInTheGaps({ reportType: "biweekly" });
 
   function getDateRange(): { startDate: string; endDate: string } {
@@ -164,6 +168,9 @@ export default function BiweeklyPage() {
       reportSave.pendingPayloadRef.current = { reportData: data, edits: {}, meta };
       reportSave.save(data, {}, meta);
       toast({ title: "Report generated", description: "Preview ready — click any text to edit." });
+    },
+    onSettled: (_data, _err, _vars) => {
+      if (sessionId) fetchAnswerUsage(sessionId);
     },
     onError: (err: any) => {
       toast({ title: "Generation failed", description: err.message, variant: "destructive" });
@@ -606,6 +613,7 @@ export default function BiweeklyPage() {
           answers={answers}
           seoHqLoadStatus={seoHqLoadStatus}
           enabled={fillInGapsEnabled}
+          answerUsage={answerUsage}
         />
       )}
 
@@ -615,6 +623,8 @@ export default function BiweeklyPage() {
           onComplete={handleGapComplete}
           onCancel={closeModal}
           isGenerating={generateMut.isPending}
+          initialAnswers={draftAnswers}
+          onAnswersChange={handleAnswersChange}
         />
       )}
     </div>

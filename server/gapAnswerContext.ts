@@ -13,7 +13,7 @@ export interface GapContext {
   hasAnswers: boolean;
 }
 
-const QUESTION_CONTEXT_MAP: Record<string, keyof Omit<GapContext, "rawAnswers" | "hasAnswers">> = {
+export const QUESTION_CONTEXT_MAP: Record<string, keyof Omit<GapContext, "rawAnswers" | "hasAnswers">> = {
   sentiment_frustrated_root_cause: "sentimentContext",
   sentiment_concerned_blockers: "sentimentContext",
   sentiment_happy_testimonial_opportunity: "sentimentContext",
@@ -67,6 +67,17 @@ export function buildGapContext(answers: GapAnswer[]): GapContext {
   }
 
   return ctx;
+}
+
+export function getAnswerUsageMap(answers: GapAnswer[]): Record<string, string> {
+  const usageMap: Record<string, string> = {};
+  for (const answer of answers) {
+    if (answer.skipped || answer.value === null || answer.value === "" ||
+        (Array.isArray(answer.value) && answer.value.length === 0)) continue;
+    const contextKey = Object.keys(QUESTION_CONTEXT_MAP).find(k => answer.questionId.startsWith(k));
+    usageMap[answer.questionId] = contextKey ? (QUESTION_CONTEXT_MAP[contextKey] as string) : "narrativeNotes";
+  }
+  return usageMap;
 }
 
 export function gapContextToString(ctx: GapContext): string {

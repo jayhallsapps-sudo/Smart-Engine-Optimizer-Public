@@ -30,8 +30,31 @@ import {
   LayoutDashboard,
   Maximize2,
   X,
+  Globe,
+  CreditCard,
+  Target,
 } from "lucide-react";
 import type { Client } from "@shared/schema";
+
+interface NsmData {
+  quarter: string;
+  sessionsGoal: string;
+  sessionsActual: string;
+  sessionsPercent: string;
+  sessionsOnTrack: string;
+  mvpType: string;
+  mvpGoal: string;
+  mvpActual: string;
+  mvpPercent: string;
+  mvpOnTrack: string;
+  website?: string;
+  credits?: string;
+}
+
+interface ClientNsmResponse {
+  current: NsmData | null;
+  next: NsmData | null;
+}
 
 const PERIOD_OPTIONS = [
   { value: "last_28_vs_prev_28", label: "Last 28 days" },
@@ -606,6 +629,134 @@ function ClientChart({
   );
 }
 
+function NsmQuarterSection({ label, nsm, clientId }: { label: string; nsm: NsmData | null; clientId: number }) {
+  const safeDiv = (a: string, b: string): string => {
+    const an = parseFloat(a.replace(/,/g, ""));
+    const bn = parseFloat(b.replace(/,/g, ""));
+    if (isNaN(an) || isNaN(bn) || bn === 0) return "—";
+    return (an / bn * 100).toFixed(1) + "%";
+  };
+
+  const isAllDash = !nsm || (
+    nsm.sessionsActual === "—" && nsm.sessionsGoal === "—" &&
+    nsm.mvpActual === "—" && nsm.mvpGoal === "—"
+  );
+
+  const rows: { label: string; value: string }[] = nsm ? [
+    { label: "Organic Sessions Actual", value: nsm.sessionsActual },
+    { label: "Organic Sessions Goal", value: nsm.sessionsGoal },
+    { label: "MVP NSMs Actual", value: nsm.mvpActual },
+    { label: "MVP NSMs Goal", value: nsm.mvpGoal },
+    { label: "% to Organic Sessions Target", value: nsm.sessionsPercent && nsm.sessionsPercent !== "—" ? nsm.sessionsPercent : safeDiv(nsm.sessionsActual, nsm.sessionsGoal) },
+    { label: "% to MVP NSM Target", value: nsm.mvpPercent && nsm.mvpPercent !== "—" ? nsm.mvpPercent : safeDiv(nsm.mvpActual, nsm.mvpGoal) },
+  ] : [];
+
+  return (
+    <div className="mb-4">
+      <div className="flex items-center gap-2 mb-2">
+        <p className="text-[9px] font-bold uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.45)" }}>
+          {label}
+        </p>
+        {nsm?.quarter && (
+          <span className="text-[9px] px-1.5 py-0.5 rounded" style={{ background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.4)" }}>
+            {nsm.quarter}
+          </span>
+        )}
+      </div>
+      {isAllDash ? (
+        <p className="text-[11px] py-2" style={{ color: "rgba(255,255,255,0.3)" }}>
+          Data not available yet
+        </p>
+      ) : (
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1.5" data-testid={`nsm-${label.toLowerCase().replace(/\s+/g, "-")}-${clientId}`}>
+          {rows.map(row => (
+            <div key={row.label} className="flex flex-col">
+              <span className="text-[9px]" style={{ color: "rgba(255,255,255,0.35)" }}>{row.label}</span>
+              <span className="text-[12px] font-semibold" style={{ color: "rgba(255,255,255,0.85)" }}>{row.value}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ClientInfoTab({ client, clientId }: { client: Client; clientId: number }) {
+  const { data: nsmData, isLoading } = useQuery<ClientNsmResponse>({
+    queryKey: ["/api/dashboard/client", clientId, "nsm"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/dashboard/client/${clientId}/nsm`);
+      return res.json();
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const current = nsmData?.current ?? null;
+  const next = nsmData?.next ?? null;
+
+  const website = current?.website && current.website !== "—" ? current.website : null;
+  const credits = current?.credits && current.credits !== "—" ? current.credits : null;
+  const nsmType = current?.mvpType && current.mvpType !== "—" ? current.mvpType : null;
+
+  if (isLoading) {
+    return (
+      <div className="p-4 flex flex-col gap-3 pb-12">
+        <Skeleton className="h-3 w-32 bg-white/10" />
+        <Skeleton className="h-3 w-48 bg-white/10" />
+        <Skeleton className="h-3 w-40 bg-white/10" />
+        <Skeleton className="h-24 w-full bg-white/5 rounded-lg mt-2" />
+        <Skeleton className="h-24 w-full bg-white/5 rounded-lg" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4 pb-12 flex flex-col gap-4">
+      <div className="flex flex-col gap-2">
+        {website ? (
+          <div className="flex items-center gap-2">
+            <Globe className="w-3 h-3 shrink-0" style={{ color: "rgba(255,255,255,0.35)" }} />
+            <a
+              href={website.startsWith("http") ? website : `https://${website}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[11px] truncate hover:underline"
+              style={{ color: "rgba(255,255,255,0.7)" }}
+              data-testid={`link-website-${clientId}`}
+            >
+              {website}
+            </a>
+          </div>
+        ) : null}
+        {credits ? (
+          <div className="flex items-center gap-2">
+            <CreditCard className="w-3 h-3 shrink-0" style={{ color: "rgba(255,255,255,0.35)" }} />
+            <span className="text-[11px]" style={{ color: "rgba(255,255,255,0.7)" }} data-testid={`text-credits-${clientId}`}>
+              {credits} credits allocated
+            </span>
+          </div>
+        ) : null}
+        {nsmType ? (
+          <div className="flex items-center gap-2">
+            <Target className="w-3 h-3 shrink-0" style={{ color: "rgba(255,255,255,0.35)" }} />
+            <span className="text-[11px]" style={{ color: "rgba(255,255,255,0.7)" }} data-testid={`text-nsm-type-${clientId}`}>
+              NSM Type: {nsmType}
+            </span>
+          </div>
+        ) : null}
+        {!website && !credits && !nsmType && (
+          <p className="text-[11px]" style={{ color: "rgba(255,255,255,0.3)" }}>No account info available</p>
+        )}
+      </div>
+
+      <div style={{ height: "1px", background: "rgba(255,255,255,0.07)" }} />
+
+      <NsmQuarterSection label="Current Quarter" nsm={current} clientId={clientId} />
+      <NsmQuarterSection label="Next Quarter" nsm={next} clientId={clientId} />
+    </div>
+  );
+}
+
 function ClientCard({
   client,
   color,
@@ -619,6 +770,7 @@ function ClientCard({
 }) {
   const [data, setData] = useState<ClientDashboardData | null>(null);
   const [selectedMetricLabel, setSelectedMetricLabel] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"stats" | "client-info">("stats");
 
   const mutation = useMutation<ClientDashboardData, Error, void>({
     mutationFn: async () => {
@@ -721,56 +873,83 @@ function ClientCard({
         />
       ) : null}
 
-      {selectedMetricLabel && (
-        <div
-          className="px-4 py-1.5 flex items-center gap-2"
-          style={{ background: "#0d1117", borderBottom: "1px solid rgba(255,255,255,0.06)" }}
-        >
-          <span className="text-[10px]" style={{ color: "rgba(255,255,255,0.4)" }}>
-            Showing: <span className="text-white/70 font-medium">{selectedMetricLabel}</span>
-          </span>
+      <div
+        className="flex items-center gap-1 px-4 py-2"
+        style={{ borderBottom: "1px solid rgba(255,255,255,0.07)", background: "#0d1117" }}
+      >
+        {(["stats", "client-info"] as const).map(tab => (
           <button
-            className="text-[10px] underline"
-            style={{ color: "rgba(255,255,255,0.35)" }}
-            onClick={() => setSelectedMetricLabel(null)}
-            data-testid={`button-clear-metric-${client.id}`}
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className="px-3 py-1 rounded-full text-[10px] font-medium transition-all"
+            style={
+              activeTab === tab
+                ? { background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.9)" }
+                : { background: "transparent", color: "rgba(255,255,255,0.4)" }
+            }
+            data-testid={`tab-${tab}-${client.id}`}
           >
-            Show all
+            {tab === "stats" ? "Stats" : "Client Info"}
           </button>
-        </div>
-      )}
+        ))}
+      </div>
 
-      <div className="p-4 flex flex-col gap-4 pb-12">
-        {mutation.isPending && !data ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <MetricSkeleton key={i} />
-            ))}
-          </div>
-        ) : grouped.length > 0 ? (
-          grouped.map(({ group, metrics }) => (
-            <div key={group}>
-              <p className={`text-[9px] font-bold uppercase tracking-widest mb-2 ${GROUP_COLORS[group] ?? "text-white/40"}`}>
-                {group}
-              </p>
+      {activeTab === "stats" ? (
+        <>
+          {selectedMetricLabel && (
+            <div
+              className="px-4 py-1.5 flex items-center gap-2"
+              style={{ background: "#0d1117", borderBottom: "1px solid rgba(255,255,255,0.06)" }}
+            >
+              <span className="text-[10px]" style={{ color: "rgba(255,255,255,0.4)" }}>
+                Showing: <span className="text-white/70 font-medium">{selectedMetricLabel}</span>
+              </span>
+              <button
+                className="text-[10px] underline"
+                style={{ color: "rgba(255,255,255,0.35)" }}
+                onClick={() => setSelectedMetricLabel(null)}
+                data-testid={`button-clear-metric-${client.id}`}
+              >
+                Show all
+              </button>
+            </div>
+          )}
+
+          <div className="p-4 flex flex-col gap-4 pb-12">
+            {mutation.isPending && !data ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {metrics.map(m => (
-                  <MetricTile
-                    key={`${group}-${m.label}`}
-                    metric={m}
-                    isSelected={selectedMetricLabel === m.label}
-                    onSelect={() => handleTileSelect(m.label)}
-                  />
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <MetricSkeleton key={i} />
                 ))}
               </div>
-            </div>
-          ))
-        ) : (
-          <p className="text-sm text-center py-2" style={{ color: "rgba(255,255,255,0.3)" }}>
-            No metrics available
-          </p>
-        )}
-      </div>
+            ) : grouped.length > 0 ? (
+              grouped.map(({ group, metrics }) => (
+                <div key={group}>
+                  <p className={`text-[9px] font-bold uppercase tracking-widest mb-2 ${GROUP_COLORS[group] ?? "text-white/40"}`}>
+                    {group}
+                  </p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {metrics.map(m => (
+                      <MetricTile
+                        key={`${group}-${m.label}`}
+                        metric={m}
+                        isSelected={selectedMetricLabel === m.label}
+                        onSelect={() => handleTileSelect(m.label)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-center py-2" style={{ color: "rgba(255,255,255,0.3)" }}>
+                No metrics available
+              </p>
+            )}
+          </div>
+        </>
+      ) : (
+        <ClientInfoTab client={client} clientId={client.id} />
+      )}
 
       <button
         onClick={onExpand}

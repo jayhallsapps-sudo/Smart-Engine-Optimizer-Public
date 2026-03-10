@@ -254,6 +254,7 @@ export default function SetupPage() {
   const [strategyBankInput, setStrategyBankInput] = useState("");
   const [qssbTesting, setQssbTesting] = useState(false);
   const [strategyTesting, setStrategyTesting] = useState(false);
+  const [strategyBankRefetchKey, setStrategyBankRefetchKey] = useState(0);
   const { toast } = useToast();
 
   const { data: googleStatus } = useQuery<{ configured: boolean }>({
@@ -281,6 +282,19 @@ export default function SetupPage() {
   const savedQssbDocId = appSettings["qssb_document_id"] ?? "";
   const savedStrategyBankId = appSettings["strategy_bank_page_id"] ?? "";
 
+  const { data: strategyBankStatus, isFetching: strategyBankChecking } = useQuery<{
+    success: boolean;
+    entries: number;
+    pageId?: string;
+    source?: string;
+    error?: string;
+    accessible?: boolean;
+  }>({
+    queryKey: ["/api/strategy-bank/test", savedStrategyBankId, strategyBankRefetchKey],
+    enabled: !!savedStrategyBankId,
+    staleTime: 5 * 60 * 1000,
+  });
+
   const saveQssbMutation = useMutation({
     mutationFn: async (docUrl: string) => {
       const match = docUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
@@ -305,6 +319,7 @@ export default function SetupPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
       toast({ title: "Strategy Bank ID saved" });
       setStrategyBankInput("");
+      setStrategyBankRefetchKey(k => k + 1);
     },
     onError: () => toast({ title: "Failed to save", variant: "destructive" }),
   });
@@ -332,11 +347,14 @@ export default function SetupPage() {
       const headers = await getAuthHeaders();
       const res = await fetch("/api/strategy-bank/test", { headers });
       const data = await res.json();
-      if (res.ok && data.success) {
-        toast({ title: `Strategy Bank connected: ${data.entries} entries` });
+      if (res.ok && data.success && data.entries > 0) {
+        toast({ title: `Strategy Bank connected: ${data.entries} entries found (${data.source ?? "unknown source"})` });
+      } else if (res.ok && data.success && data.entries === 0) {
+        toast({ title: "Page ID is valid but 0 entries found. Ensure the Notion integration has page access.", variant: "destructive" });
       } else {
-        toast({ title: data.message || "Strategy Bank connection failed", variant: "destructive" });
+        toast({ title: data.error || data.message || "Strategy Bank connection failed", variant: "destructive" });
       }
+      setStrategyBankRefetchKey(k => k + 1);
     } catch {
       toast({ title: "Strategy Bank test failed", variant: "destructive" });
     }
@@ -488,9 +506,9 @@ export default function SetupPage() {
     <div className="h-full overflow-y-auto">
     <div className="p-6 max-w-3xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-xl font-semibold" data-testid="text-setup-title">Setup</h1>
+        <h1 className="text-xl font-semibold" data-testid="text-setup-title">Integrations</h1>
         <p className="text-sm text-muted-foreground">
-          Connect your data sources. Each service supports multiple accounts for managing different clients.
+          Connect your data sources and reporting tools. Each service supports multiple accounts for managing different clients. Use the Available Commands section at the bottom to see what each integration powers inside SmartEO.
         </p>
       </div>
 
@@ -750,19 +768,55 @@ export default function SetupPage() {
                 <div className="flex items-center gap-2 mb-2">
                   <Globe className="w-4 h-4 text-muted-foreground" />
                   <h3 className="font-medium text-sm">Notion SEO Strategy Bank</h3>
-                  {savedStrategyBankId && (
-                    <Badge variant="default" className="text-[10px]">
-                      <CheckCircle className="w-3 h-3 mr-1" /> Configured
+                  {savedStrategyBankId && strategyBankStatus && (
+                    strategyBankStatus.entries > 0 ? (
+                      <Badge variant="default" className="text-[10px]">
+                        <CheckCircle className="w-3 h-3 mr-1" /> {strategyBankStatus.entries} entries
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-[10px] text-yellow-700 dark:text-yellow-400 border-yellow-400">
+                        0 entries — check access
+                      </Badge>
+                    )
+                  )}
+                  {savedStrategyBankId && strategyBankChecking && (
+                    <Badge variant="secondary" className="text-[10px]">
+                      <Loader2 className="w-3 h-3 mr-1 animate-spin" /> Checking…
                     </Badge>
+                  )}
+                  {savedStrategyBankId && !strategyBankStatus && !strategyBankChecking && (
+                    <Badge variant="secondary" className="text-[10px]">Configured</Badge>
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground mb-2">
-                  Paste the Notion page URL or page ID for the SEO Strategy Bank. Strategy entries are merged into the "Additional Opportunities" section.
+                  Paste the Notion page URL or page ID for the SEO Strategy Bank. Strategy entries are merged into the "Additional Opportunities" section of generated reports.
                 </p>
                 {savedStrategyBankId && (
                   <div className="flex items-center gap-2 p-1.5 rounded bg-muted/50 mb-2">
                     <Link className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                     <span className="text-xs text-muted-foreground truncate" data-testid="text-strategy-bank-id">{savedStrategyBankId}</span>
+                  </div>
+                )}
+                {savedStrategyBankId && strategyBankStatus && strategyBankStatus.entries === 0 && (
+                  <div className="flex items-start gap-2 p-3 rounded-md bg-yellow-500/10 border border-yellow-500/20 mb-2">
+                    <AlertTriangle className="w-4 h-4 text-yellow-600 dark:text-yellow-400 shrink-0 mt-0.5" />
+                    <div className="text-xs text-yellow-700 dark:text-yellow-300">
+                      <strong>0 entries found.</strong> The page ID is saved, but no strategy entries were parsed.
+                      {strategyBankStatus.error && (
+                        <span className="block mt-1 text-yellow-600 dark:text-yellow-400">Error: {strategyBankStatus.error}</span>
+                      )}
+                      <span className="block mt-1">
+                        To fix this: open the Notion page, click the <strong>•••</strong> menu → <strong>Add connections</strong>, and invite the SmartEO integration. Once the integration has access to the page, click Test below.
+                      </span>
+                    </div>
+                  </div>
+                )}
+                {savedStrategyBankId && strategyBankStatus && strategyBankStatus.entries > 0 && (
+                  <div className="flex items-center gap-2 p-1.5 rounded bg-emerald-500/10 border border-emerald-500/20 mb-2">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <span className="text-xs text-emerald-700 dark:text-emerald-300">
+                      {strategyBankStatus.entries} {strategyBankStatus.entries === 1 ? "entry" : "entries"} found via {strategyBankStatus.source === "database" ? "Notion database" : strategyBankStatus.source === "page_blocks" ? "page blocks" : "Notion"}.
+                    </span>
                   </div>
                 )}
                 <div className="flex gap-2">

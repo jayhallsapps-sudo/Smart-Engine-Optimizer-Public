@@ -941,11 +941,20 @@ export async function registerRoutes(
 
   app.get("/api/strategy-bank/test", async (_req, res) => {
     try {
-      const { fetchStrategyBank } = await import("./notionClient");
-      const data = await fetchStrategyBank();
-      res.json({ success: true, entries: data.entries.length });
+      const { fetchStrategyBank, clearStrategyBankCache } = await import("./notionClient");
+      clearStrategyBankCache();
+      const data = await fetchStrategyBank(true);
+      const pageId = await storage.getSetting("strategy_bank_page_id");
+      res.json({
+        success: true,
+        entries: data.entries.length,
+        pageId: pageId ?? null,
+        source: data.source ?? "none",
+        error: data.error ?? null,
+        accessible: !data.error,
+      });
     } catch (err: any) {
-      res.json({ success: false, message: err.message });
+      res.json({ success: false, entries: 0, error: err.message, accessible: false });
     }
   });
 
@@ -2089,6 +2098,28 @@ export async function registerRoutes(
 
     send("complete", { success: true });
     res.end();
+  });
+
+  // Dashboard: NSM tracker data for a client (current + next quarter)
+  app.get("/api/dashboard/client/:id/nsm", async (req, res) => {
+    try {
+      const clientId = Number(req.params.id);
+      const client = await storage.getClient(clientId);
+      if (!client) return res.status(404).json({ message: "Client not found" });
+
+      const { fetchNsmGoals } = await import("./sheetsClient");
+      const [current, next] = await Promise.all([
+        fetchNsmGoals(client.name, false).catch(() => null),
+        fetchNsmGoals(client.name, true).catch(() => null),
+      ]);
+
+      return res.json({
+        current: current ?? null,
+        next: next ?? null,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message ?? "Failed to fetch NSM data" });
+    }
   });
 
   // Dashboard: fetch key metrics for a single client

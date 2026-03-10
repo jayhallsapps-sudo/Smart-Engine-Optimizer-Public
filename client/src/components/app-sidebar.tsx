@@ -1,4 +1,4 @@
-import { CalendarDays, BarChart3, TrendingUp, Sparkles, Users, Settings, Zap, History, LayoutDashboard, FlaskConical, PenSquare, Target } from "lucide-react";
+import { CalendarDays, BarChart3, TrendingUp, Sparkles, Users, Settings, Zap, LayoutDashboard, FlaskConical, PenSquare, Target, ShieldCheck } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import {
   Sidebar,
@@ -20,19 +20,19 @@ import { ThemeToggle } from "@/components/theme-toggle";
 const dashboardItem = { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard };
 
 const reportItems = [
+  { title: "Mid-Strategy", url: "/mid-strategy", icon: Target },
   { title: "Bi-Weekly", url: "/biweekly", icon: CalendarDays },
   { title: "Monthly", url: "/monthly", icon: BarChart3 },
-  { title: "QBR Full", url: "/qbr", icon: TrendingUp },
   { title: "QBR Prep", url: "/qbr-prep", icon: Sparkles },
-  { title: "Mid-Strategy", url: "/mid-strategy", icon: Target },
+  { title: "QBR", url: "/qbr", icon: TrendingUp },
 ];
 
 const utilItems = [
   { title: "Clients", url: "/clients", icon: Users },
-  { title: "History", url: "/history", icon: History },
   { title: "Sample Exports", url: "/sample-reports", icon: FlaskConical },
   { title: "Template Builder", url: "/template-builder", icon: PenSquare },
-  { title: "Setup", url: "/setup", icon: Settings },
+  { title: "Integrations", url: "/integrations", icon: Settings },
+  { title: "Security", url: "/security", icon: ShieldCheck },
 ];
 
 function SidebarLogo() {

@@ -1,4 +1,4 @@
-import { Switch, Route, useLocation } from "wouter";
+import { Switch, Route, useLocation, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -10,7 +10,6 @@ import NotFound from "@/pages/not-found";
 import ReportsPage from "@/pages/reports";
 import ClientsPage from "@/pages/clients";
 import SetupPage from "@/pages/setup";
-import HistoryPage from "@/pages/history";
 import QbrPrepPage from "@/pages/qbr-prep";
 import QbrPrepPrintPage from "@/pages/qbr-prep-print";
 import BiweeklyPage from "@/pages/biweekly";
@@ -23,6 +22,7 @@ import MidStrategyPage from "@/pages/mid-strategy";
 import DashboardPage from "@/pages/dashboard";
 import SampleReportsPage from "@/pages/sample-reports";
 import TemplateBuilderPage from "@/pages/template-builder";
+import SecurityPage from "@/pages/security";
 
 function RootRedirect() {
   const [, setLocation] = useLocation();
@@ -44,8 +44,9 @@ function Router() {
       <Route path="/qbr-prep" component={QbrPrepPage} />
       <Route path="/reports" component={ReportsPage} />
       <Route path="/clients" component={ClientsPage} />
-      <Route path="/setup" component={SetupPage} />
-      <Route path="/history" component={HistoryPage} />
+      <Route path="/integrations" component={SetupPage} />
+      <Route path="/setup">{() => <Redirect to="/integrations" />}</Route>
+      <Route path="/security" component={SecurityPage} />
       <Route path="/sample-reports" component={SampleReportsPage} />
       <Route path="/template-builder" component={TemplateBuilderPage} />
       <Route component={NotFound} />

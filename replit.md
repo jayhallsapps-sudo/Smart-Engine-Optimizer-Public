@@ -100,7 +100,28 @@ SmartEO integrates with the following external services and APIs:
 - **Routes**: `POST /api/reports/gap-analysis` + session; `GET /api/reports/gap-analysis/session/:id`; all 5 generate routes accept `gapSessionId` and call `storage.updateGapSession` with `answerUsage` after generation via `onSettled`
 - **Draft Recovery**: localStorage key `gap_draft_{reportType}_{clientId}` stores `{questions, partialAnswers, seoHqLoadStatus, savedAt}`; 2hr TTL; cleared on submit; modal hydrates from draft when question IDs match
 
+## Navigation & Routes (March 2026)
+- **Reports order in sidebar**: Mid-Strategy → Bi-Weekly → Monthly → QBR Prep → QBR (renamed from "QBR Full")
+- **Tools order**: Clients → Sample Exports → Template Builder → Integrations → Security
+- **History removed** from Tools section
+- **Setup renamed to Integrations**: `/integrations` route renders `SetupPage`; `/setup` redirects to `/integrations`; page title + description updated
+- **Security page**: New `/security` route → `client/src/pages/security.tsx`; 10 honest status cards (Active/Partial/Unverified/Not Implemented)
+
+## Dashboard Client Info Tab (March 2026)
+- **Stats/Client Info tabs**: Each `ClientCard` now has a pill tab bar below the chart; "Stats" is default, "Client Info" is second tab
+- **Client Info tab**: Fetches `GET /api/dashboard/client/:id/nsm` for NSM tracker data; shows Website, Credits, NSM Type in top section; then Current Quarter and Next Quarter subsections with 6 metrics each (Sessions Actual/Goal, MVP Actual/Goal, % to Sessions Target, % to MVP Target)
+- **Quarter labels**: Dynamic from sheet tab names (e.g. "Q1 2026", "Q2 2026"); missing values display as "—"
+- **Percentage calculations**: `actual/goal*100`, formatted to 1 decimal; divide-by-zero and missing values safe
+- **NsmData extended**: `server/sheetsClient.ts` NsmData interface now includes `website?: string` and `credits?: string`; columns matched via `/website/i` and `/credits/i` regex against NSM Tracker sheet headers
+- **Server route**: `GET /api/dashboard/client/:id/nsm` → `{ current: NsmData, next: NsmData }` using `fetchNsmGoals` for current and next quarter
+
+## Notion Strategy Bank — Improved Diagnostics (March 2026)
+- **Richer source info**: `StrategyBankData` now includes `source: "database" | "page_blocks" | "none"` and `error?: string`
+- **Improved error handling**: Page blocks fallback now catches and surfaces its own error separately from database errors; both errors are stored on the result
+- **Enhanced test endpoint**: `GET /api/strategy-bank/test` now returns `{ entries, pageId, source, error, accessible }` and forces cache refresh
+- **Persistent connection status**: Integrations page auto-queries the test endpoint when a page ID is saved; shows persistent badge (entry count or "0 entries — check access"); yellow warning box with fix instructions when 0 entries found; green confirmation when entries are found with source type
+
 ## Removed / Legacy
 - QBR Prep v1 routes (`/generate`, `/docx`, `/upload-to-drive`, `/saved/*`) — removed; use v2 routes only
 - SEMrush Project ID input field removed from client setup UI (field still in DB; connectedServices now checks actual API credential existence)
-- History page renamed to "Query Log" to avoid confusion with saved reports
+- History page removed from sidebar navigation (HistoryPage component still exists but is no longer routed)

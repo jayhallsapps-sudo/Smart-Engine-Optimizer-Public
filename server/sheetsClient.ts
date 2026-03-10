@@ -13,6 +13,8 @@ export interface NsmData {
   mvpActual: string;
   mvpPercent: string;
   mvpOnTrack: string;
+  website?: string;
+  credits?: string;
 }
 
 const FALLBACK: NsmData = {
@@ -26,6 +28,8 @@ const FALLBACK: NsmData = {
   mvpActual: "—",
   mvpPercent: "—",
   mvpOnTrack: "—",
+  website: "—",
+  credits: "—",
 };
 
 function getCurrentQuarter(): { q: number; year: number } {
@@ -187,8 +191,13 @@ export async function fetchNsmGoals(clientName: string, forwardLooking?: boolean
     const colMvpActual   = findCol(headers, /mvp nsm actual/i);
     const colMvpPct      = findCol(headers, /% to mvp/i);
     const colMvpTrack    = findCol(headers, /mvp nsm on track/i);
+    const colWebsite     = findCol(headers, /website/i);
+    const colCredits     = findCol(headers, /credits/i);
 
     const mvpGoalCol = colMvpGoal >= 0 ? colMvpGoal : findCol(rawHeaders, /mvp nsm(?! actual)/i);
+
+    const websiteRaw = colWebsite >= 0 ? cellStr(clientRow, colWebsite) : "—";
+    const creditsRaw = colCredits >= 0 ? cellStr(clientRow, colCredits) : "—";
 
     return {
       quarter:         quarterLabel,
@@ -201,6 +210,8 @@ export async function fetchNsmGoals(clientName: string, forwardLooking?: boolean
       mvpActual:       cellStr(clientRow, colMvpActual),
       mvpPercent:      formatPercent(colMvpPct >= 0 ? clientRow[colMvpPct] : "—"),
       mvpOnTrack:      cellStr(clientRow, colMvpTrack),
+      website:         websiteRaw,
+      credits:         creditsRaw,
     };
   } catch {
     return FALLBACK;

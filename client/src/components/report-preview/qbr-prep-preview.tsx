@@ -251,21 +251,27 @@ function EditableCell({
   edits,
   onEdit,
   style,
+  normalize,
 }: {
   editKey: string;
   value: string;
   edits: Record<string, string>;
   onEdit: (k: string, v: string) => void;
   style?: React.CSSProperties;
+  normalize?: (v: string) => string;
 }) {
-  const display = edits[editKey] ?? value;
+  const normalizedValue = normalize ? normalize(value) : value;
+  const normalizedEdits = normalize && edits[editKey] !== undefined
+    ? { ...edits, [editKey]: normalize(edits[editKey]) }
+    : edits;
+  const display = normalizedEdits[editKey] ?? normalizedValue;
   const isManual = display.includes("Manual entry needed");
 
   return (
     <EditableSection
       editKey={editKey}
-      value={value}
-      edits={edits}
+      value={normalizedValue}
+      edits={normalizedEdits}
       onEdit={onEdit}
       as="span"
       className={isManual ? "italic text-gray-400" : ""}
@@ -430,7 +436,7 @@ export function QbrPrepPreview({
     <EditableCell key="g" editKey={`s1_${ri}_0`} value={r.goalType} edits={edits} onEdit={onEdit} />,
     <EditableCell key="go" editKey={`s1_${ri}_1`} value={r.goal} edits={edits} onEdit={onEdit} />,
     <EditableCell key="m" editKey={`s1_${ri}_2`} value={r.measurementSource} edits={edits} onEdit={onEdit} />,
-    <EditableCell key="gs" editKey={`s1_${ri}_3`} value={r.goalShift === "0%" ? "Par" : r.goalShift} edits={edits} onEdit={onEdit} />,
+    <EditableCell key="gs" editKey={`s1_${ri}_3`} value={r.goalShift} edits={edits} onEdit={onEdit} normalize={(v) => v === "0%" ? "Par" : v} />,
     <EditableCell key="r" editKey={`s1_${ri}_4`} value={r.reason} edits={edits} onEdit={onEdit} />,
   ]);
 

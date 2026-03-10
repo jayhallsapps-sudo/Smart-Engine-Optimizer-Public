@@ -1261,7 +1261,7 @@ const ADMIT_CONNECTION_DEFINITIONS: Record<string, string> = {
   "Low": "Awareness-stage traffic with weak commercial/admissions intent",
 };
 
-function generateSection2(
+export function generateSection2(
   ga4Landing: any[],
   gscPages: any[],
   client: Client,

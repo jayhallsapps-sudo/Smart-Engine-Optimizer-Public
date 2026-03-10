@@ -146,7 +146,7 @@ export default function QbrPrepPrint() {
   }
 
   const s1Rows = [
-    ...s1.rows.map((r: any, ri: number) => [e(`s1_${ri}_0`, r.goalType), e(`s1_${ri}_1`, r.goal), e(`s1_${ri}_2`, r.measurementSource), e(`s1_${ri}_3`, r.goalShift === "0%" ? "Par" : r.goalShift), e(`s1_${ri}_4`, r.reason)]),
+    ...s1.rows.map((r: any, ri: number) => { const gs = e(`s1_${ri}_3`, r.goalShift); return [e(`s1_${ri}_0`, r.goalType), e(`s1_${ri}_1`, r.goal), e(`s1_${ri}_2`, r.measurementSource), gs === "0%" ? "Par" : gs, e(`s1_${ri}_4`, r.reason)]; }),
     ...getCustomRows(edits, "s1"),
   ];
 

@@ -1,0 +1,40 @@
+Your report does not support a FULLY COMPLETE status. Reclassify this as NOT FULLY COMPLETE and finish the remaining verification work.
+
+Reasons:
+	1.	Required scenarios were marked UNTESTED:
+
+	•	direct GA4 conversion-page data available
+	•	no GA4 direct data but call tracking landing/source-page data available
+	•	no direct conversion data but high-intent organic landing-page inference available
+	•	print/export PDF render
+	•	DOCX export render
+
+	2.	You cannot claim FULLY COMPLETE when required scenarios were not executed.
+	3.	“Code-proven” is not sufficient for final QA closure. I asked for proof-oriented verification, not logic inspection alone.
+	4.	You stated mixed-source organic + GMB + AI LLM evidence is N/A for current implementation, but the intended behavior for Anchored Tides-style accounts was that the section should still remain useful under that broader measurement context. Clarify whether the implementation truly supports that intent or whether the requirement was only satisfied indirectly through structural fallback.
+	5.	You also documented an edge case where a user-edited literal “0%” can still display. Confirm whether that is intentional and acceptable, or harden it so the UI/export normalizes unchanged-goal “0%” to “Par” even when legacy/user-entered values exist.
+
+Next step:
+Return an amended report with final status set to NOT FULLY COMPLETE and complete the missing validation work. At minimum I need:
+
+A. Runtime verification, not just code review, for:
+	•	print/export PDF path
+	•	DOCX export path
+
+B. Executed scenario validation for:
+	•	P1 direct GA4 conversion landing-page path
+	•	P2 direct call tracking landing/source-page path
+	•	P3 high-intent organic/session inference path
+
+If no real client in the environment supports those scenarios, create or seed controlled test fixtures and run them.
+
+C. Clarify mixed-source behavior:
+	•	whether organic + GMB + AI LLM context is actually used in Section 2 logic
+	•	if not, state that clearly and explain how the requirement was satisfied without it
+
+D. Re-run final status after those tests.
+Allowed final statuses:
+	•	NOT FULLY COMPLETE
+	•	FULLY COMPLETE only after all required scenarios are actually verified
+
+Right now, the right call is: strong progress, not closed.

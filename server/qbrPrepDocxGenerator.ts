@@ -358,7 +358,7 @@ export async function generateQbrPrepV2Docx(
       resolveCell(`s1_${ri}_0`, r.goalType, edits),
       resolveCell(`s1_${ri}_1`, r.goal, edits),
       resolveCell(`s1_${ri}_2`, r.measurementSource, edits),
-      resolveCell(`s1_${ri}_3`, r.goalShift === "0%" ? "Par" : r.goalShift, edits),
+      (() => { const gs = resolveCell(`s1_${ri}_3`, r.goalShift, edits); return gs === "0%" ? "Par" : gs; })(),
       resolveCell(`s1_${ri}_4`, r.reason, edits),
     ]);
     docChildren.push(makeTable(["Goal Type", "Goal", "Source", "Goal Shift", "Reason"], s1Rows, [18, 20, 10, 10, 42]));

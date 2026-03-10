@@ -195,20 +195,6 @@ export default function QbrPrepPrint() {
             <div><strong>Generated On:</strong> {meta.generatedOn}</div>
           </div>
 
-          {(() => {
-            const ami = reportData.sourceSnapshot?.manualInputs;
-            if (!ami || (!ami.clientSentiment && !ami.amThoughts && !ami.priorityChecks && !ami.clientNotes && !ami.sentiment && !ami.hypothesis && !ami.auditNotes)) return null;
-            return (
-              <div style={{ marginBottom: 20, padding: "14px 18px", backgroundColor: "#FDF8F0", borderRadius: 6, border: "1px solid #E5D5C0" }}>
-                <div style={{ fontWeight: 700, fontSize: "13px", color: "#C0392B", marginBottom: 10, borderBottom: "1px solid #C0392B", paddingBottom: 4 }}>AM Inputs</div>
-                {(ami.clientSentiment || ami.sentiment) && <div style={{ fontSize: "11px", marginBottom: 6 }}><strong>Client Sentiment:</strong> {e("am_sentiment", ami.clientSentiment ?? ami.sentiment)}</div>}
-                {(ami.amThoughts || ami.hypothesis) && <div style={{ fontSize: "11px", marginBottom: 6 }}><strong>AM's Thoughts:</strong> {e("am_thoughts", ami.amThoughts ?? ami.hypothesis)}</div>}
-                {(ami.priorityChecks || ami.auditNotes) && <div style={{ fontSize: "11px", marginBottom: 6 }}><strong>Priority Checks:</strong> {e("am_priority_checks", ami.priorityChecks ?? ami.auditNotes)}</div>}
-                {ami.clientNotes && <div style={{ fontSize: "11px", marginBottom: 6 }}><strong>Client Notes:</strong> {e("am_client_notes", ami.clientNotes)}</div>}
-              </div>
-            );
-          })()}
-
           <SectionHeading num={1} title="What Matters Most This Quarter" />
           <DataTable
             headers={["Goal Type", "Goal", "Measurement Source", "Goal Shift vs Last Quarter", "Reason"]}

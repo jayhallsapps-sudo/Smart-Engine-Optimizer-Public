@@ -707,7 +707,7 @@ function generateSlides(
       "Phase 1 navigation cleanup (conversion-focused)",
       `Moving Admissions-related pages under About Us`,
       "Replacing the Admissions nav item with Verify Insurance",
-      ...(amInputs.amThoughts ? [`AM's Thoughts: ${amInputs.amThoughts}`] : []),
+      ...(amInputs.amThoughts ? [`AM's Hypothesis: ${amInputs.amThoughts}`] : []),
     ],
     commentary: amInputs.focusNext60Days || undefined,
   };

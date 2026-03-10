@@ -126,7 +126,7 @@ export default function MidStrategyPage() {
   function validateAmInputs(): boolean {
     const errors: Record<string, string> = {};
     if (!clientSentiment) errors.clientSentiment = "Client Sentiment is required";
-    if (!amThoughts.trim()) errors.amThoughts = "AM's Thoughts is required";
+    if (!amThoughts.trim()) errors.amThoughts = "AM's Hypothesis is required";
     if (!priorityChecks.trim()) errors.priorityChecks = "Priority Checks is required";
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
@@ -383,7 +383,7 @@ export default function MidStrategyPage() {
 
             <div className="space-y-1">
               <Label className="text-[11px] text-muted-foreground">
-                AM's Thoughts <span className="text-destructive">*</span>
+                AM's Hypothesis <span className="text-destructive">*</span>
               </Label>
               <Textarea
                 placeholder="Your hypothesis, focus areas, strategy thoughts…"
@@ -410,7 +410,7 @@ export default function MidStrategyPage() {
             </div>
 
             <div className="space-y-1">
-              <Label className="text-[11px] text-muted-foreground">Client Notes</Label>
+              <Label className="text-[11px] text-muted-foreground">Client Insights</Label>
               <Textarea
                 placeholder="Optional notes from or about the client…"
                 value={clientNotes}

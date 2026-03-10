@@ -164,7 +164,7 @@ export default function QbrPrepPage() {
   function validateAmInputs(): boolean {
     const errors: Record<string, string> = {};
     if (!sentiment) errors.sentiment = "Client Sentiment is required";
-    if (!amThoughts.trim()) errors.amThoughts = "AM's Thoughts is required";
+    if (!amThoughts.trim()) errors.amThoughts = "AM's Hypothesis is required";
     if (!priorityChecks.trim()) errors.priorityChecks = "Priority Checks is required";
     setAmValidationErrors(errors);
     if (Object.keys(errors).length > 0) {
@@ -459,7 +459,7 @@ export default function QbrPrepPage() {
                   {amValidationErrors.sentiment && <p className="text-destructive text-[10px] mt-0.5">{amValidationErrors.sentiment}</p>}
                 </div>
                 <div>
-                  <Label className="text-xs mb-1 block">AM's Thoughts <span className="text-destructive">*</span></Label>
+                  <Label className="text-xs mb-1 block">AM's Hypothesis <span className="text-destructive">*</span></Label>
                   <Textarea
                     className={`text-xs min-h-[60px] ${amValidationErrors.amThoughts ? "border-destructive" : ""}`}
                     placeholder="What you actually think about the account, performance, priorities, concerns, or opportunities…"
@@ -481,7 +481,7 @@ export default function QbrPrepPage() {
                   {amValidationErrors.priorityChecks && <p className="text-destructive text-[10px] mt-0.5">{amValidationErrors.priorityChecks}</p>}
                 </div>
                 <div>
-                  <Label className="text-xs mb-1 block text-muted-foreground">Client Notes <span className="text-muted-foreground text-[10px]">(optional)</span></Label>
+                  <Label className="text-xs mb-1 block text-muted-foreground">Client Insights <span className="text-muted-foreground text-[10px]">(optional)</span></Label>
                   <Textarea
                     className="text-xs min-h-[60px]"
                     placeholder="Client-specific conditions, constraints, special deliverables…"

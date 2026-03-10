@@ -54,6 +54,8 @@ import { getGoogleAccessToken } from "./googleToken";
 import { generateQbrPrepReport } from "./qbrPrepSectionGenerator";
 import { generateQbrPrepV2Docx } from "./qbrPrepDocxGenerator";
 import { analyzeReportGaps, loadSEOHQContext, type AccountContext } from "./gapAnalysisEngine";
+import { resolveClientMonthlyCredits, CLIENT_MONTHLY_CREDIT_MAP } from "./clientCreditMap";
+import { validateQbrPrepExportReadiness } from "./qbrPrepExportValidator";
 
 
 const SECTION_COMMANDS_AUTO: Record<string, Record<string, string[]>> = {
@@ -1456,20 +1458,9 @@ export async function registerRoutes(
     }
 
     try {
-      // Resolve monthly content credits from canonical CLIENT_CREDIT_MAP
-      // (source of truth per data-handling-rules skill — same map used by NSM dashboard).
-      const QBR_CLIENT_CREDIT_MAP: Record<string, number> = {
-        "anchored tides": 4,
-        "bliss recovery": 8,
-        "heartland healing": 5,
-        "sol women": 5,
-        "williamsburg house": 3,
-        "horseshoe ridge": 4,
-        "iris healing": 5,
-      };
+      // Resolve monthly content credits from the shared canonical source (clientCreditMap.ts).
       const clientForCredits = await import("./storage").then(m => m.storage.getClient(Number(clientId)));
-      const clientNameLower = (clientForCredits?.name ?? "").toLowerCase();
-      const resolvedMonthlyCredits = Object.entries(QBR_CLIENT_CREDIT_MAP).find(([k]) => clientNameLower.includes(k))?.[1] ?? 5;
+      const resolvedMonthlyCredits = resolveClientMonthlyCredits(clientForCredits?.name ?? "");
 
       const reportData = await generateQbrPrepReport({
         clientId: Number(clientId),
@@ -1498,6 +1489,11 @@ export async function registerRoutes(
     const { reportData, edits } = req.body;
     const validErr = validateExportPayload("QBR Prep DOCX", reportData, ["meta", "section1Goals"]);
     if (validErr) { logExport("QBR Prep DOCX", t0, false, validErr); return res.status(400).json({ message: validErr }); }
+    const readiness = validateQbrPrepExportReadiness(reportData, edits ?? {});
+    if (!readiness.canExport) {
+      logExport("QBR Prep DOCX", t0, false, readiness.reasons.join("; "));
+      return res.status(422).json({ ok: false, code: readiness.code, reasons: readiness.reasons });
+    }
     try {
       const buffer = await generateQbrPrepV2Docx(injectQbrPrepCustomRows(reportData, edits), edits);
       const slug = (reportData.meta?.site ?? "report").toLowerCase().replace(/\s+/g, "_");
@@ -1515,7 +1511,10 @@ export async function registerRoutes(
   app.post("/api/reports/qbr-prep/upload-to-drive-v2", async (req, res) => {
     const { reportData, edits, reportTitle } = req.body;
     if (!reportData) return res.status(400).json({ message: "reportData is required" });
-
+    const readiness = validateQbrPrepExportReadiness(reportData, edits ?? {});
+    if (!readiness.canExport) {
+      return res.status(422).json({ ok: false, code: readiness.code, reasons: readiness.reasons });
+    }
     try {
       const docxBuffer = await generateQbrPrepV2Docx(injectQbrPrepCustomRows(reportData, edits), edits);
       const { ReplitConnectors } = await import("@replit/connectors-sdk");
@@ -1560,6 +1559,11 @@ export async function registerRoutes(
     const { reportData, edits } = req.body;
     const validErr = validateExportPayload("QBR Prep PDF", reportData, ["meta"]);
     if (validErr) { logExport("QBR Prep PDF", t0, false, validErr); return res.status(400).json({ message: validErr }); }
+    const readiness = validateQbrPrepExportReadiness(reportData, edits ?? {});
+    if (!readiness.canExport) {
+      logExport("QBR Prep PDF", t0, false, readiness.reasons.join("; "));
+      return res.status(422).json({ ok: false, code: readiness.code, reasons: readiness.reasons });
+    }
     const id = "qbr-prep-" + Date.now();
     printCache.set(id, { data: { reportData, edits }, ts: Date.now() });
     try {
@@ -2138,23 +2142,13 @@ export async function registerRoutes(
       const websiteSource: "client_record" | "nsm_sheet" | "none" =
         websiteFromClient ? "client_record" : websiteFromSheet ? "nsm_sheet" : "none";
 
-      // Credits: sourced from hardcoded monthly capacity table per data-handling-rules skill.
-      // Values: Anchored Tides=4, Bliss=8, Heartland=5, Sol Women's=5, Williamsburg=3, Horseshoe Ridge=4, Iris Healing=5
-      const CLIENT_CREDIT_MAP: Record<string, number> = {
-        "anchored tides": 4,
-        "bliss recovery": 8,
-        "heartland healing": 5,
-        "sol women": 5,
-        "williamsburg house": 3,
-        "horseshoe ridge": 4,
-        "iris healing": 5,
-      };
-      const clientNameLower = client.name.toLowerCase();
-      const creditsFromMap = Object.entries(CLIENT_CREDIT_MAP).find(([key]) =>
-        clientNameLower.includes(key)
+      // Credits: sourced from the shared CLIENT_MONTHLY_CREDIT_MAP (clientCreditMap.ts)
+      // which is the single canonical source per data-handling-rules skill.
+      const rawCredits = Object.entries(CLIENT_MONTHLY_CREDIT_MAP).find(([key]) =>
+        client.name.toLowerCase().includes(key)
       )?.[1] ?? null;
-      const credits = creditsFromMap !== null ? String(creditsFromMap) : "—";
-      const creditsSource: "nsm_sheet" | "none" = creditsFromMap !== null ? "nsm_sheet" : "none";
+      const credits = rawCredits !== null ? String(rawCredits) : "—";
+      const creditsSource: "nsm_sheet" | "none" = rawCredits !== null ? "nsm_sheet" : "none";
 
       // NSM Type: NSM sheet only (no client-record equivalent)
       const nsmTypeFromSheet = (current?.mvpType ?? "").trim().replace(/^—$/, "") || null;

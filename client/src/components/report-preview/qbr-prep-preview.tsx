@@ -514,7 +514,7 @@ export function QbrPrepPreview({
         <div style={{ padding: "24px 56px 0", flex: 1, display: "flex", flexDirection: "column" }}>
           <div style={{ flex: 1 }}>
             <div style={{ marginBottom: "4px", fontSize: "20px", fontWeight: 700 }}>
-              QBR Snapshot
+              QBS
             </div>
             <div style={{ fontSize: "14px", fontWeight: 600, color: "#374151", marginBottom: "12px" }}>
               <EditableCell editKey="meta_site" value={meta.site} edits={edits} onEdit={onEdit} />

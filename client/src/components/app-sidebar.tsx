@@ -23,7 +23,7 @@ const reportItems = [
   { title: "Mid-Strategy", url: "/mid-strategy", icon: Target },
   { title: "Bi-Weekly", url: "/biweekly", icon: CalendarDays },
   { title: "Monthly", url: "/monthly", icon: BarChart3 },
-  { title: "QBR Snapshot", url: "/qbr-prep", icon: Sparkles },
+  { title: "QBS", url: "/qbr-prep", icon: Sparkles },
   { title: "QBR", url: "/qbr", icon: TrendingUp },
 ];
 

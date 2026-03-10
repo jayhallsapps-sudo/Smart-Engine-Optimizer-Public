@@ -25,6 +25,27 @@ function DataTable({ headers, rows }: { headers: string[]; rows: string[][] }) {
   return <ReportTable headers={headers} rows={nodeRows} />;
 }
 
+interface CreditMonth { month: string; rows: { credits: string; activity: string }[]; unparsed: string[]; }
+function parseCreditUsage(raw: string): CreditMonth[] {
+  const MONTH_HEADING = /^(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s+\d{4}$/i;
+  const CREDIT_LINE = /^(\d+(?:\s*[cC]redits?)?)\s*[-:]\s*(.+)$/;
+  const lines = raw.split("\n").map(l => l.trim()).filter(l => l.length > 0);
+  const months: CreditMonth[] = [];
+  let current: CreditMonth | null = null;
+  for (const line of lines) {
+    if (MONTH_HEADING.test(line)) { current = { month: line, rows: [], unparsed: [] }; months.push(current); }
+    else if (current) {
+      const m = CREDIT_LINE.exec(line);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        const creditLabel = isNaN(n) ? m[1].charAt(0).toUpperCase() + m[1].slice(1) : `${n} ${n === 1 ? "Credit" : "Credits"}`;
+        current.rows.push({ credits: creditLabel, activity: m[2].trim() });
+      } else { current.unparsed.push(line); }
+    }
+  }
+  return months;
+}
+
 function cell(val: string): ReactNode {
   return val?.includes("Manual entry needed")
     ? <span style={{ fontStyle: "italic", color: "#9CA3AF" }}>{val}</span>
@@ -470,7 +491,46 @@ export default function QbrPrepPrint() {
             );
           })()}
 
-          <SectionHeading num={7} title="What We Track" />
+          {(() => {
+            const rawCreditUsage: string = amPrint.creditUsage ?? "";
+            if (!rawCreditUsage.trim()) return null;
+            const creditMonths = parseCreditUsage(rawCreditUsage);
+            return (
+              <>
+                <SectionHeading num={7} title="How Credits Are Used Each Month" />
+                {creditMonths.length > 0 ? creditMonths.map((cm, mi) => (
+                  <div key={mi} style={{ marginBottom: 14 }}>
+                    <div style={{ fontSize: "11px", fontWeight: 700, color: "#374151", marginBottom: 4 }}>{cm.month}</div>
+                    {cm.rows.length > 0 && (
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px" }}>
+                        <thead>
+                          <tr style={{ backgroundColor: "#F3F4F6" }}>
+                            <th style={{ textAlign: "left", padding: "4px 8px", fontWeight: 600, color: "#6B7280", width: "22%", borderBottom: "1px solid #E5E7EB" }}>Credits</th>
+                            <th style={{ textAlign: "left", padding: "4px 8px", fontWeight: 600, color: "#6B7280", borderBottom: "1px solid #E5E7EB" }}>Activity</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {cm.rows.map((row, ri) => (
+                            <tr key={ri} style={{ borderBottom: "1px solid #F3F4F6" }}>
+                              <td style={{ padding: "5px 8px", color: "#1B3A6B", fontWeight: 600 }}>{row.credits}</td>
+                              <td style={{ padding: "5px 8px", color: "#374151" }}>{row.activity}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                    {cm.unparsed.map((u, ui) => (
+                      <div key={ui} style={{ fontSize: "11px", color: "#6B7280", padding: "2px 8px" }}>{u}</div>
+                    ))}
+                  </div>
+                )) : (
+                  <div style={{ fontSize: "11px", color: "#374151", whiteSpace: "pre-wrap", marginBottom: 14 }}>{rawCreditUsage}</div>
+                )}
+              </>
+            );
+          })()}
+
+          <SectionHeading num={amPrint.creditUsage?.trim() ? 8 : 7} title="What We Track" />
           <ReportTable
             headers={["Focus Area", "Metric", "Source", "Why It Matters"]}
             rows={s7Rows}
@@ -482,7 +542,7 @@ export default function QbrPrepPrint() {
             if (autoOpps.length === 0 && s8Rows.length === 0) return null;
             return (
               <>
-                <SectionHeading num={8} title="Additional Opportunities" />
+                <SectionHeading num={amPrint.creditUsage?.trim() ? 9 : 8} title="Additional Opportunities" />
 
                 {/* Auto-generated opportunity cards */}
                 {autoOpps.length > 0 && (

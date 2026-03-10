@@ -108,6 +108,27 @@ function makeTable(headers: string[], rows: string[][], colWidths?: number[]) {
   });
 }
 
+interface CreditMonth { month: string; rows: { credits: string; activity: string }[]; unparsed: string[]; }
+function parseCreditUsage(raw: string): CreditMonth[] {
+  const MONTH_HEADING = /^(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s+\d{4}$/i;
+  const CREDIT_LINE = /^(\d+(?:\s*[cC]redits?)?)\s*[-:]\s*(.+)$/;
+  const lines = raw.split("\n").map((l: string) => l.trim()).filter((l: string) => l.length > 0);
+  const months: CreditMonth[] = [];
+  let current: CreditMonth | null = null;
+  for (const line of lines) {
+    if (MONTH_HEADING.test(line)) { current = { month: line, rows: [], unparsed: [] }; months.push(current); }
+    else if (current) {
+      const m = CREDIT_LINE.exec(line);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        const creditLabel = isNaN(n) ? m[1].charAt(0).toUpperCase() + m[1].slice(1) : `${n} ${n === 1 ? "Credit" : "Credits"}`;
+        current.rows.push({ credits: creditLabel, activity: m[2].trim() });
+      } else { current.unparsed.push(line); }
+    }
+  }
+  return months;
+}
+
 function sectionHeading(num: number, title: string, addPageBreak = false) {
   return new Paragraph({
     pageBreakBefore: addPageBreak,
@@ -458,9 +479,49 @@ export async function generateQbrPrepV2Docx(
     [5, 18, 8, 29, 40],
   ));
 
-  // ── Section 7: Tracking ───────────────────────────────────────────────────
+  // ── Section 7: How Credits Are Used Each Month ────────────────────────────
+  const rawCreditUsage: string = (reportData.sourceSnapshot?.manualInputs as any)?.creditUsage ?? "";
+  const hasCreditUsage = rawCreditUsage.trim().length > 0;
+  if (hasCreditUsage) {
+    docChildren.push(sectionHeading(7, "How Credits Are Used Each Month"));
+    const creditMonths = parseCreditUsage(rawCreditUsage);
+    if (creditMonths.length > 0) {
+      for (const cm of creditMonths) {
+        docChildren.push(
+          new Paragraph({
+            spacing: { before: 80, after: 40 },
+            children: [new TextRun({ text: cm.month, bold: true, size: 20, color: "374151", font: "Calibri" })],
+          })
+        );
+        if (cm.rows.length > 0) {
+          docChildren.push(makeTable(
+            ["Credits", "Activity"],
+            cm.rows.map(r => [r.credits, r.activity]),
+            [22, 78],
+          ));
+        }
+        for (const u of cm.unparsed) {
+          docChildren.push(
+            new Paragraph({
+              spacing: { before: 20, after: 20 },
+              children: [new TextRun({ text: u, size: 18, color: GRAY, font: "Calibri" })],
+            })
+          );
+        }
+      }
+    } else {
+      docChildren.push(
+        new Paragraph({
+          spacing: { before: 40, after: 40 },
+          children: [new TextRun({ text: rawCreditUsage, size: 18, color: "374151", font: "Calibri" })],
+        })
+      );
+    }
+  }
+
+  // ── Section 7→8: Tracking ─────────────────────────────────────────────────
   const s7 = reportData.section7Tracking;
-  docChildren.push(sectionHeading(7, "What We Track"));
+  docChildren.push(sectionHeading(hasCreditUsage ? 8 : 7, "What We Track"));
   if (edits) {
     const trackingLen = s7.tracking?.length ?? 0;
     for (let ri = 0; ri < trackingLen; ri++) {
@@ -485,10 +546,11 @@ export async function generateQbrPrepV2Docx(
     [18, 18, 12, 12, 40],
   ));
 
-  // ── Section 8: Client Insights (QSSB) ────────────────────────────────────
+  // ── Section 8/9: Client Insights (QSSB) ──────────────────────────────────
+  const creditOffset = hasCreditUsage ? 1 : 0;
   const qssb = reportData.sectionQssb;
   if (qssb?.clientInsights?.length > 0) {
-    docChildren.push(sectionHeading(8, "Client Insights"));
+    docChildren.push(sectionHeading(8 + creditOffset, "Client Insights"));
     for (let i = 0; i < qssb.clientInsights.length; i++) {
       const q = qssb.clientInsights[i];
       docChildren.push(
@@ -506,7 +568,7 @@ export async function generateQbrPrepV2Docx(
 
   // ── Additional Opportunities ──────────────────────────────────────────────
   if (qssb?.additionalOpportunities?.length > 0) {
-    const oppNum = qssb?.clientInsights?.length > 0 ? 9 : 8;
+    const oppNum = (qssb?.clientInsights?.length > 0 ? 9 : 8) + creditOffset;
     docChildren.push(sectionHeading(oppNum, "Additional Opportunities"));
     for (let i = 0; i < qssb.additionalOpportunities.length; i++) {
       const o = qssb.additionalOpportunities[i] as any;

@@ -1428,6 +1428,7 @@ export async function registerRoutes(
     const prevQtrAssessmentVal = req.body.prevQtrAssessment ?? "";
     const priorityChecksVal = req.body.priorityChecks ?? req.body.auditNotes ?? "";
     const clientNotesVal = req.body.clientNotes ?? "";
+    const creditUsageVal = req.body.creditUsage ?? "";
     if (!clientId) return res.status(400).json({ message: "clientId is required" });
 
     const amValidation = validateAmInputs({ clientSentiment: sentimentVal, amThoughts: amThoughtsVal, priorityChecks: priorityChecksVal, clientNotes: clientNotesVal });
@@ -1471,6 +1472,7 @@ export async function registerRoutes(
         prevQtrAssessment: prevQtrAssessmentVal || undefined,
         auditNotes: priorityChecksVal,
         clientNotes: clientNotesVal,
+        creditUsage: creditUsageVal || undefined,
         forwardLooking: true,
         gapAnswers,
         monthlyCredits: resolvedMonthlyCredits,

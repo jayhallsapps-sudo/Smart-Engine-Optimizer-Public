@@ -1,0 +1,157 @@
+QBR Prep enhancement — add a new report section for monthly credit usage.
+
+We need to add a new AM input and a new rendered report section.
+
+Goal:
+Add a clear client-facing section that explains how credits are used each month.
+
+==================================================
+1. NEW AM INPUT
+==================================================
+
+Add a new manual input in the sidebar called:
+
+How Credits Are Used Each Month
+
+Requirements:
+- textarea input
+- AM-entered freeform text
+- should support month-by-month breakdowns in simple plain text
+- should persist like the other AM inputs
+- should restore on load
+- should flow through preview, print/PDF, DOCX, and Google export
+
+Example input format:
+April 2026
+1 Credit - Refresh page domain
+2 Credits - Creation of new content
+
+May 2026
+1 Credit - Technical updates
+2 Credits - New service page
+1 Credit - Content refresh
+
+This field should be visible in the AM input area, but like the other report-context inputs, it should be intentionally structured when rendered.
+
+==================================================
+2. NEW RENDERED REPORT SECTION
+==================================================
+
+Add a new client-facing report section:
+
+7. How Credits Are Used Each Month
+
+Placement:
+- This becomes the new Section 7
+- “What We Track” and all following sections must be pushed down accordingly
+- Update numbering consistently across preview, print/PDF, DOCX, and any other export output
+
+==================================================
+3. OUTPUT FORMATTING RULES
+==================================================
+
+The AM will enter this as freeform text, but the report should attempt to normalize it into a clean structured format.
+
+Preferred rendered format:
+For each month detected, render:
+- a month heading
+- followed by a clean 2-column table:
+
+| Credits | Activity |
+
+Example rendered output:
+
+April 2026
+
+| Credits | Activity |
+|---|---|
+| 1 Credit | Refresh page domain |
+| 2 Credits | Creation of new content |
+
+May 2026
+
+| Credits | Activity |
+|---|---|
+| 1 Credit | Technical updates |
+| 2 Credits | New service page |
+| 1 Credit | Content refresh |
+
+Parsing behavior:
+- detect month headings like:
+  - April 2026
+  - May 2026
+  - Jun 2026
+- detect credit/activity lines like:
+  - 1 Credit - Refresh page domain
+  - 2 Credits - Creation of new content
+  - 1 credit: Technical updates
+  - 1 - Technical updates
+
+Normalize output so the report looks clean and consistent.
+
+==================================================
+4. FALLBACK BEHAVIOR
+==================================================
+
+If the input cannot be parsed reliably:
+- do not lose the content
+- render it in a readable fallback format, such as:
+  - month heading + bullet list, or
+  - a styled pre-wrapped block
+- preserve the AM’s content rather than failing silently
+
+Important:
+- parsing should improve formatting, not make the content fragile
+- fallback should still look intentional and client-safe
+
+==================================================
+5. DESIGN / EXPORT REQUIREMENTS
+==================================================
+
+This new section must render cleanly in:
+- preview
+- print/PDF
+- DOCX
+- Google export
+
+Keep design consistent with the existing report style:
+- section heading style should match other sections
+- month subheadings should be visually clear
+- tables should match existing report table design language as closely as possible
+- spacing should feel intentional
+
+==================================================
+6. DATA / UX RULES
+==================================================
+
+- this is an AM input, not auto-generated from credits data
+- the AM provides the breakdown
+- the app formats it cleanly for the report
+- preserve persistence / restore behavior
+- do not let malformed input break the report
+- if empty, either omit the section or show nothing for it — choose the behavior that best matches existing report conventions and report back clearly
+
+==================================================
+7. TESTING / ACCEPTANCE CRITERIA
+==================================================
+
+1. Sidebar includes a new field: How Credits Are Used Each Month
+2. Field persists and restores correctly
+3. Report includes a new Section 7: How Credits Are Used Each Month
+4. What We Track and all following sections are renumbered correctly
+5. Structured month + credits/activity formatting works for normal input
+6. Fallback rendering works when parsing is imperfect
+7. Preview, print/PDF, DOCX, and Google export all include the new section cleanly
+8. Existing export flow still works
+
+==================================================
+8. AFTER IMPLEMENTATION, REPORT BACK WITH:
+==================================================
+
+- files changed
+- exact new sidebar field placement
+- exact parsing rules for month headings and credit lines
+- exact fallback behavior when parsing fails
+- exact section renumbering changes
+- confirmation that preview, PDF, DOCX, and Google export all include the new section
+- any edge cases or limitations

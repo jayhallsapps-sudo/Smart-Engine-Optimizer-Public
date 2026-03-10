@@ -167,6 +167,7 @@ export interface SourceSnapshot {
     auditNotes?: string;
     priorityChecks?: string;
     clientNotes?: string;
+    creditUsage?: string;
   } | null;
 }
 

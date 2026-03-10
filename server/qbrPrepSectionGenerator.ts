@@ -234,6 +234,8 @@ export interface QbrPrepGenerateInput {
   /** Monthly content credits resolved in routes.ts from CLIENT_CREDIT_MAP (the canonical source).
    *  Defaults to 5 if not supplied. */
   monthlyCredits?: number;
+  /** AM-entered freeform credit usage breakdown (stored verbatim, parsed at render time). */
+  creditUsage?: string;
 }
 
 export function normalizeKpiLabel(mvpType: string): string {
@@ -761,6 +763,7 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
       prevQtrAssessment: input.prevQtrAssessment,
       priorityChecks: input.auditNotes,
       clientNotes: (input as any).clientNotes ?? "",
+      creditUsage: input.creditUsage ?? "",
       sentiment: input.sentiment,
       hypothesis: input.hypothesis,
       auditNotes: input.auditNotes,

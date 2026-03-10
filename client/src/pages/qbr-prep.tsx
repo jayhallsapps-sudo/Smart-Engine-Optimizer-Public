@@ -100,6 +100,8 @@ export default function QbrPrepPage() {
   const [priorityChecks, setPriorityChecks] = useState("");
   const [clientNotes, setClientNotes] = useState("");
   const [creditUsage, setCreditUsage] = useState("");
+  const [hiddenSections, setHiddenSections] = useState<Record<string, boolean>>({});
+  const [hiddenTables, setHiddenTables] = useState<Record<string, boolean>>({});
   const [currentCrawlId, setCurrentCrawlId] = useState<number | null>(null);
   const [showAmInputs, setShowAmInputs] = useState(true);
   const [amValidationErrors, setAmValidationErrors] = useState<Record<string, string>>({});
@@ -207,6 +209,8 @@ export default function QbrPrepPage() {
         planningYear: quarter.planningYear,
         currentCrawlAssetId: currentCrawlId,
       };
+      setHiddenSections({});
+      setHiddenTables({});
       reportSave.pendingPayloadRef.current = { reportData: data.reportData, edits: {}, meta };
       reportSave.save(data.reportData, {}, meta);
       toast({ title: "QBR Prep generated", description: "Preview ready — click any text to edit." });
@@ -223,26 +227,82 @@ export default function QbrPrepPage() {
   editsRef.current = edits;
   const reportDataRef = useRef(reportData);
   reportDataRef.current = reportData;
+  const hiddenSectionsRef = useRef(hiddenSections);
+  hiddenSectionsRef.current = hiddenSections;
+  const hiddenTablesRef = useRef(hiddenTables);
+  hiddenTablesRef.current = hiddenTables;
+
+  const VIS_SEC = "__visSec__";
+  const VIS_TBL = "__visTbl__";
+
+  const mergeVisIntoEdits = (e: Record<string, string>, hs: Record<string, boolean>, ht: Record<string, boolean>): Record<string, string> => {
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(e)) {
+      if (!k.startsWith(VIS_SEC) && !k.startsWith(VIS_TBL)) out[k] = v;
+    }
+    for (const [k, v] of Object.entries(hs)) if (v) out[`${VIS_SEC}${k}`] = "1";
+    for (const [k, v] of Object.entries(ht)) if (v) out[`${VIS_TBL}${k}`] = "1";
+    return out;
+  };
+  const extractVisFromEdits = (e: Record<string, string>): { hs: Record<string, boolean>; ht: Record<string, boolean>; clean: Record<string, string> } => {
+    const hs: Record<string, boolean> = {}, ht: Record<string, boolean> = {}, clean: Record<string, string> = {};
+    for (const [k, v] of Object.entries(e)) {
+      if (k.startsWith(VIS_SEC) && v === "1") hs[k.slice(VIS_SEC.length)] = true;
+      else if (k.startsWith(VIS_TBL) && v === "1") ht[k.slice(VIS_TBL.length)] = true;
+      else clean[k] = v;
+    }
+    return { hs, ht, clean };
+  };
+
+  const visMeta = useCallback(() => ({
+    reportPeriodLabel: quarter.analysisWindowLabel,
+    analysisWindowStart: quarter.analysisStart,
+    analysisWindowEnd: quarter.analysisEnd,
+    planningQuarter: quarter.planningQ,
+    planningYear: quarter.planningYear,
+    currentCrawlAssetId: currentCrawlId,
+  }), [quarter, currentCrawlId]);
 
   const handleEdit = useCallback((key: string, value: string) => {
     setEdits(prev => {
       const next = { ...prev, [key]: value };
       reportSave.pendingPayloadRef.current = {
         reportData: reportDataRef.current,
-        edits: next,
-        meta: {
-          reportPeriodLabel: quarter.analysisWindowLabel,
-          analysisWindowStart: quarter.analysisStart,
-          analysisWindowEnd: quarter.analysisEnd,
-          planningQuarter: quarter.planningQ,
-          planningYear: quarter.planningYear,
-          currentCrawlAssetId: currentCrawlId,
-        },
+        edits: mergeVisIntoEdits(next, hiddenSectionsRef.current, hiddenTablesRef.current),
+        meta: visMeta(),
       };
       return next;
     });
     reportSave.markDirty();
-  }, [currentCrawlId, quarter]);
+  }, [visMeta]);
+
+  const toggleSection = useCallback((key: string) => {
+    setHiddenSections(prev => {
+      const next = { ...prev, [key]: !prev[key] };
+      if (!next[key]) delete next[key];
+      reportSave.pendingPayloadRef.current = {
+        reportData: reportDataRef.current,
+        edits: mergeVisIntoEdits(editsRef.current, next, hiddenTablesRef.current),
+        meta: visMeta(),
+      };
+      return next;
+    });
+    reportSave.markDirty();
+  }, [visMeta]);
+
+  const toggleTable = useCallback((key: string) => {
+    setHiddenTables(prev => {
+      const next = { ...prev, [key]: !prev[key] };
+      if (!next[key]) delete next[key];
+      reportSave.pendingPayloadRef.current = {
+        reportData: reportDataRef.current,
+        edits: mergeVisIntoEdits(editsRef.current, hiddenSectionsRef.current, next),
+        meta: visMeta(),
+      };
+      return next;
+    });
+    reportSave.markDirty();
+  }, [visMeta]);
 
   const [docxDownloading, setDocxDownloading] = useState(false);
   const downloadDocx = async () => {
@@ -254,7 +314,7 @@ export default function QbrPrepPage() {
       const res = await fetch("/api/reports/qbr-prep/docx-v2", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders },
-        body: JSON.stringify({ reportData, edits }),
+        body: JSON.stringify({ reportData, edits, hiddenSections, hiddenTables }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ message: "Unknown error" }));
@@ -282,6 +342,8 @@ export default function QbrPrepPage() {
       const res = await apiRequest("POST", "/api/reports/qbr-prep/upload-to-drive-v2", {
         reportData,
         edits,
+        hiddenSections,
+        hiddenTables,
         reportTitle: `QBR Prep - ${reportData.meta?.site} - Q${quarter.planningQ} ${quarter.planningYear}`,
       });
       return res.json();
@@ -311,7 +373,7 @@ export default function QbrPrepPage() {
       const res = await fetch("/api/reports/qbr-prep/preview-pdf", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders },
-        body: JSON.stringify({ reportData, edits }),
+        body: JSON.stringify({ reportData, edits, hiddenSections, hiddenTables }),
       });
       if (!res.ok) throw new Error("PDF generation failed");
       const blob = await res.blob();
@@ -529,8 +591,11 @@ export default function QbrPrepPage() {
                 clientId={clientId ? Number(clientId) : null}
                 reportType="qbr_prep"
                 onLoad={(data, savedEdits, id) => {
+                  const { hs, ht, clean } = extractVisFromEdits(savedEdits);
+                  setHiddenSections(hs);
+                  setHiddenTables(ht);
                   setReportData(data);
-                  setEdits(savedEdits);
+                  setEdits(clean);
                   setDataOrigin("saved");
                   reportSave.setSavedReportId(id);
                   reportSave.pendingPayloadRef.current = {
@@ -810,6 +875,10 @@ export default function QbrPrepPage() {
               clientNotes: reportData.sourceSnapshot.manualInputs.clientNotes,
               creditUsage: reportData.sourceSnapshot.manualInputs.creditUsage,
             } : undefined}
+            hiddenSections={hiddenSections}
+            hiddenTables={hiddenTables}
+            onToggleSection={toggleSection}
+            onToggleTable={toggleTable}
           />
         )}
       </div>

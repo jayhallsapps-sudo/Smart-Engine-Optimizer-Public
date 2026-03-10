@@ -1,0 +1,206 @@
+QBR Prep visibility controls pass — add report-only hide/show controls for sections and tables, and make exports follow the same visibility state.
+
+Goal:
+Allow the AM to hide sections and/or tables from the current report instance in preview, without deleting the underlying content and without affecting future reports.
+
+Core principle:
+This is report-level visibility, not permanent deletion.
+If something is hidden in preview, it should also be hidden in:
+- PDF
+- DOCX
+- Google export
+for that specific saved/generated report instance only.
+
+Do not change:
+- core report generation logic unless needed for visibility support
+- current export gating rules
+- content persistence for future reports
+- existing section/table data structures unless needed for visibility mapping
+
+==================================================
+1. VISIBILITY MODEL
+==================================================
+
+Implement a report-level visibility system.
+
+Required behavior:
+- sections can be hidden from the current report
+- individual tables inside sections can be hidden from the current report
+- hidden content is not deleted
+- hidden content can be unhidden later in preview
+- hidden state persists for the current saved report instance
+- future reports are unaffected
+
+Preferred implementation:
+Use a visibility map stored alongside the current report’s edits/state.
+
+Examples:
+- hiddenSections["section7_credits"] = true
+- hiddenTables["section3_topics"] = true
+- hiddenTables["section2_sources"] = true
+
+You may choose exact key naming, but it must be:
+- explicit
+- stable
+- easy to apply across preview + exports
+
+==================================================
+2. WHAT MUST BE HIDEABLE
+==================================================
+
+At minimum, support:
+A. Entire section hide/show
+Examples:
+- hide Section 7 How Credits Are Used Each Month
+- hide Section 8 What We Track
+- hide any other major report section
+
+B. Individual table hide/show
+Examples:
+- hide Top Topics table
+- hide Top Traffic Pages table
+- hide Top Converting Sources table
+- hide any table inside a section without hiding the whole section
+
+Important:
+- If a section contains multiple tables and only one is hidden, the rest of the section should still render cleanly
+- If all renderable content inside a section becomes hidden, either:
+  - auto-hide the section shell too, or
+  - do not render an empty section
+Choose the cleaner behavior and report it back clearly
+
+==================================================
+3. PREVIEW UI REQUIREMENTS
+==================================================
+
+In the preview UI, add clear report-only visibility controls.
+
+Required:
+- each major section gets a Hide Section / Show Section control
+- each table gets a Hide Table / Show Table control
+- controls should be easy for the AM to understand
+- the wording should make it obvious this affects the current report output only
+
+Preferred wording:
+- Hide from report
+- Show in report
+
+Important:
+- do not make the UI ugly or noisy
+- keep controls lightweight and aligned with the current polished report feel
+- avoid cluttering the client-facing visual too much
+- controls should feel like editor tools, not report content
+
+==================================================
+4. EXPORT BEHAVIOR
+==================================================
+
+Exports must follow the same visibility state as preview.
+
+Required:
+If a section or table is hidden in preview, it must also be hidden in:
+- print/PDF
+- DOCX
+- Google export
+
+This applies to the current report instance only.
+
+Important:
+- do not just hide it visually in preview and forget exports
+- export output must match preview state closely
+
+==================================================
+5. OPTIONAL CONTENT RULES
+==================================================
+
+Optional AM-input-driven content should auto-hide when empty.
+
+Examples:
+- Client Insights
+- Client Sentiment if optional in the render block and blank
+- How Credits Are Used Each Month
+- any similar optional block
+
+Required behavior:
+- if optional content is blank, it should not render
+- blank optional content should not create empty section shells or broken numbering
+- if optional content is present, it should render by default unless the AM manually hides it
+
+For "How Credits Are Used Each Month":
+- if blank, do not render the section
+- if filled, render by default
+- if filled and the AM hides it, do not export it
+
+==================================================
+6. SECTION NUMBERING
+==================================================
+
+Section numbering must be recomputed from visible sections only.
+
+Required:
+- do not leave numbering gaps when sections are hidden or omitted
+- if Section 7 is hidden, the next visible section should become Section 7
+- numbering in preview, print/PDF, DOCX, and Google export must stay aligned
+
+Important:
+- numbering should reflect what the client actually sees
+- hidden or omitted sections should not leave dead numbers behind
+
+==================================================
+7. PERSISTENCE RULES
+==================================================
+
+Visibility state must persist with the current saved report.
+
+Required:
+- if the AM hides sections/tables and saves the report, those hidden states should still be present when reloading that saved report
+- visibility state should be part of the current report instance state, similar to edits
+- future newly generated reports should not inherit hidden state unless explicitly loaded from that saved report
+
+==================================================
+8. NON-GOALS / SAFETY RULES
+==================================================
+
+Do not:
+- permanently delete generated content
+- alter future report templates
+- create global account-level hide rules
+- break export flow
+- break existing manual edits
+- render empty section containers after everything inside was hidden
+
+This feature is about:
+- current report presentation control
+- visibility
+- cleaner exports
+- AM flexibility
+
+==================================================
+9. ACCEPTANCE CRITERIA
+==================================================
+
+1. AM can hide/show an entire section in preview
+2. AM can hide/show an individual table in preview
+3. Hidden sections/tables do not appear in PDF
+4. Hidden sections/tables do not appear in DOCX
+5. Hidden sections/tables do not appear in Google export
+6. Hidden state persists when saving/loading the current report
+7. Optional blank AM-input-driven content does not render
+8. Filled optional content renders by default unless manually hidden
+9. Section numbering recomputes from visible sections only
+10. No empty sections render after inner content is hidden
+11. Existing export flow still works
+
+==================================================
+10. AFTER IMPLEMENTATION, REPORT BACK WITH:
+==================================================
+
+- files changed
+- exact visibility state model used
+- exact section/table keys used for hide/show
+- exact preview controls added
+- exact persistence behavior for hidden state
+- exact numbering recomputation behavior
+- exact export behavior across PDF, DOCX, and Google export
+- exact rule for empty optional sections like How Credits Are Used Each Month
+- any edge cases or limitations

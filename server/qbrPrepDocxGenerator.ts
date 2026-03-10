@@ -265,9 +265,45 @@ function resolveCell(key: string, value: string, edits?: Record<string, string>)
 }
 
 // ── Main export function ──────────────────────────────────────────────────────
+const DOCX_SECTION_DEFS = [
+  { key: "section_goals" },
+  { key: "section_conversions" },
+  { key: "section_traffic" },
+  { key: "section_services" },
+  { key: "section_diagnosis" },
+  { key: "section_priorities" },
+  { key: "section_credits" },
+  { key: "section_tracking" },
+  { key: "section_opportunities" },
+];
+const DOCX_SECTION_TABLES: Record<string, string[]> = {
+  section_conversions: ["table_s2_pages", "table_s2_patterns", "table_s2_sources"],
+  section_traffic: ["table_s3_topics", "table_s3_pages"],
+  section_services: ["table_s4_services"],
+  section_priorities: ["table_s6"],
+  section_tracking: ["table_s8"],
+};
+function docxSecAutoHidden(secKey: string, ht: Record<string, boolean>): boolean {
+  const tbls = DOCX_SECTION_TABLES[secKey];
+  return !!(tbls && tbls.length > 0 && tbls.every(t => ht[t]));
+}
+function computeDocxSecNums(hs: Record<string, boolean>, ht: Record<string, boolean>, hasCreds: boolean, hasOpps: boolean): Record<string, number> {
+  const out: Record<string, number> = {};
+  let n = 1;
+  for (const { key } of DOCX_SECTION_DEFS) {
+    if (key === "section_credits" && !hasCreds) continue;
+    if (key === "section_opportunities" && !hasOpps) continue;
+    if (hs[key] || docxSecAutoHidden(key, ht)) continue;
+    out[key] = n++;
+  }
+  return out;
+}
+
 export async function generateQbrPrepV2Docx(
   reportData: any,
-  edits?: Record<string, string>
+  edits?: Record<string, string>,
+  hiddenSections: Record<string, boolean> = {},
+  hiddenTables: Record<string, boolean> = {}
 ): Promise<Buffer> {
   const meta = reportData.meta;
   const docChildren: any[] = [];
@@ -331,226 +367,174 @@ export async function generateQbrPrepV2Docx(
     }
   }
 
+  // ── Compute visibility ────────────────────────────────────────────────────
+  const _hasCreds = !!(manualInputs?.creditUsage?.trim());
+  const _hasOpps = !!(reportData.additionalOpportunities?.length);
+  const secNums = computeDocxSecNums(hiddenSections, hiddenTables, _hasCreds, _hasOpps);
+  const secVisible = (key: string) => secNums[key] !== undefined;
+  const tblVisible = (key: string) => !hiddenTables[key];
+
   // ── Section 1: Goals ──────────────────────────────────────────────────────
   const s1 = reportData.section1Goals;
-  docChildren.push(sectionHeading(1, "What Matters Most This Quarter", true));
-  const s1Rows = s1.rows.map((r: any, ri: number) => [
-    resolveCell(`s1_${ri}_0`, r.goalType, edits),
-    resolveCell(`s1_${ri}_1`, r.goal, edits),
-    resolveCell(`s1_${ri}_2`, r.measurementSource, edits),
-    resolveCell(`s1_${ri}_3`, r.goalShift, edits),
-    resolveCell(`s1_${ri}_4`, r.reason, edits),
-  ]);
-  // Goal Type 18%, Goal 20%, Source 10%, Goal Shift 10%, Reason 42%
-  docChildren.push(makeTable(
-    ["Goal Type", "Goal", "Source", "Goal Shift", "Reason"],
-    s1Rows,
-    [18, 20, 10, 10, 42],
-  ));
+  if (secVisible("section_goals")) {
+    docChildren.push(sectionHeading(secNums["section_goals"], "What Matters Most This Quarter", true));
+    const s1Rows = s1.rows.map((r: any, ri: number) => [
+      resolveCell(`s1_${ri}_0`, r.goalType, edits),
+      resolveCell(`s1_${ri}_1`, r.goal, edits),
+      resolveCell(`s1_${ri}_2`, r.measurementSource, edits),
+      resolveCell(`s1_${ri}_3`, r.goalShift, edits),
+      resolveCell(`s1_${ri}_4`, r.reason, edits),
+    ]);
+    docChildren.push(makeTable(["Goal Type", "Goal", "Source", "Goal Shift", "Reason"], s1Rows, [18, 20, 10, 10, 42]));
+  }
 
   // ── Section 2: Conversions ────────────────────────────────────────────────
   const s2 = reportData.section2Conversions;
-  docChildren.push(sectionHeading(2, "Where Conversions Actually Happen"));
-  docChildren.push(subHeading("Top Converting Pages"));
-  const s2aRows = s2.topConvertingPages.map((r: any, ri: number) => [
-    resolveCell(`s2a_${ri}_0`, r.dataSource ? `${r.type} [${r.dataSource}]` : r.type, edits),
-    resolveCell(`s2a_${ri}_1`, r.page, edits),
-    resolveCell(`s2a_${ri}_2`, r.notes, edits),
-  ]);
-  // Type 12%, Page/Pattern 33%, Notes 55%
-  docChildren.push(makeTable(
-    ["Type", "Page / Pattern", "Notes / What We're Learning"],
-    s2aRows,
-    [12, 33, 55],
-  ));
-
-  docChildren.push(subHeading("Top Converting Sources"));
-  const s2bRows = s2.topConvertingSources.map((r: any, ri: number) => [
-    resolveCell(`s2b_${ri}_0`, r.source, edits),
-    resolveCell(`s2b_${ri}_1`, r.whatsConverting, edits),
-    resolveCell(`s2b_${ri}_2`, r.notes, edits),
-  ]);
-  // Source 15%, What's Converting 30%, Notes 55%
-  docChildren.push(makeTable(
-    ["Source", "What's Converting", "Notes"],
-    s2bRows,
-    [15, 30, 55],
-  ));
-
-  if (s2.trackingDisclaimer) {
-    docChildren.push(
-      new Paragraph({
-        spacing: { before: 100, after: 80 },
-        children: [
-          new TextRun({ text: s2.trackingDisclaimer, italics: true, size: 16, color: GRAY, font: "Calibri" }),
-        ],
-      })
-    );
+  if (secVisible("section_conversions")) {
+    docChildren.push(sectionHeading(secNums["section_conversions"], "Where Conversions Actually Happen"));
+    if (tblVisible("table_s2_pages")) {
+      docChildren.push(subHeading("Top Converting Pages"));
+      const s2aRows = s2.topConvertingPages.map((r: any, ri: number) => [
+        resolveCell(`s2a_${ri}_0`, r.dataSource ? `${r.type} [${r.dataSource}]` : r.type, edits),
+        resolveCell(`s2a_${ri}_1`, r.page, edits),
+        resolveCell(`s2a_${ri}_2`, r.notes, edits),
+      ]);
+      docChildren.push(makeTable(["Type", "Page / Pattern", "Notes / What We're Learning"], s2aRows, [12, 33, 55]));
+    }
+    if (tblVisible("table_s2_patterns") && s2.topConversionPatterns?.length) {
+      docChildren.push(subHeading("Top Conversion Patterns"));
+      const s2cRows = s2.topConversionPatterns.map((r: any, ri: number) => [
+        resolveCell(`s2c_${ri}_0`, r.pattern, edits),
+        resolveCell(`s2c_${ri}_1`, r.whyItMatters, edits),
+        resolveCell(`s2c_${ri}_2`, r.evidence, edits),
+      ]);
+      docChildren.push(makeTable(["Pattern", "Why It Matters", "Evidence"], s2cRows, [20, 45, 35]));
+    }
+    if (tblVisible("table_s2_sources")) {
+      docChildren.push(subHeading("Top Converting Sources"));
+      const s2bRows = s2.topConvertingSources.map((r: any, ri: number) => [
+        resolveCell(`s2b_${ri}_0`, r.source, edits),
+        resolveCell(`s2b_${ri}_1`, r.whatsConverting, edits),
+        resolveCell(`s2b_${ri}_2`, r.notes, edits),
+      ]);
+      docChildren.push(makeTable(["Source", "What's Converting", "Notes"], s2bRows, [15, 30, 55]));
+    }
+    if (s2.trackingDisclaimer) {
+      docChildren.push(new Paragraph({ spacing: { before: 100, after: 80 }, children: [new TextRun({ text: s2.trackingDisclaimer, italics: true, size: 16, color: GRAY, font: "Calibri" })] }));
+    }
   }
 
   // ── Section 3: Traffic ────────────────────────────────────────────────────
   const s3 = reportData.section3Traffic;
-  docChildren.push(sectionHeading(3, "Top Organic Traffic Drivers", true));
-  docChildren.push(subHeading("Top Traffic Topics"));
-  const hasTopicDeltas = s3.topTrafficTopics.some((r: any) => r.queryCount != null);
-  const s3aRows = s3.topTrafficTopics.map((r: any, ri: number) => {
-    const cells = [resolveCell(`s3a_${ri}_0`, r.topic, edits)];
-    if (hasTopicDeltas) {
-      cells.push(
-        String(r.queryCount ?? "—"),
-        r.queryCountDelta ?? "—",
-        r.impressions != null ? r.impressions.toLocaleString("en-US") : "—",
-        r.impressionsDelta ?? "—",
-      );
+  if (secVisible("section_traffic")) {
+    docChildren.push(sectionHeading(secNums["section_traffic"], "Top Organic Traffic Drivers", true));
+    const hasTopicDeltas = s3.topTrafficTopics.some((r: any) => r.queryCount != null);
+    if (tblVisible("table_s3_topics")) {
+      docChildren.push(subHeading("Top Traffic Topics"));
+      const s3aRows = s3.topTrafficTopics.map((r: any, ri: number) => {
+        const cells = [resolveCell(`s3a_${ri}_0`, r.topic, edits)];
+        if (hasTopicDeltas) cells.push(String(r.queryCount ?? "—"), r.queryCountDelta ?? "—", r.impressions != null ? r.impressions.toLocaleString("en-US") : "—", r.impressionsDelta ?? "—");
+        cells.push(resolveCell(`s3a_${ri}_1`, r.exampleQueries, edits), resolveCell(`s3a_${ri}_2`, r.connectionToAdmits, edits), resolveCell(`s3a_${ri}_3`, r.insight, edits));
+        return cells;
+      });
+      const s3aHeaders = hasTopicDeltas ? ["Topic", "# Queries", "Δ Queries", "Impressions", "Δ Impressions", "Example Queries", "🔗 Admits", "Insight"] : ["Topic", "Example Queries", "🔗 Admits", "Insight"];
+      const s3aWidths = hasTopicDeltas ? [14, 7, 7, 8, 8, 20, 14, 22] : [22, 28, 18, 32];
+      docChildren.push(makeTable(s3aHeaders, s3aRows, s3aWidths));
     }
-    cells.push(
-      resolveCell(`s3a_${ri}_1`, r.exampleQueries, edits),
-      resolveCell(`s3a_${ri}_2`, r.connectionToAdmits, edits),
-      resolveCell(`s3a_${ri}_3`, r.insight, edits),
-    );
-    return cells;
-  });
-  const s3aHeaders = hasTopicDeltas
-    ? ["Topic", "# Queries", "Δ Queries", "Impressions", "Δ Impressions", "Example Queries", "🔗 Admits", "Insight"]
-    : ["Topic", "Example Queries", "🔗 Admits", "Insight"];
-  const s3aWidths = hasTopicDeltas
-    ? [14, 7, 7, 8, 8, 20, 14, 22]
-    : [22, 28, 18, 32];
-  docChildren.push(makeTable(s3aHeaders, s3aRows, s3aWidths));
-
-  docChildren.push(subHeading("Top Traffic Pages"));
-  const hasPageDeltas = s3.topTrafficPages.some((r: any) => r.clicksDelta || r.impressions || r.queries);
-  const s3bRows = s3.topTrafficPages.map((r: any, ri: number) => {
-    const cells = [
-      resolveCell(`s3b_${ri}_0`, r.page, edits),
-      resolveCell(`s3b_${ri}_1`, r.clicks, edits),
-    ];
-    if (hasPageDeltas) {
-      cells.push(r.clicksDelta ?? "—", r.impressions ?? "—", r.impressionsDelta ?? "—", r.queries ?? "—", r.queriesDelta ?? "—");
+    const hasPageDeltas = s3.topTrafficPages.some((r: any) => r.clicksDelta || r.impressions || r.queries);
+    if (tblVisible("table_s3_pages")) {
+      docChildren.push(subHeading("Top Traffic Pages"));
+      const s3bRows = s3.topTrafficPages.map((r: any, ri: number) => {
+        const cells = [resolveCell(`s3b_${ri}_0`, r.page, edits), resolveCell(`s3b_${ri}_1`, r.clicks, edits)];
+        if (hasPageDeltas) cells.push(r.clicksDelta ?? "—", r.impressions ?? "—", r.impressionsDelta ?? "—", r.queries ?? "—", r.queriesDelta ?? "—");
+        cells.push(resolveCell(`s3b_${ri}_2`, r.ctr, edits), resolveCell(`s3b_${ri}_3`, r.connectionToAdmits, edits), resolveCell(`s3b_${ri}_4`, r.insight, edits));
+        return cells;
+      });
+      const s3bHeaders = hasPageDeltas ? ["Page", "Clicks", "Δ Clicks", "Impressions", "Δ Impressions", "# Queries", "Δ Queries", "CTR", "🔗 Admits", "Insight"] : ["Page", "Clicks", "CTR", "🔗 Admits", "Insight"];
+      const s3bWidths = hasPageDeltas ? [16, 7, 7, 8, 8, 7, 7, 7, 11, 22] : [28, 10, 10, 17, 35];
+      docChildren.push(makeTable(s3bHeaders, s3bRows, s3bWidths));
     }
-    cells.push(
-      resolveCell(`s3b_${ri}_2`, r.ctr, edits),
-      resolveCell(`s3b_${ri}_3`, r.connectionToAdmits, edits),
-      resolveCell(`s3b_${ri}_4`, r.insight, edits),
-    );
-    return cells;
-  });
-  const s3bHeaders = hasPageDeltas
-    ? ["Page", "Clicks", "Δ Clicks", "Impressions", "Δ Impressions", "# Queries", "Δ Queries", "CTR", "🔗 Admits", "Insight"]
-    : ["Page", "Clicks", "CTR", "🔗 Admits", "Insight"];
-  const s3bWidths = hasPageDeltas
-    ? [16, 7, 7, 8, 8, 7, 7, 7, 11, 22]
-    : [28, 10, 10, 17, 35];
-  docChildren.push(makeTable(s3bHeaders, s3bRows, s3bWidths));
+  }
 
   // ── Section 4: Services ───────────────────────────────────────────────────
   const s4 = reportData.section4Services;
-  docChildren.push(sectionHeading(4, "Site Service Overview"));
-  const s4Rows = s4.services.map((r: any, ri: number) => [
-    resolveCell(`s4_${ri}_0`, r.service, edits),
-    resolveCell(`s4_${ri}_1`, r.examplePage, edits),
-  ]);
-  // Service 38%, Example Page 62%
-  docChildren.push(makeTable(["Service", "Example Page"], s4Rows, [38, 62]));
+  if (secVisible("section_services")) {
+    docChildren.push(sectionHeading(secNums["section_services"], "Site Service Overview"));
+    if (tblVisible("table_s4_services")) {
+      const s4Rows = s4.services.map((r: any, ri: number) => [resolveCell(`s4_${ri}_0`, r.service, edits), resolveCell(`s4_${ri}_1`, r.examplePage, edits)]);
+      docChildren.push(makeTable(["Service", "Example Page"], s4Rows, [38, 62]));
+    }
+  }
 
   // ── Section 5: Tier Diagnosis ─────────────────────────────────────────────
   const s5 = reportData.section5Diagnosis;
-  docChildren.push(sectionHeading(5, "SEO Tier Diagnosis", true));
-  docChildren.push(tierDiagnosisBlock(
-    s5.tier,
-    s5.tierName,
-    resolveCell("s5_diagnosis", s5.diagnosis, edits),
-  ));
+  if (secVisible("section_diagnosis")) {
+    docChildren.push(sectionHeading(secNums["section_diagnosis"], "SEO Tier Diagnosis", true));
+    docChildren.push(tierDiagnosisBlock(s5.tier, s5.tierName, resolveCell("s5_diagnosis", s5.diagnosis, edits)));
+  }
 
   // ── Section 6: Priorities ─────────────────────────────────────────────────
   const s6 = reportData.section6Priorities;
-  docChildren.push(sectionHeading(6, "What We Need to Do Next", true));
-  const s6Rows = s6.priorities.map((r: any, ri: number) => [
-    resolveCell(`s6_${ri}_0`, String(r.priority), edits),
-    resolveCell(`s6_${ri}_1`, r.initiative, edits),
-    resolveCell(`s6_${ri}_2`, r.tier, edits),
-    resolveCell(`s6_${ri}_3`, r.action, edits),
-    resolveCell(`s6_${ri}_4`, r.reason, edits),
-  ]);
-  // # 5%, Initiative 18%, Tier 8%, Action 29%, Reason 40%
-  docChildren.push(makeTable(
-    ["#", "Initiative", "Tier", "Action", "Reason"],
-    s6Rows,
-    [5, 18, 8, 29, 40],
-  ));
+  if (secVisible("section_priorities")) {
+    docChildren.push(sectionHeading(secNums["section_priorities"], "What We Need to Do Next", true));
+    if (tblVisible("table_s6")) {
+      const s6Rows = s6.priorities.map((r: any, ri: number) => [
+        resolveCell(`s6_${ri}_0`, String(r.priority), edits),
+        resolveCell(`s6_${ri}_1`, r.initiative, edits),
+        resolveCell(`s6_${ri}_2`, r.tier, edits),
+        resolveCell(`s6_${ri}_3`, r.action, edits),
+        resolveCell(`s6_${ri}_4`, r.reason, edits),
+      ]);
+      docChildren.push(makeTable(["#", "Initiative", "Tier", "Action", "Reason"], s6Rows, [5, 18, 8, 29, 40]));
+    }
+  }
 
   // ── Section 7: How Credits Are Used Each Month ────────────────────────────
   const rawCreditUsage: string = (reportData.sourceSnapshot?.manualInputs as any)?.creditUsage ?? "";
-  const hasCreditUsage = rawCreditUsage.trim().length > 0;
-  if (hasCreditUsage) {
-    docChildren.push(sectionHeading(7, "How Credits Are Used Each Month"));
+  if (secVisible("section_credits")) {
+    docChildren.push(sectionHeading(secNums["section_credits"], "How Credits Are Used Each Month"));
     const creditMonths = parseCreditUsage(rawCreditUsage);
     if (creditMonths.length > 0) {
       for (const cm of creditMonths) {
-        docChildren.push(
-          new Paragraph({
-            spacing: { before: 80, after: 40 },
-            children: [new TextRun({ text: cm.month, bold: true, size: 20, color: "374151", font: "Calibri" })],
-          })
-        );
-        if (cm.rows.length > 0) {
-          docChildren.push(makeTable(
-            ["Credits", "Activity"],
-            cm.rows.map(r => [r.credits, r.activity]),
-            [22, 78],
-          ));
-        }
-        for (const u of cm.unparsed) {
-          docChildren.push(
-            new Paragraph({
-              spacing: { before: 20, after: 20 },
-              children: [new TextRun({ text: u, size: 18, color: GRAY, font: "Calibri" })],
-            })
-          );
-        }
+        docChildren.push(new Paragraph({ spacing: { before: 80, after: 40 }, children: [new TextRun({ text: cm.month, bold: true, size: 20, color: "374151", font: "Calibri" })] }));
+        if (cm.rows.length > 0) docChildren.push(makeTable(["Credits", "Activity"], cm.rows.map(r => [r.credits, r.activity]), [22, 78]));
+        for (const u of cm.unparsed) docChildren.push(new Paragraph({ spacing: { before: 20, after: 20 }, children: [new TextRun({ text: u, size: 18, color: GRAY, font: "Calibri" })] }));
       }
     } else {
-      docChildren.push(
-        new Paragraph({
-          spacing: { before: 40, after: 40 },
-          children: [new TextRun({ text: rawCreditUsage, size: 18, color: "374151", font: "Calibri" })],
-        })
-      );
+      docChildren.push(new Paragraph({ spacing: { before: 40, after: 40 }, children: [new TextRun({ text: rawCreditUsage, size: 18, color: "374151", font: "Calibri" })] }));
     }
   }
 
-  // ── Section 7→8: Tracking ─────────────────────────────────────────────────
+  // ── Section 8: Tracking ───────────────────────────────────────────────────
   const s7 = reportData.section7Tracking;
-  docChildren.push(sectionHeading(hasCreditUsage ? 8 : 7, "What We Track"));
-  if (edits) {
-    const trackingLen = s7.tracking?.length ?? 0;
-    for (let ri = 0; ri < trackingLen; ri++) {
-      const hasStatus = s7.tracking[ri]?.status;
-      if (!hasStatus && edits[`s7_${ri}_3`] && !edits[`s7_${ri}_4`]) {
-        edits[`s7_${ri}_4`] = edits[`s7_${ri}_3`];
-        delete edits[`s7_${ri}_3`];
+  if (secVisible("section_tracking")) {
+    docChildren.push(sectionHeading(secNums["section_tracking"], "What We Track"));
+    if (edits) {
+      const trackingLen = s7.tracking?.length ?? 0;
+      for (let ri = 0; ri < trackingLen; ri++) {
+        const hasStatus = s7.tracking[ri]?.status;
+        if (!hasStatus && edits[`s7_${ri}_3`] && !edits[`s7_${ri}_4`]) {
+          edits[`s7_${ri}_4`] = edits[`s7_${ri}_3`];
+          delete edits[`s7_${ri}_3`];
+        }
       }
     }
+    if (tblVisible("table_s8")) {
+      const s7Rows = s7.tracking.map((r: any, ri: number) => [
+        resolveCell(`s7_${ri}_0`, r.focusArea, edits),
+        resolveCell(`s7_${ri}_1`, r.metric, edits),
+        resolveCell(`s7_${ri}_2`, r.source, edits),
+        resolveCell(`s7_${ri}_3`, r.status ?? "Needs Verification", edits),
+        resolveCell(`s7_${ri}_4`, r.whyItMatters, edits),
+      ]);
+      docChildren.push(makeTable(["Focus Area", "Metric", "Source", "Status", "Why It Matters"], s7Rows, [18, 18, 12, 12, 40]));
+    }
   }
-  const s7Rows = s7.tracking.map((r: any, ri: number) => [
-    resolveCell(`s7_${ri}_0`, r.focusArea, edits),
-    resolveCell(`s7_${ri}_1`, r.metric, edits),
-    resolveCell(`s7_${ri}_2`, r.source, edits),
-    resolveCell(`s7_${ri}_3`, r.status ?? "Needs Verification", edits),
-    resolveCell(`s7_${ri}_4`, r.whyItMatters, edits),
-  ]);
-  // Focus Area 18%, Metric 18%, Source 12%, Status 12%, Why It Matters 40%
-  docChildren.push(makeTable(
-    ["Focus Area", "Metric", "Source", "Status", "Why It Matters"],
-    s7Rows,
-    [18, 18, 12, 12, 40],
-  ));
 
-  // ── Section 8/9: Client Insights (QSSB) ──────────────────────────────────
-  const creditOffset = hasCreditUsage ? 1 : 0;
+  // ── Section 9: Client Insights (QSSB) ────────────────────────────────────
   const qssb = reportData.sectionQssb;
   if (qssb?.clientInsights?.length > 0) {
-    docChildren.push(sectionHeading(8 + creditOffset, "Client Insights"));
+    docChildren.push(sectionHeading(secNums["section_opportunities"] ?? 9, "Client Insights"));
     for (let i = 0; i < qssb.clientInsights.length; i++) {
       const q = qssb.clientInsights[i];
       docChildren.push(
@@ -567,9 +551,8 @@ export async function generateQbrPrepV2Docx(
   }
 
   // ── Additional Opportunities ──────────────────────────────────────────────
-  if (qssb?.additionalOpportunities?.length > 0) {
-    const oppNum = (qssb?.clientInsights?.length > 0 ? 9 : 8) + creditOffset;
-    docChildren.push(sectionHeading(oppNum, "Additional Opportunities"));
+  if (secVisible("section_opportunities") && qssb?.additionalOpportunities?.length > 0) {
+    docChildren.push(sectionHeading(secNums["section_opportunities"]!, "Additional Opportunities"));
     for (let i = 0; i < qssb.additionalOpportunities.length; i++) {
       const o = qssb.additionalOpportunities[i] as any;
       const titleVal = resolveCell(`qssb_opp_${i}_0`, o.title ?? o.service ?? "", edits);

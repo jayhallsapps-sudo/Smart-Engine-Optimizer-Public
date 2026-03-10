@@ -1,9 +1,44 @@
 import React, { useState, useEffect, useRef } from "react";
+import { EyeOff, Eye } from "lucide-react";
 import { EditableSection } from "./editable-section";
 import { AddableReportTable, SourceBadge } from "./report-table";
 import swoopHeaderFallback from "@assets/HEADER_IMAGE_1773063127856.png";
 
 const ACCENT = "#C0392B";
+
+const SECTION_DEFS = [
+  { key: "section_goals", title: "What Matters Most This Quarter" },
+  { key: "section_conversions", title: "Where Conversions Actually Happen" },
+  { key: "section_traffic", title: "Top Organic Traffic Drivers" },
+  { key: "section_services", title: "Site Service Overview" },
+  { key: "section_diagnosis", title: "SEO Tier Diagnosis" },
+  { key: "section_priorities", title: "What We Need to Do Next" },
+  { key: "section_credits", title: "How Credits Are Used Each Month" },
+  { key: "section_tracking", title: "What We Track" },
+  { key: "section_opportunities", title: "Additional Opportunities" },
+];
+const SECTION_TABLES: Record<string, string[]> = {
+  section_conversions: ["table_s2_pages", "table_s2_patterns", "table_s2_sources"],
+  section_traffic: ["table_s3_topics", "table_s3_pages"],
+  section_services: ["table_s4_services"],
+  section_priorities: ["table_s6"],
+  section_tracking: ["table_s8"],
+};
+function isSectionAutoHidden(secKey: string, hiddenTables: Record<string, boolean>): boolean {
+  const tables = SECTION_TABLES[secKey];
+  return !!(tables && tables.length > 0 && tables.every(t => hiddenTables[t]));
+}
+function computeSectionNums(hiddenSections: Record<string, boolean>, hiddenTables: Record<string, boolean>, hasCreditUsage: boolean, hasOpps: boolean): Record<string, number> {
+  const result: Record<string, number> = {};
+  let n = 1;
+  for (const def of SECTION_DEFS) {
+    if (def.key === "section_credits" && !hasCreditUsage) continue;
+    if (def.key === "section_opportunities" && !hasOpps) continue;
+    if (hiddenSections[def.key] || isSectionAutoHidden(def.key, hiddenTables)) continue;
+    result[def.key] = n++;
+  }
+  return result;
+}
 
 interface QbrPrepMeta {
   site: string;
@@ -112,6 +147,10 @@ export interface QbrPrepPreviewProps {
   onEdit: (key: string, value: string) => void;
   generationMeta?: { dataSources: string[]; missingData: string[] };
   amInputs?: { clientSentiment?: string; amThoughts?: string; prevQtrAssessment?: string; priorityChecks?: string; clientNotes?: string; creditUsage?: string };
+  hiddenSections?: Record<string, boolean>;
+  hiddenTables?: Record<string, boolean>;
+  onToggleSection?: (key: string) => void;
+  onToggleTable?: (key: string) => void;
 }
 
 function QueryChipsCell({
@@ -244,10 +283,28 @@ function parseCreditUsage(raw: string): CreditMonth[] {
   return months;
 }
 
-function SectionHeading({ num, title }: { num: number; title: string }) {
+function HiddenSectionBar({ secKey, num, title, onShow }: { secKey: string; num?: number; title: string; onShow: () => void }) {
+  return (
+    <div
+      style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 20, marginBottom: 4, padding: "5px 8px", backgroundColor: "#F9FAFB", border: "1px dashed #D1D5DB", borderRadius: 4, fontSize: "10px", color: "#9CA3AF" }}
+      data-testid={`section-hidden-bar-${secKey}`}
+    >
+      <EyeOff size={10} />
+      <span style={{ fontStyle: "italic" }}>{title} — hidden from report</span>
+      <button
+        onClick={onShow}
+        data-testid={`button-show-section-${secKey}`}
+        style={{ color: ACCENT, background: "none", border: "none", cursor: "pointer", textDecoration: "underline", padding: 0, fontSize: "10px", marginLeft: 2 }}
+      >Show in report</button>
+    </div>
+  );
+}
+
+function SectionHeading({ num, title, onHide }: { num: number; title: string; onHide?: () => void }) {
   return (
     <div
       style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
         color: ACCENT,
         fontWeight: 700,
         fontSize: "14px",
@@ -258,7 +315,17 @@ function SectionHeading({ num, title }: { num: number; title: string }) {
       }}
       data-testid={`section-heading-${num}`}
     >
-      {num}. {title}
+      <span>{num}. {title}</span>
+      {onHide && (
+        <button
+          onClick={onHide}
+          title="Hide from report"
+          data-testid={`button-hide-section-${num}`}
+          style={{ color: "#9CA3AF", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 3, fontSize: "10px", fontWeight: 400, padding: "0 2px" }}
+        >
+          <EyeOff size={10} /><span>Hide</span>
+        </button>
+      )}
     </div>
   );
 }
@@ -307,9 +374,37 @@ export function QbrPrepPreview({
   onEdit,
   generationMeta,
   amInputs,
+  hiddenSections = {},
+  hiddenTables = {},
+  onToggleSection,
+  onToggleTable,
 }: QbrPrepPreviewProps) {
   const [headerImgUrl, setHeaderImgUrl] = useState<string | null>(null);
   const [showSection8, setShowSection8] = useState(true);
+
+  const hasCreditUsage = !!(amInputs?.creditUsage?.trim());
+  const hasOpps = (additionalOpportunities?.length ?? 0) > 0 || showSection8;
+  const sectionNums = computeSectionNums(hiddenSections, hiddenTables, hasCreditUsage, hasOpps);
+
+  const hideSecBtn = (key: string) => onToggleSection ? () => onToggleSection(key) : undefined;
+  const hideTblBtn = (key: string) => onToggleTable ? () => onToggleTable(key) : undefined;
+
+  const tblHiddenBar = (tblKey: string, label: string) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, padding: "4px 8px", backgroundColor: "#F9FAFB", border: "1px dashed #E5E7EB", borderRadius: 4, fontSize: "10px", color: "#9CA3AF" }}>
+      <EyeOff size={9} /><span style={{ fontStyle: "italic" }}>{label} — hidden from report</span>
+      <button onClick={() => onToggleTable?.(tblKey)} style={{ color: ACCENT, background: "none", border: "none", cursor: "pointer", textDecoration: "underline", padding: 0, fontSize: "10px" }}>Show</button>
+    </div>
+  );
+  const tblSubLabel = (tblKey: string, label: string, hidden: boolean) => (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: hidden ? 0 : 6 }}>
+      <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151" }}>{label}</div>
+      {onToggleTable && (
+        <button onClick={() => onToggleTable(tblKey)} style={{ color: "#9CA3AF", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 2, fontSize: "9px", padding: "0 2px" }}>
+          {hidden ? <><Eye size={9} /><span>Show table</span></> : <><EyeOff size={9} /><span>Hide table</span></>}
+        </button>
+      )}
+    </div>
+  );
 
   useEffect(() => {
     fetch("/api/template/header")
@@ -465,48 +560,46 @@ export function QbrPrepPreview({
               </div>
             )}
 
-            <SectionHeading num={1} title="What Matters Most This Quarter" />
-            <AddableReportTable
-              tableId="s1"
-              headers={["Goal Type", "Goal", "Source", "Goal Shift vs Last Quarter", "Reason"]}
-              sourceRows={s1SourceRows}
-              edits={edits}
-              onEdit={onEdit}
-            />
+            {hiddenSections["section_goals"] ? (
+              <HiddenSectionBar secKey="section_goals" title="What Matters Most This Quarter" onShow={() => onToggleSection?.("section_goals")} />
+            ) : sectionNums["section_goals"] !== undefined ? (
+              <>
+                <SectionHeading num={sectionNums["section_goals"]} title="What Matters Most This Quarter" onHide={hideSecBtn("section_goals")} />
+                <AddableReportTable tableId="s1" headers={["Goal Type", "Goal", "Source", "Goal Shift vs Last Quarter", "Reason"]} sourceRows={s1SourceRows} edits={edits} onEdit={onEdit} />
+              </>
+            ) : null}
 
-            <SectionHeading num={2} title="Where Conversions Actually Happen" />
-            <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Converting Pages</div>
-            <AddableReportTable
-              tableId="s2a"
-              headers={["Type", "Page / Pattern", "Conversion Source", "Notes / What We're Learning"]}
-              sourceRows={s2aSourceRows}
-              edits={edits}
-              onEdit={onEdit}
-            />
-            <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Conversion Patterns</div>
-            <AddableReportTable
-              tableId="s2c"
-              headers={["Pattern", "Why It Matters", "Evidence"]}
-              sourceRows={s2cSourceRows}
-              edits={edits}
-              onEdit={onEdit}
-            />
-            <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Converting Sources</div>
-            <AddableReportTable
-              tableId="s2b"
-              headers={["Source", "What's Converting", "Notes / What We're Learning"]}
-              sourceRows={s2bSourceRows}
-              edits={edits}
-              onEdit={onEdit}
-            />
-            {section2Conversions.trackingDisclaimer && (
-              <div style={{ fontSize: "9px", fontStyle: "italic", color: "#6b7280", marginTop: 4, marginBottom: 8 }} data-testid="tracking-disclaimer">
-                {section2Conversions.trackingDisclaimer}
-              </div>
-            )}
+            {hiddenSections["section_conversions"] ? (
+              <HiddenSectionBar secKey="section_conversions" title="Where Conversions Actually Happen" onShow={() => onToggleSection?.("section_conversions")} />
+            ) : !isSectionAutoHidden("section_conversions", hiddenTables) && sectionNums["section_conversions"] !== undefined ? (
+              <>
+                <SectionHeading num={sectionNums["section_conversions"]} title="Where Conversions Actually Happen" onHide={hideSecBtn("section_conversions")} />
+                {tblSubLabel("table_s2_pages", "Top Converting Pages", !!hiddenTables["table_s2_pages"])}
+                {hiddenTables["table_s2_pages"] ? tblHiddenBar("table_s2_pages", "Top Converting Pages") : (
+                  <AddableReportTable tableId="s2a" headers={["Type", "Page / Pattern", "Conversion Source", "Notes / What We're Learning"]} sourceRows={s2aSourceRows} edits={edits} onEdit={onEdit} />
+                )}
+                {tblSubLabel("table_s2_patterns", "Top Conversion Patterns", !!hiddenTables["table_s2_patterns"])}
+                {hiddenTables["table_s2_patterns"] ? tblHiddenBar("table_s2_patterns", "Top Conversion Patterns") : (
+                  <AddableReportTable tableId="s2c" headers={["Pattern", "Why It Matters", "Evidence"]} sourceRows={s2cSourceRows} edits={edits} onEdit={onEdit} />
+                )}
+                {tblSubLabel("table_s2_sources", "Top Converting Sources", !!hiddenTables["table_s2_sources"])}
+                {hiddenTables["table_s2_sources"] ? tblHiddenBar("table_s2_sources", "Top Converting Sources") : (
+                  <AddableReportTable tableId="s2b" headers={["Source", "What's Converting", "Notes / What We're Learning"]} sourceRows={s2bSourceRows} edits={edits} onEdit={onEdit} />
+                )}
+                {section2Conversions.trackingDisclaimer && (
+                  <div style={{ fontSize: "9px", fontStyle: "italic", color: "#6b7280", marginTop: 4, marginBottom: 8 }} data-testid="tracking-disclaimer">
+                    {section2Conversions.trackingDisclaimer}
+                  </div>
+                )}
+              </>
+            ) : null}
 
-            <SectionHeading num={3} title="Top Organic Traffic Drivers" />
-            <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Traffic Topics</div>
+            {hiddenSections["section_traffic"] ? (
+              <HiddenSectionBar secKey="section_traffic" title="Top Organic Traffic Drivers" onShow={() => onToggleSection?.("section_traffic")} />
+            ) : !isSectionAutoHidden("section_traffic", hiddenTables) && sectionNums["section_traffic"] !== undefined ? (<>
+            <SectionHeading num={sectionNums["section_traffic"]} title="Top Organic Traffic Drivers" onHide={hideSecBtn("section_traffic")} />
+            {tblSubLabel("table_s3_topics", "Top Traffic Topics", !!hiddenTables["table_s3_topics"])}
+            {hiddenTables["table_s3_topics"] ? tblHiddenBar("table_s3_topics", "Top Traffic Topics") : (
             <div style={{ border: `1px solid ${ACCENT}28`, borderRadius: 6, overflow: "hidden", marginBottom: 12, backgroundColor: "#FFFDFB" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px", tableLayout: "fixed" }}>
                 <colgroup>
@@ -574,7 +667,9 @@ export function QbrPrepPreview({
                 </tbody>
               </table>
             </div>
-            <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Traffic Pages</div>
+            )}
+            {tblSubLabel("table_s3_pages", "Top Traffic Pages", !!hiddenTables["table_s3_pages"])}
+            {hiddenTables["table_s3_pages"] ? tblHiddenBar("table_s3_pages", "Top Traffic Pages") : (
             <div style={{ border: `1px solid ${ACCENT}28`, borderRadius: 6, overflow: "hidden", marginBottom: 12, backgroundColor: "#FFFDFB" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px", tableLayout: "fixed" }}>
                 <colgroup>
@@ -635,42 +730,39 @@ export function QbrPrepPreview({
                 </tbody>
               </table>
             </div>
+            )}
+            </>) : null}
 
-            <SectionHeading num={4} title="Site Service Overview" />
-            <AddableReportTable
-              tableId="s4"
-              headers={["Service", "Example Page"]}
-              sourceRows={s4SourceRows}
-              edits={edits}
-              onEdit={onEdit}
-            />
+            {hiddenSections["section_services"] ? (
+              <HiddenSectionBar secKey="section_services" title="Site Service Overview" onShow={() => onToggleSection?.("section_services")} />
+            ) : !isSectionAutoHidden("section_services", hiddenTables) && sectionNums["section_services"] !== undefined ? (
+              <>
+                <SectionHeading num={sectionNums["section_services"]} title="Site Service Overview" onHide={hideSecBtn("section_services")} />
+                {tblSubLabel("table_s4_services", "Service Pages", !!hiddenTables["table_s4_services"])}
+                {hiddenTables["table_s4_services"] ? tblHiddenBar("table_s4_services", "Service Pages") : (
+                  <AddableReportTable tableId="s4" headers={["Service", "Example Page"]} sourceRows={s4SourceRows} edits={edits} onEdit={onEdit} />
+                )}
+              </>
+            ) : null}
 
-            <SectionHeading num={5} title="SEO Tier Diagnosis" />
-            <div
-              style={{
-                padding: "12px 16px",
-                backgroundColor: "#FDF2F0",
-                borderRadius: 4,
-                border: `1px solid ${ACCENT}33`,
-                marginBottom: 12,
-                fontSize: "11px",
-              }}
-            >
-              <div style={{ fontWeight: 700, color: ACCENT, marginBottom: 6, fontSize: "12px" }}>
-                Tier {section5Diagnosis.tier} — {section5Diagnosis.tierName}
-              </div>
-              <EditableSection
-                editKey="s5_diagnosis"
-                value={section5Diagnosis.diagnosis}
-                edits={edits}
-                onEdit={onEdit}
-                as="div"
-                multiline
-                className="text-gray-700 leading-relaxed"
-              />
-            </div>
+            {hiddenSections["section_diagnosis"] ? (
+              <HiddenSectionBar secKey="section_diagnosis" title="SEO Tier Diagnosis" onShow={() => onToggleSection?.("section_diagnosis")} />
+            ) : sectionNums["section_diagnosis"] !== undefined ? (
+              <>
+                <SectionHeading num={sectionNums["section_diagnosis"]} title="SEO Tier Diagnosis" onHide={hideSecBtn("section_diagnosis")} />
+                <div style={{ padding: "12px 16px", backgroundColor: "#FDF2F0", borderRadius: 4, border: `1px solid ${ACCENT}33`, marginBottom: 12, fontSize: "11px" }}>
+                  <div style={{ fontWeight: 700, color: ACCENT, marginBottom: 6, fontSize: "12px" }}>Tier {section5Diagnosis.tier} — {section5Diagnosis.tierName}</div>
+                  <EditableSection editKey="s5_diagnosis" value={section5Diagnosis.diagnosis} edits={edits} onEdit={onEdit} as="div" multiline className="text-gray-700 leading-relaxed" />
+                </div>
+              </>
+            ) : null}
 
-            <SectionHeading num={6} title="What We Need to Do Next" />
+            {hiddenSections["section_priorities"] ? (
+              <HiddenSectionBar secKey="section_priorities" title="What We Need to Do Next" onShow={() => onToggleSection?.("section_priorities")} />
+            ) : !isSectionAutoHidden("section_priorities", hiddenTables) && sectionNums["section_priorities"] !== undefined ? (<>
+            <SectionHeading num={sectionNums["section_priorities"]} title="What We Need to Do Next" onHide={hideSecBtn("section_priorities")} />
+            {tblSubLabel("table_s6", "Priority Actions", !!hiddenTables["table_s6"])}
+            {hiddenTables["table_s6"] ? tblHiddenBar("table_s6", "Priority Actions") : (
             <AddableReportTable
               tableId="s6"
               headers={["#", "Initiative", "Tier", "Action", "Reason"]}
@@ -678,6 +770,7 @@ export function QbrPrepPreview({
               edits={edits}
               onEdit={onEdit}
             />
+            )}
             {(() => {
               const raw = edits["s6_crossSells_confirmed"];
               if (!raw) return null;
@@ -757,52 +850,56 @@ export function QbrPrepPreview({
                 </div>
               );
             })()}
+            </>) : null}
 
-            {amInputs?.creditUsage && amInputs.creditUsage.trim().length > 0 && (() => {
-              const creditMonths = parseCreditUsage(amInputs.creditUsage!);
-              return (
-                <>
-                  <SectionHeading num={7} title="How Credits Are Used Each Month" />
-                  {creditMonths.length > 0 ? creditMonths.map((cm, mi) => (
-                    <div key={mi} style={{ marginBottom: 14 }}>
-                      <div style={{ fontSize: "11px", fontWeight: 700, color: "#374151", marginBottom: 4 }}>{cm.month}</div>
-                      {cm.rows.length > 0 && (
-                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px" }}>
-                          <thead>
-                            <tr style={{ backgroundColor: "#F3F4F6" }}>
+            {hasCreditUsage && (
+              hiddenSections["section_credits"] ? (
+                <HiddenSectionBar secKey="section_credits" title="How Credits Are Used Each Month" onShow={() => onToggleSection?.("section_credits")} />
+              ) : sectionNums["section_credits"] !== undefined ? (() => {
+                const creditMonths = parseCreditUsage(amInputs!.creditUsage!);
+                return (
+                  <>
+                    <SectionHeading num={sectionNums["section_credits"]} title="How Credits Are Used Each Month" onHide={hideSecBtn("section_credits")} />
+                    {creditMonths.length > 0 ? creditMonths.map((cm, mi) => (
+                      <div key={mi} style={{ marginBottom: 14 }}>
+                        <div style={{ fontSize: "11px", fontWeight: 700, color: "#374151", marginBottom: 4 }}>{cm.month}</div>
+                        {cm.rows.length > 0 && (
+                          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px" }}>
+                            <thead><tr style={{ backgroundColor: "#F3F4F6" }}>
                               <th style={{ textAlign: "left", padding: "4px 8px", fontWeight: 600, color: "#6B7280", width: "22%", borderBottom: "1px solid #E5E7EB" }}>Credits</th>
                               <th style={{ textAlign: "left", padding: "4px 8px", fontWeight: 600, color: "#6B7280", borderBottom: "1px solid #E5E7EB" }}>Activity</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {cm.rows.map((row, ri) => (
+                            </tr></thead>
+                            <tbody>{cm.rows.map((row, ri) => (
                               <tr key={ri} style={{ borderBottom: "1px solid #F3F4F6" }}>
                                 <td style={{ padding: "5px 8px", color: "#1B3A6B", fontWeight: 600 }}>{row.credits}</td>
                                 <td style={{ padding: "5px 8px", color: "#374151" }}>{row.activity}</td>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      )}
-                      {cm.unparsed.map((u, ui) => (
-                        <div key={ui} style={{ fontSize: "11px", color: "#6B7280", padding: "2px 8px" }}>{u}</div>
-                      ))}
-                    </div>
-                  )) : (
-                    <div style={{ fontSize: "11px", color: "#374151", whiteSpace: "pre-wrap", marginBottom: 14 }}>{amInputs.creditUsage}</div>
-                  )}
-                </>
-              );
-            })()}
+                            ))}</tbody>
+                          </table>
+                        )}
+                        {cm.unparsed.map((u, ui) => (
+                          <div key={ui} style={{ fontSize: "11px", color: "#6B7280", padding: "2px 8px" }}>{u}</div>
+                        ))}
+                      </div>
+                    )) : (
+                      <div style={{ fontSize: "11px", color: "#374151", whiteSpace: "pre-wrap", marginBottom: 14 }}>{amInputs!.creditUsage}</div>
+                    )}
+                  </>
+                );
+              })() : null
+            )}
 
-            <SectionHeading num={amInputs?.creditUsage && amInputs.creditUsage.trim().length > 0 ? 8 : 7} title="What We Track" />
-            <AddableReportTable
-              tableId="s7"
-              headers={["Focus Area", "Metric", "Source", "Why It Matters"]}
-              sourceRows={s7SourceRows}
-              edits={edits}
-              onEdit={onEdit}
-            />
+            {hiddenSections["section_tracking"] ? (
+              <HiddenSectionBar secKey="section_tracking" title="What We Track" onShow={() => onToggleSection?.("section_tracking")} />
+            ) : !isSectionAutoHidden("section_tracking", hiddenTables) && sectionNums["section_tracking"] !== undefined ? (
+              <>
+                <SectionHeading num={sectionNums["section_tracking"]} title="What We Track" onHide={hideSecBtn("section_tracking")} />
+                {tblSubLabel("table_s8", "Tracked Metrics", !!hiddenTables["table_s8"])}
+                {hiddenTables["table_s8"] ? tblHiddenBar("table_s8", "Tracked Metrics") : (
+                  <AddableReportTable tableId="s7" headers={["Focus Area", "Metric", "Source", "Why It Matters"]} sourceRows={s7SourceRows} edits={edits} onEdit={onEdit} />
+                )}
+              </>
+            ) : null}
 
             {/* Client Insights — commented out pending redesign
             {sectionQssb && sectionQssb.clientInsights.length > 0 && (
@@ -828,107 +925,42 @@ export function QbrPrepPreview({
             )}
             */}
 
-            {/* Section 8: Additional Opportunities
-                  — auto-generated cards appear when the post-processing pass finds
-                    justified upsell/cross-sell opportunities.
-                  — manual AddableReportTable always stays below for AM additions. */}
-            {(additionalOpportunities?.length ?? 0) > 0 ? (
+            {/* Additional Opportunities — auto-generated cards + manual AM entries */}
+            {hiddenSections["section_opportunities"] ? (
+              <HiddenSectionBar secKey="section_opportunities" title="Additional Opportunities" onShow={() => onToggleSection?.("section_opportunities")} />
+            ) : sectionNums["section_opportunities"] !== undefined ? (
               <>
-                <div
-                  style={{ color: ACCENT, fontWeight: 700, fontSize: "14px", borderBottom: `2px solid ${ACCENT}`, paddingBottom: 4, marginBottom: 12, marginTop: 28 }}
-                  data-testid="section-heading-8"
-                >
-                  {(amInputs?.creditUsage?.trim() ? 9 : 8)}. Additional Opportunities
-                </div>
-
-                {/* Auto-generated opportunity cards */}
-                <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
-                  {additionalOpportunities!.map((opp, i) => (
-                    <div
-                      key={i}
-                      style={{ border: "1px solid #E5E7EB", borderRadius: 6, overflow: "hidden", fontSize: "11px" }}
-                      data-testid={`card-additional-opportunity-${i}`}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", backgroundColor: "#F9FAFB", borderBottom: "1px solid #E5E7EB" }}>
-                        <span
-                          style={{
-                            display: "inline-block", padding: "1px 8px", borderRadius: 10,
-                            fontSize: "9px", fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.06em",
-                            backgroundColor: opp.type === "upsell" ? "#FEF3C7" : "#DBEAFE",
-                            color: opp.type === "upsell" ? "#92400E" : "#1E40AF",
-                          }}
-                          data-testid={`badge-opp-type-${i}`}
-                        >
-                          {opp.type === "upsell" ? "Upsell" : "Cross-sell"}
-                        </span>
-                        <span style={{ fontWeight: 700, fontSize: "12px", color: "#111827" }} data-testid={`text-opp-title-${i}`}>{opp.title}</span>
-                      </div>
-                      <div style={{ padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
-                        <div style={{ color: "#374151", fontStyle: "italic" }} data-testid={`text-opp-whynow-${i}`}>{opp.why_now}</div>
-                        <div>
-                          <div style={{ fontWeight: 600, fontSize: "10px", color: "#6B7280", textTransform: "uppercase" as const, letterSpacing: "0.05em", marginBottom: 3 }}>Evidence</div>
-                          <ul style={{ margin: 0, paddingLeft: 16, color: "#374151" }}>
-                            {opp.evidence.map((ev, j) => (
-                              <li key={j} style={{ marginBottom: 2 }} data-testid={`text-opp-evidence-${i}-${j}`}>{ev}</li>
-                            ))}
-                          </ul>
+                <SectionHeading num={sectionNums["section_opportunities"]} title="Additional Opportunities" onHide={hideSecBtn("section_opportunities")} />
+                {(additionalOpportunities?.length ?? 0) > 0 && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
+                    {additionalOpportunities!.map((opp, i) => (
+                      <div key={i} style={{ border: "1px solid #E5E7EB", borderRadius: 6, overflow: "hidden", fontSize: "11px" }} data-testid={`card-additional-opportunity-${i}`}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", backgroundColor: "#F9FAFB", borderBottom: "1px solid #E5E7EB" }}>
+                          <span style={{ display: "inline-block", padding: "1px 8px", borderRadius: 10, fontSize: "9px", fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.06em", backgroundColor: opp.type === "upsell" ? "#FEF3C7" : "#DBEAFE", color: opp.type === "upsell" ? "#92400E" : "#1E40AF" }} data-testid={`badge-opp-type-${i}`}>{opp.type === "upsell" ? "Upsell" : "Cross-sell"}</span>
+                          <span style={{ fontWeight: 700, fontSize: "12px", color: "#111827" }} data-testid={`text-opp-title-${i}`}>{opp.title}</span>
                         </div>
-                        <div>
-                          <div style={{ fontWeight: 600, fontSize: "10px", color: "#6B7280", textTransform: "uppercase" as const, letterSpacing: "0.05em", marginBottom: 3 }}>Recommendation</div>
-                          <div style={{ color: "#1B3A6B" }} data-testid={`text-opp-recommendation-${i}`}>{opp.recommendation}</div>
+                        <div style={{ padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
+                          <div style={{ color: "#374151", fontStyle: "italic" }} data-testid={`text-opp-whynow-${i}`}>{opp.why_now}</div>
+                          <div>
+                            <div style={{ fontWeight: 600, fontSize: "10px", color: "#6B7280", textTransform: "uppercase" as const, letterSpacing: "0.05em", marginBottom: 3 }}>Evidence</div>
+                            <ul style={{ margin: 0, paddingLeft: 16, color: "#374151" }}>
+                              {opp.evidence.map((ev, j) => (<li key={j} style={{ marginBottom: 2 }} data-testid={`text-opp-evidence-${i}-${j}`}>{ev}</li>))}
+                            </ul>
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: 600, fontSize: "10px", color: "#6B7280", textTransform: "uppercase" as const, letterSpacing: "0.05em", marginBottom: 3 }}>Recommendation</div>
+                            <div style={{ color: "#1B3A6B" }} data-testid={`text-opp-recommendation-${i}`}>{opp.recommendation}</div>
+                          </div>
+                          <div style={{ fontSize: "10px", color: "#9CA3AF", borderTop: "1px solid #F3F4F6", paddingTop: 6, fontStyle: "italic" }}>{opp.framing}</div>
                         </div>
-                        <div style={{ fontSize: "10px", color: "#9CA3AF", borderTop: "1px solid #F3F4F6", paddingTop: 6, fontStyle: "italic" }}>{opp.framing}</div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Manual additions below auto-generated cards */}
-                <div style={{ fontSize: "10px", color: "#6B7280", marginBottom: 6, fontWeight: 600, textTransform: "uppercase" as const, letterSpacing: "0.04em" }}>
-                  Additional manual entries
-                </div>
-                <AddableReportTable
-                  tableId="s8_opportunities"
-                  headers={["Description", "Purpose", "Est. Cost"]}
-                  sourceRows={[]}
-                  edits={edits}
-                  onEdit={onEdit}
-                />
-              </>
-            ) : showSection8 ? (
-              <>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    color: ACCENT,
-                    fontWeight: 700,
-                    fontSize: "14px",
-                    borderBottom: `2px solid ${ACCENT}`,
-                    paddingBottom: 4,
-                    marginBottom: 12,
-                    marginTop: 28,
-                  }}
-                  data-testid="section-heading-8"
-                >
-                  <span>{(amInputs?.creditUsage?.trim() ? 9 : 8)}. Additional Opportunities</span>
-                  <button
-                    onClick={() => setShowSection8(false)}
-                    title="Remove section"
-                    data-testid="button-remove-section8"
-                    style={{ color: "#9CA3AF", background: "none", border: "none", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: "0 2px" }}
-                  >
-                    ×
-                  </button>
-                </div>
-                <AddableReportTable
-                  tableId="s8_opportunities"
-                  headers={["Description", "Purpose", "Est. Cost"]}
-                  sourceRows={[]}
-                  edits={edits}
-                  onEdit={onEdit}
-                />
+                    ))}
+                  </div>
+                )}
+                {(additionalOpportunities?.length ?? 0) > 0 && (
+                  <div style={{ fontSize: "10px", color: "#6B7280", marginBottom: 6, fontWeight: 600, textTransform: "uppercase" as const, letterSpacing: "0.04em" }}>Additional manual entries</div>
+                )}
+                <AddableReportTable tableId="s8_opportunities" headers={["Description", "Purpose", "Est. Cost"]} sourceRows={[]} edits={edits} onEdit={onEdit} />
               </>
             ) : null}
 

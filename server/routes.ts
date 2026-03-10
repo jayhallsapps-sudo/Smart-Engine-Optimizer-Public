@@ -1490,7 +1490,7 @@ export async function registerRoutes(
 
   app.post("/api/reports/qbr-prep/docx-v2", async (req, res) => {
     const t0 = Date.now();
-    const { reportData, edits } = req.body;
+    const { reportData, edits, hiddenSections = {}, hiddenTables = {} } = req.body;
     const validErr = validateExportPayload("QBR Prep DOCX", reportData, ["meta", "section1Goals"]);
     if (validErr) { logExport("QBR Prep DOCX", t0, false, validErr); return res.status(400).json({ message: validErr }); }
     const readiness = validateQbrPrepExportReadiness(reportData, edits ?? {});
@@ -1499,7 +1499,7 @@ export async function registerRoutes(
       return res.status(422).json({ ok: false, code: readiness.code, reasons: readiness.reasons });
     }
     try {
-      const buffer = await generateQbrPrepV2Docx(injectQbrPrepCustomRows(reportData, edits), edits);
+      const buffer = await generateQbrPrepV2Docx(injectQbrPrepCustomRows(reportData, edits), edits, hiddenSections, hiddenTables);
       const slug = (reportData.meta?.site ?? "report").toLowerCase().replace(/\s+/g, "_");
       const filename = `${slug}_qbr_prep_${reportData.meta?.planningQuarter?.replace(/\s+/g, "_") ?? "report"}.docx`;
       logExport("QBR Prep DOCX", t0, true);
@@ -1513,14 +1513,14 @@ export async function registerRoutes(
   });
 
   app.post("/api/reports/qbr-prep/upload-to-drive-v2", async (req, res) => {
-    const { reportData, edits, reportTitle } = req.body;
+    const { reportData, edits, reportTitle, hiddenSections = {}, hiddenTables = {} } = req.body;
     if (!reportData) return res.status(400).json({ message: "reportData is required" });
     const readiness = validateQbrPrepExportReadiness(reportData, edits ?? {});
     if (!readiness.canExport) {
       return res.status(422).json({ ok: false, code: readiness.code, reasons: readiness.reasons });
     }
     try {
-      const docxBuffer = await generateQbrPrepV2Docx(injectQbrPrepCustomRows(reportData, edits), edits);
+      const docxBuffer = await generateQbrPrepV2Docx(injectQbrPrepCustomRows(reportData, edits), edits, hiddenSections, hiddenTables);
       const { ReplitConnectors } = await import("@replit/connectors-sdk");
       const connectors = new ReplitConnectors();
 

@@ -6,6 +6,34 @@ import { ReportTable, SourceBadge, getCustomRows } from "../components/report-pr
 const ACCENT = "#C0392B";
 const FOOTER_TEXT = "Webserv  |  32 Discovery Suite 130, Irvine, CA 92618  |  webserv.io";
 
+const PRINT_SECTION_DEFS = [
+  { key: "section_goals" }, { key: "section_conversions" }, { key: "section_traffic" },
+  { key: "section_services" }, { key: "section_diagnosis" }, { key: "section_priorities" },
+  { key: "section_credits" }, { key: "section_tracking" }, { key: "section_opportunities" },
+];
+const PRINT_SECTION_TABLES: Record<string, string[]> = {
+  section_conversions: ["table_s2_pages", "table_s2_patterns", "table_s2_sources"],
+  section_traffic: ["table_s3_topics", "table_s3_pages"],
+  section_services: ["table_s4_services"],
+  section_priorities: ["table_s6"],
+  section_tracking: ["table_s8"],
+};
+function printSecAutoHidden(k: string, ht: Record<string, boolean>) {
+  const tbls = PRINT_SECTION_TABLES[k];
+  return !!(tbls && tbls.length > 0 && tbls.every(t => ht[t]));
+}
+function computePrintSecNums(hs: Record<string, boolean>, ht: Record<string, boolean>, hasCreds: boolean, hasOpps: boolean) {
+  const out: Record<string, number> = {};
+  let n = 1;
+  for (const { key } of PRINT_SECTION_DEFS) {
+    if (key === "section_credits" && !hasCreds) continue;
+    if (key === "section_opportunities" && !hasOpps) continue;
+    if (hs[key] || printSecAutoHidden(key, ht)) continue;
+    out[key] = n++;
+  }
+  return out;
+}
+
 function SectionHeading({ num, title }: { num: number; title: string }) {
   return (
     <div style={{ color: ACCENT, fontWeight: 700, fontSize: "14px", borderBottom: `2px solid ${ACCENT}`, paddingBottom: 4, marginBottom: 12, marginTop: num > 1 ? 28 : 0 }}>
@@ -110,7 +138,7 @@ export default function QbrPrepPrint() {
   if (error) return <div style={{ padding: 32 }}>Error: {error}</div>;
   if (!data) return <div style={{ padding: 32 }}>Loading…</div>;
 
-  const { reportData, edits = {} } = data;
+  const { reportData, edits = {}, hiddenSections = {}, hiddenTables = {} } = data;
   const meta = reportData.meta ?? {};
   const s1 = reportData.section1Goals ?? { rows: [] };
   const s2 = reportData.section2Conversions ?? { topConvertingPages: [], topConvertingSources: [] };
@@ -121,6 +149,14 @@ export default function QbrPrepPrint() {
   const s7 = reportData.section7Tracking ?? { tracking: [] };
   const genMeta = reportData.generationMeta;
   const amPrint = reportData.sourceSnapshot?.manualInputs ?? {};
+
+  const _hasCreds = !!(amPrint.creditUsage?.trim());
+  const _autoOpps: any[] = reportData.additionalOpportunities ?? [];
+  const _s8ManualRows = getCustomRows(edits, "s8_opportunities");
+  const _hasOpps = _autoOpps.length > 0 || _s8ManualRows.length > 0;
+  const secNums = computePrintSecNums(hiddenSections, hiddenTables, _hasCreds, _hasOpps);
+  const secVis = (k: string) => secNums[k] !== undefined;
+  const tblVis = (k: string) => !hiddenTables[k];
 
   const e = (key: string, val: string) => applyEdits(val, key, edits);
 
@@ -259,36 +295,43 @@ export default function QbrPrepPrint() {
             </div>
           )}
 
-          <SectionHeading num={1} title="What Matters Most This Quarter" />
-          <DataTable
-            headers={["Goal Type", "Goal", "Source", "Goal Shift vs Last Quarter", "Reason"]}
-            rows={s1Rows}
-          />
-
-          <SectionHeading num={2} title="Where Conversions Actually Happen" />
-          <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Converting Pages</div>
-          <ReportTable
-            headers={["Type", "Page / Pattern", "Conversion Source", "Notes / What We're Learning"]}
-            rows={s2aRows}
-          />
-          <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Conversion Patterns</div>
-          <ReportTable
-            headers={["Pattern", "Why It Matters", "Evidence"]}
-            rows={s2cRows}
-          />
-          <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Converting Sources</div>
-          <ReportTable
-            headers={["Source", "What's Converting", "Notes / What We're Learning"]}
-            rows={s2bRows}
-          />
-          {s2.trackingDisclaimer && (
-            <div style={{ fontSize: "9px", fontStyle: "italic", color: "#6b7280", marginTop: 4, marginBottom: 8 }}>
-              {s2.trackingDisclaimer}
-            </div>
+          {secVis("section_goals") && (
+            <>
+              <SectionHeading num={secNums["section_goals"]} title="What Matters Most This Quarter" />
+              <DataTable headers={["Goal Type", "Goal", "Source", "Goal Shift vs Last Quarter", "Reason"]} rows={s1Rows} />
+            </>
           )}
 
-          <SectionHeading num={3} title="Top Organic Traffic Drivers" />
-          <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Traffic Topics</div>
+          {secVis("section_conversions") && !printSecAutoHidden("section_conversions", hiddenTables) && (
+            <>
+              <SectionHeading num={secNums["section_conversions"]} title="Where Conversions Actually Happen" />
+              {tblVis("table_s2_pages") && (
+                <>
+                  <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Converting Pages</div>
+                  <ReportTable headers={["Type", "Page / Pattern", "Conversion Source", "Notes / What We're Learning"]} rows={s2aRows} />
+                </>
+              )}
+              {tblVis("table_s2_patterns") && (
+                <>
+                  <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Conversion Patterns</div>
+                  <ReportTable headers={["Pattern", "Why It Matters", "Evidence"]} rows={s2cRows} />
+                </>
+              )}
+              {tblVis("table_s2_sources") && (
+                <>
+                  <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Converting Sources</div>
+                  <ReportTable headers={["Source", "What's Converting", "Notes / What We're Learning"]} rows={s2bRows} />
+                </>
+              )}
+              {s2.trackingDisclaimer && (
+                <div style={{ fontSize: "9px", fontStyle: "italic", color: "#6b7280", marginTop: 4, marginBottom: 8 }}>{s2.trackingDisclaimer}</div>
+              )}
+            </>
+          )}
+
+          {secVis("section_traffic") && !printSecAutoHidden("section_traffic", hiddenTables) && (<>
+          <SectionHeading num={secNums["section_traffic"]!} title="Top Organic Traffic Drivers" />
+          {tblVis("table_s3_topics") && <><div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Traffic Topics</div>
           <div style={{ border: `1px solid ${ACCENT}28`, borderRadius: 4, overflow: "hidden", marginBottom: 12 }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px", tableLayout: "fixed" }}>
               <colgroup>
@@ -360,9 +403,9 @@ export default function QbrPrepPrint() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </div></>}
 
-          <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Traffic Pages</div>
+          {tblVis("table_s3_pages") && <><div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Traffic Pages</div>
           <div style={{ border: `1px solid ${ACCENT}28`, borderRadius: 4, overflow: "hidden", marginBottom: 12 }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px", tableLayout: "fixed" }}>
               <colgroup>
@@ -433,28 +476,31 @@ export default function QbrPrepPrint() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </div></>}
+          </>)}
 
-          <SectionHeading num={4} title="Site Service Overview" />
-          <DataTable
-            headers={["Service", "Example Page"]}
-            rows={s4Rows}
-          />
+          {secVis("section_services") && !printSecAutoHidden("section_services", hiddenTables) && (
+            <>
+              <SectionHeading num={secNums["section_services"]!} title="Site Service Overview" />
+              {tblVis("table_s4_services") && <DataTable headers={["Service", "Example Page"]} rows={s4Rows} />}
+            </>
+          )}
 
-          <SectionHeading num={5} title="SEO Tier Diagnosis" />
-          <div style={{ padding: "12px 16px", backgroundColor: "#FDF2F0", borderRadius: 4, border: `1px solid ${ACCENT}33`, marginBottom: 12, fontSize: "11px" }}>
-            <div style={{ fontWeight: 700, color: ACCENT, marginBottom: 6, fontSize: "12px" }}>
-              Tier {s5.tier} — {s5.tierName}
-            </div>
-            <div style={{ color: "#374151", lineHeight: 1.6 }}>{e("s5_diagnosis", s5.diagnosis)}</div>
-          </div>
+          {secVis("section_diagnosis") && (
+            <>
+              <SectionHeading num={secNums["section_diagnosis"]!} title="SEO Tier Diagnosis" />
+              <div style={{ padding: "12px 16px", backgroundColor: "#FDF2F0", borderRadius: 4, border: `1px solid ${ACCENT}33`, marginBottom: 12, fontSize: "11px" }}>
+                <div style={{ fontWeight: 700, color: ACCENT, marginBottom: 6, fontSize: "12px" }}>Tier {s5.tier} — {s5.tierName}</div>
+                <div style={{ color: "#374151", lineHeight: 1.6 }}>{e("s5_diagnosis", s5.diagnosis)}</div>
+              </div>
+            </>
+          )}
 
-          <SectionHeading num={6} title="What We Need to Do Next" />
-          <ReportTable
-            headers={["#", "Initiative", "Tier", "Action", "Reason"]}
-            rows={s6Rows}
-          />
-          {(() => {
+          {secVis("section_priorities") && !printSecAutoHidden("section_priorities", hiddenTables) && (
+            <>
+              <SectionHeading num={secNums["section_priorities"]!} title="What We Need to Do Next" />
+              {tblVis("table_s6") && <ReportTable headers={["#", "Initiative", "Tier", "Action", "Reason"]} rows={s6Rows} />}
+              {(() => {
             const raw = edits["s6_crossSells_confirmed"];
             if (!raw) return null;
             let items: { recommendation: string; type: string; relevance: string }[] = [];
@@ -489,15 +535,17 @@ export default function QbrPrepPrint() {
                 </table>
               </div>
             );
-          })()}
+              })()}
+            </>
+          )}
 
-          {(() => {
+          {secVis("section_credits") && (() => {
             const rawCreditUsage: string = amPrint.creditUsage ?? "";
             if (!rawCreditUsage.trim()) return null;
             const creditMonths = parseCreditUsage(rawCreditUsage);
             return (
               <>
-                <SectionHeading num={7} title="How Credits Are Used Each Month" />
+                <SectionHeading num={secNums["section_credits"]!} title="How Credits Are Used Each Month" />
                 {creditMonths.length > 0 ? creditMonths.map((cm, mi) => (
                   <div key={mi} style={{ marginBottom: 14 }}>
                     <div style={{ fontSize: "11px", fontWeight: 700, color: "#374151", marginBottom: 4 }}>{cm.month}</div>
@@ -530,24 +578,23 @@ export default function QbrPrepPrint() {
             );
           })()}
 
-          <SectionHeading num={amPrint.creditUsage?.trim() ? 8 : 7} title="What We Track" />
-          <ReportTable
-            headers={["Focus Area", "Metric", "Source", "Why It Matters"]}
-            rows={s7Rows}
-          />
+          {secVis("section_tracking") && !printSecAutoHidden("section_tracking", hiddenTables) && (
+            <>
+              <SectionHeading num={secNums["section_tracking"]!} title="What We Track" />
+              {tblVis("table_s8") && <ReportTable headers={["Focus Area", "Metric", "Source", "Why It Matters"]} rows={s7Rows} />}
+            </>
+          )}
 
-          {(() => {
-            const autoOpps: any[] = reportData.additionalOpportunities ?? [];
-            const s8Rows = getCustomRows(edits, "s8_opportunities");
-            if (autoOpps.length === 0 && s8Rows.length === 0) return null;
+          {secVis("section_opportunities") && (() => {
+            if (_autoOpps.length === 0 && _s8ManualRows.length === 0) return null;
             return (
               <>
-                <SectionHeading num={amPrint.creditUsage?.trim() ? 9 : 8} title="Additional Opportunities" />
+                <SectionHeading num={secNums["section_opportunities"]!} title="Additional Opportunities" />
 
                 {/* Auto-generated opportunity cards */}
-                {autoOpps.length > 0 && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: s8Rows.length > 0 ? 14 : 0, fontSize: "11px" }}>
-                    {autoOpps.map((opp: any, i: number) => (
+                {_autoOpps.length > 0 && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: _s8ManualRows.length > 0 ? 14 : 0, fontSize: "11px" }}>
+                    {_autoOpps.map((opp: any, i: number) => (
                       <div key={i} style={{ border: "1px solid #E5E7EB", borderRadius: 6, overflow: "hidden", pageBreakInside: "avoid" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 12px", backgroundColor: "#F9FAFB", borderBottom: "1px solid #E5E7EB" }}>
                           <span
@@ -584,10 +631,10 @@ export default function QbrPrepPrint() {
                 )}
 
                 {/* Manual additions */}
-                {s8Rows.length > 0 && (
+                {_s8ManualRows.length > 0 && (
                   <ReportTable
                     headers={["Description", "Purpose", "Est. Cost"]}
-                    rows={s8Rows.map((row: string[]) => row.map((c: string) => cell(c)))}
+                    rows={_s8ManualRows.map((row: string[]) => row.map((c: string) => cell(c)))}
                   />
                 )}
               </>

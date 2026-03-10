@@ -1162,60 +1162,78 @@ function generateSection1(nsmData: any, ga4Funnel: any, quarter: QuarterInfo, cl
   let callsGoal: string = ME;
   let callsShift = "—";
   let callsHasPriorBenchmark = false;
+  let callsBenchmarkSource = "none";
   let callsReason = callTrackingProvider
-    ? `Zero inbound calls recorded quarter-to-date as of the report preparation date. Q2 call goal is held at par as a planning default — adjust once tracked volume provides a QTD baseline.`
+    ? `${ME}: No tracked call volume recorded yet this quarter.`
     : `${ME}: Call tracking provider not configured`;
+  let includeCallsRow = false;
 
   if (callTrackingSources.length > 0) {
     const totalCalls = callTrackingSources.reduce((s, r) => s + r.calls, 0);
     callsGoal = `${fmtNum(totalCalls)} tracked calls (QTD)`;
 
-    // P1: compute from prior NSM calls goal if available
+    // P1a: explicit callsGoal field in NSM tracker
     const prevCallsGoalRaw = (prevNsmData as any)?.callsGoal ?? null;
     if (prevCallsGoalRaw && prevCallsGoalRaw !== "—") {
       callsShift = computeGoalShiftPct(String(totalCalls), String(prevCallsGoalRaw));
       callsHasPriorBenchmark = true;
+      callsBenchmarkSource = `NSM callsGoal (prev=${prevCallsGoalRaw})`;
     }
 
-    // P2: derive from primary KPI pacing if both goal and actuals are available
+    // P1b: when MVP type is calls-based, prior MVP goal is a valid prior-quarter calls benchmark
+    if (callsShift === "—") {
+      const mvpIsCalls = /call/i.test(nsmData?.mvpType ?? "");
+      const prevMvpGoalRaw = prevNsmData?.mvpGoal ?? null;
+      if (mvpIsCalls && prevMvpGoalRaw && prevMvpGoalRaw !== "—") {
+        callsShift = computeGoalShiftPct(String(totalCalls), String(prevMvpGoalRaw));
+        callsHasPriorBenchmark = true;
+        callsBenchmarkSource = `NSM mvpGoal (prev=${prevMvpGoalRaw}, mvpType="${nsmData?.mvpType}")`;
+      }
+    }
+
+    // P2: primary KPI pacing proxy — directional only, not a direct call-to-call comparison
     if (callsShift === "—" && nsmMvpGoalNum !== null && nsmMvpActNum !== null) {
       const pacing = nsmMvpActNum / nsmMvpGoalNum;
       callsShift = pacing >= 0.9 ? "+5%" : pacing >= 0.7 ? "Par" : "-5%";
-      // callsHasPriorBenchmark stays false — pacing proxy, not a direct comparison
+      callsBenchmarkSource = `pacing proxy (mvpAct=${nsmMvpActNum}, mvpGoal=${nsmMvpGoalNum})`;
     }
 
-    // P3: no prior benchmark and no pacing signal — planning default
+    // If no valid prior-quarter basis exists: suppress the Calls row entirely
+    // Do not render a "vs Last Quarter" shift that has no last-quarter comparison basis
     if (callsShift === "—") {
-      callsShift = "Par";
-    }
-
-    if (callsHasPriorBenchmark) {
-      if (callsShift.startsWith("+")) {
-        callsReason = `Quarter-to-date: ${fmtNum(totalCalls)} inbound calls recorded — ahead of the prior-quarter calls benchmark. The volume trend supports a modest upward adjustment to the Q2 call target.`;
-      } else if (callsShift === "Par") {
-        callsReason = `Quarter-to-date: ${fmtNum(totalCalls)} inbound calls recorded — flat versus the prior-quarter calls benchmark. Volume is holding at the prior-quarter level, so Q2 is held at par while conversion-path improvements are evaluated.`;
-      } else {
-        callsReason = `Quarter-to-date: ${fmtNum(totalCalls)} inbound calls recorded — below the prior-quarter calls benchmark. The shortfall is more consistent with attribution or conversion-path friction than a structural drop in inbound demand, so Q2 is adjusted modestly rather than held flat at an unreachable prior target.`;
-      }
-    } else if (callsShift !== "Par") {
-      // Pacing proxy — directional, not a direct call-to-call comparison
-      const directionWord = callsShift.startsWith("+") ? "ahead of" : "below";
-      callsReason = `Quarter-to-date: ${fmtNum(totalCalls)} inbound calls recorded. No prior-quarter calls benchmark is logged in the NSM tracker — Q2 call direction is inferred from primary KPI pacing, which suggests performance ${directionWord} the current target. Confirm prior-quarter call data to replace this directional estimate with a direct comparison.`;
+      callsBenchmarkSource = "none — row suppressed";
+      console.log(`[Section1] Secondary Goal=Calls SUPPRESSED: no valid prior-quarter calls benchmark. prevCallsGoalRaw=${prevCallsGoalRaw}, mvpType="${nsmData?.mvpType}", prevMvpGoal=${prevNsmData?.mvpGoal ?? "null"}, nsmMvpActNum=${nsmMvpActNum}`);
     } else {
-      // Planning default Par — no prior benchmark, no pacing signal
-      callsReason = `Quarter-to-date: ${fmtNum(totalCalls)} inbound calls recorded. No prior-quarter calls benchmark is available in the NSM tracker for a direct comparison — Q2 is held at par as a planning default. Adjust once prior-quarter call data is confirmed.`;
+      includeCallsRow = true;
+      if (callsHasPriorBenchmark) {
+        const prevBenchNum = parseInt(String(callsBenchmarkSource.match(/prev=(\d+)/)?.[1] ?? "0"), 10);
+        const prevLabel = prevBenchNum > 0 ? ` (prior-quarter benchmark: ${fmtNum(prevBenchNum)})` : "";
+        if (callsShift.startsWith("+")) {
+          callsReason = `Quarter-to-date: ${fmtNum(totalCalls)} inbound calls recorded${prevLabel} — ahead of the prior-quarter benchmark. The volume trend supports a modest upward adjustment to the Q2 call target.`;
+        } else if (callsShift === "Par") {
+          callsReason = `Quarter-to-date: ${fmtNum(totalCalls)} inbound calls recorded${prevLabel} — flat versus the prior-quarter benchmark. Volume is holding at the prior level, so Q2 is held at par while conversion-path improvements are evaluated.`;
+        } else {
+          callsReason = `Quarter-to-date: ${fmtNum(totalCalls)} inbound calls recorded${prevLabel} — below the prior-quarter benchmark. The shortfall is more consistent with attribution or conversion-path friction than a structural drop in inbound demand, so Q2 is adjusted modestly rather than held flat at an unreachable prior target.`;
+        }
+      } else {
+        // P2 pacing proxy — label it as directional
+        const directionWord = callsShift.startsWith("+") ? "ahead of" : callsShift === "Par" ? "in line with" : "below";
+        callsReason = `Quarter-to-date: ${fmtNum(totalCalls)} inbound calls recorded. No direct prior-quarter calls benchmark is available — Q2 call direction is inferred from primary KPI pacing, which suggests performance is ${directionWord} the current target. Confirm prior-quarter call data to replace this directional estimate with a direct comparison.`;
+      }
     }
   }
 
-  console.log(`[Section1] Secondary Goal=Calls, source=${callsSource}, shift=${callsShift}, hasPriorBenchmark=${callsHasPriorBenchmark}, prevCallsGoalRaw=${(prevNsmData as any)?.callsGoal ?? "null"}, nsmMvpActNum=${nsmMvpActNum}, nsmMvpGoalNum=${nsmMvpGoalNum}`);
+  console.log(`[Section1] Secondary Goal=Calls: shift=${callsShift}, includeRow=${includeCallsRow}, benchmarkSource=${callsBenchmarkSource}, totalCalls=${callsGoal}`);
 
-  rows.push({
-    goalType: "Secondary Goal",
-    goal: callsGoal,
-    measurementSource: callsSource,
-    goalShift: callsShift,
-    reason: callsReason,
-  });
+  if (includeCallsRow) {
+    rows.push({
+      goalType: "Secondary Goal",
+      goal: callsGoal,
+      measurementSource: callsSource,
+      goalShift: callsShift,
+      reason: callsReason,
+    });
+  }
 
   // ── Tertiary Goal: Organic Sessions ────────────────────────────────────
   let sessRecommended: string = ME;

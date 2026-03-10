@@ -1,0 +1,115 @@
+QoQ refinement pass for QBR Prep — switch Section 3 GSC deltas from full-prior-quarter comparison to true quarter-aligned QTD QoQ comparison.
+
+Current state:
+- The report labels now say QoQ
+- Backend logic currently compares:
+  - current quarter to date
+  - vs full prior quarter boundary
+- That is better than the old matched prior-period logic, but it is still analytically uneven mid-quarter because the two windows have different day counts
+
+Required change:
+Use true quarter-aligned QTD QoQ logic.
+
+Meaning:
+- Current window stays:
+  current quarter start → current analysis end date
+- Prior window becomes:
+  prior quarter start → prior quarter start + same day offset as the current quarter window
+
+In plain language:
+If current report window is Jan 1 → Mar 10, prior comparison window should be Oct 1 → Dec 10, not Oct 1 → Dec 31.
+
+This keeps:
+- quarter-over-quarter framing
+- aligned quarter starts
+- equal elapsed-day comparison
+
+==================================================
+1. REQUIRED BACKEND LOGIC CHANGE
+==================================================
+
+File expected to change:
+- server/qbrPrepSectionGenerator.ts
+
+Replace the current prior-quarter boundary logic with quarter-aligned QTD prior-quarter logic.
+
+Required algorithm:
+1. Determine current quarter number and year from quarter.analysisStart
+2. Determine prior quarter number and year
+3. Set priorStart = first day of prior quarter
+4. Compute elapsed day count from current quarter start to current analysis end
+5. Set priorEnd = priorStart + same elapsed day offset
+6. Clamp priorEnd so it cannot extend past the true end of the prior quarter
+   - in practice it should not if the current analysis end is inside the current quarter, but clamp defensively anyway
+
+Use this comparison model consistently for all Section 3 GSC delta fetches:
+- top topics / query tables
+- top traffic pages / page tables
+- any related query+page delta pulls used in the report
+
+==================================================
+2. REPORTING / LABEL TRUTHFULNESS
+==================================================
+
+Keep the report-facing labels as QoQ, because after this change they will be both:
+- quarter-aligned
+- equal elapsed-day
+
+Examples:
+- QoQ Clicks
+- QoQ Queries
+- QoQ Impressions
+
+Also update any server logs / debug messages so they accurately describe the new comparison.
+
+Preferred log style:
+[GSC] QoQ windows — Current Q1 2026 QTD: 2026-01-01→2026-03-10 | Prior Q4 2025 aligned QTD: 2025-10-01→2025-12-10
+
+==================================================
+3. DATE WINDOW RULES
+==================================================
+
+Use exact calendar quarter starts:
+- Q1 starts Jan 1
+- Q2 starts Apr 1
+- Q3 starts Jul 1
+- Q4 starts Oct 1
+
+Elapsed-day alignment rule:
+- If current window is quarter start through day N of the current quarter
+- prior window must be prior quarter start through day N of the prior quarter
+
+Be careful with inclusive dates.
+The prior window should represent the same number of elapsed days as the current window.
+
+Example:
+Current:
+- Jan 1 → Mar 10
+
+Prior:
+- Oct 1 → Dec 10
+
+==================================================
+4. ACCEPTANCE CRITERIA
+==================================================
+
+1. Section 3 QoQ deltas no longer compare current QTD against full prior quarter
+2. Section 3 QoQ deltas now compare current quarter-to-date against prior-quarter-to-equivalent-day
+3. Report labels remain QoQ
+4. Logs accurately describe the new windows
+5. Existing Section 3 rendering remains unchanged except for the improved comparison basis
+6. Export flow still works
+7. No other report sections are unintentionally changed
+
+==================================================
+5. AFTER IMPLEMENTATION, REPORT BACK WITH:
+==================================================
+
+- files changed
+- exact final QoQ date-window algorithm
+- exact inclusive-day handling
+- one concrete example using a current Q1 2026 QTD window and the resulting prior Q4 2025 aligned window
+- confirmation that all Section 3 GSC delta pulls now use the new logic
+- confirmation that labels remain QoQ
+- confirmation that export still works
+- any edge cases

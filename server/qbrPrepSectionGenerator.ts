@@ -304,20 +304,40 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
   let gscPrevQueryPageRows: any[] = [];
   const gscAvailable = !!(gscToken && client.gscSiteUrl);
   if (gscAvailable) {
-    // True QoQ: compare current quarter-to-date against the full prior calendar quarter.
-    // Prior quarter boundaries are exact calendar boundaries (Q1=Jan-Mar, Q2=Apr-Jun, etc.).
+    // Quarter-aligned QTD QoQ:
+    //   Current window:  quarter start → analysis end (QTD)
+    //   Prior window:    prior quarter start → prior quarter start + same day-of-quarter offset
+    //                    clamped to the last day of the prior quarter
+    //
+    // Example: current Q1 2026, Jan 1 → Mar 10
+    //   monthOffset = Mar(2) − Jan(0) = 2, day = 10
+    //   prior Q4 2025 start = Oct 1 (month index 9)
+    //   prior end = month 9+2=11, day 10 → Dec 10, 2025
+
     const qStartDate = new Date(quarter.analysisStart + "T00:00:00");
-    const currQYear = qStartDate.getFullYear();
-    const currQNum = Math.ceil((qStartDate.getMonth() + 1) / 3); // 1–4
-    const prevQNum = currQNum === 1 ? 4 : currQNum - 1;
-    const prevQYear = currQNum === 1 ? currQYear - 1 : currQYear;
-    // Q boundary month indices (0-based): Q1=0, Q2=3, Q3=6, Q4=9
-    const prevQStartMonth = (prevQNum - 1) * 3;       // e.g. Q4 → 9 (October)
-    const prevQEndMonth   = prevQStartMonth + 2;       // e.g. Q4 → 11 (December)
+    const qEndDate   = new Date(quarter.analysisEnd   + "T00:00:00");
+    const currQYear  = qStartDate.getFullYear();
+    const currQNum   = Math.ceil((qStartDate.getMonth() + 1) / 3); // 1–4
+    const prevQNum   = currQNum === 1 ? 4 : currQNum - 1;
+    const prevQYear  = currQNum === 1 ? currQYear - 1 : currQYear;
+
+    // Prior quarter calendar boundaries (0-indexed months)
+    const prevQStartMonth = (prevQNum - 1) * 3;  // Oct=9 for Q4, Jan=0 for Q1, etc.
+    const prevQEndMonth   = prevQStartMonth + 2;  // last month of prior quarter
+
+    // Align prior window end to the same position within the prior quarter
+    const monthOffsetInQ = qEndDate.getMonth() - qStartDate.getMonth(); // 0, 1, or 2
+    const dayOfMonth     = qEndDate.getDate();
+    const prevEndRaw     = new Date(prevQYear, prevQStartMonth + monthOffsetInQ, dayOfMonth);
+
+    // Clamp to the true last day of the prior quarter (defensive; should not trigger mid-quarter)
+    const prevQLastDay = new Date(prevQYear, prevQEndMonth + 1, 0);
+    const prevEndClamped = prevEndRaw > prevQLastDay ? prevQLastDay : prevEndRaw;
+
     const prevStartStr = new Date(prevQYear, prevQStartMonth, 1).toISOString().slice(0, 10);
-    // Last day of prevQEndMonth: use day 0 of the following month
-    const prevEndStr = new Date(prevQYear, prevQEndMonth + 1, 0).toISOString().slice(0, 10);
-    console.log(`[GSC] QoQ windows — Current Q${currQNum} ${currQYear}: ${quarter.analysisStart}→${quarter.analysisEnd} | Prior Q${prevQNum} ${prevQYear}: ${prevStartStr}→${prevEndStr}`);
+    const prevEndStr   = prevEndClamped.toISOString().slice(0, 10);
+
+    console.log(`[GSC] QoQ windows — Current Q${currQNum} ${currQYear} QTD: ${quarter.analysisStart}→${quarter.analysisEnd} | Prior Q${prevQNum} ${prevQYear} aligned QTD: ${prevStartStr}→${prevEndStr}`);
 
     [gscQueryRows, gscPageRows, gscQueryPageRows, gscPrevQueryRows, gscPrevPageRows, gscPrevQueryPageRows] = await Promise.all([
       gscFetch(gscToken!, client.gscSiteUrl!, quarter.analysisStart, quarter.analysisEnd, ["query"], 200),

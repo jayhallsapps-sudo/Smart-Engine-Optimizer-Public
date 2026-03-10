@@ -2113,7 +2113,22 @@ export async function registerRoutes(
         fetchNsmGoals(client.name, true).catch(() => null),
       ]);
 
+      // Website: primary = client.gscSiteUrl; fallback = NSM sheet; final fallback = null
+      const websiteFromClient = client.gscSiteUrl && client.gscSiteUrl !== "—" ? client.gscSiteUrl : null;
+      const websiteFromSheet = current?.website && current.website !== "—" ? current.website : null;
+      const website = websiteFromClient ?? websiteFromSheet ?? null;
+
+      // Credits: client record has no credits field; only source = NSM sheet
+      const credits = current?.credits && current.credits !== "—" ? current.credits : null;
+
+      // NSM Type: NSM sheet only
+      const nsmType = current?.mvpType && current.mvpType !== "—" ? current.mvpType : null;
+
       return res.json({
+        website,
+        credits,
+        nsmType,
+        websiteSource: websiteFromClient ? "client_record" : websiteFromSheet ? "nsm_sheet" : "none",
         current: current ?? null,
         next: next ?? null,
       });

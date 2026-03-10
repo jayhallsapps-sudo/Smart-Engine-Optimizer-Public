@@ -1,0 +1,61 @@
+Make one targeted data-source correction to the new Dashboard > Client Info feature.
+
+Problem:
+Website and Credits are currently being read from the SEO NSM Tracker sheet via regex/header matching. That works as a fallback, but it is too fragile to be the primary source of truth because sheet column names can change and silently break the mapping.
+
+Required fix:
+Update the Client Info data-loading logic so that Website and Credits prefer the client record as the primary source of truth.
+
+New source-of-truth rules:
+1. Website
+   - First try to read Website from the client record
+   - If Website is missing on the client record, fall back to the SEO NSM Tracker 2026 sheet mapping
+   - If neither source has a value, display —
+
+2. Credits
+   - First try to read Credits from the client record
+   - If Credits are missing on the client record, fall back to the SEO NSM Tracker 2026 sheet mapping
+   - If neither source has a value, display —
+
+Important:
+- NSM Type should continue to come from the SEO NSM Tracker mapping unless there is already an intentional primary source elsewhere
+- Quarter metrics should remain exactly as currently implemented
+- Do not change the Stats tab behavior
+- Do not change the Clients page
+- Do not change the navigation
+
+Implementation requirements:
+- Identify where the client record is stored and fetched for the dashboard/client context
+- Wire Website and Credits into the dashboard Client Info response from the client record first
+- Preserve the existing sheet fallback so older clients still work
+- Make the fallback logic explicit and readable, not buried or implied
+- Avoid duplicate mapping logic where possible
+
+Backend behavior:
+- The API response that powers Dashboard > Client Info should return:
+  - website
+  - credits
+  - nsmType
+  - current quarter metrics
+  - next quarter metrics
+- Website and Credits in that response should already reflect the primary/fallback logic so the frontend does not need to guess
+
+Frontend behavior:
+- No UI redesign needed
+- Continue displaying Website and Credits exactly where they are now
+- If the API returns null/empty, show —
+
+Acceptance criteria:
+1. If the client record has Website and Credits, those values are used
+2. If the client record is missing one or both, the system falls back to SEO NSM Tracker 2026
+3. If both sources are missing, the UI shows —
+4. Existing NSM quarter metrics remain unchanged
+5. Existing Client Info tab layout remains unchanged
+6. No regressions to dashboard or integrations behavior
+
+After implementing, report back with:
+- exact files changed
+- where Website is now sourced from
+- where Credits are now sourced from
+- how fallback order was implemented
+- any clients or records that would still need manual cleanup because the client record lacks those fields

@@ -52,6 +52,10 @@ interface NsmData {
 }
 
 interface ClientNsmResponse {
+  website: string | null;
+  credits: string | null;
+  nsmType: string | null;
+  websiteSource: "client_record" | "nsm_sheet" | "none";
   current: NsmData | null;
   next: NsmData | null;
 }
@@ -694,9 +698,13 @@ function ClientInfoTab({ client, clientId }: { client: Client; clientId: number 
   const current = nsmData?.current ?? null;
   const next = nsmData?.next ?? null;
 
-  const website = current?.website && current.website !== "—" ? current.website : null;
-  const credits = current?.credits && current.credits !== "—" ? current.credits : null;
-  const nsmType = current?.mvpType && current.mvpType !== "—" ? current.mvpType : null;
+  // website and credits are pre-resolved by the API with priority logic:
+  //   website: client.gscSiteUrl first → NSM sheet fallback → null
+  //   credits: NSM sheet only (client record has no credits field)
+  //   nsmType: NSM sheet only
+  const website = nsmData?.website ?? null;
+  const credits = nsmData?.credits ?? null;
+  const nsmType = nsmData?.nsmType ?? null;
 
   if (isLoading) {
     return (

@@ -1151,7 +1151,11 @@ function generateSection2(
 
   if (sfData.length > 0) {
     const urlCol = sfHeaders.find(h => /^address$/i.test(h) || /^url$/i.test(h)) ?? sfHeaders[0] ?? "";
-    const sfPageUrls = sfData.map(r => String(r[urlCol] ?? "")).filter(isValidPageUrl);
+    const statusColHeader = sfHeaders.find(h => /^status code$/i.test(h) || /^status$/i.test(h));
+    const liveSfDataS2 = statusColHeader
+      ? sfData.filter(r => { const s = Number(r[statusColHeader]); return !(s >= 300 && s < 400); })
+      : sfData;
+    const sfPageUrls = liveSfDataS2.map(r => String(r[urlCol] ?? "")).filter(isValidPageUrl);
     for (const { pattern, internalType } of sfServicePriority) {
       const matches = sfPageUrls.filter(u => pattern.test(u));
       if (matches.length === 0) continue;
@@ -1764,11 +1768,15 @@ function generateSection4(
   const insuranceBroadPattern = /\/insurance\b/i;
 
   if (sfData.length > 0 && urlCol) {
-    const allUrls = sfData.map(r => String(r[urlCol] ?? ""));
-    // Filter to only valid page URLs before any matching
+    const statusColHeader4 = sfHeaders.find(h => /^status code$/i.test(h) || /^status$/i.test(h));
+    const liveSfData4 = statusColHeader4
+      ? sfData.filter(r => { const s = Number(r[statusColHeader4]); return !(s >= 300 && s < 400); })
+      : sfData;
+    const allUrls = liveSfData4.map(r => String(r[urlCol] ?? ""));
+    // Filter to only valid, non-redirect page URLs before any matching
     const pageUrls = allUrls.filter(isValidPageUrl);
 
-    console.log(`[Section4] Total SF URLs: ${allUrls.length}, valid page URLs after filtering: ${pageUrls.length}`);
+    console.log(`[Section4] Total SF URLs: ${allUrls.length} (after redirect filter), valid page URLs after filtering: ${pageUrls.length}`);
 
     for (const target of serviceTargets) {
       // Collect all candidates for this service

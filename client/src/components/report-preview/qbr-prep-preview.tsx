@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { EditableSection } from "./editable-section";
 import { AddableReportTable, SourceBadge } from "./report-table";
 import swoopHeaderFallback from "@assets/HEADER_IMAGE_1773063127856.png";
@@ -371,42 +371,44 @@ export function QbrPrepPreview({
               onEdit={onEdit}
             />
             <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Traffic Pages</div>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px", marginBottom: 16 }}>
-              <thead>
-                <tr style={{ backgroundColor: "#F9FAFB" }}>
-                  {["Page", "Clicks", ...(hasPageDeltas ? ["Δ Clicks", "Impressions", "Δ Impressions", "# Queries", "Δ Queries"] : []), "CTR", "Connection to Admits"].map(h => (
-                    <th key={h} style={{ padding: "5px 8px", textAlign: "left", borderBottom: "2px solid #E5E7EB", fontWeight: 600, color: "#374151", whiteSpace: "nowrap" }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {section3Traffic.topTrafficPages.map((r, ri) => (
-                  <>
-                    <tr key={`${ri}-m`} style={{ borderBottom: r.insight ? "none" : "1px solid #E5E7EB" }}>
-                      <td style={{ padding: "5px 8px", verticalAlign: "top" }}><EditableCell editKey={`s3b_${ri}_0`} value={r.page} edits={edits} onEdit={onEdit} /></td>
-                      <td style={{ padding: "5px 8px", verticalAlign: "top" }}><EditableCell editKey={`s3b_${ri}_1`} value={r.clicks} edits={edits} onEdit={onEdit} /></td>
-                      {hasPageDeltas && <>
-                        <td style={{ padding: "5px 8px", verticalAlign: "top", color: r.clicksDelta?.startsWith("-") ? "#DC2626" : "#16A34A" }}>{r.clicksDelta ?? "—"}</td>
-                        <td style={{ padding: "5px 8px", verticalAlign: "top" }}>{r.impressions ?? "—"}</td>
-                        <td style={{ padding: "5px 8px", verticalAlign: "top", color: r.impressionsDelta?.startsWith("-") ? "#DC2626" : "#16A34A" }}>{r.impressionsDelta ?? "—"}</td>
-                        <td style={{ padding: "5px 8px", verticalAlign: "top" }}>{r.queries ?? "—"}</td>
-                        <td style={{ padding: "5px 8px", verticalAlign: "top", color: r.queriesDelta?.startsWith("-") ? "#DC2626" : "#16A34A" }}>{r.queriesDelta ?? "—"}</td>
-                      </>}
-                      <td style={{ padding: "5px 8px", verticalAlign: "top" }}><EditableCell editKey={`s3b_${ri}_2`} value={r.ctr} edits={edits} onEdit={onEdit} /></td>
-                      <td style={{ padding: "5px 8px", verticalAlign: "top" }}><EditableCell editKey={`s3b_${ri}_3`} value={r.connectionToAdmits} edits={edits} onEdit={onEdit} /></td>
-                    </tr>
-                    {(edits[`s3b_${ri}_4`] ?? r.insight) && (
-                      <tr key={`${ri}-i`} style={{ borderBottom: "1px solid #E5E7EB", backgroundColor: "#FAFAFA" }}>
-                        <td colSpan={pageColCount} style={{ padding: "4px 8px 6px 12px", fontSize: "9px", color: "#6B7280" }}>
-                          <span style={{ fontWeight: 600, color: "#4B5563" }}>Insight: </span>
-                          <EditableCell editKey={`s3b_${ri}_4`} value={r.insight} edits={edits} onEdit={onEdit} />
-                        </td>
+            <div style={{ border: `1px solid ${ACCENT}28`, borderRadius: 6, overflow: "hidden", marginBottom: 12, backgroundColor: "#FFFDFB" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px" }}>
+                <thead>
+                  <tr style={{ backgroundColor: `${ACCENT}0D` }}>
+                    {["Page", "Clicks", ...(hasPageDeltas ? ["Δ Clicks", "Impressions", "Δ Impressions", "# Queries", "Δ Queries"] : []), "CTR", "Connection to Admits"].map(h => (
+                      <th key={h} style={{ padding: "5px 8px", textAlign: "left", fontWeight: 600, fontSize: "9px", color: ACCENT, textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: `1px solid ${ACCENT}20`, whiteSpace: "nowrap" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {section3Traffic.topTrafficPages.map((r, ri) => (
+                    <React.Fragment key={`page-${ri}`}>
+                      <tr style={{ backgroundColor: ri % 2 === 1 ? "#FBF8F7" : "white" }}>
+                        <td style={{ padding: "6px 8px", borderBottom: (edits[`s3b_${ri}_4`] ?? r.insight) ? "none" : "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4 }}><EditableCell editKey={`s3b_${ri}_0`} value={r.page} edits={edits} onEdit={onEdit} /></td>
+                        <td style={{ padding: "6px 8px", borderBottom: (edits[`s3b_${ri}_4`] ?? r.insight) ? "none" : "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4 }}><EditableCell editKey={`s3b_${ri}_1`} value={r.clicks} edits={edits} onEdit={onEdit} /></td>
+                        {hasPageDeltas && <>
+                          <td style={{ padding: "6px 8px", borderBottom: (edits[`s3b_${ri}_4`] ?? r.insight) ? "none" : "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4, color: r.clicksDelta?.startsWith("-") ? "#DC2626" : "#16A34A" }}>{r.clicksDelta ?? "—"}</td>
+                          <td style={{ padding: "6px 8px", borderBottom: (edits[`s3b_${ri}_4`] ?? r.insight) ? "none" : "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4 }}>{r.impressions ?? "—"}</td>
+                          <td style={{ padding: "6px 8px", borderBottom: (edits[`s3b_${ri}_4`] ?? r.insight) ? "none" : "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4, color: r.impressionsDelta?.startsWith("-") ? "#DC2626" : "#16A34A" }}>{r.impressionsDelta ?? "—"}</td>
+                          <td style={{ padding: "6px 8px", borderBottom: (edits[`s3b_${ri}_4`] ?? r.insight) ? "none" : "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4 }}>{r.queries ?? "—"}</td>
+                          <td style={{ padding: "6px 8px", borderBottom: (edits[`s3b_${ri}_4`] ?? r.insight) ? "none" : "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4, color: r.queriesDelta?.startsWith("-") ? "#DC2626" : "#16A34A" }}>{r.queriesDelta ?? "—"}</td>
+                        </>}
+                        <td style={{ padding: "6px 8px", borderBottom: (edits[`s3b_${ri}_4`] ?? r.insight) ? "none" : "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4 }}><EditableCell editKey={`s3b_${ri}_2`} value={r.ctr} edits={edits} onEdit={onEdit} /></td>
+                        <td style={{ padding: "6px 8px", borderBottom: (edits[`s3b_${ri}_4`] ?? r.insight) ? "none" : "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4 }}><EditableCell editKey={`s3b_${ri}_3`} value={r.connectionToAdmits} edits={edits} onEdit={onEdit} /></td>
                       </tr>
-                    )}
-                  </>
-                ))}
-              </tbody>
-            </table>
+                      {(edits[`s3b_${ri}_4`] ?? r.insight) && (
+                        <tr key={`${ri}-i`} style={{ backgroundColor: "#FFFBEB" }}>
+                          <td colSpan={pageColCount} style={{ padding: "4px 10px 6px 14px", borderBottom: "1px solid #F3EDED", borderLeft: `3px solid ${ACCENT}40`, fontSize: "9px", color: "#6B7280", lineHeight: 1.4 }}>
+                            <span style={{ fontWeight: 700, color: ACCENT, marginRight: 4 }}>Insight:</span>
+                            <EditableCell editKey={`s3b_${ri}_4`} value={r.insight} edits={edits} onEdit={onEdit} />
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
             <SectionHeading num={4} title="Site Service Overview" />
             <AddableReportTable
@@ -473,6 +475,7 @@ export function QbrPrepPreview({
               </>
             )}
 
+            {/* Additional Opportunities — commented out pending redesign
             {sectionQssb && sectionQssb.additionalOpportunities.length > 0 && (
               <>
                 <SectionHeading num={sectionQssb.clientInsights.length > 0 ? 9 : 8} title="Additional Opportunities" />
@@ -493,6 +496,7 @@ export function QbrPrepPreview({
                 </div>
               </>
             )}
+            */}
 
             {generationMeta && (
               <div style={{ fontSize: "9px", color: "#9CA3AF", marginTop: 16 }}>

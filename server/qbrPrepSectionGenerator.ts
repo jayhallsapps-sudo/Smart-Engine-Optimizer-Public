@@ -721,8 +721,11 @@ function generateSection1(nsmData: any, ga4Funnel: any, quarter: QuarterInfo, cl
 
   let admitsGoalDisplay: string = primaryKpiLabel;
   let admitsShift = "—";
-  let admitsReason = `${primaryKpiLabel} is the strategic primary KPI. Reporting source is not yet confirmed — this goal will be updated once a tracking source is connected.`;
-  let admitsSource = "Source pending confirmation";
+  const callTrackingProviderForPrimary = detectCallTrackingProvider(client);
+  let admitsSource = callTrackingProviderForPrimary ?? "Source pending confirmation";
+  let admitsReason = callTrackingProviderForPrimary
+    ? `${primaryKpiLabel} is the strategic primary KPI. ${callTrackingProviderForPrimary} call data is used as the operational tracking source for admissions-intent activity.`
+    : `${primaryKpiLabel} is the strategic primary KPI. Reporting source is not yet confirmed — this goal will be updated once a tracking source is connected.`;
 
   let nsmMvpActNum: number | null = null;
   let nsmMvpGoalNum: number | null = null;
@@ -830,9 +833,16 @@ function generateSection1(nsmData: any, ga4Funnel: any, quarter: QuarterInfo, cl
     }
   } else if (ga4Funnel) {
     sessRecommended = `${fmtNum(ga4Funnel.sessions)} organic sessions (QTD baseline)`;
-    sessReason = `${ME}: Goal target needs manual validation against prior quarter`;
+    sessReason = `${fmtNum(ga4Funnel.sessions)} organic sessions recorded QTD via GA4. Sessions are the key top-of-funnel indicator reflecting organic traffic volume and content reach. Goal target to be validated against prior quarter baseline.`;
   } else {
-    sessReason = `${ME}: no data sources available`;
+    sessReason = `Organic sessions via GA4 and GSC are the primary top-of-funnel indicator, reflecting organic traffic volume and content reach driving admissions pipeline.`;
+  }
+
+  // Fallback reason when NSM data exists but session sub-fields are incomplete
+  if (sessReason === ME) {
+    sessReason = ga4Funnel
+      ? `${fmtNum(ga4Funnel.sessions)} organic sessions recorded QTD via GA4. Organic sessions are the top-of-funnel leading indicator for pipeline quality and content reach — higher organic traffic means more qualified admissions inquiries.`
+      : `Organic sessions via GA4 and GSC are the top-of-funnel leading indicator for pipeline quality. Increasing organic traffic directly drives more qualified admissions inquiries.`;
   }
 
   console.log(`[Section1] Tertiary Goal=Organic Sessions, target=${sessRecommended}, source=GA4 / GSC, shift=${sessShift}`);

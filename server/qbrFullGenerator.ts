@@ -7,6 +7,7 @@ import { fetchAirtableWorkLog } from "./airtable";
 import { fetchAsanaWorkLog, groupAsanaTasks } from "./asanaClient";
 import { fetchQssbData } from "./qssbClient";
 import { fetchStrategyBank } from "./notionClient";
+import { fetchNsmGoalsForSpecificQuarter } from "./sheetsClient";
 import type { Slide } from "../client/src/components/report-preview/pptx-preview";
 import { type GapContext } from "./gapAnswerContext";
 
@@ -259,6 +260,7 @@ export async function generateQbrFull(input: {
     semCompetitor,
     airtableResult,
     asanaResult,
+    nsmResult,
   ] = await Promise.allSettled([
     handlesGscCommand("top_queries" as any)
       ? queryGsc("top_queries" as any, client, calQtrRange)
@@ -283,6 +285,7 @@ export async function generateQbrFull(input: {
       : Promise.resolve(null),
     fetchAirtableWorkLog(client.id, airtableStart, airtableEnd),
     fetchAsanaWorkLog(client.id, airtableStart, airtableEnd),
+    fetchNsmGoalsForSpecificQuarter(client.name, input.quarter === 4 ? 1 : input.quarter + 1, input.quarter === 4 ? input.year + 1 : input.year),
   ]);
 
   // Extract key data
@@ -742,16 +745,42 @@ export async function generateQbrFull(input: {
 
   // Smart goal projection: factors in current actuals, prior quarter delta, and trend direction.
   // Each metric gets a deterministic goal + plain-English rationale based on observed trend.
+  // When NSM Tracker has explicit goals, those take priority over smart projections.
+  const nsmGoals = nsmResult.status === "fulfilled" ? nsmResult.value : null;
+  const DASH = "—";
+
   const sessionsGoal = smartProjectGoal(ga4Summary[0] ?? organicSessionsMetric);
   const clicksGoal   = smartProjectGoal(organicClicksMetric ?? gscQueriesSummary[0]);
   const callsGoal    = smartProjectGoal(callsMetric);
   const posGoal      = smartProjectPosition(avgPosMetric);
 
+  const nsmSessGoal = nsmGoals?.sessionsGoal && nsmGoals.sessionsGoal !== DASH ? nsmGoals.sessionsGoal : null;
+  const nsmMvpGoal = nsmGoals?.mvpGoal && nsmGoals.mvpGoal !== DASH ? nsmGoals.mvpGoal : null;
+  const rawMvpType = nsmGoals?.mvpType && nsmGoals.mvpType !== DASH ? nsmGoals.mvpType : null;
+  const mvpType = rawMvpType ?? "Calls";
+  const isMvpCallBased = !rawMvpType || /call/i.test(rawMvpType);
+
+  const ga4ConversionsMetric = ga4Summary.find(
+    (s: SummaryMetric) => /conver|admit|lead/i.test(s.label)
+  );
+  const mvpActualMetric = isMvpCallBased ? callsMetric : (ga4ConversionsMetric ?? callsMetric);
+  const mvpSmartGoal = isMvpCallBased ? callsGoal : smartProjectGoal(mvpActualMetric);
+
   const nsmGoalRows: (string | number)[][] = [
-    ["Organic Sessions (GA4)", organicSessionsMetric?.current ?? MNE, sessionsGoal.goal, sessionsGoal.rationale],
-    ["Organic Clicks (GSC)",   organicClicksMetric?.current ?? MNE,   clicksGoal.goal,   clicksGoal.rationale],
-    ["Organic Calls",          callsMetric?.current ?? MNE,           callsGoal.goal,    callsGoal.rationale],
-    ["Avg. GSC Position",      avgPosMetric?.current ?? MNE,          posGoal.goal,      posGoal.rationale],
+    [
+      "Organic Sessions (GA4)",
+      organicSessionsMetric?.current ?? MNE,
+      nsmSessGoal ?? sessionsGoal.goal,
+      nsmSessGoal ? "NSM Tracker goal" : sessionsGoal.rationale,
+    ],
+    ["Organic Clicks (GSC)", organicClicksMetric?.current ?? MNE, clicksGoal.goal, clicksGoal.rationale],
+    [
+      `Organic ${mvpType}`,
+      mvpActualMetric?.current ?? MNE,
+      nsmMvpGoal ?? mvpSmartGoal.goal,
+      nsmMvpGoal ? "NSM Tracker goal" : mvpSmartGoal.rationale,
+    ],
+    ["Avg. GSC Position", avgPosMetric?.current ?? MNE, posGoal.goal, posGoal.rationale],
   ];
 
   slides.push({

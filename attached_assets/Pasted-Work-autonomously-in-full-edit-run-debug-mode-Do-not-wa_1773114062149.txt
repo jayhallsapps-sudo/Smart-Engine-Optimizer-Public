@@ -1,0 +1,206 @@
+Work autonomously in full edit-run-debug mode. Do not wait for confirmation unless you hit a true blocker such as missing credentials, missing files, failing environment access, or conflicting source-of-truth requirements that would make implementation unsafe.
+
+Use the existing codebase, report templates, graphs, tables, report text, editable fields, and provided internal docs as the source of truth. Follow the existing product direction. Do not invent new product requirements unless they are required to complete the intended reporting flow.
+
+Mission:
+Make the reporting app materially more production-ready during this session, with the main focus on report completion and shared report-system stability.
+
+Report types in scope:
+1. Bi-weekly
+2. Monthly
+3. Mid-Strategy
+4. QBR
+5. QBR Prep
+
+Current reality:
+- Bi-weekly is the closest to done, but not fully done.
+- Monthly, Mid-Strategy, and QBR are not done.
+- QBR Prep is in a good state and must be treated as protected.
+- Templates, graphs, tables, editable fields, and most report content already exist.
+- The biggest risk is partial, fragile, inconsistent implementation across report types.
+- Priority is not cosmetic refactoring. Priority is making the report system actually work end-to-end and making unfinished reports substantially closer to usable.
+
+Critical protection rule for QBR Prep:
+QBR Prep is protected and should not be reworked, restructured, or “improved” unless a change is clearly non-destructive and strictly necessary for shared-system stability.
+
+Allowed QBR Prep changes:
+- truly non-destructive shared infrastructure updates that do not alter its logic, layout, wording, field behavior, or report output
+- compatibility fixes required because of shared code changes
+- bug fixes only if something is already clearly broken and the fix preserves intended behavior
+
+Disallowed QBR Prep changes:
+- changing content structure
+- changing section order
+- changing text generation behavior
+- changing prompt logic
+- changing editable field behavior
+- changing layout or styling unless required by a shared rendering fix
+- opportunistic refactors
+- standardization for the sake of consistency
+- any change made just because another report uses a different pattern
+
+If there is doubt, do not modify QBR Prep. Prefer leaving QBR Prep untouched.
+
+Core operating rules:
+1. Do not do a broad redesign.
+2. Do not rewrite working systems just because you prefer a different architecture.
+3. Prefer shared infrastructure improvements only when they clearly reduce breakage across report types.
+4. Preserve existing working functionality unless it must be changed to support the mission.
+5. Do not leave behind fake placeholders pretending features are complete.
+6. Do not stop after analysis. Implement.
+7. Work in small validated steps: inspect, implement, run, verify, log.
+8. Optimize for business-ready report generation, previewing, editing, and export reliability.
+9. Prefer finishing nearly complete systems over starting speculative ones.
+10. Follow existing templates and internal docs rather than improvising new structures.
+11. Avoid unrelated cleanup and low-value refactors.
+12. Treat QBR Prep as a no-touch system except for strictly necessary, compatibility-safe, non-destructive work.
+
+Mandatory working style:
+Treat this as a continuous autonomous build session, not a review session.
+Do not end after audit, planning, or documentation.
+Audit quickly, document briefly, then immediately implement.
+For every analysis step, follow with code changes, validation, and then continue forward.
+Do not pause after a completed chunk of work just to summarize progress.
+Keep moving to the next highest-priority feasible task until a stop rule is met.
+
+Execution order:
+1. Fast audit only, then immediately implement
+2. Shared infrastructure hardening
+3. Bi-weekly completion pass
+4. Monthly advancement
+5. Mid-Strategy and QBR leverage pass
+6. Validation and cleanup
+
+Important execution rule:
+The execution order above is sequencing guidance only, not a set of checkpoints.
+Do not stop after any item in the list just because that item is complete.
+After finishing one item, immediately continue to the next highest-priority feasible work item.
+Only stop when a true blocker is reached, the highest-value feasible work is complete, or additional changes would likely create instability.
+
+Success criteria for this session:
+A. The app is more stable at the shared report-system level.
+B. Bi-weekly is pushed as close to fully complete as realistically possible.
+C. Monthly is materially advanced using existing templates and logic patterns.
+D. Mid-Strategy and QBR are scaffolded or improved in the highest-leverage way possible after higher priorities are handled.
+E. QBR Prep remains intact and unaffected except for clearly non-destructive shared compatibility fixes if absolutely required.
+F. Report generation and export pathways are validated and hardened wherever touched.
+G. Work is documented clearly so it can be reviewed easily afterward.
+
+Detailed instructions by execution order:
+
+1. Fast audit only
+- Inspect report architecture, generators, preview components, export or PDF flow, shared table and chart components, editable field handling, report persistence state, and major report entry points.
+- Identify only the highest-leverage blockers that prevent real use.
+- Keep the audit brief and practical.
+- Write the findings into:
+  /docs/overnight-report-hardening-log.md
+- Log only the top blockers and immediate plan.
+- Do not expand the audit into a long review.
+- Immediately begin implementation after the brief audit.
+- Explicitly note whether any shared-system work could affect QBR Prep. If yes, proceed only with compatibility-safe changes that preserve its current behavior.
+
+2. Shared infrastructure hardening
+Focus only on improvements that clearly benefit multiple report types.
+Examples include:
+- report data normalization
+- shared section rendering
+- safe defaults and fallback handling
+- table row rendering consistency
+- chart config consistency
+- export or PDF generation stability
+- editable field persistence
+- preview versus export parity
+- error handling and null safety
+
+Rules for this step:
+- Prefer targeted fixes over large refactors.
+- If a shared abstraction is messy but currently working, do not rebuild it unless it is actively blocking progress.
+- Any change that could affect QBR Prep is high risk and must preserve its current behavior.
+- After each meaningful improvement, run relevant validation.
+
+3. Bi-weekly completion pass
+Bi-weekly is the closest to done, so prioritize finishing it properly.
+For Bi-weekly:
+- ensure all intended sections render properly
+- ensure data mapping is correct and stable
+- ensure editable fields behave correctly
+- ensure preview is coherent
+- ensure export or PDF works if the pipeline exists
+- ensure fallbacks are graceful when a data source is missing
+- ensure output reads like a real usable report, not a dev stub
+- finish partial implementations where reasonable instead of leaving TODO-grade work
+
+4. Monthly advancement
+Use the stable patterns established in shared infrastructure and Bi-weekly.
+For Monthly:
+- align implementation to the existing monthly template and structure
+- complete the most important missing sections first
+- ensure KPI summary, strategic sections, tables, graphs, and editable content are functional where intended
+- wire up preview and export as far as realistically possible
+- remove obvious mismatch between template expectations and implemented structure
+- avoid speculative content generation patterns that are not already supported by the product direction
+
+5. Mid-Strategy and QBR leverage pass
+Only after higher priorities are handled:
+- identify what can be safely shared from Bi-weekly and Monthly
+- implement the most valuable structural progress
+- prioritize report generation, layout integrity, editable sections, and export readiness
+- create or finish real sections where the template already exists
+- do not inflate scope with broad redesigns
+- do not touch QBR Prep unless required for compatibility-safe shared behavior preservation
+
+6. Validation and cleanup
+Before ending the session:
+- run build, lint, and tests where available
+- manually validate the main touched flows
+- fix obvious regressions introduced during the session
+- remove dead code created during this session only if safe
+- do not spend time on unrelated cleanup
+- verify that QBR Prep behavior remains unchanged if any shared code was touched
+
+Decision framework:
+When choosing between possible tasks, use this order:
+1. Does it unblock real report generation or export?
+2. Does it improve a shared system used by multiple reports?
+3. Does it finish a nearly complete feature instead of starting a new one?
+4. Does it reduce manual cleanup needed by the user?
+5. Does it improve clarity or reliability for something already implemented?
+6. Can it be done without risking QBR Prep?
+
+Stop rules:
+Stop only when one of these is true:
+- the highest-priority feasible work is complete
+- you hit a true blocker
+- additional work would likely create unstable speculative changes
+- the next available step would require risky or unnecessary changes to QBR Prep
+
+Required logging:
+Maintain /docs/overnight-report-hardening-log.md throughout the session.
+Update it after each major milestone with:
+- what you changed
+- why it mattered
+- files touched
+- validation performed
+- whether QBR Prep was affected
+- remaining blockers
+- next best steps
+
+Required end-of-session summary:
+At the end, output a concise but complete summary including:
+1. What was completed
+2. What was partially completed
+3. What is still blocked
+4. Exact files changed
+5. Highest-risk unresolved issues
+6. Whether QBR Prep was touched, and if so, exactly how
+7. Recommended next prompt for the next work session
+
+Behavioral guardrails:
+- Do not ask broad strategy questions.
+- Do not dump analysis without implementation.
+- Do not start with UI polish.
+- Do not make assumptions that conflict with existing templates or docs.
+- Do not over-engineer.
+- Do not treat the execution order as permission to stop between steps.
+- Do not “improve” QBR Prep unless the change is strictly necessary, compatibility-safe, and non-destructive.
+- Make the app better in a real, reviewable, production-oriented way.

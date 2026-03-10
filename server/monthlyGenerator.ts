@@ -6,6 +6,7 @@ import { querySemrush, handlesSemrushCommand } from "./semrushClient";
 import { fetchAirtableWorkLog } from "./airtable";
 import { fetchAsanaWorkLog, asanaSectionToCategory, groupAsanaTasks } from "./asanaClient";
 import { clusterQueriesByTopic, topicAdmitConnection } from "./qbrPrepHelpers";
+import { fetchNsmGoalsForSpecificQuarter } from "./sheetsClient";
 import type { Slide } from "../client/src/components/report-preview/pptx-preview";
 import { type GapContext } from "./gapAnswerContext";
 
@@ -141,6 +142,7 @@ export async function generateMonthly(input: {
     gscTopicClusterData,
     gscDailyTrend,
     ga4DailyTrend,
+    nsmResult,
   ] = await Promise.allSettled([
     handlesGscCommand("gsc_qoq_queries" as any)
       ? queryGsc("gsc_qoq_queries" as any, client, calMonthRange)
@@ -180,6 +182,7 @@ export async function generateMonthly(input: {
     fetchGscQueryRowsForTopicClustering(client, calMonthRange),
     fetchGscDailyTrend(client, calMonthRange),
     fetchGa4DailyTrend(client, calMonthRange),
+    fetchNsmGoalsForSpecificQuarter(client.name, Math.ceil(input.month / 3), input.year).catch(() => null),
   ]);
 
   const slides: Slide[] = [];
@@ -379,7 +382,7 @@ export async function generateMonthly(input: {
 
   // ─── SLIDE 4: QTD Key Performance Indicators ─────────────────────
   // Primary: GA4 QTD organic sessions + conversions, CallRail QTD calls.
-  // Goals require NSM Tracker integration (not connected) — shown as "Manual entry needed".
+  // Goals from NSM Tracker (Google Sheets).
   const qtdRows: (string | number)[][] = [];
 
   const ga4QtdSummary =
@@ -402,10 +405,55 @@ export async function generateMonthly(input: {
   const qNum = Math.ceil(input.month / 3);
   const qtdLabel = `Q${qNum} ${input.year} to date`;
 
+  const nsmGoals = nsmResult.status === "fulfilled" ? nsmResult.value : null;
+  const ME = "—";
+
+  function pctToGoal(actual: string | number, goal: string): string {
+    const a = typeof actual === "number" ? actual : parseFloat(String(actual).replace(/[^0-9.-]/g, ""));
+    const g = parseFloat(String(goal).replace(/[^0-9.-]/g, ""));
+    if (isNaN(a) || isNaN(g) || g === 0) return ME;
+    return `${Math.round((a / g) * 100)}%`;
+  }
+
+  function onTrackStatus(actual: string | number, goal: string): string {
+    const a = typeof actual === "number" ? actual : parseFloat(String(actual).replace(/[^0-9.-]/g, ""));
+    const g = parseFloat(String(goal).replace(/[^0-9.-]/g, ""));
+    if (isNaN(a) || isNaN(g) || g === 0) return ME;
+    const pct = a / g;
+    if (pct >= 0.9) return "On Track";
+    if (pct >= 0.7) return "Monitor";
+    return "At Risk";
+  }
+
+  const sessGoal = nsmGoals?.sessionsGoal && nsmGoals.sessionsGoal !== ME ? nsmGoals.sessionsGoal : null;
+  const mvpGoal = nsmGoals?.mvpGoal && nsmGoals.mvpGoal !== ME ? nsmGoals.mvpGoal : null;
+  const rawMvpType = nsmGoals?.mvpType && nsmGoals.mvpType !== ME ? nsmGoals.mvpType : null;
+  const mvpType = rawMvpType ?? "Calls";
+  const isMvpCallBased = !rawMvpType || /call/i.test(rawMvpType);
+  const mvpActual = isMvpCallBased ? qtdCalls : qtdConversions;
+
   qtdRows.push(
-    ["Organic Sessions", qtdSessions, "Manual entry needed", "—", "—"],
-    ["Organic Conversions / Leads", qtdConversions, "Manual entry needed", "—", "—"],
-    ["Qualified Calls", qtdCalls, "Manual entry needed", "—", "—"]
+    [
+      "Organic Sessions",
+      qtdSessions,
+      sessGoal ?? "Manual entry needed",
+      sessGoal ? pctToGoal(qtdSessions, sessGoal) : ME,
+      sessGoal ? onTrackStatus(qtdSessions, sessGoal) : ME,
+    ],
+    [
+      "Organic Conversions / Leads",
+      qtdConversions,
+      "Manual entry needed",
+      ME,
+      ME,
+    ],
+    [
+      `Qualified ${mvpType}`,
+      mvpActual,
+      mvpGoal ?? "Manual entry needed",
+      mvpGoal ? pctToGoal(mvpActual, mvpGoal) : ME,
+      mvpGoal ? onTrackStatus(mvpActual, mvpGoal) : ME,
+    ]
   );
 
   slides.push({
@@ -672,7 +720,7 @@ export async function generateMonthly(input: {
       "Continue publishing scheduled content pieces.",
       "Review and resolve technical SEO findings from latest crawl.",
       "Monitor keyword ranking changes and adjust content strategy as needed.",
-      "Prepare QTD KPI goals for leadership review — connect NSM Tracker for automated pull."
+      "Review QTD KPI goals with leadership ahead of next planning cycle."
     );
   }
 

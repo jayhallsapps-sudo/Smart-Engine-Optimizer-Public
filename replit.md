@@ -41,3 +41,11 @@ SmartEO integrates with the following external services and APIs:
 -   **PostgreSQL** (Database)
 -   **Google Docs** (for QSSB via Replit connector)
 -   **Notion** (for Strategy Bank via Replit connector)
+-   **Google Sheets** (NSM Tracker — via Google Drive Replit connector)
+
+## NSM Tracker Integration
+The NSM (North Star Metric) Tracker is a Google Sheets-based goal tracking system. `fetchNsmGoals()` in `server/sheetsClient.ts` retrieves session goals, MVP goals (calls/admits), and on-track status for each client. NSM data is wired into:
+- **Monthly generator**: QTD KPI slide (Slide 4) — Goal, % to Goal, Status columns
+- **QBR Full generator**: NSM Next-Quarter Goals slide (Slide 15) — NSM Tracker goals override smart projections when available
+- **Bi-weekly generator**: Performance Pulse section — NSM metrics displayed alongside GA4/GSC/CallRail data
+- **Dashboard**: Client Info tab — NSM quarter, goals, actuals, and on-track status

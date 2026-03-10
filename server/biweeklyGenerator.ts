@@ -262,7 +262,7 @@ export async function generateBiweekly(input: {
   }
 
   if (callTrackingResult.status === "fulfilled" && callTrackingResult.value) {
-    const callSource = (client as any).callrailCompanyId ? "CallRail" : (client as any).ctmAccountId ? "CallRail" : "CallRail";
+    const callSource = (client as any).callrailCompanyId ? "CallRail" : (client as any).ctmAccountId ? "CTM" : "Call Tracking";
     const summary = (callTrackingResult.value as any).summary ?? [];
     for (const s of summary.slice(0, 2)) {
       if (!EXCLUDED_PULSE_LABELS.has(s.label)) {
@@ -272,17 +272,22 @@ export async function generateBiweekly(input: {
   }
 
   const nsmGoals = nsmResult.status === "fulfilled" ? nsmResult.value : null;
-  if (nsmGoals) {
+  const nsmHasData = nsmGoals && (
+    (nsmGoals.sessionsGoal && nsmGoals.sessionsGoal !== "—") ||
+    (nsmGoals.mvpGoal && nsmGoals.mvpGoal !== "—")
+  );
+  if (nsmGoals && nsmHasData) {
+    const mvpLabel = nsmGoals.mvpType && nsmGoals.mvpType !== "—" ? nsmGoals.mvpType : "MVP";
     pulseMetrics.push(
       { label: "NSM Quarter",          current: nsmGoals.quarter, source: "NSM" },
       { label: "NSM Sessions Goal",     current: nsmGoals.sessionsGoal, source: "NSM" },
       { label: "NSM Sessions Actual",   current: nsmGoals.sessionsActual, source: "NSM" },
       { label: "NSM Sessions %",        current: nsmGoals.sessionsPercent, source: "NSM" },
       { label: "NSM Sessions On Track", current: nsmGoals.sessionsOnTrack, source: "NSM" },
-      { label: `NSM MVP (${nsmGoals.mvpType}) Goal`,    current: nsmGoals.mvpGoal, source: "NSM" },
-      { label: `NSM MVP (${nsmGoals.mvpType}) Actual`,  current: nsmGoals.mvpActual, source: "NSM" },
-      { label: `NSM MVP (${nsmGoals.mvpType}) %`,       current: nsmGoals.mvpPercent, source: "NSM" },
-      { label: `NSM MVP (${nsmGoals.mvpType}) On Track`,current: nsmGoals.mvpOnTrack, source: "NSM" },
+      { label: `NSM ${mvpLabel} Goal`,    current: nsmGoals.mvpGoal, source: "NSM" },
+      { label: `NSM ${mvpLabel} Actual`,  current: nsmGoals.mvpActual, source: "NSM" },
+      { label: `NSM ${mvpLabel} %`,       current: nsmGoals.mvpPercent, source: "NSM" },
+      { label: `NSM ${mvpLabel} On Track`,current: nsmGoals.mvpOnTrack, source: "NSM" },
     );
   }
 

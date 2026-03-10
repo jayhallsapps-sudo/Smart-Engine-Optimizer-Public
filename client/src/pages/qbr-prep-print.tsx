@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import swoopHeaderFallback from "@assets/HEADER_IMAGE_1773063127856.png";
 import { ReportTable, SourceBadge, getCustomRows } from "../components/report-preview/report-table";

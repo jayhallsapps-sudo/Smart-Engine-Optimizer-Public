@@ -1,0 +1,693 @@
+We are implementing the final logic hardening pass for QBR Snapshot. Treat this as a strict engineering task with defined acceptance criteria. Do not interpret loosely. Do not rewrite surrounding systems. Do not make “smart” substitutions outside the scope below.
+
+Objective:
+Fix two final issues in QBR Snapshot generation and rendering:
+
+Section 1: What Matters Most This Quarter
+
+Section 2: Where Conversions Actually Happen
+
+These two sections must behave like a defensible client-facing strategic artifact. No filler. No dead-end rows when inference is possible. No lazy “0%” logic. Reporting must tie back to business outcomes and expectation-setting must be explicit.
+
+NON-NEGOTIABLE SCOPE RULES
+
+Only change logic/presentation for:
+
+QBR Snapshot Section 1
+
+QBR Snapshot Section 2
+
+Do not modify:
+
+unrelated report sections
+
+unrelated report types
+
+scoring systems outside the fields needed to support these two sections
+
+save/load behavior unless required to preserve this section output
+
+export behavior unless required to preserve this section output
+
+Do not introduce:
+
+placeholder text
+
+fake certainty
+
+empty strategic commentary
+
+default dead-end rows when inference is available
+
+Any missing-data handling must prefer:
+
+evidence first
+
+inference second
+
+explicit limitation language third
+Never stop at “no data” if a defensible inference path exists.
+
+==================================================
+PART A — SECTION 1: WHAT MATTERS MOST THIS QUARTER
+
+Current problem:
+“Goal Shift vs Last Quarter” is currently allowed to show raw “0%” without strategic interpretation. That is not acceptable. If a goal is unchanged, the system must explicitly justify why it is being held at par instead of raised or reduced.
+
+SECTION 1 REQUIRED TABLE SHAPE
+
+Keep these columns exactly:
+
+Goal Type
+
+Goal
+
+Source
+
+Goal Shift vs Last Quarter
+
+Reason
+
+Do not rename them.
+
+A1. GOAL SHIFT DISPLAY RULES
+
+Implement these exact display rules for “Goal Shift vs Last Quarter”:
+
+Always calculate shift as a percentage against the prior quarter’s goal.
+
+Formula:
+goalShiftPct = ((currentQuarterGoal - priorQuarterGoal) / priorQuarterGoal) * 100
+
+Presentation rules:
+
+If goalShiftPct > 0, display signed percentage, example: +8%
+
+If goalShiftPct < 0, display signed percentage, example: -12%
+
+If goalShiftPct === 0, display: Par
+
+Important:
+
+“Par” is presentation only
+
+underlying logic value remains numeric zero if needed for sorting/internal logic
+
+exported output must also show “Par”, not “0%”
+
+Never show raw “0%” in preview or export for this field.
+
+Acceptance criteria:
+
+unchanged goal => “Par”
+
+increased goal => signed positive percent
+
+decreased goal => signed negative percent
+
+A2. REQUIRED REASON GENERATION LOGIC
+
+The “Reason” column must never be generic. It must explain why the goal is:
+
+held at par
+
+increased
+
+decreased
+
+For every row in Section 1, the system must do the following:
+
+Step 1:
+Identify current planned quarter goal.
+
+Step 2:
+Identify prior quarter goal for the same metric.
+
+Step 3:
+Calculate shift classification:
+
+PAR if equal
+
+UP if current > prior
+
+DOWN if current < prior
+
+Step 4:
+Pull supporting context where available from:
+
+prior quarter actual performance
+
+current quarter pacing to date
+
+comparable prior-period pacing if available
+
+tracking reliability
+
+structural/technical constraints
+
+conversion-path maturity
+
+known opportunity strength
+
+Step 5:
+Generate a reason that explicitly explains why the chosen target level is justified.
+
+A3. REASON CONTENT RULES BY CLASSIFICATION
+
+If classification = PAR:
+The reason must explain why the goal is being held rather than raised or lowered.
+
+Acceptable content patterns:
+
+maintaining target because performance does not yet justify expansion
+
+maintaining target because softness appears tied to fixable tracking/structural issues rather than lack of opportunity
+
+maintaining target because stabilization work is needed before goal expansion
+
+maintaining target because current pacing is close enough to historical benchmark to support holding the line
+
+If classification = UP:
+The reason must explain why a higher goal is justified.
+
+Acceptable content patterns:
+
+prior actuals or pacing support higher target
+
+improvement in intent, visibility, or conversion performance supports expansion
+
+stronger funnel signals justify a more aggressive goal
+
+If classification = DOWN:
+The reason must explain why a lower goal is justified.
+
+Acceptable content patterns:
+
+current pacing trails relevant benchmark enough to make prior target unrealistic
+
+unresolved structural or tracking issues reduce confidence in holding prior goal
+
+demand softness or conversion weakness warrants a more conservative target
+
+A4. PACING COMPARISON REQUIREMENT
+
+If pacing data exists, Section 1 reason generation must use it.
+
+Required comparison concept:
+Compare where the account was tracking by this point in time against the comparable prior-period checkpoint.
+
+Example:
+If planning Q2 on March 10, compare current-quarter pacing through March 10 against comparable prior-quarter or prior-period pacing through the equivalent point, where data structure supports it.
+
+Purpose:
+Determine whether “Par” is actually defensible.
+
+Decision influence:
+
+If current pacing is materially weaker, system must consider whether flat goal is too aggressive
+
+If current pacing is materially stronger, system must consider whether an increase is justified
+
+If current pacing is similar, Par may be justified
+
+Important:
+If the model still chooses Par despite weaker pacing, the Reason must explicitly say why the target is still being held.
+
+A5. MISSING OR PARTIAL DATA RULES
+
+If data is incomplete:
+
+Do not fabricate certainty
+
+Do not output blank reason
+
+Do not use “actuals pending” as the whole explanation
+
+Do state the limitation briefly
+
+Do still provide the most defensible rationale available
+
+Forbidden examples:
+
+“Actuals pending.”
+
+“No data available.”
+
+“Goal unchanged from last quarter.”
+
+Acceptable pattern:
+“Par. We are maintaining the prior-quarter target because available pacing does not yet justify expansion, and the main performance constraint appears to be structural/tracking-related rather than a collapse in underlying opportunity.”
+
+A6. SECTION 1 OUTPUT REQUIREMENTS
+
+For every row in Section 1:
+
+Goal Shift vs Last Quarter must render correctly
+
+Reason must be strategic, readable, and specific
+
+Reason must reflect actual classification
+
+Reason must reference available evidence or limitations
+
+No generic one-liners
+
+No repeated template phrasing across all rows if row contexts differ
+
+==================================================
+PART B — SECTION 2: WHERE CONVERSIONS ACTUALLY HAPPEN
+
+Current problem:
+Top Converting Pages cannot remain blank or collapse into “No qualified data yet” just because direct GA4 conversion landing-page data is missing. We must infer what we can about engagement and likely conversion-support behavior.
+
+SECTION 2 REQUIRED BEHAVIOR
+
+There are two relevant subsections:
+
+Top Converting Pages
+
+Top Conversion Patterns
+
+Primary fix focus:
+Top Converting Pages must never be empty or dead-end when inference is possible.
+
+B1. TOP CONVERTING PAGES FALLBACK HIERARCHY
+
+Implement this exact fallback order for populating Top Converting Pages:
+
+Priority 1:
+Direct GA4 conversion landing-page data
+
+Priority 2:
+Call tracking landing-page or source-page data
+
+Priority 3:
+Organic landing pages with strongest commercial/admissions intent
+
+Priority 4:
+Organic/GMB/AI-LLM call source patterns tied to likely admissions-path pages
+
+Priority 5:
+Likely conversion-support pages inferred from site structure and intent, including:
+
+homepage
+
+contact page
+
+verify insurance page
+
+primary service pages
+
+location pages
+
+strongest high-intent organic landing pages
+
+trust/support pages where clearly relevant
+
+The system must stop at the first usable layer, but if higher layers are sparse and lower layers materially improve usefulness, it is acceptable to blend direct evidence plus clearly labeled inference.
+
+B2. DO NOT DEFAULT TO DEAD-END ROWS
+
+Do not output rows like:
+
+“No qualified data yet”
+
+“No qualifying conversion page identified”
+
+unless ALL of the following are true:
+
+no direct conversion page data exists
+
+no call tracking page/source data exists
+
+no organic landing page data exists
+
+no high-intent admissions-path page inference is possible
+
+no meaningful site-structure-based conversion-support hypothesis can be formed
+
+That case should be rare.
+
+B3. INFERENCE LABELING RULES
+
+Whenever a row is not directly verified by conversion attribution, the Notes / What We’re Learning field must explicitly label it as inference.
+
+Allowed labels:
+
+Inference:
+
+Directional inference:
+
+Confidence-weighted inference:
+
+High-confidence inference:
+
+Moderate-confidence inference:
+
+Low-confidence inference:
+
+Use one of those at the start of the note when the row is inferred.
+
+Do not add a separate confidence column unless already trivial to support. Put confidence in the note only.
+
+B4. NOTES / WHAT WE’RE LEARNING REQUIREMENTS
+
+Every row in Top Converting Pages must teach something useful.
+
+Each note must do at least one of the following:
+
+explain why the page is likely conversion-supportive
+
+explain what kind of intent it reflects
+
+explain what evidence supports the hypothesis
+
+explain what tracking gap limits certainty
+
+explain what validation step should come next
+
+Forbidden note patterns:
+
+generic filler
+
+“populate this table”
+
+“tracking needed”
+
+“no data found” with nothing else
+
+restating the page name with no insight
+
+Acceptable examples:
+
+“Directional inference: The homepage is likely supporting a meaningful share of conversion activity because it remains a primary branded entry point and routes users toward service and admissions pages.”
+
+“Moderate-confidence inference: This detox-related page likely supports conversion activity because detox queries are near-decision and the page sits close to the admissions path, even though page-level conversion attribution is not confirmed.”
+
+“Inference: Direct GA4 conversion landing-page data is unavailable, so this page is being treated as a likely conversion-support URL based on entry volume, treatment intent, and proximity to contact and insurance actions.”
+
+B5. ACCOUNT-TYPE-SPECIFIC RULE
+
+For accounts where the measurable type includes broader mixed-source outcomes such as:
+
+organic + GMB + AI LLM calls
+or similar call/source blends
+
+the system must not stop at “no GA4 conversion data.”
+
+Instead it must:
+
+use available mixed-source context
+
+look at organic/GMB/call-source patterns
+
+infer likely page-level conversion-support URLs from that evidence stack
+
+populate Top Converting Pages with the best defensible candidates
+
+Anchored Tides-style behavior requirement:
+If the measured business outcome stack includes organic + GMB + AI LLM calls, the system should use that context to infer likely high-intent page candidates rather than leaving the table effectively blank.
+
+B6. PAGE CANDIDATE PRIORITIZATION RULES
+
+When inference is needed, prioritize candidate pages in this general order:
+
+pages directly tied to admission/contact action
+
+contact
+
+verify insurance
+
+admissions-related pages
+
+high-intent service pages
+
+detox
+
+residential treatment
+
+rehab program pages
+
+core modality/service pages
+
+branded/high-traffic routing pages
+
+homepage
+
+major brand entry pages
+
+location pages where local intent is meaningful
+
+trust/support pages if evidence suggests they plausibly assist conversion
+
+Do not randomly select pages. Candidate ranking must reflect:
+
+entry importance
+
+commercial/admissions intent
+
+funnel proximity
+
+likely contribution to calls or lead actions
+
+B7. IF DIRECT DATA EXISTS
+
+If direct conversion landing-page data or direct call tracking landing-page data exists:
+
+use it
+
+prioritize it over inference
+
+still allow note commentary on intent and tracking gaps
+
+do not label direct evidence as inference
+
+If a row mixes direct data with interpretation, keep the evidence portion clear.
+
+==================================================
+PART C — IMPLEMENTATION LOGIC REQUIREMENTS
+
+Implement the following exact logic behavior.
+
+C1. SECTION 1 PSEUDOLOGIC
+
+For each Section 1 row:
+
+inputs:
+
+currentQuarterGoal
+
+priorQuarterGoal
+
+priorQuarterActual if available
+
+currentQuarterPacingToDate if available
+
+comparablePriorPeriodPacing if available
+
+sourceType
+
+knownStructuralIssues if available
+
+knownTrackingIssues if available
+
+knownOpportunitySignals if available
+
+logic:
+
+calculate goalShiftPct
+
+determine displayShift:
+
+if pct == 0 => "Par"
+
+if pct > 0 => signed rounded percent
+
+if pct < 0 => signed rounded percent
+
+classify row:
+
+PAR / UP / DOWN
+
+assemble evidence summary from available inputs
+
+generate reason:
+
+classification-aware
+
+evidence-aware
+
+not generic
+
+not blank
+
+render row
+
+C2. SECTION 2 PSEUDOLOGIC
+
+For Top Converting Pages:
+
+try direct GA4 conversion landing pages
+
+if insufficient, try call tracking landing/source pages
+
+if insufficient, try high-intent organic landing pages
+
+if insufficient, try broader organic/GMB/AI-LLM source patterns
+
+if insufficient, infer likely conversion-support pages from page intent + site structure
+
+populate table with best available candidates
+
+for each inferred row:
+
+prefix note with approved inference label
+
+explain why page likely matters
+
+explain limitation if needed
+
+only output dead-end state if all layers fail
+
+Definition of “insufficient”:
+Not enough usable rows to make the section informative.
+Use reasonable minimum:
+
+if only one weak row exists and stronger inference is available, enrich section
+
+do not stop early just because one low-quality row exists
+
+==================================================
+PART D — QA / ACCEPTANCE CRITERIA
+
+Do not mark complete until all checks below pass.
+
+SECTION 1 QA
+
+Raw “0%” no longer appears in preview
+
+Raw “0%” no longer appears in export
+
+Unchanged goals display “Par”
+
+Increased goals display signed positive percentages
+
+Decreased goals display signed negative percentages
+
+Every Section 1 row has a non-generic Reason
+
+Reason content changes appropriately for Par vs Up vs Down
+
+Available pacing context influences reasoning where present
+
+Incomplete data does not produce blank or lazy reasons
+
+SECTION 2 QA
+10. Top Converting Pages no longer defaults to “No qualified data yet” when inference is possible
+11. Direct data is used when present
+12. Fallback hierarchy is followed when direct data is missing
+13. Inferred rows are clearly labeled as inference in notes
+14. Notes contain useful insight, not filler
+15. Mixed-source call contexts like organic + GMB + AI LLM calls can still populate the table
+16. Section remains informative under imperfect attribution conditions
+17. Dead-end state appears only when every inference path truly fails
+
+REGRESSION QA
+18. Preview still renders
+19. Export still renders
+20. Saved snapshot loading still renders these sections correctly
+21. No unrelated section regressions
+22. No broken type/notes mismatches in affected tables
+23. No placeholder copy introduced
+
+==================================================
+PART E — REQUIRED TEST SCENARIOS
+
+You must test and report all of these:
+
+SECTION 1 TESTS
+
+unchanged goal => displays Par
+
+increased goal => displays positive percent
+
+decreased goal => displays negative percent
+
+unchanged goal with weaker pacing => reason explains why Par is still held or indicates reduction if logic supports it
+
+unchanged goal with stronger pacing => reason explains whether Par remains justified
+
+incomplete pacing data => reason still useful and not lazy
+
+SECTION 2 TESTS
+7. direct GA4 conversion page data available
+8. no GA4 direct data but call tracking landing/source data available
+9. no direct conversion data but high-intent organic landing pages available
+10. no direct data but mixed-source organic + GMB + AI LLM evidence available
+11. only site-structure inference available
+12. truly no viable inference path available
+
+==================================================
+PART F — REQUIRED COMPLETION REPORT FORMAT
+
+Return a formal completion report with these exact sections:
+
+Files changed
+
+list every file changed
+
+Logic changed
+
+exact Section 1 logic changes
+
+exact Section 2 logic changes
+
+Goal Shift implementation
+
+formula
+
+Par display rule
+
+reason-generation rule summary
+
+Top Converting Pages fallback implementation
+
+exact hierarchy implemented
+
+note labeling behavior
+
+dead-end suppression behavior
+
+QA scenarios tested
+
+one line per scenario
+
+pass/fail
+
+what rendered
+
+Before/after examples
+Provide one before/after example for:
+
+Section 1 using Anchored Tides-style data
+
+Section 2 using Anchored Tides-style data
+
+Regression check
+
+preview
+
+export
+
+saved load
+
+unrelated sections untouched
+
+Final status
+
+explicitly state whether the task is fully complete
+
+Do not return a vague summary.
+Do not say “should be fixed.”
+Do not say “likely resolved.”
+Return proof-oriented output only.

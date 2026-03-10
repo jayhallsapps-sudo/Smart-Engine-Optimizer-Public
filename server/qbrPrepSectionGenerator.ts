@@ -967,7 +967,7 @@ function computeGoalShiftPct(currentGoal: string, prevGoal: string): string {
   const prev = parseInt(String(prevGoal).replace(/[^0-9]/g, ""), 10);
   if (isNaN(curr) || isNaN(prev) || prev === 0) return "—";
   const pct = Math.round(((curr - prev) / prev) * 100);
-  if (pct === 0) return "0%";
+  if (pct === 0) return "Par";
   return pct > 0 ? `+${pct}%` : `${pct}%`;
 }
 
@@ -1019,6 +1019,35 @@ function buildPrimaryGoalReason(p: {
       ? `${callTrackingProvider} configured as tracking source.`
       : "Connect a call tracking source to begin tracking.";
     parts.push(`${primaryKpiLabel} is the primary KPI. ${sourceNote}`);
+  }
+
+  // ── Sentence 3: Shift classification rationale ────────────────────────────
+  const shiftClass =
+    admitsShift === "Par" ? "PAR" :
+    admitsShift.startsWith("+") ? "UP" :
+    admitsShift.startsWith("-") ? "DOWN" : null;
+
+  if (shiftClass === "PAR" && nsmMvpGoalNum !== null && nsmMvpActNum !== null) {
+    const pacing = nsmMvpActNum / nsmMvpGoalNum;
+    const pacingPct = Math.round(pacing * 100);
+    if (pacing >= 0.7) {
+      parts.push(`Goal held at par from prior quarter — pacing at ${pacingPct}% of target is within the range where the prior goal remains the appropriate planning anchor and expansion is not yet warranted.`);
+    } else {
+      parts.push(`Goal held at par despite softer pacing at ${pacingPct}% — the performance gap appears tied to conversion path and tracking quality rather than a collapse in underlying demand, so the target is maintained while those constraints are addressed.`);
+    }
+  } else if (shiftClass === "PAR" && nsmMvpGoalNum !== null) {
+    parts.push(`Goal held at par from prior quarter — actuals not yet recorded for this period, so the prior-quarter goal serves as the planning anchor until in-quarter pacing data becomes available.`);
+  } else if (shiftClass === "UP" && nsmMvpGoalNum !== null && nsmMvpActNum !== null) {
+    const pacing = nsmMvpActNum / nsmMvpGoalNum;
+    if (pacing >= 0.9) {
+      parts.push(`Increase is supported by on-pace trajectory — prior actuals and current pacing both indicate the account can absorb a higher target without overstating realistic expectations.`);
+    } else {
+      parts.push(`Increase reflects directional growth opportunity — pacing will need to improve to validate the higher target, but setting a higher anchor reinforces the strategic intent for the quarter.`);
+    }
+  } else if (shiftClass === "DOWN" && nsmMvpGoalNum !== null && nsmMvpActNum !== null) {
+    const pacing = nsmMvpActNum / nsmMvpGoalNum;
+    const pacingPct = Math.round(pacing * 100);
+    parts.push(`Reduction reflects current pacing at ${pacingPct}% of the prior target — holding the prior goal while tracking this far behind would misrepresent realistic expectations and undermine priority-setting for the quarter.`);
   }
 
   return parts.length > 0
@@ -1080,7 +1109,7 @@ function generateSection1(nsmData: any, ga4Funnel: any, quarter: QuarterInfo, cl
           : Math.round(nsmMvpGoalNum! * 0.95);
       admitsGoalDisplay = `${fmtNum(nextTarget)} ${kpiLower}`;
       if (admitsShift === "—") {
-        admitsShift = pacing >= 0.9 ? "+5%" : pacing >= 0.7 ? "0%" : "-5%";
+        admitsShift = pacing >= 0.9 ? "+5%" : pacing >= 0.7 ? "Par" : "-5%";
       }
       admitsReason = pacing >= 0.9
         ? `${primaryKpiLabel} on pace (${nsmMvpActNum}/${nsmMvpGoalNum}). Slight increase is achievable given current trajectory. Calls are tracked via ${callTrackingProvider ?? "call tracking"}.`
@@ -1125,7 +1154,7 @@ function generateSection1(nsmData: any, ga4Funnel: any, quarter: QuarterInfo, cl
   // ── Secondary Goal: Calls ──────────────────────────────────────────────
   const callsSource = callTrackingProvider ?? ME;
   let callsGoal: string = ME;
-  let callsShift = "0%";
+  let callsShift = "—";
   let callsReason = callTrackingProvider
     ? `Qualified organic calls tracked via ${callTrackingProvider}. Calls serve as the primary operational proxy for ${primaryKpiLabel.toLowerCase()} until a direct tracking source is confirmed.`
     : `${ME}: Call tracking provider not configured`;
@@ -1174,8 +1203,8 @@ function generateSection1(nsmData: any, ga4Funnel: any, quarter: QuarterInfo, cl
           sessReason = `On pace at ${sessPct} through current quarter. Modest increase is realistic given current trajectory.`;
         } else if (pacing >= 0.7) {
           sessRecommended = fmtNum(goalNum);
-          if (sessShift === "—") sessShift = "0%";
-          sessReason = `Tracking at ${sessPct} — maintaining current goal is realistic while addressing site improvements.`;
+          if (sessShift === "—") sessShift = "Par";
+          sessReason = `Tracking at ${sessPct} through current quarter. Goal held at par — pacing is within acceptable range of the prior-quarter target, and the performance gap is more likely attributable to content and technical factors being addressed in priorities than to a structural collapse in organic opportunity.`;
         } else {
           sessRecommended = fmtNum(Math.round(goalNum * 0.95));
           if (sessShift === "—") sessShift = "-5%";
@@ -1313,8 +1342,8 @@ function generateSection2(
     topConvertingPages.push(row);
   }
 
-  // Fallback P3 — GA4 has session data but no conversion events configured yet
-  // Use top session pages as proxies for likely conversion pages, noting the tracking gap
+  // P3 — GA4 has session data but no conversion events configured yet
+  // Use top session pages as directional proxies, labeled clearly as inference
   if (topConvertingPages.length === 0 && ga4Landing.length > 0) {
     const topBySession = ga4Landing
       .filter(r => (r.sessions ?? 0) > 0)
@@ -1326,20 +1355,82 @@ function generateSection2(
         type: clientReadableType(internalType),
         page: buildPagePattern(row.page, internalType, "GA4"),
         conversionSource: "GA4 (sessions only)",
-        notes: `${row.sessions.toLocaleString("en-US")} organic sessions recorded. Conversion event tracking not yet configured in GA4 — connect events to confirm whether sessions are converting to admissions actions.`,
+        notes: `Directional inference: ${row.sessions.toLocaleString("en-US")} organic sessions recorded this period. GA4 conversion events are not yet configured, so this page is treated as a likely conversion-support URL based on organic entry volume and page intent. Confirm by connecting GA4 conversion events aligned to admissions actions.`,
         dataSource: "GA4",
       });
       if (topConvertingPages.length >= 2) break;
     }
   }
 
-  // Final fallback — no GA4 data and no call-tracking rows exist
+  // P4 — Client-configured money pages as high-confidence inference
+  // Uses client.moneyPages to identify the most likely conversion-support URLs
+  if (topConvertingPages.length < 2 && (client.moneyPages?.length ?? 0) > 0) {
+    const intentMap: Record<string, { confidence: string; note: string }> = {
+      "contact":        { confidence: "High-confidence inference", note: "Contact and admissions pages are near-certain conversion-support URLs for treatment centers — they are the primary destination for users actively seeking intake information." },
+      "admissions":     { confidence: "High-confidence inference", note: "Admissions pages sit at the bottom of the conversion funnel — users reaching this page have moved past evaluation and are initiating the intake process." },
+      "insurance":      { confidence: "High-confidence inference", note: "Insurance verification pages are direct conversion-support pages — users checking coverage are one step away from committing to admission." },
+      "verify":         { confidence: "High-confidence inference", note: "Insurance verification pages are direct conversion-support pages — users checking coverage are one step away from committing to admission." },
+      "vob":            { confidence: "High-confidence inference", note: "VOB pages are direct conversion-support pages — users checking coverage are one step away from committing to admission." },
+      "detox":          { confidence: "Moderate-confidence inference", note: "Detox service pages attract near-decision query traffic — users researching detox are typically closer to admission than users at earlier awareness stages." },
+      "residential":    { confidence: "Moderate-confidence inference", note: "Residential treatment pages capture users comparing inpatient options — high intent relative to informational pages." },
+      "inpatient":      { confidence: "Moderate-confidence inference", note: "Inpatient program pages attract users making level-of-care decisions — typically mid-to-bottom funnel intent." },
+      "rehab":          { confidence: "Moderate-confidence inference", note: "Primary rehabilitation program page — likely supports a meaningful share of conversion activity given its funnel proximity to the admissions path." },
+      "treatment":      { confidence: "Moderate-confidence inference", note: "Core treatment program page — a likely conversion-support URL based on service intent and proximity to admissions actions." },
+      "php":            { confidence: "Moderate-confidence inference", note: "PHP program pages attract users actively comparing treatment intensity — meaningful intent signal." },
+      "iop":            { confidence: "Moderate-confidence inference", note: "IOP program pages attract users evaluating outpatient options — typically mid-funnel with real conversion potential." },
+      "program":        { confidence: "Moderate-confidence inference", note: "Program landing page likely supports conversion activity — users reviewing program details are actively evaluating fit before contacting admissions." },
+    };
+    for (const mp of (client.moneyPages ?? [])) {
+      if (topConvertingPages.length >= 2) break;
+      const path = mp.replace(/^https?:\/\/[^/]+/, "").toLowerCase();
+      if (seenPageKeys.has(path)) continue;
+      const internalType = classifyPageType(mp);
+      const displayType = clientReadableType(internalType);
+      // Pick the best matching intent label
+      const matchedKey = Object.keys(intentMap).find(k => path.includes(k));
+      const { confidence, note } = matchedKey
+        ? intentMap[matchedKey]
+        : { confidence: "Moderate-confidence inference", note: "Client-configured priority page — likely supports conversion activity based on its position in the admissions funnel, though direct attribution is not yet confirmed." };
+      seenPageKeys.add(path);
+      topConvertingPages.push({
+        type: displayType,
+        page: path || mp,
+        conversionSource: "Site Structure",
+        notes: `${confidence}: ${note}`,
+        dataSource: undefined,
+      });
+    }
+  }
+
+  // P5 — Structural inference from common treatment center admission-path patterns
+  // Only fires when no client money pages covered the key high-intent URLs
+  const structuralCandidates: Array<{ path: string; type: string; note: string }> = [
+    { path: "/contact", type: "Contact / Admissions", note: "High-confidence inference: Contact page is a near-certain conversion-support URL for any treatment center — it is the primary destination for admissions inquiries regardless of whether conversion tracking is active." },
+    { path: "/admissions", type: "Contact / Admissions", note: "High-confidence inference: Admissions page sits at the bottom of the conversion funnel — users reaching this page have moved past evaluation and are initiating the intake process." },
+    { path: "/insurance", type: "Verify Insurance", note: "High-confidence inference: Insurance verification pages are direct conversion-support pages — users checking coverage are typically one step away from committing to admission." },
+    { path: "/verify-insurance", type: "Verify Insurance", note: "High-confidence inference: VOB pages are direct conversion-support pages — users checking coverage before calling are one of the clearest pre-admission signals." },
+  ];
+  for (const sc of structuralCandidates) {
+    if (topConvertingPages.length >= 2) break;
+    if (seenPageKeys.has(sc.path)) continue;
+    seenPageKeys.add(sc.path);
+    topConvertingPages.push({
+      type: sc.type,
+      page: sc.path,
+      conversionSource: "Site Structure",
+      notes: sc.note,
+      dataSource: undefined,
+    });
+  }
+
+  // Final fallback — only fires when every inference layer truly fails
+  // (no GA4, no call tracking, no money pages, no structural inference — extremely rare)
   if (topConvertingPages.length === 0) {
     topConvertingPages.push({
       type: "No qualified data yet",
       page: "No qualifying conversion page identified",
       conversionSource: "GA4 / Call Tracking not detected",
-      notes: "No GA4 conversion events or call-tracking landing-page data found. Connect GA4 event tracking or a call tracking provider to populate this table.",
+      notes: "No GA4 conversion events, call-tracking data, or client-configured priority pages found. Connect GA4 event tracking or a call tracking provider to populate this table with verified conversion data.",
       dataSource: undefined,
     });
   }

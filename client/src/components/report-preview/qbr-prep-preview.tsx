@@ -430,7 +430,7 @@ export function QbrPrepPreview({
     <EditableCell key="g" editKey={`s1_${ri}_0`} value={r.goalType} edits={edits} onEdit={onEdit} />,
     <EditableCell key="go" editKey={`s1_${ri}_1`} value={r.goal} edits={edits} onEdit={onEdit} />,
     <EditableCell key="m" editKey={`s1_${ri}_2`} value={r.measurementSource} edits={edits} onEdit={onEdit} />,
-    <EditableCell key="gs" editKey={`s1_${ri}_3`} value={r.goalShift} edits={edits} onEdit={onEdit} />,
+    <EditableCell key="gs" editKey={`s1_${ri}_3`} value={r.goalShift === "0%" ? "Par" : r.goalShift} edits={edits} onEdit={onEdit} />,
     <EditableCell key="r" editKey={`s1_${ri}_4`} value={r.reason} edits={edits} onEdit={onEdit} />,
   ]);
 

@@ -88,6 +88,64 @@ function inferQuarterClient(dateStr: string): QuarterInfo {
   };
 }
 
+const SECTION2_INTENT_MAP: Record<string, { type: string; confidence: string; note: string }> = {
+  "contact":    { type: "Contact / Admissions", confidence: "High-confidence inference", note: "Contact and admissions pages are near-certain conversion-support URLs for treatment centers — they are the primary destination for users actively seeking intake information." },
+  "admissions": { type: "Contact / Admissions", confidence: "High-confidence inference", note: "Admissions pages sit at the bottom of the conversion funnel — users reaching this page have moved past evaluation and are initiating the intake process." },
+  "insurance":  { type: "Verify Insurance",     confidence: "High-confidence inference", note: "Insurance verification pages are direct conversion-support pages — users checking coverage are one step away from committing to admission." },
+  "verify":     { type: "Verify Insurance",     confidence: "High-confidence inference", note: "Insurance verification pages are direct conversion-support pages — users checking coverage are one step away from committing to admission." },
+  "vob":        { type: "Verify Insurance",     confidence: "High-confidence inference", note: "VOB pages are direct conversion-support pages — users checking coverage are one step away from committing to admission." },
+  "detox":      { type: "Service Page",         confidence: "Moderate-confidence inference", note: "Detox service pages attract near-decision query traffic — users researching detox are typically closer to admission than users at earlier awareness stages." },
+  "residential":{ type: "Service Page",         confidence: "Moderate-confidence inference", note: "Residential treatment pages capture users comparing inpatient options — high intent relative to informational pages." },
+  "inpatient":  { type: "Service Page",         confidence: "Moderate-confidence inference", note: "Inpatient program pages attract users making level-of-care decisions — typically mid-to-bottom funnel intent." },
+  "rehab":      { type: "Service Page",         confidence: "Moderate-confidence inference", note: "Primary rehabilitation program page — likely supports a meaningful share of conversion activity given its funnel proximity to the admissions path." },
+  "treatment":  { type: "Service Page",         confidence: "Moderate-confidence inference", note: "Core treatment program page — a likely conversion-support URL based on service intent and proximity to admissions actions." },
+  "php":        { type: "Service Page",         confidence: "Moderate-confidence inference", note: "PHP program pages attract users actively comparing treatment intensity — meaningful intent signal." },
+  "iop":        { type: "Service Page",         confidence: "Moderate-confidence inference", note: "IOP program pages attract users evaluating outpatient options — typically mid-funnel with real conversion potential." },
+  "program":    { type: "Service Page",         confidence: "Moderate-confidence inference", note: "Program landing page likely supports conversion activity — users reviewing program details are actively evaluating fit before contacting admissions." },
+};
+
+const SECTION2_STRUCTURAL_FALLBACKS = [
+  { path: "/contact",          type: "Contact / Admissions", note: "High-confidence inference: Contact page is a near-certain conversion-support URL for any treatment center — it is the primary destination for admissions inquiries regardless of whether conversion tracking is active." },
+  { path: "/admissions",       type: "Contact / Admissions", note: "High-confidence inference: Admissions page sits at the bottom of the conversion funnel — users reaching this page have moved past evaluation and are initiating the intake process." },
+  { path: "/insurance",        type: "Verify Insurance",     note: "High-confidence inference: Insurance verification pages are direct conversion-support pages for treatment centers — they are where users confirm coverage before committing to admission." },
+  { path: "/verify-insurance", type: "Verify Insurance",     note: "High-confidence inference: VOB pages are direct conversion-support pages — users checking coverage before calling are one of the clearest pre-admission signals." },
+];
+
+function migrateSection2DeadEnd(data: any, moneyPages: string[]): any {
+  if (!data?.section2Conversions?.topConvertingPages) return data;
+  const existing: any[] = data.section2Conversions.topConvertingPages;
+  const isDeadEnd = (r: any) =>
+    r.type === "No qualified data yet" ||
+    r.page === "No qualifying conversion page identified";
+  const realRows = existing.filter(r => !isDeadEnd(r));
+  if (realRows.length >= existing.length) return data;
+
+  const inferred: any[] = [...realRows];
+  const seen = new Set(inferred.map(r => (r.page ?? "").toLowerCase()));
+
+  for (const mp of moneyPages) {
+    if (inferred.length >= 2) break;
+    const path = mp.replace(/^https?:\/\/[^/]+/, "").toLowerCase() || mp.toLowerCase();
+    if (seen.has(path)) continue;
+    const matchedKey = Object.keys(SECTION2_INTENT_MAP).find(k => path.includes(k));
+    const info = matchedKey
+      ? SECTION2_INTENT_MAP[matchedKey]
+      : { type: "Priority Page", confidence: "Moderate-confidence inference", note: "Client-configured priority page — likely supports conversion activity based on its position in the admissions funnel, though direct attribution is not yet confirmed." };
+    seen.add(path);
+    inferred.push({ type: info.type, page: path, conversionSource: "Site Structure", notes: `${info.confidence}: ${info.note}` });
+  }
+
+  for (const s of SECTION2_STRUCTURAL_FALLBACKS) {
+    if (inferred.length >= 2) break;
+    if (seen.has(s.path)) continue;
+    seen.add(s.path);
+    inferred.push({ type: s.type, page: s.path, conversionSource: "Site Structure", notes: s.note });
+  }
+
+  const finalRows = inferred.length > 0 ? inferred : existing;
+  return { ...data, section2Conversions: { ...data.section2Conversions, topConvertingPages: finalRows } };
+}
+
 export default function QbrPrepPage() {
   const { toast } = useToast();
   const rqClient = useQueryClient();
@@ -582,12 +640,14 @@ export default function QbrPrepPage() {
                   const { hs, ht, clean } = extractVisFromEdits(savedEdits);
                   setHiddenSections(hs);
                   setHiddenTables(ht);
-                  setReportData(data);
+                  const currentClient = clients.find(c => String(c.id) === clientId);
+                  const migratedData = migrateSection2DeadEnd(data, currentClient?.moneyPages ?? []);
+                  setReportData(migratedData);
                   setEdits(clean);
                   setDataOrigin("saved");
                   reportSave.setSavedReportId(id);
                   reportSave.pendingPayloadRef.current = {
-                    reportData: data,
+                    reportData: migratedData,
                     edits: savedEdits,
                     meta: {
                       reportPeriodLabel: quarter.analysisWindowLabel,

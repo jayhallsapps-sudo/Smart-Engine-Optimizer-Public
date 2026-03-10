@@ -270,6 +270,7 @@ export default function MidStrategyPage() {
     try {
       const sid = await submitAnswers(Number(clientId), answers);
       generateMut.mutate({ gapAnswers: answers, gapSessionId: sid });
+      closeModal();
     } catch (err) {
       // Error handled in hook
     }

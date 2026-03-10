@@ -343,6 +343,7 @@ export default function QbrPrepPage() {
     try {
       const sid = await submitAnswers(Number(clientId), answers);
       generateMutation.mutate({ gapAnswers: answers, gapSessionId: sid });
+      closeModal();
     } catch (err) {
       // Error handled in hook
     }

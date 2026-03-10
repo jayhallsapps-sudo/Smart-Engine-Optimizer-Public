@@ -874,21 +874,10 @@ export async function generateQbrFull(input: {
     bullets: closingBullets.slice(0, 8),
   });
 
-  const amInputsBullets: string[] = [];
-  if (am.clientSentiment) amInputsBullets.push(`Client Sentiment: ${am.clientSentiment}`);
-  if (am.amThoughts?.trim()) amInputsBullets.push(`AM's Thoughts: ${am.amThoughts.trim()}`);
-  if (am.priorityChecks?.trim()) amInputsBullets.push(`Priority Checks: ${am.priorityChecks.trim()}`);
-  if (am.clientNotes?.trim()) amInputsBullets.push(`Client Notes: ${am.clientNotes.trim()}`);
-
-  if (amInputsBullets.length > 0) {
-    slides.push({
-      id: "am_inputs",
-      type: "bullets",
-      title: "AM Inputs",
-      subtitle: "Account Manager Context & Priorities",
-      bullets: amInputsBullets,
-    });
-  }
+  // AM Inputs standalone slide removed. Context from am.clientSentiment, amThoughts,
+  // priorityChecks, and clientNotes is used within individual sections above (enriched
+  // into strategic priorities via parseAmContext / enrichWithAmContext) rather than
+  // surfaced as a separate pre-read block.
 
   try {
     const [qssbData, strategyBank] = await Promise.all([fetchQssbData(), fetchStrategyBank()]);

@@ -902,23 +902,10 @@ function generateSlides(
     },
   };
 
-  const amInputsBullets: string[] = [];
-  if (amInputs.clientSentiment) amInputsBullets.push(`Client Sentiment: ${amInputs.clientSentiment}`);
-  if (amInputs.amThoughts?.trim()) amInputsBullets.push(`AM's Thoughts: ${amInputs.amThoughts.trim()}`);
-  if (amInputs.priorityChecks?.trim()) amInputsBullets.push(`Priority Checks: ${amInputs.priorityChecks.trim()}`);
-  if (amInputs.clientNotes?.trim()) amInputsBullets.push(`Client Notes: ${amInputs.clientNotes.trim()}`);
+  // AM Inputs standalone slide removed. AM context (sentiment, thoughts, priority checks,
+  // notes) is used inline within the relevant strategy sections above, not as a separate block.
 
   const allSlides = [s01, s02, s03, s04, s05, s06, s07, s08, s09, s10, s11, s12, s13, s14];
-
-  if (amInputsBullets.length > 0) {
-    allSlides.push({
-      id: "am_inputs",
-      type: "bullets",
-      title: "AM Inputs",
-      subtitle: "Account Manager Context & Priorities",
-      bullets: amInputsBullets,
-    });
-  }
 
   return allSlides;
 }

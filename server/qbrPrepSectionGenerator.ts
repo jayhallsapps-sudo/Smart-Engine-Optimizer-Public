@@ -1017,7 +1017,7 @@ function buildPrimaryGoalReason(p: {
     }
   } else if (nsmMvpGoalNum !== null) {
     const shiftNote = admitsShift !== "—" && admitsShift !== "Par" ? ` (${admitsShift} vs last quarter)` : admitsShift === "Par" ? " (Par vs last quarter)" : "";
-    parts.push(`Quarter-to-date: no tracked ${kpiLower} activity has been recorded yet this period${shiftNote}. The prior-quarter benchmark is the most reliable anchor for setting the current-quarter projection until in-quarter signal accumulates.`);
+    parts.push(`Quarter-to-date: zero tracked ${kpiLower} as of the report preparation date${shiftNote}. The prior-quarter goal is the strongest available anchor for the Q2 projection — zero QTD activity does not yet provide a signal to justify raising or lowering the target.`);
   } else if (nsmData) {
     parts.push(`No goal has been entered in the NSM tracker for this period — the projection is directional until a confirmed target is logged.`);
   } else {
@@ -1160,42 +1160,54 @@ function generateSection1(nsmData: any, ga4Funnel: any, quarter: QuarterInfo, cl
   // ── Secondary Goal: Calls ──────────────────────────────────────────────
   const callsSource = callTrackingProvider ?? ME;
   let callsGoal: string = ME;
-  let callsShift = "Par";
+  let callsShift = "—";
+  let callsHasPriorBenchmark = false;
   let callsReason = callTrackingProvider
-    ? `No quarter-to-date call volume has been recorded yet. Q2 call goal is held at par from the prior quarter — the prior-quarter benchmark remains the most reliable planning anchor until tracked volume accumulates this period.`
+    ? `Zero inbound calls recorded quarter-to-date as of the report preparation date. Q2 call goal is held at par as a planning default — adjust once tracked volume provides a QTD baseline.`
     : `${ME}: Call tracking provider not configured`;
 
   if (callTrackingSources.length > 0) {
     const totalCalls = callTrackingSources.reduce((s, r) => s + r.calls, 0);
     callsGoal = `${fmtNum(totalCalls)} tracked calls (QTD)`;
 
-    // Derive call shift from prior NSM sessions pacing as a proxy, or from primary goal pacing
+    // P1: compute from prior NSM calls goal if available
     const prevCallsGoalRaw = (prevNsmData as any)?.callsGoal ?? null;
     if (prevCallsGoalRaw && prevCallsGoalRaw !== "—") {
       callsShift = computeGoalShiftPct(String(totalCalls), String(prevCallsGoalRaw));
-    } else if (nsmMvpGoalNum !== null && nsmMvpActNum !== null) {
-      const pacing = nsmMvpActNum / nsmMvpGoalNum;
-      callsShift = pacing >= 0.9 ? "+5%" : pacing >= 0.7 ? "Par" : "-5%";
+      callsHasPriorBenchmark = true;
     }
 
-    const callsPacingDesc =
-      callsShift.startsWith("+") ? "tracking ahead of the prior benchmark" :
-      callsShift === "Par" ? "tracking at a level consistent with the prior benchmark" :
-      "tracking below the prior benchmark";
+    // P2: derive from primary KPI pacing if both goal and actuals are available
+    if (callsShift === "—" && nsmMvpGoalNum !== null && nsmMvpActNum !== null) {
+      const pacing = nsmMvpActNum / nsmMvpGoalNum;
+      callsShift = pacing >= 0.9 ? "+5%" : pacing >= 0.7 ? "Par" : "-5%";
+      // callsHasPriorBenchmark stays false — pacing proxy, not a direct comparison
+    }
 
-    if (callsShift.startsWith("+")) {
-      callsReason = `Quarter-to-date: ${fmtNum(totalCalls)} inbound calls recorded — ${callsPacingDesc}. The volume trend supports holding or modestly raising the call target, as the current run rate indicates prior-quarter performance was not a ceiling.`;
-    } else if (callsShift === "Par") {
-      callsReason = `Quarter-to-date: ${fmtNum(totalCalls)} inbound calls recorded — ${callsPacingDesc}. Call volume does not yet provide a strong signal for expansion or reduction, so Q2 is being held at par while conversion-path improvements are evaluated.`;
+    // P3: no prior benchmark and no pacing signal — planning default
+    if (callsShift === "—") {
+      callsShift = "Par";
+    }
+
+    if (callsHasPriorBenchmark) {
+      if (callsShift.startsWith("+")) {
+        callsReason = `Quarter-to-date: ${fmtNum(totalCalls)} inbound calls recorded — ahead of the prior-quarter calls benchmark. The volume trend supports a modest upward adjustment to the Q2 call target.`;
+      } else if (callsShift === "Par") {
+        callsReason = `Quarter-to-date: ${fmtNum(totalCalls)} inbound calls recorded — flat versus the prior-quarter calls benchmark. Volume is holding at the prior-quarter level, so Q2 is held at par while conversion-path improvements are evaluated.`;
+      } else {
+        callsReason = `Quarter-to-date: ${fmtNum(totalCalls)} inbound calls recorded — below the prior-quarter calls benchmark. The shortfall is more consistent with attribution or conversion-path friction than a structural drop in inbound demand, so Q2 is adjusted modestly rather than held flat at an unreachable prior target.`;
+      }
+    } else if (callsShift !== "Par") {
+      // Pacing proxy — directional, not a direct call-to-call comparison
+      const directionWord = callsShift.startsWith("+") ? "ahead of" : "below";
+      callsReason = `Quarter-to-date: ${fmtNum(totalCalls)} inbound calls recorded. No prior-quarter calls benchmark is logged in the NSM tracker — Q2 call direction is inferred from primary KPI pacing, which suggests performance ${directionWord} the current target. Confirm prior-quarter call data to replace this directional estimate with a direct comparison.`;
     } else {
-      callsReason = `Quarter-to-date: ${fmtNum(totalCalls)} inbound calls recorded — ${callsPacingDesc}. The shortfall appears more consistent with attribution or conversion-path friction than a fundamental drop in inbound demand, so Q2 is adjusted modestly rather than held flat at an unrealistic prior target.`;
+      // Planning default Par — no prior benchmark, no pacing signal
+      callsReason = `Quarter-to-date: ${fmtNum(totalCalls)} inbound calls recorded. No prior-quarter calls benchmark is available in the NSM tracker for a direct comparison — Q2 is held at par as a planning default. Adjust once prior-quarter call data is confirmed.`;
     }
   }
 
-  // Final safety: goalShift must never be "—"
-  if (callsShift === "—") callsShift = "Par";
-
-  console.log(`[Section1] Secondary Goal=Calls, source=${callsSource}, shift=${callsShift}`);
+  console.log(`[Section1] Secondary Goal=Calls, source=${callsSource}, shift=${callsShift}, hasPriorBenchmark=${callsHasPriorBenchmark}, prevCallsGoalRaw=${(prevNsmData as any)?.callsGoal ?? "null"}, nsmMvpActNum=${nsmMvpActNum}, nsmMvpGoalNum=${nsmMvpGoalNum}`);
 
   rows.push({
     goalType: "Secondary Goal",
@@ -1243,24 +1255,33 @@ function generateSection1(nsmData: any, ga4Funnel: any, quarter: QuarterInfo, cl
       }
     } else if (sessGoal) {
       sessRecommended = fmtNum(parseInt(String(sessGoal).replace(/[^0-9]/g, ""), 10));
-      if (sessShift === "—") sessShift = "Par";
-      sessReason = `Quarter-to-date: no session data has been recorded yet this period. Goal held at par from the prior quarter — the prior-quarter organic traffic benchmark is maintained as the planning anchor until in-quarter volume provides a directional signal.`;
+      const sessShiftWasComputed = sessShift !== "—";
+      if (sessShift === "—") sessShift = "Par"; // planning default when no prior benchmark
+      if (sessShiftWasComputed) {
+        const sessShiftDesc =
+          sessShift === "Par" ? "unchanged from the prior-quarter target" :
+          sessShift.startsWith("+") ? `raised ${sessShift} from the prior-quarter target` :
+          `reduced ${sessShift} from the prior-quarter target`;
+        sessReason = `Quarter-to-date: zero organic sessions recorded as of the report preparation date. The Q2 sessions goal is ${sessShiftDesc} — zero QTD volume does not yet provide an in-quarter signal to override what the prior-quarter goal-to-goal comparison already reflects.`;
+      } else {
+        sessReason = `Quarter-to-date: zero organic sessions recorded as of the report preparation date. No prior-quarter sessions benchmark is available for comparison — Q2 sessions goal is held at par as a planning default. Update once the prior-quarter NSM sessions entry is confirmed.`;
+      }
     }
   } else if (ga4Funnel) {
     sessRecommended = `${fmtNum(ga4Funnel.sessions)} organic sessions (QTD baseline)`;
     if (sessShift === "—") sessShift = "Par";
-    sessReason = `Quarter-to-date: ${fmtNum(ga4Funnel.sessions)} organic sessions recorded. No prior-quarter NSM goal is available to compute a shift, so Q2 is held at par — the current run rate serves as the baseline for target-setting until a prior benchmark is confirmed.`;
+    sessReason = `Quarter-to-date: ${fmtNum(ga4Funnel.sessions)} organic sessions recorded. No prior-quarter NSM goal is available to compute a shift, so Q2 is held at par as a planning default — the current run rate is the starting anchor for target-setting until a prior benchmark is confirmed.`;
   } else {
     if (sessShift === "—") sessShift = "Par";
-    sessReason = `No session data or prior-quarter goal is available for this period. Q2 session goal is held at par — it should be updated once current-quarter organic traffic data is confirmed in the NSM tracker.`;
+    sessReason = `Zero session actuals and no prior-quarter NSM goal are available for this period. Q2 session goal is held at par as a planning default — update once current-quarter GA4 data and the prior-quarter NSM entry are confirmed.`;
   }
 
   // Fallback reason when NSM data exists but session sub-fields are incomplete
   if (sessReason === ME) {
     if (sessShift === "—") sessShift = "Par";
     sessReason = ga4Funnel
-      ? `Quarter-to-date: ${fmtNum(ga4Funnel.sessions)} organic sessions recorded. The available data does not yet provide a strong signal for raising or lowering the session target, so Q2 is held at par while content and technical improvements work through the ranking cycle.`
-      : `No session actuals or prior-quarter goal are available. Q2 is held at par as a conservative planning anchor — revise once current-quarter GSC and GA4 data confirms the organic traffic trajectory.`;
+      ? `Quarter-to-date: ${fmtNum(ga4Funnel.sessions)} organic sessions recorded. The available data does not yet provide a directional signal for adjusting the session target, so Q2 is held at par as a planning default.`
+      : `Zero session actuals and no prior-quarter goal are available. Q2 is held at par as a planning default — revise once current-quarter GSC and GA4 data and the prior-quarter NSM entry are confirmed.`;
   }
 
   console.log(`[Section1] Tertiary Goal=Organic Sessions, target=${sessRecommended}, source=GA4 / GSC, shift=${sessShift}`);

@@ -186,6 +186,20 @@ export interface AdditionalOpportunity {
   framing: string;
 }
 
+export interface CreditRowData {
+  credits: number;
+  activity: string;
+}
+
+export interface CreditMonthBlock {
+  month: string;
+  rows: CreditRowData[];
+}
+
+export interface Section7Credits {
+  months: CreditMonthBlock[];
+}
+
 export interface QbrPrepReportData {
   meta: QbrPrepMeta;
   section1Goals: Section1Goals;
@@ -195,6 +209,7 @@ export interface QbrPrepReportData {
   section5Diagnosis: Section5Diagnosis;
   section6Priorities: Section6Priorities;
   section7Tracking: Section7Tracking;
+  section7Credits?: Section7Credits;
   sectionQssb?: SectionQssb;
   additionalOpportunities?: AdditionalOpportunity[];
   gapContext?: GapContext;

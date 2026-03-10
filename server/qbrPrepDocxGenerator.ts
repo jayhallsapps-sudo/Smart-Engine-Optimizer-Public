@@ -368,7 +368,8 @@ export async function generateQbrPrepV2Docx(
   }
 
   // ── Compute visibility ────────────────────────────────────────────────────
-  const _hasCreds = !!(manualInputs?.creditUsage?.trim());
+  const s7c = (reportData as any).section7Credits as { months: Array<{ month: string; rows: Array<{ credits: number; activity: string }> }> } | undefined;
+  const _hasCreds = !!(s7c?.months?.length) || !!(manualInputs?.creditUsage?.trim());
   const _hasOpps = (reportData.additionalOpportunities?.length ?? 0) > 0;
   const secNums = computeDocxSecNums(hiddenSections, hiddenTables, _hasCreds, _hasOpps);
   const secVisible = (key: string) => secNums[key] !== undefined;
@@ -493,15 +494,38 @@ export async function generateQbrPrepV2Docx(
   const rawCreditUsage: string = (reportData.sourceSnapshot?.manualInputs as any)?.creditUsage ?? "";
   if (secVisible("section_credits")) {
     docChildren.push(sectionHeading(secNums["section_credits"], "How Credits Are Used Each Month"));
-    const creditMonths = parseCreditUsage(rawCreditUsage);
-    if (creditMonths.length > 0) {
-      for (const cm of creditMonths) {
-        docChildren.push(new Paragraph({ spacing: { before: 80, after: 40 }, children: [new TextRun({ text: cm.month, bold: true, size: 20, color: "374151", font: "Calibri" })] }));
-        if (cm.rows.length > 0) docChildren.push(makeTable(["Credits", "Activity"], cm.rows.map(r => [r.credits, r.activity]), [22, 78]));
-        for (const u of cm.unparsed) docChildren.push(new Paragraph({ spacing: { before: 20, after: 20 }, children: [new TextRun({ text: u, size: 18, color: GRAY, font: "Calibri" })] }));
+    if (s7c?.months?.length) {
+      for (let mi = 0; mi < s7c.months.length; mi++) {
+        const cm = s7c.months[mi];
+        const monthLabel = resolveCell(`credit_${mi}_month`, cm.month, edits);
+        docChildren.push(new Paragraph({ spacing: { before: 80, after: 40 }, children: [new TextRun({ text: monthLabel, bold: true, size: 20, color: "374151", font: "Calibri" })] }));
+        const creditRows: string[][] = [];
+        for (let ri = 0; ri < cm.rows.length; ri++) {
+          if (edits?.[`credit_${mi}_${ri}_deleted`] === "1") continue;
+          const creditsDefault = cm.rows[ri].credits === 1 ? "1 Credit" : `${cm.rows[ri].credits} Credits`;
+          const creditsVal = resolveCell(`credit_${mi}_${ri}_credits`, creditsDefault, edits);
+          const activityVal = resolveCell(`credit_${mi}_${ri}_activity`, cm.rows[ri].activity, edits);
+          creditRows.push([creditsVal, activityVal]);
+        }
+        const newRowCount = parseInt(edits?.[`credit_${mi}_newrow_count`] ?? "0", 10);
+        for (let ni = 0; ni < newRowCount; ni++) {
+          const newCredits = edits?.[`credit_${mi}_newrow_${ni}_credits`] ?? "";
+          const newActivity = edits?.[`credit_${mi}_newrow_${ni}_activity`] ?? "";
+          if (newCredits || newActivity) creditRows.push([newCredits || "1 Credit", newActivity]);
+        }
+        if (creditRows.length > 0) docChildren.push(makeTable(["Credits", "Activity"], creditRows, [22, 78]));
       }
     } else {
-      docChildren.push(new Paragraph({ spacing: { before: 40, after: 40 }, children: [new TextRun({ text: rawCreditUsage, size: 18, color: "374151", font: "Calibri" })] }));
+      const creditMonths = parseCreditUsage(rawCreditUsage);
+      if (creditMonths.length > 0) {
+        for (const cm of creditMonths) {
+          docChildren.push(new Paragraph({ spacing: { before: 80, after: 40 }, children: [new TextRun({ text: cm.month, bold: true, size: 20, color: "374151", font: "Calibri" })] }));
+          if (cm.rows.length > 0) docChildren.push(makeTable(["Credits", "Activity"], cm.rows.map(r => [r.credits, r.activity]), [22, 78]));
+          for (const u of cm.unparsed) docChildren.push(new Paragraph({ spacing: { before: 20, after: 20 }, children: [new TextRun({ text: u, size: 18, color: GRAY, font: "Calibri" })] }));
+        }
+      } else if (rawCreditUsage.trim()) {
+        docChildren.push(new Paragraph({ spacing: { before: 40, after: 40 }, children: [new TextRun({ text: rawCreditUsage, size: 18, color: "374151", font: "Calibri" })] }));
+      }
     }
   }
 

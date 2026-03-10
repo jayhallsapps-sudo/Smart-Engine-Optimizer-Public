@@ -150,7 +150,8 @@ export default function QbrPrepPrint() {
   const genMeta = reportData.generationMeta;
   const amPrint = reportData.sourceSnapshot?.manualInputs ?? {};
 
-  const _hasCreds = !!(amPrint.creditUsage?.trim());
+  const s7c = (reportData as any).section7Credits as { months: Array<{ month: string; rows: Array<{ credits: number; activity: string }> }> } | undefined;
+  const _hasCreds = !!(s7c?.months?.length) || !!(amPrint.creditUsage?.trim());
   const _autoOpps: any[] = reportData.additionalOpportunities ?? [];
   const _hasOpps = _autoOpps.length > 0;
   const secNums = computePrintSecNums(hiddenSections, hiddenTables, _hasCreds, _hasOpps);
@@ -539,6 +540,53 @@ export default function QbrPrepPrint() {
           )}
 
           {secVis("section_credits") && (() => {
+            if (s7c?.months?.length) {
+              return (
+                <>
+                  <SectionHeading num={secNums["section_credits"]!} title="How Credits Are Used Each Month" />
+                  {s7c.months.map((cm, mi) => {
+                    const newRowCount = parseInt(edits[`credit_${mi}_newrow_count`] ?? "0", 10);
+                    return (
+                      <div key={mi} style={{ marginBottom: 14 }}>
+                        <div style={{ fontSize: "11px", fontWeight: 700, color: "#374151", marginBottom: 4 }}>{e(`credit_${mi}_month`, cm.month)}</div>
+                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px" }}>
+                          <thead>
+                            <tr style={{ backgroundColor: "#F3F4F6" }}>
+                              <th style={{ textAlign: "left", padding: "4px 8px", fontWeight: 600, color: "#6B7280", width: "22%", borderBottom: "1px solid #E5E7EB" }}>Credits</th>
+                              <th style={{ textAlign: "left", padding: "4px 8px", fontWeight: 600, color: "#6B7280", borderBottom: "1px solid #E5E7EB" }}>Activity</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {cm.rows.map((row, ri) => {
+                              if (edits[`credit_${mi}_${ri}_deleted`] === "1") return null;
+                              const creditsDefault = row.credits === 1 ? "1 Credit" : `${row.credits} Credits`;
+                              return (
+                                <tr key={ri} style={{ borderBottom: "1px solid #F3F4F6" }}>
+                                  <td style={{ padding: "5px 8px", color: "#1B3A6B", fontWeight: 600 }}>{e(`credit_${mi}_${ri}_credits`, creditsDefault)}</td>
+                                  <td style={{ padding: "5px 8px", color: "#374151" }}>{e(`credit_${mi}_${ri}_activity`, row.activity)}</td>
+                                </tr>
+                              );
+                            })}
+                            {Array.from({ length: newRowCount }).map((_, ni) => {
+                              const nc = edits[`credit_${mi}_newrow_${ni}_credits`] ?? "";
+                              const na = edits[`credit_${mi}_newrow_${ni}_activity`] ?? "";
+                              if (!nc && !na) return null;
+                              return (
+                                <tr key={`new_${ni}`} style={{ borderBottom: "1px solid #F3F4F6" }}>
+                                  <td style={{ padding: "5px 8px", color: "#1B3A6B", fontWeight: 600 }}>{nc || "1 Credit"}</td>
+                                  <td style={{ padding: "5px 8px", color: "#374151" }}>{na}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    );
+                  })}
+                </>
+              );
+            }
+            // Legacy fallback
             const rawCreditUsage: string = amPrint.creditUsage ?? "";
             if (!rawCreditUsage.trim()) return null;
             const creditMonths = parseCreditUsage(rawCreditUsage);

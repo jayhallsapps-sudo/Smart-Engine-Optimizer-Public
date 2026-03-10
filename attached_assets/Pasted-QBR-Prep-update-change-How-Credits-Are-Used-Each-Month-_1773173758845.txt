@@ -1,0 +1,268 @@
+QBR Prep update — change “How Credits Are Used Each Month” from a sidebar AM input into an auto-generated, editable report section, with row-level editing controls.
+
+We no longer want “How Credits Are Used Each Month” to be manually entered in the left sidebar.
+
+New product direction:
+- the system should generate this section automatically
+- it should use the quarter months already implied by the report
+- it should use the known monthly credit allocation for the client
+- it should suggest how those credits should be used based on the report data
+- the AM can revise the suggested allocation directly in the report
+- the AM can delete individual rows inside the monthly credits tables
+- the AM can hide the whole section using the existing visibility controls
+
+Very important business rule:
+These are content credits only.
+Do not allocate technical SEO work inside this section.
+No technical cleanup, schema, metadata audit, page speed, tracking setup, or other technical work should appear in monthly credit allocation suggestions.
+
+Do not change:
+- current section/table visibility system
+- current export flow
+- current numbering reflow behavior
+- current editable report behavior unless needed for this section
+
+==================================================
+1. REMOVE THE SIDEBAR INPUT
+==================================================
+
+Remove the “How Credits Are Used Each Month” textarea from the left sidebar/manual input area.
+
+Required:
+- remove it from the live input UI
+- remove it from the input payload for new reports
+- remove it from persistence / restore logic for new reports
+- remove any preview dependency that expects that sidebar field as the primary source
+
+Important:
+- do not break old saved reports if they still contain this field in historical data
+- support legacy display safely if needed
+
+==================================================
+2. AUTO-GENERATE THE SECTION IN THE REPORT
+==================================================
+
+Generate this section automatically inside the report:
+
+7. How Credits Are Used Each Month
+
+Behavior:
+- generate it by default as part of the report
+- keep it hideable via the existing section visibility controls
+- keep it editable after generation
+
+==================================================
+3. MONTHS SHOULD BE DERIVED FROM THE REPORT QUARTER
+==================================================
+
+Determine the 3 months from the report quarter automatically.
+
+Examples:
+- Q1 → January, February, March
+- Q2 → April, May, June
+- Q3 → July, August, September
+- Q4 → October, November, December
+
+The year should align with the report quarter/year already being used.
+
+Example:
+If the report is Q2 2026:
+- April 2026
+- May 2026
+- June 2026
+
+==================================================
+4. USE THE CLIENT’S KNOWN MONTHLY CONTENT CREDIT CAPACITY
+==================================================
+
+Use the client’s known monthly content credit count as the allocation constraint.
+
+Required:
+- each month’s suggested rows must sum to the known monthly credit count
+- do not suggest more credits than the client has
+- use the existing canonical credit source already established in the project
+- do not reintroduce duplicate credit maps
+
+Important:
+These are content credits only.
+This section must only include content work.
+
+==================================================
+5. CONTENT-ONLY GENERATION RULE
+==================================================
+
+Do not include technical SEO in this section.
+
+Disallowed examples:
+- technical cleanup
+- schema work
+- metadata audit
+- page speed fixes
+- tracking setup
+- analytics fixes
+- indexing fixes
+- crawl fixes
+- dev support tasks
+- internal linking framed as standalone technical SEO unless it is clearly part of content optimization work
+
+Allowed examples:
+- content refreshes
+- new content creation
+- service page creation
+- support page creation
+- cluster content expansion
+- care-access-supporting content
+- local content/page creation if it is truly content work
+- content updates to improve conversion support
+- content consolidation if framed as content work
+
+If a recommendation is not clearly content work, do not place it in this section.
+
+==================================================
+6. SUGGESTED CREDIT USAGE SHOULD BE DATA-DRIVEN
+==================================================
+
+Generate the monthly content-credit recommendations from report findings.
+
+Suggested inputs:
+- Section 1 goals / NSM direction
+- Section 2 conversion findings
+- Section 3 traffic topics / traffic pages / weak admit connection patterns
+- Section 4 service coverage gaps
+- Section 5 tier diagnosis
+- Section 6 priorities, filtered to content-only work
+- client monthly credit capacity
+
+Desired behavior:
+- suggest the most sensible use of content credits for each month
+- recommendations should be strategic and varied across the quarter
+- month 1, month 2, and month 3 should not all read like the same repeated template
+- totals per month must align with content credit count
+- no technical recommendations should appear
+
+==================================================
+7. OUTPUT FORMAT
+==================================================
+
+Render the section as month-by-month editable tables.
+
+Preferred format:
+For each month:
+- month heading
+- 2-column table:
+
+| Credits | Activity |
+
+Example:
+April 2026
+
+| Credits | Activity |
+|---|---|
+| 2 Credits | Refresh two high-traffic informational pages with weak admit connection |
+| 1 Credit | Create one new care-access-supporting content piece around detox intent |
+| 1 Credit | Refresh one service-supporting content page tied to admissions intent |
+
+Rules:
+- each month should have its own heading and table
+- activities should be concise, specific, and client-safe
+- totals per month should align with monthly credit capacity
+
+==================================================
+8. ROW-LEVEL EDITING CONTROLS
+==================================================
+
+This section must support row-level editing in the report editor.
+
+Required:
+- AM can edit the Credits cell
+- AM can edit the Activity cell
+- AM can delete individual rows inside a month table
+- deleting a row should remove it from preview and exports for that report instance
+- row deletion should not break the month table structure
+
+Preferred:
+- AM can also add a new row manually if needed
+- if add-row is implemented, it should create a blank Credits + Activity row inside that month
+
+Why this is required:
+Example:
+If the system suggests four separate 1-credit refresh rows, and the AM wants:
+- 2 Credits | Refresh two pages
+- 1 Credit | Create one new content piece
+- 1 Credit | Refresh one service page
+they must be able to delete the unwanted row(s) and edit the remaining ones.
+
+Important:
+This is report-instance editing only.
+Do not change future generated reports globally.
+
+==================================================
+9. STORAGE / EDIT MODEL
+==================================================
+
+Use a structured storage model for this section so row edits and row deletions persist cleanly.
+
+Required:
+- row edits persist on save/load
+- row deletions persist on save/load
+- exports use the edited/deleted state
+- hidden section state still works
+
+If needed, store this section in a structured JSON format rather than as raw text.
+
+==================================================
+10. LEGACY / COMPATIBILITY RULES
+==================================================
+
+Older saved reports may still contain the old manual sidebar version of this section.
+
+Do not break them.
+
+Preferred precedence rule:
+- new reports use generated structured month tables
+- legacy saved reports can still display their old saved content if present
+- if a legacy report is migrated into the new editable structure, document the migration rule clearly
+
+==================================================
+11. NUMBERING / VISIBILITY
+==================================================
+
+This section must continue to work with the current dynamic numbering and visibility system.
+
+Required:
+- if visible, it appears in the visible section order
+- if hidden, numbering collapses cleanly
+- if rows are edited/deleted, preview/PDF/DOCX/Google all reflect the updated state
+
+==================================================
+12. TESTING / ACCEPTANCE CRITERIA
+==================================================
+
+1. Sidebar no longer contains “How Credits Are Used Each Month”
+2. New reports auto-generate Section 7: How Credits Are Used Each Month
+3. Months are derived correctly from the report quarter
+4. Each month’s generated rows sum to the client’s monthly content credit count
+5. Generated recommendations are content-only
+6. No technical SEO work appears in the section
+7. AM can edit credits and activity cells
+8. AM can delete individual rows from a month table
+9. Edited/deleted rows persist on save/load
+10. PDF, DOCX, and Google export follow the edited/deleted state
+11. Section hide/show still works
+12. Existing export flow still works
+13. Legacy reports do not break
+
+==================================================
+13. AFTER IMPLEMENTATION, REPORT BACK WITH:
+==================================================
+
+- files changed
+- exact rule used to derive quarter months
+- exact source of truth used for monthly content credit count
+- exact logic used to generate content-only credit recommendations
+- exact row-edit / row-delete model used
+- exact storage format used for this section
+- exact legacy compatibility rule
+- confirmation that the sidebar input was removed
+- confirmation that preview, PDF, DOCX, and Google export all follow the edited/deleted/hidden state
+- any edge cases or limitations

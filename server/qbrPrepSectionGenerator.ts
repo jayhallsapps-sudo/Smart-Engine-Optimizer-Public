@@ -18,6 +18,9 @@ import type {
   Section5Diagnosis,
   Section6Priorities,
   Section7Tracking,
+  Section7Credits,
+  CreditMonthBlock,
+  CreditRowData,
   SectionQssb,
   SourceSnapshot,
   GenerationMeta,
@@ -589,6 +592,14 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
     gbpActive: false,
   };
   const section7 = generateSection7(section6, section5, section7Evidence);
+  const section7Credits = generateSection7Credits(
+    quarter,
+    s6MonthlyCredits,
+    section2,
+    section3,
+    section4,
+    section6,
+  );
 
   // T004: Generate account-specific client insights
   function generateContextualClientInsights(params: {
@@ -779,6 +790,7 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
     section5Diagnosis: section5,
     section6Priorities: section6,
     section7Tracking: section7,
+    section7Credits,
     sectionQssb,
     gapContext,
     sourceSnapshot,
@@ -3002,4 +3014,140 @@ function generateAdditionalOpportunities(report: QbrPrepReportData): AdditionalO
     .map(({ type, title, why_now, evidence, recommendation, framing }) => ({
       type, title, why_now, evidence, recommendation, framing,
     }));
+}
+
+// ─── Section 7 Credits: auto-generated content-credit allocation ──────────────
+
+const QUARTER_MONTH_NAMES: Record<number, [string, string, string]> = {
+  1: ["January", "February", "March"],
+  2: ["April", "May", "June"],
+  3: ["July", "August", "September"],
+  4: ["October", "November", "December"],
+};
+
+const TECHNICAL_CREDIT_PATTERNS = /\b(technical seo|schema|metadata audit|page speed|core web vital|crawl|indexab|index audit|sitemap|robots\.txt|redirect|canonical|structured data|hreflang|tracking setup|analytics setup|tag manager|gtm|dev support|javascript error|accessibility audit|link building|backlink|off-?page|internal link audit)\b/i;
+const CONTENT_SIGNAL_PATTERNS = /\b(content|refresh|creat|new page|service page|support page|local page|cluster|topic|rewrite|update|expand|conversion page|landing page|blog|article)\b/i;
+
+function isContentOnlyPriority(row: PriorityRow): boolean {
+  const combined = `${row.initiative} ${row.action} ${row.tier}`;
+  if (TECHNICAL_CREDIT_PATTERNS.test(combined)) return false;
+  return CONTENT_SIGNAL_PATTERNS.test(combined);
+}
+
+function buildCreditActionPool(
+  section2: Section2Conversions,
+  section3: Section3Traffic,
+  section4: Section4Services,
+  section6: Section6Priorities,
+): Array<{ credits: number; activity: string; weight: number }> {
+  const pool: Array<{ credits: number; activity: string; weight: number }> = [];
+
+  // 1. Section 6 content-only priorities (highest priority — data-driven)
+  const contentPriorities = section6.priorities.filter(isContentOnlyPriority);
+  for (const p of contentPriorities) {
+    let activity = p.action.replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s{2,}/g, " ").trim();
+    if (activity.length > 110) activity = activity.substring(0, 110).trim();
+    pool.push({ credits: 1, activity, weight: 12 - p.priority });
+  }
+
+  // 2. Section 4 missing service pages (content creation)
+  const missingSvcPages = section4.services.filter(
+    s => !s.examplePage || s.examplePage === "—" || /need|manual|tbd|missing/i.test(s.examplePage)
+  ).slice(0, 3);
+  for (const svc of missingSvcPages) {
+    pool.push({ credits: 1, activity: `Create ${svc.service} service page to fill coverage gap`, weight: 6 });
+  }
+
+  // 3. Section 3 high-traffic topics with weak admit connection
+  for (const topic of section3.topTrafficTopics.slice(0, 4)) {
+    if (/weak|poor|indirect|no\s*clear|low/i.test(topic.connectionToAdmits)) {
+      pool.push({ credits: 1, activity: `Refresh "${topic.topic}" content to strengthen admissions connection`, weight: 5 });
+    }
+  }
+
+  // 4. Section 3 top pages with weak insight / conversion signal
+  for (const page of section3.topTrafficPages.slice(0, 3)) {
+    if (/weak|poor|low|no\s*conversion|informational/i.test(page.insight)) {
+      const shortPage = page.page.replace(/^https?:\/\/[^/]+/, "").replace(/\/$/, "") || page.page;
+      const label = shortPage.length > 50 ? shortPage.substring(0, 50) : shortPage;
+      pool.push({ credits: 1, activity: `Update ${label} page content to improve conversion intent alignment`, weight: 3 });
+    }
+  }
+
+  // Sort descending by weight
+  return pool.sort((a, b) => b.weight - a.weight);
+}
+
+export function generateSection7Credits(
+  quarter: QuarterInfo,
+  monthlyCredits: number,
+  section2: Section2Conversions,
+  section3: Section3Traffic,
+  section4: Section4Services,
+  section6: Section6Priorities,
+): Section7Credits {
+  const monthNames = QUARTER_MONTH_NAMES[quarter.planningQ] ?? ["Month 1", "Month 2", "Month 3"];
+  const year = quarter.planningYear;
+
+  const pool = buildCreditActionPool(section2, section3, section4, section6);
+
+  // Generic fallbacks to ensure we always have enough items
+  const GENERIC_FALLBACKS = [
+    "Refresh one high-traffic informational page with weak admit connection",
+    "Create one new care-access-supporting content piece",
+    "Refresh one service page to improve conversion intent alignment",
+    "Expand cluster content for top organic query topic",
+    "Create one locally-targeted content piece to support program discovery",
+    "Refresh one underperforming money page with updated admissions messaging",
+    "Create one FAQ-style support content piece around treatment access",
+    "Refresh one blog/informational page to add admissions call-to-action",
+    "Create one new content piece targeting an unaddressed high-intent query",
+  ];
+
+  // Pad pool with varied fallbacks if sparse
+  let fbIdx = 0;
+  while (pool.length < monthlyCredits * 3) {
+    pool.push({ credits: 1, activity: GENERIC_FALLBACKS[fbIdx % GENERIC_FALLBACKS.length], weight: 1 });
+    fbIdx++;
+  }
+
+  // Allocate across 3 months — each month must sum to exactly monthlyCredits
+  const months: CreditMonthBlock[] = [];
+  let poolIdx = 0;
+
+  for (let mi = 0; mi < 3; mi++) {
+    const monthLabel = `${monthNames[mi]} ${year}`;
+    const rows: CreditRowData[] = [];
+    let used = 0;
+
+    while (used < monthlyCredits) {
+      const remaining = monthlyCredits - used;
+      if (poolIdx >= pool.length) {
+        // Safety pad
+        rows.push({
+          credits: remaining,
+          activity: remaining === 1
+            ? "Refresh one priority content page"
+            : `Refresh ${remaining} priority content pages`,
+        });
+        used = monthlyCredits;
+        break;
+      }
+      const item = pool[poolIdx];
+      if (item.credits <= remaining) {
+        rows.push({ credits: item.credits, activity: item.activity });
+        used += item.credits;
+        poolIdx++;
+      } else {
+        // Partial: split the item
+        rows.push({ credits: remaining, activity: item.activity });
+        pool[poolIdx] = { ...item, credits: item.credits - remaining };
+        used = monthlyCredits;
+      }
+    }
+
+    months.push({ month: monthLabel, rows });
+  }
+
+  return { months };
 }

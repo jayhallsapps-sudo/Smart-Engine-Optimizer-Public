@@ -28,16 +28,21 @@ function isSectionAutoHidden(secKey: string, hiddenTables: Record<string, boolea
   const tables = SECTION_TABLES[secKey];
   return !!(tables && tables.length > 0 && tables.every(t => hiddenTables[t]));
 }
-function computeSectionNums(hiddenSections: Record<string, boolean>, hiddenTables: Record<string, boolean>, hasCreditUsage: boolean, hasOpps: boolean): Record<string, number> {
+function computeSectionNums(hiddenSections: Record<string, boolean>, hiddenTables: Record<string, boolean>, hasCreditSection: boolean, hasOpps: boolean): Record<string, number> {
   const result: Record<string, number> = {};
   let n = 1;
   for (const def of SECTION_DEFS) {
-    if (def.key === "section_credits" && !hasCreditUsage) continue;
+    if (def.key === "section_credits" && !hasCreditSection) continue;
     if (def.key === "section_opportunities" && !hasOpps) continue;
     if (hiddenSections[def.key] || isSectionAutoHidden(def.key, hiddenTables)) continue;
     result[def.key] = n++;
   }
   return result;
+}
+
+interface CreditMonthBlock {
+  month: string;
+  rows: Array<{ credits: number; activity: string }>;
 }
 
 interface QbrPrepMeta {
@@ -147,6 +152,7 @@ export interface QbrPrepPreviewProps {
   section5Diagnosis: { tier: number; tierName: string; diagnosis: string };
   section6Priorities: { priorities: PriorityRow[] };
   section7Tracking: { tracking: TrackingRow[] };
+  section7Credits?: { months: CreditMonthBlock[] };
   sectionQssb?: SectionQssb;
   additionalOpportunities?: AdditionalOpportunity[];
   edits: Record<string, string>;
@@ -374,6 +380,7 @@ export function QbrPrepPreview({
   section5Diagnosis,
   section6Priorities,
   section7Tracking,
+  section7Credits,
   sectionQssb,
   additionalOpportunities,
   edits,
@@ -388,9 +395,9 @@ export function QbrPrepPreview({
   const [headerImgUrl, setHeaderImgUrl] = useState<string | null>(null);
   const [showSection8, setShowSection8] = useState(true);
 
-  const hasCreditUsage = !!(amInputs?.creditUsage?.trim());
+  const hasCreditSection = !!(section7Credits?.months?.length) || !!(amInputs?.creditUsage?.trim());
   const hasOpps = (additionalOpportunities?.length ?? 0) > 0 || showSection8;
-  const sectionNums = computeSectionNums(hiddenSections, hiddenTables, hasCreditUsage, hasOpps);
+  const sectionNums = computeSectionNums(hiddenSections, hiddenTables, hasCreditSection, hasOpps);
 
   const hideSecBtn = (key: string) => onToggleSection ? () => onToggleSection(key) : undefined;
   const hideTblBtn = (key: string) => onToggleTable ? () => onToggleTable(key) : undefined;
@@ -858,46 +865,132 @@ export function QbrPrepPreview({
             })()}
             </>) : null}
 
-            {hasCreditUsage && (
+            {hasCreditSection && (
               hiddenSections["section_credits"] ? (
                 <HiddenSectionBar secKey="section_credits" title="How Credits Are Used Each Month" onShow={() => onToggleSection?.("section_credits")} />
               ) : sectionNums["section_credits"] !== undefined ? (() => {
-                const creditMonths = parseCreditUsage(amInputs!.creditUsage!);
-                return (
-                  <>
-                    <SectionHeading num={sectionNums["section_credits"]} title="How Credits Are Used Each Month" onHide={hideSecBtn("section_credits")} />
-                    {creditMonths.length > 0 ? creditMonths.map((cm, mi) => (
-                      <div key={mi} style={{ marginBottom: 14 }}>
-                        <div style={{ fontSize: "11px", fontWeight: 700, color: "#374151", marginBottom: 4 }}>
-                          <EditableCell editKey={`credit_${mi}_month`} value={cm.month} edits={edits} onEdit={onEdit} />
+                if (section7Credits?.months?.length) {
+                  return (
+                    <>
+                      <SectionHeading num={sectionNums["section_credits"]} title="How Credits Are Used Each Month" onHide={hideSecBtn("section_credits")} />
+                      {section7Credits.months.map((cm, mi) => {
+                        const newRowCount = parseInt(edits[`credit_${mi}_newrow_count`] ?? "0", 10);
+                        return (
+                          <div key={mi} style={{ marginBottom: 16 }}>
+                            <div style={{ fontSize: "11px", fontWeight: 700, color: "#374151", marginBottom: 4 }}>
+                              <EditableCell editKey={`credit_${mi}_month`} value={cm.month} edits={edits} onEdit={onEdit} />
+                            </div>
+                            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px" }}>
+                              <thead><tr style={{ backgroundColor: "#F3F4F6" }}>
+                                <th style={{ textAlign: "left", padding: "4px 8px", fontWeight: 600, color: "#6B7280", width: "22%", borderBottom: "1px solid #E5E7EB" }}>Credits</th>
+                                <th style={{ textAlign: "left", padding: "4px 8px", fontWeight: 600, color: "#6B7280", borderBottom: "1px solid #E5E7EB" }}>Activity</th>
+                                <th style={{ width: "28px", borderBottom: "1px solid #E5E7EB" }}></th>
+                              </tr></thead>
+                              <tbody>
+                                {cm.rows.map((row, ri) => {
+                                  if (edits[`credit_${mi}_${ri}_deleted`] === "1") return null;
+                                  const creditsVal = edits[`credit_${mi}_${ri}_credits`] ?? String(row.credits === 1 ? "1 Credit" : `${row.credits} Credits`);
+                                  const activityVal = edits[`credit_${mi}_${ri}_activity`] ?? row.activity;
+                                  return (
+                                    <tr key={ri} style={{ borderBottom: "1px solid #F3F4F6" }}>
+                                      <td style={{ padding: "5px 8px", color: "#1B3A6B", fontWeight: 600 }}>
+                                        <EditableCell editKey={`credit_${mi}_${ri}_credits`} value={creditsVal} edits={edits} onEdit={onEdit} />
+                                      </td>
+                                      <td style={{ padding: "5px 8px", color: "#374151" }}>
+                                        <EditableCell editKey={`credit_${mi}_${ri}_activity`} value={activityVal} edits={edits} onEdit={onEdit} />
+                                      </td>
+                                      <td style={{ padding: "5px 4px", textAlign: "center" }}>
+                                        <button
+                                          data-testid={`btn-delete-credit-${mi}-${ri}`}
+                                          onClick={() => onEdit(`credit_${mi}_${ri}_deleted`, "1")}
+                                          title="Remove row"
+                                          style={{ background: "none", border: "none", cursor: "pointer", color: "#9CA3AF", fontSize: "10px", padding: "1px 3px", lineHeight: 1 }}
+                                        >✕</button>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                                {Array.from({ length: newRowCount }).map((_, ni) => (
+                                  <tr key={`new_${ni}`} style={{ borderBottom: "1px solid #F3F4F6" }}>
+                                    <td style={{ padding: "5px 8px", color: "#1B3A6B", fontWeight: 600 }}>
+                                      <EditableCell editKey={`credit_${mi}_newrow_${ni}_credits`} value={edits[`credit_${mi}_newrow_${ni}_credits`] ?? "1 Credit"} edits={edits} onEdit={onEdit} />
+                                    </td>
+                                    <td style={{ padding: "5px 8px", color: "#374151" }}>
+                                      <EditableCell editKey={`credit_${mi}_newrow_${ni}_activity`} value={edits[`credit_${mi}_newrow_${ni}_activity`] ?? ""} edits={edits} onEdit={onEdit} />
+                                    </td>
+                                    <td style={{ padding: "5px 4px", textAlign: "center" }}>
+                                      <button
+                                        data-testid={`btn-delete-credit-${mi}-new-${ni}`}
+                                        onClick={() => {
+                                          onEdit(`credit_${mi}_newrow_${ni}_credits`, "");
+                                          onEdit(`credit_${mi}_newrow_${ni}_activity`, "");
+                                          const currentCount = parseInt(edits[`credit_${mi}_newrow_count`] ?? "0", 10);
+                                          if (ni === currentCount - 1) onEdit(`credit_${mi}_newrow_count`, String(currentCount - 1));
+                                        }}
+                                        title="Remove row"
+                                        style={{ background: "none", border: "none", cursor: "pointer", color: "#9CA3AF", fontSize: "10px", padding: "1px 3px", lineHeight: 1 }}
+                                      >✕</button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                            <button
+                              data-testid={`btn-add-credit-row-${mi}`}
+                              onClick={() => {
+                                const currentCount = parseInt(edits[`credit_${mi}_newrow_count`] ?? "0", 10);
+                                onEdit(`credit_${mi}_newrow_${currentCount}_credits`, "1 Credit");
+                                onEdit(`credit_${mi}_newrow_${currentCount}_activity`, "");
+                                onEdit(`credit_${mi}_newrow_count`, String(currentCount + 1));
+                              }}
+                              style={{ marginTop: 4, background: "none", border: "1px dashed #D1D5DB", borderRadius: 3, color: "#6B7280", fontSize: "10px", cursor: "pointer", padding: "2px 8px" }}
+                            >+ Add row</button>
+                          </div>
+                        );
+                      })}
+                    </>
+                  );
+                }
+                // Legacy fallback: old text-based creditUsage from saved reports
+                if (amInputs?.creditUsage?.trim()) {
+                  const creditMonths = parseCreditUsage(amInputs.creditUsage);
+                  return (
+                    <>
+                      <SectionHeading num={sectionNums["section_credits"]} title="How Credits Are Used Each Month" onHide={hideSecBtn("section_credits")} />
+                      {creditMonths.length > 0 ? creditMonths.map((cm, mi) => (
+                        <div key={mi} style={{ marginBottom: 14 }}>
+                          <div style={{ fontSize: "11px", fontWeight: 700, color: "#374151", marginBottom: 4 }}>
+                            <EditableCell editKey={`credit_${mi}_month`} value={cm.month} edits={edits} onEdit={onEdit} />
+                          </div>
+                          {cm.rows.length > 0 && (
+                            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px" }}>
+                              <thead><tr style={{ backgroundColor: "#F3F4F6" }}>
+                                <th style={{ textAlign: "left", padding: "4px 8px", fontWeight: 600, color: "#6B7280", width: "22%", borderBottom: "1px solid #E5E7EB" }}>Credits</th>
+                                <th style={{ textAlign: "left", padding: "4px 8px", fontWeight: 600, color: "#6B7280", borderBottom: "1px solid #E5E7EB" }}>Activity</th>
+                              </tr></thead>
+                              <tbody>{cm.rows.map((row, ri) => (
+                                <tr key={ri} style={{ borderBottom: "1px solid #F3F4F6" }}>
+                                  <td style={{ padding: "5px 8px", color: "#1B3A6B", fontWeight: 600 }}>
+                                    <EditableCell editKey={`credit_${mi}_${ri}_credits`} value={row.credits} edits={edits} onEdit={onEdit} />
+                                  </td>
+                                  <td style={{ padding: "5px 8px", color: "#374151" }}>
+                                    <EditableCell editKey={`credit_${mi}_${ri}_activity`} value={row.activity} edits={edits} onEdit={onEdit} />
+                                  </td>
+                                </tr>
+                              ))}</tbody>
+                            </table>
+                          )}
+                          {cm.unparsed.map((u, ui) => (
+                            <div key={ui} style={{ fontSize: "11px", color: "#6B7280", padding: "2px 8px" }}>{u}</div>
+                          ))}
                         </div>
-                        {cm.rows.length > 0 && (
-                          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px" }}>
-                            <thead><tr style={{ backgroundColor: "#F3F4F6" }}>
-                              <th style={{ textAlign: "left", padding: "4px 8px", fontWeight: 600, color: "#6B7280", width: "22%", borderBottom: "1px solid #E5E7EB" }}>Credits</th>
-                              <th style={{ textAlign: "left", padding: "4px 8px", fontWeight: 600, color: "#6B7280", borderBottom: "1px solid #E5E7EB" }}>Activity</th>
-                            </tr></thead>
-                            <tbody>{cm.rows.map((row, ri) => (
-                              <tr key={ri} style={{ borderBottom: "1px solid #F3F4F6" }}>
-                                <td style={{ padding: "5px 8px", color: "#1B3A6B", fontWeight: 600 }}>
-                                  <EditableCell editKey={`credit_${mi}_${ri}_credits`} value={row.credits} edits={edits} onEdit={onEdit} />
-                                </td>
-                                <td style={{ padding: "5px 8px", color: "#374151" }}>
-                                  <EditableCell editKey={`credit_${mi}_${ri}_activity`} value={row.activity} edits={edits} onEdit={onEdit} />
-                                </td>
-                              </tr>
-                            ))}</tbody>
-                          </table>
-                        )}
-                        {cm.unparsed.map((u, ui) => (
-                          <div key={ui} style={{ fontSize: "11px", color: "#6B7280", padding: "2px 8px" }}>{u}</div>
-                        ))}
-                      </div>
-                    )) : (
-                      <div style={{ fontSize: "11px", color: "#374151", whiteSpace: "pre-wrap", marginBottom: 14 }}>{amInputs!.creditUsage}</div>
-                    )}
-                  </>
-                );
+                      )) : (
+                        <div style={{ fontSize: "11px", color: "#374151", whiteSpace: "pre-wrap", marginBottom: 14 }}>{amInputs.creditUsage}</div>
+                      )}
+                    </>
+                  );
+                }
+                return null;
               })() : null
             )}
 

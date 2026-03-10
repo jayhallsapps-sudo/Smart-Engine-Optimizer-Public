@@ -99,7 +99,6 @@ export default function QbrPrepPage() {
   const [prevQtrAssessment, setPrevQtrAssessment] = useState("");
   const [priorityChecks, setPriorityChecks] = useState("");
   const [clientNotes, setClientNotes] = useState("");
-  const [creditUsage, setCreditUsage] = useState("");
   const [hiddenSections, setHiddenSections] = useState<Record<string, boolean>>({});
   const [hiddenTables, setHiddenTables] = useState<Record<string, boolean>>({});
   const [currentCrawlId, setCurrentCrawlId] = useState<number | null>(null);
@@ -189,7 +188,6 @@ export default function QbrPrepPage() {
         prevQtrAssessment: prevQtrAssessment || undefined,
         priorityChecks,
         clientNotes: clientNotes || undefined,
-        creditUsage: creditUsage || undefined,
         currentCrawlAssetId: currentCrawlId ?? undefined,
         gapAnswers: params?.gapAnswers,
         gapSessionId: params?.gapSessionId,
@@ -555,16 +553,6 @@ export default function QbrPrepPage() {
                   />
                 </div>
                 <div>
-                  <Label className="text-xs mb-1 block text-muted-foreground">How Credits Are Used Each Month <span className="text-muted-foreground text-[10px]">(optional)</span></Label>
-                  <Textarea
-                    className="text-xs min-h-[80px]"
-                    placeholder={"April 2026\n1 Credit - Refresh page domain\n2 Credits - New content\n\nMay 2026\n1 Credit - Technical updates"}
-                    value={creditUsage}
-                    onChange={e => setCreditUsage(e.target.value)}
-                    data-testid="textarea-credit-usage"
-                  />
-                </div>
-                <div>
                   <Label className="text-xs mb-1 block">Client Sentiment <span className="text-destructive">*</span></Label>
                   <Select value={sentiment} onValueChange={(v) => { setSentiment(v); setAmValidationErrors(prev => { const n = {...prev}; delete n.sentiment; return n; }); }}>
                     <SelectTrigger className={`h-8 text-xs ${amValidationErrors.sentiment ? "border-destructive" : ""}`} data-testid="select-sentiment">
@@ -614,7 +602,6 @@ export default function QbrPrepPage() {
                   if (savedInputs.prevQtrAssessment) setPrevQtrAssessment(savedInputs.prevQtrAssessment ?? "");
                   if (savedInputs.priorityChecks || savedInputs.auditNotes) setPriorityChecks(savedInputs.priorityChecks ?? savedInputs.auditNotes ?? "");
                   if (savedInputs.clientNotes) setClientNotes(savedInputs.clientNotes ?? "");
-                  if (savedInputs.creditUsage) setCreditUsage(savedInputs.creditUsage ?? "");
                   toast({ title: "Report loaded" });
                 }}
               />
@@ -862,6 +849,7 @@ export default function QbrPrepPage() {
             section5Diagnosis={reportData.section5Diagnosis}
             section6Priorities={reportData.section6Priorities}
             section7Tracking={reportData.section7Tracking}
+            section7Credits={reportData.section7Credits}
             sectionQssb={reportData.sectionQssb}
             additionalOpportunities={reportData.additionalOpportunities}
             edits={edits}

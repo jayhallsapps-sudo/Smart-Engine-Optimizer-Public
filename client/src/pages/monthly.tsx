@@ -630,7 +630,8 @@ export default function MonthlyPage() {
         )}
       </div>
 
-      {fillInGapsEnabled && sessionId && questions.length > 0 && (
+      {/* ClarificationTrail hidden — gap answers still saved to DB via answerUsage */}
+      {/* {fillInGapsEnabled && sessionId && questions.length > 0 && (
         <ClarificationTrail
           questions={questions}
           answers={answers}
@@ -638,7 +639,7 @@ export default function MonthlyPage() {
           enabled={fillInGapsEnabled}
           answerUsage={answerUsage}
         />
-      )}
+      )} */}
 
       {showModal && (
         <FillInTheGapsModal

@@ -477,38 +477,28 @@ export async function generateBiweekly(input: {
   // No separate Technical Maintenance section — matches the 3-section template structure.
 
   const bwAm = input.amInputs ?? {};
-  const amBullets: string[] = [];
-  if (bwAm.clientSentiment) amBullets.push(`Client Sentiment: ${bwAm.clientSentiment}`);
-  if (bwAm.amThoughts?.trim()) amBullets.push(`AM's Thoughts: ${bwAm.amThoughts.trim()}`);
-  if (bwAm.priorityChecks?.trim()) amBullets.push(`Priority Checks: ${bwAm.priorityChecks.trim()}`);
-  if (bwAm.clientNotes?.trim()) amBullets.push(`Client Notes: ${bwAm.clientNotes.trim()}`);
 
-  if (amBullets.length > 0 || (gapContext && gapContext.hasAnswers)) {
-    const finalBullets = [...amBullets];
-    if (gapContext && gapContext.hasAnswers) {
-      finalBullets.push("--- Gap Analysis Insights ---");
-      if (gapContext.sentimentContext) finalBullets.push(`Sentiment Context: ${gapContext.sentimentContext}`);
-      if (gapContext.businessChanges) finalBullets.push(`Business Context: ${gapContext.businessChanges}`);
-      if (gapContext.blockers) finalBullets.push(`Blockers: ${gapContext.blockers}`);
-      if (gapContext.narrativeNotes) finalBullets.push(`Additional Notes: ${gapContext.narrativeNotes}`);
-    }
-
-    sections.push({
-      id: "bw_am_inputs",
-      type: "bullets",
-      title: "AM Inputs",
-      bullets: finalBullets,
-    });
+  // AM inputs woven into Partnership & Alignment so they appear alongside the report,
+  // not as a standalone pre-read section. Gap analysis insights follow the same pattern.
+  const partnershipBullets: string[] = [];
+  if (bwAm.clientSentiment) partnershipBullets.push(`Client sentiment: ${bwAm.clientSentiment}`);
+  if (bwAm.amThoughts?.trim()) partnershipBullets.push(`AM focus: ${bwAm.amThoughts.trim()}`);
+  if (bwAm.priorityChecks?.trim()) partnershipBullets.push(`Priority checks: ${bwAm.priorityChecks.trim()}`);
+  if (bwAm.clientNotes?.trim()) partnershipBullets.push(`Client notes: ${bwAm.clientNotes.trim()}`);
+  if (gapContext && gapContext.hasAnswers) {
+    if (gapContext.sentimentContext) partnershipBullets.push(`Context: ${gapContext.sentimentContext}`);
+    if (gapContext.businessChanges) partnershipBullets.push(`Business context: ${gapContext.businessChanges}`);
+    if (gapContext.blockers) partnershipBullets.push(`Blockers: ${gapContext.blockers}`);
+    if (gapContext.narrativeNotes) partnershipBullets.push(`Notes: ${gapContext.narrativeNotes}`);
   }
+  partnershipBullets.push("Open discussion: feedback, lead quality, new initiatives, or observations.");
+  partnershipBullets.push("Confirm next steps, responsibilities, and upcoming deliverables.");
 
   sections.push({
     id: "bw_partnership",
     type: "bullets",
     title: "Partnership & Alignment",
-    bullets: [
-      "Open discussion: feedback, lead quality, new initiatives, or observations.",
-      "Confirm next steps, responsibilities, and upcoming deliverables.",
-    ],
+    bullets: partnershipBullets,
   });
 
   if (sfCounts) {

@@ -50,16 +50,20 @@ function fmtIso(d: Date) {
   return d.toISOString().slice(0, 10);
 }
 
-// Combine progressFeeling + contextAnomalies into a single compact commentary line.
-// Returns undefined when both fields are empty.
+// Combine progressFeeling + contextAnomalies + clientSentiment into a single compact commentary line.
+// Returns undefined when all fields are empty.
 function buildPerformanceCommentary(am: MonthlyAmInputs): string | undefined {
   const feeling = am.progressFeeling?.trim();
   const context = am.contextAnomalies?.trim();
-  if (!feeling && !context) return undefined;
+  const sentiment = am.clientSentiment?.trim();
+  if (!feeling && !context && !sentiment) return undefined;
   const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
   const end = (s: string) => /[.!?]$/.test(s) ? s : `${s}.`;
-  if (feeling && context) return `${end(cap(feeling))} Context: ${cap(context)}`;
-  return end(cap(feeling || context!));
+  const parts: string[] = [];
+  if (feeling) parts.push(end(cap(feeling)));
+  if (context) parts.push(`Context: ${cap(context)}`);
+  if (sentiment) parts.push(`Client sentiment: ${cap(sentiment)}`);
+  return parts.join(" ");
 }
 
 // Converts a URL slug into a readable label.
@@ -685,6 +689,9 @@ export async function generateMonthly(input: {
   if (am.amThoughts?.trim()) {
     nextMonthBullets.push(`Strategic focus: ${am.amThoughts}`);
   }
+  if (am.clientNotes?.trim()) {
+    nextMonthBullets.push(`Client notes: ${am.clientNotes.trim()}`);
+  }
 
   const nextMonthName = new Date(input.year, input.month, 1).toLocaleDateString("en-US", {
     month: "long",
@@ -698,21 +705,11 @@ export async function generateMonthly(input: {
     bullets: nextMonthBullets.slice(0, 8),
   });
 
-  const amInputsBullets: string[] = [];
-  if (am.clientSentiment) amInputsBullets.push(`Client Sentiment: ${am.clientSentiment}`);
-  if (am.amThoughts?.trim()) amInputsBullets.push(`AM's Thoughts: ${am.amThoughts.trim()}`);
-  if (am.priorityChecks?.trim()) amInputsBullets.push(`Priority Checks: ${am.priorityChecks.trim()}`);
-  if (am.clientNotes?.trim()) amInputsBullets.push(`Client Notes: ${am.clientNotes.trim()}`);
-
-  if (amInputsBullets.length > 0) {
-    slides.push({
-      id: "am_inputs",
-      type: "bullets",
-      title: "AM Inputs",
-      subtitle: "Account Manager Context & Priorities",
-      bullets: amInputsBullets,
-    });
-  }
+  // AM Inputs standalone slide removed — context is now distributed into relevant slides:
+  //   clientSentiment → Monthly Performance Overview commentary
+  //   priorityChecks  → Next Month Priorities ("Technical note")
+  //   amThoughts      → Next Month Priorities ("Strategic focus")
+  //   clientNotes     → Next Month Priorities ("Client notes")
 
   if (gscDailyTrend.status === "fulfilled" && gscDailyTrend.value) {
     const { current: gscCurr, previous: gscPrev } = gscDailyTrend.value as { current: any[]; previous: any[] };

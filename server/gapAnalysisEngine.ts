@@ -196,17 +196,9 @@ const QUESTION_TEMPLATES: GapQuestionTemplate[] = [
     reportTypes: ["qbr_full", "mid_strategy", "monthly"],
     evaluator: ({ seoHqContext }) => seoHqContext.strategyBank.entries.length > 0
   },
-  {
-    templateId: "hq_qssb_additional_opportunities",
-    prompt: "The QSSB lists additional opportunities for this client. Have we followed up on these?",
-    type: "long_text",
-    priorityScore: 70,
-    rationale: "Tracking upsell and expansion opportunities is part of our account management standard.",
-    showRationaleToUser: false,
-    sourceCategory: "SEO_HQ_alignment_gap",
-    reportTypes: ["monthly", "qbr_prep", "qbr_full"],
-    evaluator: ({ seoHqContext }) => seoHqContext.qssb.additionalOpportunities.length > 0
-  },
+  // hq_qssb_additional_opportunities removed — this question appeared for QSSB clients
+  // even when the AM had no action to report, causing confusion. QSSB follow-up is
+  // handled manually in the Partnership section, not via the gap flow.
 
   // --- REPORT NARRATIVE GAPS ---
   {

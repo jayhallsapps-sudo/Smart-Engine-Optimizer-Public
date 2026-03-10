@@ -2597,7 +2597,7 @@ function generateAdditionalOpportunities(report: QbrPrepReportData): AdditionalO
         `Tier ${tier} site diagnosis (${tierName}) — domain authority is the primary constraint on service-page rankings, which content production alone cannot break through`,
       ];
       if (isBehindPace && primaryRow) {
-        evidenceItems.push(`Primary goal (${primaryRow.goal}) is behind pace — standard content-only work cannot accelerate service-page rankings within the quarter`);
+        evidenceItems.push(`Primary goal (${primaryRow.goal}) is behind pace — standard content-only work cannot close the authority gap that limits service-page rankings this cycle`);
       } else {
         evidenceItems.push(`${highAdmitTopics.length} confirmed high-intent topic cluster${highAdmitTopics.length > 1 ? "s" : ""} identified — authority, not content volume, is the primary ranking constraint on these terms`);
       }
@@ -2605,10 +2605,10 @@ function generateAdditionalOpportunities(report: QbrPrepReportData): AdditionalO
       pool.push(candidate({
         type: "upsell",
         title: "Custom Authority-Building Initiative",
-        why_now: `Site is at Tier ${tier} — service-page rankings on high-value treatment terms are directly constrained by domain authority, which the standard content roadmap alone cannot resolve within a quarter.`,
+        why_now: `Site is at Tier ${tier} — service-page rankings on high-value treatment terms are constrained by domain authority. The standard content roadmap addresses what to publish, not the ceiling that prevents those pages from ranking.`,
         evidence: evidenceItems,
-        recommendation: "A focused link acquisition or digital PR project targeting high-intent service pages — a deeper SEO investment than the standard monthly content roadmap includes.",
-        framing: "Optional acceleration lever for clients who need rankings on competitive treatment terms faster than organic content compounding alone.",
+        recommendation: "A focused link acquisition or digital PR program targeting high-intent service pages. This is a deeper SEO investment than the standard monthly retainer covers, designed to remove the authority ceiling that content production alone cannot lift.",
+        framing: "Recommended when authority — not content output or keyword strategy — is the confirmed bottleneck. Link acquisition and digital PR address a constraint that standard scope cannot resolve.",
       }, bi, es, u, sf));
     }
   }
@@ -2639,13 +2639,13 @@ function generateAdditionalOpportunities(report: QbrPrepReportData): AdditionalO
     pool.push(candidate({
       type: "cross_sell",
       title: "Paid Search Demand Capture",
-      why_now: `Primary goal is behind pace while treatment-intent organic demand is confirmed in search data — paid search can capture the same high-intent traffic immediately rather than waiting for organic rankings to compound.`,
+      why_now: `Primary goal is behind pace while organic search data confirms treatment-intent demand — paid search reaches the same audience on a faster timeline than organic rankings can deliver this quarter.`,
       evidence: [
-        `Primary goal (${primaryRow!.goal}) is behind pace — organic growth alone may not close the gap within the current quarter`,
-        `${highAdmitTopics.length} confirmed high-intent organic cluster${highAdmitTopics.length > 1 ? "s" : ""} — treatment-intent demand is active and paid search can capture it immediately`,
+        `Primary goal (${primaryRow!.goal}) is behind pace — organic growth alone is unlikely to close the gap before the quarter ends`,
+        `${highAdmitTopics.length} confirmed high-intent organic cluster${highAdmitTopics.length > 1 ? "s" : ""} — treatment-intent demand is active in search data and paid search can reach it on a shorter timeline`,
       ],
-      recommendation: `Targeted paid search on confirmed high-intent service terms (${topTopic.topic} and related treatment clusters) to generate qualified leads faster than organic timelines allow.`,
-      framing: "Optional acceleration lever — paid search captures immediate admit-intent demand without replacing the organic roadmap.",
+      recommendation: `Targeted paid search on confirmed high-intent service terms (${topTopic.topic} and related treatment clusters) to generate qualified leads on a timeline that organic rankings cannot match this quarter.`,
+      framing: "Paid search is additive, not a replacement — it reaches the same intent the organic program is building toward, just through a faster channel.",
     }, bi, es, u, sf));
   }
 
@@ -2674,13 +2674,13 @@ function generateAdditionalOpportunities(report: QbrPrepReportData): AdditionalO
     pool.push(candidate({
       type: "upsell",
       title: "Expanded Content Production Initiative",
-      why_now: `${highAdmitTopics.length} high-intent topic clusters are confirmed in organic search data, but current monthly content output cannot build all of them to competitive depth within a single quarter.`,
+      why_now: `${highAdmitTopics.length} high-intent topic clusters are confirmed in organic search data, but current monthly content output cannot build all of them to competitive depth in a single planning cycle.`,
       evidence: [
         `High-admit-connection clusters: ${highAdmitTopics.slice(0, 3).map(t => `"${t.topic}"`).join(", ")}`,
-        `${highAdmitTopics.length} confirmed high-intent areas compete for the same monthly content allocation — full cluster coverage requires increased production capacity`,
+        `Full cluster coverage at competitive depth would require a production volume beyond what the standard monthly allocation supports`,
       ],
-      recommendation: "An expanded content production program to systematically build out service page clusters, topic hubs, and conversion-path pages across all confirmed high-intent areas within the quarter.",
-      framing: "Optional acceleration lever for clients who want to build full topic authority faster than standard monthly content output allows.",
+      recommendation: "An expanded content production program to systematically build out service page clusters, topic hubs, and conversion-path pages across all confirmed high-intent areas — more output capacity applied to confirmed demand signals.",
+      framing: "Relevant when production capacity — not strategy, authority, or keyword targeting — is the reason high-intent clusters remain underdeveloped.",
     }, bi, es, u, sf));
   }
 
@@ -2713,14 +2713,14 @@ function generateAdditionalOpportunities(report: QbrPrepReportData): AdditionalO
 
       pool.push(candidate({
         type: "cross_sell",
-        title: "Retargeting & Content Promotion",
-        why_now: `${totalInfoClicks.toLocaleString()} confirmed organic clicks are reaching informational pages with low-to-medium admit connection — this traffic is earned through SEO but is not converting through organic paths alone.`,
+        title: "Organic Audience Retargeting",
+        why_now: `${totalInfoClicks.toLocaleString()} confirmed organic clicks are reaching informational pages with low-to-medium admit connection — the audience is being built through SEO, but organic paths alone are not converting it to admissions activity.`,
         evidence: [
           `${lowMidPages.length} informational pages with ${totalInfoClicks.toLocaleString()} combined organic clicks and low-to-medium admit connection — confirmed via GA4 or call tracking`,
-          "Organic users are reaching the site through informational content but are not progressing to admissions, VOB, or contact pages without an additional touchpoint",
+          "The gap between organic visit volume on informational pages and downstream admissions activity indicates these users need an additional touchpoint to progress toward intake",
         ],
-        recommendation: "A retargeting or paid social promotion program to re-engage confirmed organic visitors who did not convert, delivering service-focused messaging to move them toward admissions.",
-        framing: "Optional lever to extract conversion value from organic traffic already being generated — no additional audience acquisition required.",
+        recommendation: "A retargeting program to re-engage confirmed organic visitors who did not convert — delivering service-focused messaging to move them from research to direct admissions contact.",
+        framing: "Retargeting works on audience already earned through SEO. No new rankings or content are required to reach these users again.",
       }, bi, es, u, sf));
     }
   }
@@ -2763,14 +2763,14 @@ function generateAdditionalOpportunities(report: QbrPrepReportData): AdditionalO
 
       pool.push(candidate({
         type: "cross_sell",
-        title: "Paid Social & Content Promotion",
-        why_now: `${lowReachClusters.length} topic clusters have confirmed content but limited organic reach, and the primary goal is behind pace — paid promotion would accelerate distribution on content that is already produced.`,
+        title: "Paid Social Content Amplification",
+        why_now: `${lowReachClusters.length} topic clusters have confirmed content but limited organic reach, and the primary goal is behind pace — content is being produced faster than organic indexing is distributing it.`,
         evidence: [
-          `${lowReachClusters.length} clusters with confirmed search activity but sub-1,000 organic impressions — content distribution is lagging behind content output`,
-          "Primary goal is behind pace and organic indexing speed alone is unlikely to close the visibility gap within the quarter",
+          `${lowReachClusters.length} clusters with confirmed search activity but sub-1,000 organic impressions — distribution is lagging behind content output`,
+          "Primary goal is behind pace and organic indexing speed alone is unlikely to close the distribution gap before the quarter ends",
         ],
-        recommendation: "A paid social or content promotion campaign to amplify organic content that is already produced but not yet reaching its full treatment-seeking audience.",
-        framing: "Optional lever to accelerate reach on content already earned — no additional content creation required.",
+        recommendation: "A paid social or content promotion campaign to amplify treatment-relevant content that is already published but not yet reaching its full audience through organic channels.",
+        framing: "Applies when content output is outpacing organic indexing and pace risk makes waiting on rankings impractical — paid amplification closes the distribution gap without requiring new content.",
       }, bi, es, u, sf));
     }
   }
@@ -2816,13 +2816,13 @@ function generateAdditionalOpportunities(report: QbrPrepReportData): AdditionalO
       pool.push(candidate({
         type: "cross_sell",
         title: "Paid Search Demand Capture",
-        why_now: `Primary goal is behind pace and organic search data does not confirm any high-intent treatment clusters — paid search can target treatment-intent terms directly while the organic program develops positioning.`,
+        why_now: `Primary goal is behind pace and organic search data does not yet confirm any high-intent treatment clusters — paid search can target priority treatment terms directly while the organic program works toward positioning on those terms.`,
         evidence: [
-          `Primary goal is behind pace with no confirmed high-intent organic traffic — organic coverage is not yet reaching the highest-value treatment search terms`,
+          `Primary goal is behind pace with no confirmed high-intent organic clusters — organic coverage has not yet reached the highest-value treatment search terms`,
           `${allTopics.length} topic cluster${allTopics.length > 1 ? "s" : ""} tracked organically${topTopic ? ` (strongest: "${topTopic.topic}")` : ""} — none classified as High admit connection`,
         ],
-        recommendation: `Targeted paid search on high-intent treatment terms (detox, residential, PHP/IOP, insurance verification) to capture admit-intent demand that organic rankings have not yet reached.`,
-        framing: "Optional acceleration lever — captures treatment-intent demand immediately while the organic program builds toward the same terms.",
+        recommendation: `Targeted paid search on priority treatment terms (detox, residential, PHP/IOP, insurance verification) to reach admit-intent demand on terms the organic program has not yet ranked for.`,
+        framing: "Applies when the organic program lacks confirmed high-intent positioning and pace risk makes waiting on organic timelines impractical this quarter.",
       }, bi, es, u, sf));
     }
   }

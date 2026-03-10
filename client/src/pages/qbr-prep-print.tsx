@@ -408,7 +408,7 @@ export default function QbrPrepPrint() {
                 {autoOpps.length > 0 && (
                   <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: s8Rows.length > 0 ? 14 : 0, fontSize: "11px" }}>
                     {autoOpps.map((opp: any, i: number) => (
-                      <div key={i} style={{ border: "1px solid #E5E7EB", borderRadius: 6, overflow: "hidden" }}>
+                      <div key={i} style={{ border: "1px solid #E5E7EB", borderRadius: 6, overflow: "hidden", pageBreakInside: "avoid" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 12px", backgroundColor: "#F9FAFB", borderBottom: "1px solid #E5E7EB" }}>
                           <span
                             style={{

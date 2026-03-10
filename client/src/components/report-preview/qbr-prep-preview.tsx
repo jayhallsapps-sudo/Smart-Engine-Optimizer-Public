@@ -277,6 +277,7 @@ export function QbrPrepPreview({
   amInputs,
 }: QbrPrepPreviewProps) {
   const [headerImgUrl, setHeaderImgUrl] = useState<string | null>(null);
+  const [showSection8, setShowSection8] = useState(true);
 
   useEffect(() => {
     fetch("/api/template/header")
@@ -306,26 +307,7 @@ export function QbrPrepPreview({
   ]);
 
   const hasTopicDeltas = section3Traffic.topTrafficTopics.some(r => r.queryCount != null);
-
-  const s3aSourceRows: React.ReactNode[][] = section3Traffic.topTrafficTopics.map((r, ri) => {
-    const baseCells = [
-      <EditableCell key="t" editKey={`s3a_${ri}_0`} value={r.topic} edits={edits} onEdit={onEdit} />,
-    ];
-    if (hasTopicDeltas) {
-      baseCells.push(
-        <span key="qc" data-testid={`text-query-count-${ri}`}>{r.queryCount ?? "—"}</span>,
-        <span key="qcd" data-testid={`text-query-delta-${ri}`}>{r.queryCountDelta ?? "—"}</span>,
-        <span key="imp" data-testid={`text-impressions-${ri}`}>{r.impressions != null ? r.impressions.toLocaleString("en-US") : "—"}</span>,
-        <span key="impd" data-testid={`text-impressions-delta-${ri}`}>{r.impressionsDelta ?? "—"}</span>,
-      );
-    }
-    baseCells.push(
-      <QueryChipsCell key="eq" editKey={`s3a_${ri}_1`} value={r.exampleQueries} edits={edits} onEdit={onEdit} />,
-      <EditableCell key="c" editKey={`s3a_${ri}_2`} value={r.connectionToAdmits} edits={edits} onEdit={onEdit} />,
-      <BadgeCell key="i" editKey={`s3a_${ri}_3`} value={r.insight} dataSource={r.dataSource} edits={edits} onEdit={onEdit} />,
-    );
-    return baseCells;
-  });
+  const topicColCount = hasTopicDeltas ? 7 : 3;
 
   const hasPageDeltas = section3Traffic.topTrafficPages.some(r => r.clicksDelta || r.impressions || r.queries);
   const pageColCount = hasPageDeltas ? 9 : 4;
@@ -441,15 +423,54 @@ export function QbrPrepPreview({
 
             <SectionHeading num={3} title="Top Organic Traffic Drivers" />
             <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Traffic Topics</div>
-            <AddableReportTable
-              tableId="s3a"
-              headers={hasTopicDeltas
-                ? ["Topic", "# Queries", "Δ Queries", "Impressions", "Δ Impressions", "Example Queries", "Connection to Admits", "Insight"]
-                : ["Topic", "Example Queries", "Connection to Admits", "Insight"]}
-              sourceRows={s3aSourceRows}
-              edits={edits}
-              onEdit={onEdit}
-            />
+            <div style={{ border: `1px solid ${ACCENT}28`, borderRadius: 6, overflow: "hidden", marginBottom: 12, backgroundColor: "#FFFDFB" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px" }}>
+                <thead>
+                  <tr style={{ backgroundColor: `${ACCENT}0D` }}>
+                    {["Topic", ...(hasTopicDeltas ? ["# Queries", "Δ Queries", "Impressions", "Δ Impressions"] : []), "Example Queries", "Connection to Admits"].map(h => (
+                      <th key={h} style={{ padding: "5px 8px", textAlign: "left", fontWeight: 600, fontSize: "9px", color: ACCENT, textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: `1px solid ${ACCENT}20`, whiteSpace: "nowrap" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {section3Traffic.topTrafficTopics.map((r, ri) => {
+                    const insightVal = edits[`s3a_${ri}_3`] ?? r.insight;
+                    const hasInsight = !!insightVal;
+                    const cellBorder = hasInsight ? "none" : "1px solid #F3EDED";
+                    const bg = ri % 2 === 1 ? "#FBF8F7" : "white";
+                    return (
+                      <React.Fragment key={`topic-${ri}`}>
+                        <tr style={{ backgroundColor: bg }}>
+                          <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4 }}>
+                            <EditableCell editKey={`s3a_${ri}_0`} value={r.topic} edits={edits} onEdit={onEdit} />
+                          </td>
+                          {hasTopicDeltas && <>
+                            <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4 }} data-testid={`text-query-count-${ri}`}>{r.queryCount ?? "—"}</td>
+                            <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4, color: r.queryCountDelta?.startsWith("-") ? "#DC2626" : "#16A34A" }} data-testid={`text-query-delta-${ri}`}>{r.queryCountDelta ?? "—"}</td>
+                            <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4 }} data-testid={`text-impressions-${ri}`}>{r.impressions != null ? r.impressions.toLocaleString("en-US") : "—"}</td>
+                            <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4, color: r.impressionsDelta?.startsWith("-") ? "#DC2626" : "#16A34A" }} data-testid={`text-impressions-delta-${ri}`}>{r.impressionsDelta ?? "—"}</td>
+                          </>}
+                          <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4 }}>
+                            <QueryChipsCell editKey={`s3a_${ri}_1`} value={r.exampleQueries} edits={edits} onEdit={onEdit} />
+                          </td>
+                          <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4 }}>
+                            <EditableCell editKey={`s3a_${ri}_2`} value={r.connectionToAdmits} edits={edits} onEdit={onEdit} />
+                          </td>
+                        </tr>
+                        {hasInsight && (
+                          <tr style={{ backgroundColor: "#FFFBEB" }}>
+                            <td colSpan={topicColCount} style={{ padding: "4px 10px 6px 14px", borderBottom: "1px solid #F3EDED", borderLeft: `3px solid ${ACCENT}40`, fontSize: "9px", color: "#6B7280", lineHeight: 1.4 }}>
+                              <span style={{ fontWeight: 700, color: ACCENT, marginRight: 4 }}>Insight:</span>
+                              <EditableCell editKey={`s3a_${ri}_3`} value={r.insight} edits={edits} onEdit={onEdit} />
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
             <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Traffic Pages</div>
             <div style={{ border: `1px solid ${ACCENT}28`, borderRadius: 6, overflow: "hidden", marginBottom: 12, backgroundColor: "#FFFDFB" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px" }}>
@@ -542,6 +563,7 @@ export function QbrPrepPreview({
               onEdit={onEdit}
             />
 
+            {/* Client Insights — commented out pending redesign
             {sectionQssb && sectionQssb.clientInsights.length > 0 && (
               <>
                 <SectionHeading num={8} title="Client Insights" />
@@ -554,38 +576,59 @@ export function QbrPrepPreview({
                 </div>
               </>
             )}
+            */}
 
+            {/* QSSB Additional Opportunities — commented out pending redesign
             {sectionQssb && sectionQssb.additionalOpportunities.length > 0 && (
               <>
                 <SectionHeading num={sectionQssb.clientInsights.length > 0 ? 9 : 8} title="Additional Opportunities" />
-                <div style={{ marginBottom: 16 }} data-testid="qssb-opportunities-table">
-                  {sectionQssb.additionalOpportunities.map((opp, i) => (
-                    <div
-                      key={i}
-                      style={{ display: "flex", gap: 10, marginBottom: 14, alignItems: "flex-start" }}
-                      data-testid={`opportunity-item-${i}`}
-                    >
-                      <span style={{
-                        fontWeight: 700,
-                        color: ACCENT,
-                        minWidth: 20,
-                        flexShrink: 0,
-                        fontSize: "12px",
-                        lineHeight: "1.4",
-                      }}>
-                        {i + 1}.
-                      </span>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 700, fontSize: "11px", color: "#111827", marginBottom: 3 }}>
-                          <EditableCell editKey={`qssb_opp_${i}_0`} value={opp.title} edits={edits} onEdit={onEdit} />
-                        </div>
-                        <div style={{ fontSize: "10px", color: "#4B5563", lineHeight: "1.5" }}>
-                          <EditableCell editKey={`qssb_opp_${i}_1`} value={opp.description} edits={edits} onEdit={onEdit} />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                ...
+              </>
+            )}
+            */}
+
+            {showSection8 && (
+              <>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    color: ACCENT,
+                    fontWeight: 700,
+                    fontSize: "14px",
+                    borderBottom: `2px solid ${ACCENT}`,
+                    paddingBottom: 4,
+                    marginBottom: 12,
+                    marginTop: 28,
+                  }}
+                  data-testid="section-heading-8"
+                >
+                  <span>8. Additional Opportunities</span>
+                  <button
+                    onClick={() => setShowSection8(false)}
+                    title="Remove section"
+                    data-testid="button-remove-section8"
+                    style={{
+                      color: "#9CA3AF",
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      fontSize: 16,
+                      lineHeight: 1,
+                      padding: "0 2px",
+                    }}
+                  >
+                    ×
+                  </button>
                 </div>
+                <AddableReportTable
+                  tableId="s8_opportunities"
+                  headers={["Description", "Purpose", "Est. Cost"]}
+                  sourceRows={[]}
+                  edits={edits}
+                  onEdit={onEdit}
+                />
               </>
             )}
 

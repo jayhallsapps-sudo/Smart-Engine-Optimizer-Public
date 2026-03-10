@@ -187,7 +187,7 @@ export async function generateQbrPrepV2Docx(
     resolveCell(`s1_${ri}_3`, r.goalShift, edits),
     resolveCell(`s1_${ri}_4`, r.reason, edits),
   ]);
-  docChildren.push(makeTable(["Goal Type", "Goal", "Measurement Source", "Goal Shift", "Reason"], s1Rows));
+  docChildren.push(makeTable(["Goal Type", "Goal", "Source", "Goal Shift", "Reason"], s1Rows));
 
   const s2 = reportData.section2Conversions;
   docChildren.push(sectionHeading(2, "Where Conversions Actually Happen"));

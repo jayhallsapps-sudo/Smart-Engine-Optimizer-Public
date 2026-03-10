@@ -60,7 +60,7 @@ const SAMPLE_REPORTS: SampleReport[] = [
   },
   {
     id: "qbr-prep",
-    title: "QBR Prep",
+    title: "QBR Snapshot",
     subtitle: "Word Document (.docx)",
     description:
       "An internal strategy document for Acme Plumbing & HVAC's Q1 → Q2 review. Contains an executive summary of wins, a prioritized opportunity backlog with evidence, problem statements, and recommended next steps across Content, Technical, CRO, and Local categories.",

@@ -435,7 +435,7 @@ export function getSampleQbrSections(): SectionData[] {
 
 export function getSampleQbrPrepJson(): QbrPrepJson {
   return {
-    report_title: "QBR Prep — Opportunity Backlog",
+    report_title: "QBR Snapshot — Opportunity Backlog",
     client_name: SAMPLE_CLIENT_NAME,
     past_window_label: "Q1 2025",
     past_start: "2025-01-01",

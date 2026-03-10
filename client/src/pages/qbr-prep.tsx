@@ -211,7 +211,7 @@ export default function QbrPrepPage() {
       setHiddenTables({});
       reportSave.pendingPayloadRef.current = { reportData: data.reportData, edits: {}, meta };
       reportSave.save(data.reportData, {}, meta);
-      toast({ title: "QBR Prep generated", description: "Preview ready — click any text to edit." });
+      toast({ title: "QBR Snapshot generated", description: "Preview ready — click any text to edit." });
     },
     onSettled: () => {
       if (sessionId) fetchAnswerUsage(sessionId);
@@ -324,7 +324,7 @@ export default function QbrPrepPage() {
       const a = document.createElement("a");
       a.href = url;
       const slug = reportData.meta?.site?.toLowerCase().replace(/\s+/g, "_") ?? "report";
-      a.download = `${slug}_qbr_prep_q${quarter.planningQ}_${quarter.planningYear}.docx`;
+      a.download = `${slug}_qbr_snapshot_q${quarter.planningQ}_${quarter.planningYear}.docx`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (err: any) {
@@ -342,7 +342,7 @@ export default function QbrPrepPage() {
         edits,
         hiddenSections,
         hiddenTables,
-        reportTitle: `QBR Prep - ${reportData.meta?.site} - Q${quarter.planningQ} ${quarter.planningYear}`,
+        reportTitle: `QBR Snapshot - ${reportData.meta?.site} - Q${quarter.planningQ} ${quarter.planningYear}`,
       });
       return res.json();
     },
@@ -379,7 +379,7 @@ export default function QbrPrepPage() {
       const a = document.createElement("a");
       a.href = url;
       const slug = reportData.meta?.site?.toLowerCase().replace(/\s+/g, "_") ?? "report";
-      a.download = `${slug}_qbr_prep_q${quarter.planningQ}_${quarter.planningYear}.pdf`;
+      a.download = `${slug}_qbr_snapshot_q${quarter.planningQ}_${quarter.planningYear}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (err: any) {
@@ -425,7 +425,7 @@ export default function QbrPrepPage() {
           <div className="flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-primary" />
             <div>
-              <h1 className="font-semibold text-sm" data-testid="text-page-title">QBR Prep</h1>
+              <h1 className="font-semibold text-sm" data-testid="text-page-title">QBR Snapshot</h1>
               <p className="text-xs text-muted-foreground">7-section SEO planning snapshot</p>
             </div>
           </div>
@@ -644,7 +644,7 @@ export default function QbrPrepPage() {
             ) : reportData ? (
               <><RefreshCw className="w-4 h-4 mr-2" /> Regenerate</>
             ) : (
-              <><Sparkles className="w-4 h-4 mr-2" /> Generate QBR Prep</>
+              <><Sparkles className="w-4 h-4 mr-2" /> Generate QBR Snapshot</>
             )}
           </Button>
 
@@ -821,7 +821,7 @@ export default function QbrPrepPage() {
           <div className="h-full flex items-center justify-center">
             <div className="text-center space-y-3 max-w-xs">
               <Sparkles className="w-12 h-12 text-muted-foreground mx-auto" />
-              <h2 className="font-semibold text-lg" data-testid="text-empty-state-title">QBR Prep Report</h2>
+              <h2 className="font-semibold text-lg" data-testid="text-empty-state-title">QBR Snapshot</h2>
               <p className="text-sm text-muted-foreground">
                 Select a client, upload a site crawl, then click Generate. The preview renders your 7-section planning snapshot — click any text to edit before exporting.
               </p>

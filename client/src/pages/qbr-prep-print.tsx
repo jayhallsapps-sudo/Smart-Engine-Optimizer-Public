@@ -9,7 +9,7 @@ const FOOTER_TEXT = "Webserv  |  32 Discovery Suite 130, Irvine, CA 92618  |  we
 const PRINT_SECTION_DEFS = [
   { key: "section_goals" }, { key: "section_conversions" }, { key: "section_traffic" },
   { key: "section_services" }, { key: "section_diagnosis" }, { key: "section_priorities" },
-  { key: "section_credits" }, { key: "section_tracking" }, { key: "section_opportunities" },
+  { key: "section_tracking" }, { key: "section_opportunities" },
 ];
 const PRINT_SECTION_TABLES: Record<string, string[]> = {
   section_conversions: ["table_s2_pages", "table_s2_patterns", "table_s2_sources"],
@@ -22,11 +22,10 @@ function printSecAutoHidden(k: string, ht: Record<string, boolean>) {
   const tbls = PRINT_SECTION_TABLES[k];
   return !!(tbls && tbls.length > 0 && tbls.every(t => ht[t]));
 }
-function computePrintSecNums(hs: Record<string, boolean>, ht: Record<string, boolean>, hasCreds: boolean, hasOpps: boolean) {
+function computePrintSecNums(hs: Record<string, boolean>, ht: Record<string, boolean>, hasOpps: boolean) {
   const out: Record<string, number> = {};
   let n = 1;
   for (const { key } of PRINT_SECTION_DEFS) {
-    if (key === "section_credits" && !hasCreds) continue;
     if (key === "section_opportunities" && !hasOpps) continue;
     if (hs[key] || printSecAutoHidden(key, ht)) continue;
     out[key] = n++;
@@ -51,27 +50,6 @@ function DataTable({ headers, rows }: { headers: string[]; rows: string[][] }) {
     )
   );
   return <ReportTable headers={headers} rows={nodeRows} />;
-}
-
-interface CreditMonth { month: string; rows: { credits: string; activity: string }[]; unparsed: string[]; }
-function parseCreditUsage(raw: string): CreditMonth[] {
-  const MONTH_HEADING = /^(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s+\d{4}$/i;
-  const CREDIT_LINE = /^(\d+(?:\s*[cC]redits?)?)\s*[-:]\s*(.+)$/;
-  const lines = raw.split("\n").map(l => l.trim()).filter(l => l.length > 0);
-  const months: CreditMonth[] = [];
-  let current: CreditMonth | null = null;
-  for (const line of lines) {
-    if (MONTH_HEADING.test(line)) { current = { month: line, rows: [], unparsed: [] }; months.push(current); }
-    else if (current) {
-      const m = CREDIT_LINE.exec(line);
-      if (m) {
-        const n = parseInt(m[1], 10);
-        const creditLabel = isNaN(n) ? m[1].charAt(0).toUpperCase() + m[1].slice(1) : `${n} ${n === 1 ? "Credit" : "Credits"}`;
-        current.rows.push({ credits: creditLabel, activity: m[2].trim() });
-      } else { current.unparsed.push(line); }
-    }
-  }
-  return months;
 }
 
 function cell(val: string): ReactNode {
@@ -150,11 +128,9 @@ export default function QbrPrepPrint() {
   const genMeta = reportData.generationMeta;
   const amPrint = reportData.sourceSnapshot?.manualInputs ?? {};
 
-  const s7c = (reportData as any).section7Credits as { months: Array<{ month: string; rows: Array<{ credits: number; activity: string }> }> } | undefined;
-  const _hasCreds = !!(s7c?.months?.length) || !!(amPrint.creditUsage?.trim());
   const _autoOpps: any[] = reportData.additionalOpportunities ?? [];
   const _hasOpps = _autoOpps.length > 0;
-  const secNums = computePrintSecNums(hiddenSections, hiddenTables, _hasCreds, _hasOpps);
+  const secNums = computePrintSecNums(hiddenSections, hiddenTables, _hasOpps);
   const secVis = (k: string) => secNums[k] !== undefined;
   const tblVis = (k: string) => !hiddenTables[k];
 
@@ -251,7 +227,7 @@ export default function QbrPrepPrint() {
         </div>
 
         <div style={{ padding: "24px 56px 0" }}>
-          <div style={{ marginBottom: "4px", fontSize: "20px", fontWeight: 700 }}>QBR Prep: SEO Planning Snapshot</div>
+          <div style={{ marginBottom: "4px", fontSize: "20px", fontWeight: 700 }}>QBR Snapshot</div>
           <div style={{ fontSize: "14px", fontWeight: 600, color: "#374151", marginBottom: "12px" }}>{e("meta_site", meta.site ?? "")}</div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 24px", fontSize: "11px", marginBottom: "20px", padding: "12px 16px", backgroundColor: "#F9FAFB", borderRadius: 4, border: "1px solid #E5E7EB" }}>
@@ -538,92 +514,6 @@ export default function QbrPrepPrint() {
               })()}
             </>
           )}
-
-          {secVis("section_credits") && (() => {
-            if (s7c?.months?.length) {
-              return (
-                <>
-                  <SectionHeading num={secNums["section_credits"]!} title="How Credits Are Used Each Month" />
-                  {s7c.months.map((cm, mi) => {
-                    const newRowCount = parseInt(edits[`credit_${mi}_newrow_count`] ?? "0", 10);
-                    return (
-                      <div key={mi} style={{ marginBottom: 14 }}>
-                        <div style={{ fontSize: "11px", fontWeight: 700, color: "#374151", marginBottom: 4 }}>{e(`credit_${mi}_month`, cm.month)}</div>
-                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px" }}>
-                          <thead>
-                            <tr style={{ backgroundColor: "#F3F4F6" }}>
-                              <th style={{ textAlign: "left", padding: "4px 8px", fontWeight: 600, color: "#6B7280", width: "22%", borderBottom: "1px solid #E5E7EB" }}>Credits</th>
-                              <th style={{ textAlign: "left", padding: "4px 8px", fontWeight: 600, color: "#6B7280", borderBottom: "1px solid #E5E7EB" }}>Activity</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {cm.rows.map((row, ri) => {
-                              if (edits[`credit_${mi}_${ri}_deleted`] === "1") return null;
-                              const creditsDefault = row.credits === 1 ? "1 Credit" : `${row.credits} Credits`;
-                              return (
-                                <tr key={ri} style={{ borderBottom: "1px solid #F3F4F6" }}>
-                                  <td style={{ padding: "5px 8px", color: "#1B3A6B", fontWeight: 600 }}>{e(`credit_${mi}_${ri}_credits`, creditsDefault)}</td>
-                                  <td style={{ padding: "5px 8px", color: "#374151" }}>{e(`credit_${mi}_${ri}_activity`, row.activity)}</td>
-                                </tr>
-                              );
-                            })}
-                            {Array.from({ length: newRowCount }).map((_, ni) => {
-                              const nc = edits[`credit_${mi}_newrow_${ni}_credits`] ?? "";
-                              const na = edits[`credit_${mi}_newrow_${ni}_activity`] ?? "";
-                              if (!nc && !na) return null;
-                              return (
-                                <tr key={`new_${ni}`} style={{ borderBottom: "1px solid #F3F4F6" }}>
-                                  <td style={{ padding: "5px 8px", color: "#1B3A6B", fontWeight: 600 }}>{nc || "1 Credit"}</td>
-                                  <td style={{ padding: "5px 8px", color: "#374151" }}>{na}</td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    );
-                  })}
-                </>
-              );
-            }
-            // Legacy fallback
-            const rawCreditUsage: string = amPrint.creditUsage ?? "";
-            if (!rawCreditUsage.trim()) return null;
-            const creditMonths = parseCreditUsage(rawCreditUsage);
-            return (
-              <>
-                <SectionHeading num={secNums["section_credits"]!} title="How Credits Are Used Each Month" />
-                {creditMonths.length > 0 ? creditMonths.map((cm, mi) => (
-                  <div key={mi} style={{ marginBottom: 14 }}>
-                    <div style={{ fontSize: "11px", fontWeight: 700, color: "#374151", marginBottom: 4 }}>{e(`credit_${mi}_month`, cm.month)}</div>
-                    {cm.rows.length > 0 && (
-                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px" }}>
-                        <thead>
-                          <tr style={{ backgroundColor: "#F3F4F6" }}>
-                            <th style={{ textAlign: "left", padding: "4px 8px", fontWeight: 600, color: "#6B7280", width: "22%", borderBottom: "1px solid #E5E7EB" }}>Credits</th>
-                            <th style={{ textAlign: "left", padding: "4px 8px", fontWeight: 600, color: "#6B7280", borderBottom: "1px solid #E5E7EB" }}>Activity</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {cm.rows.map((row, ri) => (
-                            <tr key={ri} style={{ borderBottom: "1px solid #F3F4F6" }}>
-                              <td style={{ padding: "5px 8px", color: "#1B3A6B", fontWeight: 600 }}>{e(`credit_${mi}_${ri}_credits`, row.credits)}</td>
-                              <td style={{ padding: "5px 8px", color: "#374151" }}>{e(`credit_${mi}_${ri}_activity`, row.activity)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    )}
-                    {cm.unparsed.map((u, ui) => (
-                      <div key={ui} style={{ fontSize: "11px", color: "#6B7280", padding: "2px 8px" }}>{u}</div>
-                    ))}
-                  </div>
-                )) : (
-                  <div style={{ fontSize: "11px", color: "#374151", whiteSpace: "pre-wrap", marginBottom: 14 }}>{rawCreditUsage}</div>
-                )}
-              </>
-            );
-          })()}
 
           {secVis("section_tracking") && !printSecAutoHidden("section_tracking", hiddenTables) && (
             <>

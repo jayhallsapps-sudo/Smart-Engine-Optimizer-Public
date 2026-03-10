@@ -13,7 +13,7 @@ const SECTION_DEFS = [
   { key: "section_services", title: "Site Service Overview" },
   { key: "section_diagnosis", title: "SEO Tier Diagnosis" },
   { key: "section_priorities", title: "What We Need to Do Next" },
-  { key: "section_credits", title: "How Credits Are Used Each Month" },
+  { key: "section_credits", title: "Possible Credit Usage Each Month" },
   { key: "section_tracking", title: "What We Track" },
   { key: "section_opportunities", title: "Additional Opportunities" },
 ];
@@ -508,7 +508,7 @@ export function QbrPrepPreview({
         <div style={{ padding: "24px 56px 0", flex: 1, display: "flex", flexDirection: "column" }}>
           <div style={{ flex: 1 }}>
             <div style={{ marginBottom: "4px", fontSize: "20px", fontWeight: 700 }}>
-              QBR Prep: SEO Planning Snapshot
+              QBR Snapshot
             </div>
             <div style={{ fontSize: "14px", fontWeight: 600, color: "#374151", marginBottom: "12px" }}>
               <EditableCell editKey="meta_site" value={meta.site} edits={edits} onEdit={onEdit} />
@@ -867,12 +867,12 @@ export function QbrPrepPreview({
 
             {hasCreditSection && (
               hiddenSections["section_credits"] ? (
-                <HiddenSectionBar secKey="section_credits" title="How Credits Are Used Each Month" onShow={() => onToggleSection?.("section_credits")} />
+                <HiddenSectionBar secKey="section_credits" title="Possible Credit Usage Each Month" onShow={() => onToggleSection?.("section_credits")} />
               ) : sectionNums["section_credits"] !== undefined ? (() => {
                 if (section7Credits?.months?.length) {
                   return (
                     <>
-                      <SectionHeading num={sectionNums["section_credits"]} title="How Credits Are Used Each Month" onHide={hideSecBtn("section_credits")} />
+                      <SectionHeading num={sectionNums["section_credits"]} title="Possible Credit Usage Each Month" onHide={hideSecBtn("section_credits")} />
                       {section7Credits.months.map((cm, mi) => {
                         const newRowCount = parseInt(edits[`credit_${mi}_newrow_count`] ?? "0", 10);
                         return (
@@ -956,7 +956,7 @@ export function QbrPrepPreview({
                   const creditMonths = parseCreditUsage(amInputs.creditUsage);
                   return (
                     <>
-                      <SectionHeading num={sectionNums["section_credits"]} title="How Credits Are Used Each Month" onHide={hideSecBtn("section_credits")} />
+                      <SectionHeading num={sectionNums["section_credits"]} title="Possible Credit Usage Each Month" onHide={hideSecBtn("section_credits")} />
                       {creditMonths.length > 0 ? creditMonths.map((cm, mi) => (
                         <div key={mi} style={{ marginBottom: 14 }}>
                           <div style={{ fontSize: "11px", fontWeight: 700, color: "#374151", marginBottom: 4 }}>

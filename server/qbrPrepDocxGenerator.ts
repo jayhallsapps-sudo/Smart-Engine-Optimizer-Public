@@ -108,27 +108,6 @@ function makeTable(headers: string[], rows: string[][], colWidths?: number[]) {
   });
 }
 
-interface CreditMonth { month: string; rows: { credits: string; activity: string }[]; unparsed: string[]; }
-function parseCreditUsage(raw: string): CreditMonth[] {
-  const MONTH_HEADING = /^(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s+\d{4}$/i;
-  const CREDIT_LINE = /^(\d+(?:\s*[cC]redits?)?)\s*[-:]\s*(.+)$/;
-  const lines = raw.split("\n").map((l: string) => l.trim()).filter((l: string) => l.length > 0);
-  const months: CreditMonth[] = [];
-  let current: CreditMonth | null = null;
-  for (const line of lines) {
-    if (MONTH_HEADING.test(line)) { current = { month: line, rows: [], unparsed: [] }; months.push(current); }
-    else if (current) {
-      const m = CREDIT_LINE.exec(line);
-      if (m) {
-        const n = parseInt(m[1], 10);
-        const creditLabel = isNaN(n) ? m[1].charAt(0).toUpperCase() + m[1].slice(1) : `${n} ${n === 1 ? "Credit" : "Credits"}`;
-        current.rows.push({ credits: creditLabel, activity: m[2].trim() });
-      } else { current.unparsed.push(line); }
-    }
-  }
-  return months;
-}
-
 function sectionHeading(num: number, title: string, addPageBreak = false) {
   return new Paragraph({
     pageBreakBefore: addPageBreak,
@@ -272,7 +251,6 @@ const DOCX_SECTION_DEFS = [
   { key: "section_services" },
   { key: "section_diagnosis" },
   { key: "section_priorities" },
-  { key: "section_credits" },
   { key: "section_tracking" },
   { key: "section_opportunities" },
 ];
@@ -287,11 +265,10 @@ function docxSecAutoHidden(secKey: string, ht: Record<string, boolean>): boolean
   const tbls = DOCX_SECTION_TABLES[secKey];
   return !!(tbls && tbls.length > 0 && tbls.every(t => ht[t]));
 }
-function computeDocxSecNums(hs: Record<string, boolean>, ht: Record<string, boolean>, hasCreds: boolean, hasOpps: boolean): Record<string, number> {
+function computeDocxSecNums(hs: Record<string, boolean>, ht: Record<string, boolean>, hasOpps: boolean): Record<string, number> {
   const out: Record<string, number> = {};
   let n = 1;
   for (const { key } of DOCX_SECTION_DEFS) {
-    if (key === "section_credits" && !hasCreds) continue;
     if (key === "section_opportunities" && !hasOpps) continue;
     if (hs[key] || docxSecAutoHidden(key, ht)) continue;
     out[key] = n++;
@@ -368,10 +345,8 @@ export async function generateQbrPrepV2Docx(
   }
 
   // ── Compute visibility ────────────────────────────────────────────────────
-  const s7c = (reportData as any).section7Credits as { months: Array<{ month: string; rows: Array<{ credits: number; activity: string }> }> } | undefined;
-  const _hasCreds = !!(s7c?.months?.length) || !!(manualInputs?.creditUsage?.trim());
   const _hasOpps = (reportData.additionalOpportunities?.length ?? 0) > 0;
-  const secNums = computeDocxSecNums(hiddenSections, hiddenTables, _hasCreds, _hasOpps);
+  const secNums = computeDocxSecNums(hiddenSections, hiddenTables, _hasOpps);
   const secVisible = (key: string) => secNums[key] !== undefined;
   const tblVisible = (key: string) => !hiddenTables[key];
 
@@ -490,46 +465,8 @@ export async function generateQbrPrepV2Docx(
     }
   }
 
-  // ── Section 7: How Credits Are Used Each Month ────────────────────────────
-  const rawCreditUsage: string = (reportData.sourceSnapshot?.manualInputs as any)?.creditUsage ?? "";
-  if (secVisible("section_credits")) {
-    docChildren.push(sectionHeading(secNums["section_credits"], "How Credits Are Used Each Month"));
-    if (s7c?.months?.length) {
-      for (let mi = 0; mi < s7c.months.length; mi++) {
-        const cm = s7c.months[mi];
-        const monthLabel = resolveCell(`credit_${mi}_month`, cm.month, edits);
-        docChildren.push(new Paragraph({ spacing: { before: 80, after: 40 }, children: [new TextRun({ text: monthLabel, bold: true, size: 20, color: "374151", font: "Calibri" })] }));
-        const creditRows: string[][] = [];
-        for (let ri = 0; ri < cm.rows.length; ri++) {
-          if (edits?.[`credit_${mi}_${ri}_deleted`] === "1") continue;
-          const creditsDefault = cm.rows[ri].credits === 1 ? "1 Credit" : `${cm.rows[ri].credits} Credits`;
-          const creditsVal = resolveCell(`credit_${mi}_${ri}_credits`, creditsDefault, edits);
-          const activityVal = resolveCell(`credit_${mi}_${ri}_activity`, cm.rows[ri].activity, edits);
-          creditRows.push([creditsVal, activityVal]);
-        }
-        const newRowCount = parseInt(edits?.[`credit_${mi}_newrow_count`] ?? "0", 10);
-        for (let ni = 0; ni < newRowCount; ni++) {
-          const newCredits = edits?.[`credit_${mi}_newrow_${ni}_credits`] ?? "";
-          const newActivity = edits?.[`credit_${mi}_newrow_${ni}_activity`] ?? "";
-          if (newCredits || newActivity) creditRows.push([newCredits || "1 Credit", newActivity]);
-        }
-        if (creditRows.length > 0) docChildren.push(makeTable(["Credits", "Activity"], creditRows, [22, 78]));
-      }
-    } else {
-      const creditMonths = parseCreditUsage(rawCreditUsage);
-      if (creditMonths.length > 0) {
-        for (const cm of creditMonths) {
-          docChildren.push(new Paragraph({ spacing: { before: 80, after: 40 }, children: [new TextRun({ text: cm.month, bold: true, size: 20, color: "374151", font: "Calibri" })] }));
-          if (cm.rows.length > 0) docChildren.push(makeTable(["Credits", "Activity"], cm.rows.map(r => [r.credits, r.activity]), [22, 78]));
-          for (const u of cm.unparsed) docChildren.push(new Paragraph({ spacing: { before: 20, after: 20 }, children: [new TextRun({ text: u, size: 18, color: GRAY, font: "Calibri" })] }));
-        }
-      } else if (rawCreditUsage.trim()) {
-        docChildren.push(new Paragraph({ spacing: { before: 40, after: 40 }, children: [new TextRun({ text: rawCreditUsage, size: 18, color: "374151", font: "Calibri" })] }));
-      }
-    }
-  }
-
-  // ── Section 8: Tracking ───────────────────────────────────────────────────
+  // ── Section 7: Tracking ───────────────────────────────────────────────────
+  // NOTE: "Possible Credit Usage Each Month" is intentionally preview-only and is excluded from all exports.
   const s7 = reportData.section7Tracking;
   if (secVisible("section_tracking")) {
     docChildren.push(sectionHeading(secNums["section_tracking"], "What We Track"));

@@ -2122,12 +2122,23 @@ export async function registerRoutes(
       const websiteSource: "client_record" | "nsm_sheet" | "none" =
         websiteFromClient ? "client_record" : websiteFromSheet ? "nsm_sheet" : "none";
 
-      // Credits priority: NSM sheet only.
-      // NOTE: The client record does NOT currently have a credits field.
-      // When a credits field is added to the clients table, update this to prefer client.credits first.
-      const creditsFromSheet = (current?.credits ?? "").trim().replace(/^—$/, "") || null;
-      const credits = creditsFromSheet ?? "—";
-      const creditsSource: "nsm_sheet" | "none" = creditsFromSheet ? "nsm_sheet" : "none";
+      // Credits: sourced from hardcoded monthly capacity table per data-handling-rules skill.
+      // Values: Anchored Tides=4, Bliss=8, Heartland=5, Sol Women's=5, Williamsburg=3, Horseshoe Ridge=4, Iris Healing=5
+      const CLIENT_CREDIT_MAP: Record<string, number> = {
+        "anchored tides": 4,
+        "bliss recovery": 8,
+        "heartland healing": 5,
+        "sol women": 5,
+        "williamsburg house": 3,
+        "horseshoe ridge": 4,
+        "iris healing": 5,
+      };
+      const clientNameLower = client.name.toLowerCase();
+      const creditsFromMap = Object.entries(CLIENT_CREDIT_MAP).find(([key]) =>
+        clientNameLower.includes(key)
+      )?.[1] ?? null;
+      const credits = creditsFromMap !== null ? String(creditsFromMap) : "—";
+      const creditsSource: "nsm_sheet" | "none" = creditsFromMap !== null ? "nsm_sheet" : "none";
 
       // NSM Type: NSM sheet only (no client-record equivalent)
       const nsmTypeFromSheet = (current?.mvpType ?? "").trim().replace(/^—$/, "") || null;

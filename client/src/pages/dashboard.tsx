@@ -742,7 +742,7 @@ function ClientInfoTab({ client, clientId }: { client: Client; clientId: number 
         <div className="flex items-center gap-2">
           <CreditCard className="w-3 h-3 shrink-0" style={{ color: "rgba(255,255,255,0.35)" }} />
           <span className="text-[11px]" style={{ color: credits !== "—" ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.35)" }} data-testid={`text-credits-${clientId}`}>
-            {credits !== "—" ? `${credits} credits allocated` : "—"}
+            {credits !== "—" ? `${credits} credits total` : "—"}
           </span>
         </div>
         <div className="flex items-center gap-2">

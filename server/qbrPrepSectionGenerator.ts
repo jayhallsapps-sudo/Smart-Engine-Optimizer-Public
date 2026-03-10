@@ -1301,7 +1301,27 @@ function generateSection2(
     topConvertingPages.push(row);
   }
 
-  // Final fallback — only reached when no GA4 conversion rows and no call-tracking rows exist
+  // Fallback P3 — GA4 has session data but no conversion events configured yet
+  // Use top session pages as proxies for likely conversion pages, noting the tracking gap
+  if (topConvertingPages.length === 0 && ga4Landing.length > 0) {
+    const topBySession = ga4Landing
+      .filter(r => (r.sessions ?? 0) > 0)
+      .sort((a, b) => b.sessions - a.sessions)
+      .slice(0, 2);
+    for (const row of topBySession) {
+      const internalType = classifyPageType(row.page);
+      topConvertingPages.push({
+        type: clientReadableType(internalType),
+        page: buildPagePattern(row.page, internalType, "GA4"),
+        conversionSource: "GA4 (sessions only)",
+        notes: `${row.sessions.toLocaleString("en-US")} organic sessions recorded. Conversion event tracking not yet configured in GA4 — connect events to confirm whether sessions are converting to admissions actions.`,
+        dataSource: "GA4",
+      });
+      if (topConvertingPages.length >= 2) break;
+    }
+  }
+
+  // Final fallback — no GA4 data and no call-tracking rows exist
   if (topConvertingPages.length === 0) {
     topConvertingPages.push({
       type: "No qualified data yet",
@@ -1995,6 +2015,7 @@ function parseAmContext(sentiment?: string, hypothesis?: string, auditNotes?: st
     if (/internal.?link/.test(a)) auditSignals.push("internal_linking");
     if (/thin content|thin pages|duplicate|cannibali/.test(a)) auditSignals.push("thin_content");
     if (/redirect|404|broken link|error page/.test(a)) auditSignals.push("crawl_errors");
+    if (/noindex|non.?indexable|indexability/.test(a)) auditSignals.push("noindex");
     if (/speed|core web vitals|lcp|cls|fid|page speed/.test(a)) auditSignals.push("page_speed");
     if (/admissions|vob|contact|conversion/.test(a)) auditSignals.push("admissions_path");
     if (/service.?page|program page/.test(a)) auditSignals.push("service_page");
@@ -2097,6 +2118,20 @@ function addNetNewAmPriorities(
       tier: "Tier 3",
       action: "Implement LocalBusiness, MedicalOrganization, and FAQ schema on core service and admissions pages",
       reason: "Schema markup improves SERP feature eligibility and helps Google confirm treatment center entity context across service and admissions pages.",
+      source: "Manual entry needed",
+    });
+  }
+
+  if (amCtx.auditSignals.includes("noindex") &&
+    !covered.some(c => /noindex|non.?index|indexability/.test(c)) &&
+    !((tierInput.nonIndexable ?? 0) > 5) &&
+    priorities.length < 7) {
+    priorities.push({
+      priority: priorities.length + 1,
+      initiative: "Indexability Audit",
+      tier: "Tier 3",
+      action: "Audit non-indexable pages — identify any service, location, or content pages accidentally excluded from Google's index and remove incorrect noindex tags",
+      reason: "Non-indexable pages cannot rank regardless of content quality. A single service page accidentally noindexed represents zero organic traffic potential",
       source: "Manual entry needed",
     });
   }
@@ -2246,6 +2281,16 @@ function generateSection6(
         action: `Resolve ${tierInput.errors4xx5xx} error pages (4xx/5xx) and clean up redirect chains suppressing crawl efficiency`,
         reason: "Error pages create structural drag — cleaning them improves crawl budget allocation to revenue pages",
         source: "Multi-source",
+      });
+    }
+    if ((tierInput.nonIndexable ?? 0) > 5 && !isAlreadyDone("noindex") && !isAlreadyDone("non-index") && !isAlreadyDone("indexability") && priorities.length < 7) {
+      priorities.push({
+        priority: priorities.length + 1,
+        initiative: "Indexability Audit",
+        tier: "Tier 3",
+        action: `Audit ${tierInput.nonIndexable} non-indexable pages — identify any service, location, or content pages accidentally excluded from Google's index and remove incorrect noindex tags`,
+        reason: "Non-indexable pages cannot rank regardless of content quality. A single service page accidentally noindexed represents zero organic traffic potential",
+        source: "Screaming Frog",
       });
     }
     if (tierInput.overlapGeoPages > 5 && !isAlreadyDone("geo") && !isAlreadyDone("location")) {

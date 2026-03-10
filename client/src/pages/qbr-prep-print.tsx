@@ -152,8 +152,7 @@ export default function QbrPrepPrint() {
 
   const _hasCreds = !!(amPrint.creditUsage?.trim());
   const _autoOpps: any[] = reportData.additionalOpportunities ?? [];
-  const _s8ManualRows = getCustomRows(edits, "s8_opportunities");
-  const _hasOpps = _autoOpps.length > 0 || _s8ManualRows.length > 0;
+  const _hasOpps = _autoOpps.length > 0;
   const secNums = computePrintSecNums(hiddenSections, hiddenTables, _hasCreds, _hasOpps);
   const secVis = (k: string) => secNums[k] !== undefined;
   const tblVis = (k: string) => !hiddenTables[k];
@@ -548,7 +547,7 @@ export default function QbrPrepPrint() {
                 <SectionHeading num={secNums["section_credits"]!} title="How Credits Are Used Each Month" />
                 {creditMonths.length > 0 ? creditMonths.map((cm, mi) => (
                   <div key={mi} style={{ marginBottom: 14 }}>
-                    <div style={{ fontSize: "11px", fontWeight: 700, color: "#374151", marginBottom: 4 }}>{cm.month}</div>
+                    <div style={{ fontSize: "11px", fontWeight: 700, color: "#374151", marginBottom: 4 }}>{e(`credit_${mi}_month`, cm.month)}</div>
                     {cm.rows.length > 0 && (
                       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px" }}>
                         <thead>
@@ -560,8 +559,8 @@ export default function QbrPrepPrint() {
                         <tbody>
                           {cm.rows.map((row, ri) => (
                             <tr key={ri} style={{ borderBottom: "1px solid #F3F4F6" }}>
-                              <td style={{ padding: "5px 8px", color: "#1B3A6B", fontWeight: 600 }}>{row.credits}</td>
-                              <td style={{ padding: "5px 8px", color: "#374151" }}>{row.activity}</td>
+                              <td style={{ padding: "5px 8px", color: "#1B3A6B", fontWeight: 600 }}>{e(`credit_${mi}_${ri}_credits`, row.credits)}</td>
+                              <td style={{ padding: "5px 8px", color: "#374151" }}>{e(`credit_${mi}_${ri}_activity`, row.activity)}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -586,57 +585,43 @@ export default function QbrPrepPrint() {
           )}
 
           {secVis("section_opportunities") && (() => {
-            if (_autoOpps.length === 0 && _s8ManualRows.length === 0) return null;
+            if (_autoOpps.length === 0) return null;
             return (
               <>
                 <SectionHeading num={secNums["section_opportunities"]!} title="Additional Opportunities" />
 
                 {/* Auto-generated opportunity cards */}
                 {_autoOpps.length > 0 && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: _s8ManualRows.length > 0 ? 14 : 0, fontSize: "11px" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 0, fontSize: "11px" }}>
                     {_autoOpps.map((opp: any, i: number) => (
                       <div key={i} style={{ border: "1px solid #E5E7EB", borderRadius: 6, overflow: "hidden", pageBreakInside: "avoid" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 12px", backgroundColor: "#F9FAFB", borderBottom: "1px solid #E5E7EB" }}>
-                          <span
-                            style={{
-                              display: "inline-block", padding: "1px 8px", borderRadius: 10,
-                              fontSize: "9px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em",
-                              backgroundColor: opp.type === "upsell" ? "#FEF3C7" : "#DBEAFE",
-                              color: opp.type === "upsell" ? "#92400E" : "#1E40AF",
-                            }}
-                          >
+                          <span style={{ display: "inline-block", padding: "1px 8px", borderRadius: 10, fontSize: "9px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", backgroundColor: opp.type === "upsell" ? "#FEF3C7" : "#DBEAFE", color: opp.type === "upsell" ? "#92400E" : "#1E40AF" }}>
                             {opp.type === "upsell" ? "Upsell" : "Cross-sell"}
                           </span>
-                          <span style={{ fontWeight: 700, fontSize: "12px", color: "#111827" }}>{opp.title}</span>
+                          <span style={{ fontWeight: 700, fontSize: "12px", color: "#111827" }}>{e(`opp_${i}_title`, opp.title)}</span>
                         </div>
                         <div style={{ padding: "9px 12px", display: "flex", flexDirection: "column", gap: 7 }}>
-                          <div style={{ color: "#374151", fontStyle: "italic" }}>{opp.why_now}</div>
+                          <div style={{ color: "#374151", fontStyle: "italic" }}>{e(`opp_${i}_why_now`, opp.why_now)}</div>
                           <div>
                             <div style={{ fontWeight: 600, fontSize: "10px", color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 3 }}>Evidence</div>
                             <ul style={{ margin: 0, paddingLeft: 16, color: "#374151" }}>
                               {(opp.evidence ?? []).map((ev: string, j: number) => (
-                                <li key={j} style={{ marginBottom: 2 }}>{ev}</li>
+                                <li key={j} style={{ marginBottom: 2 }}>{e(`opp_${i}_evidence_${j}`, ev)}</li>
                               ))}
                             </ul>
                           </div>
                           <div>
                             <div style={{ fontWeight: 600, fontSize: "10px", color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 3 }}>Recommendation</div>
-                            <div style={{ color: "#1B3A6B" }}>{opp.recommendation}</div>
+                            <div style={{ color: "#1B3A6B" }}>{e(`opp_${i}_recommendation`, opp.recommendation)}</div>
                           </div>
-                          <div style={{ fontSize: "10px", color: "#9CA3AF", borderTop: "1px solid #F3F4F6", paddingTop: 5, fontStyle: "italic" }}>{opp.framing}</div>
+                          <div style={{ fontSize: "10px", color: "#9CA3AF", borderTop: "1px solid #F3F4F6", paddingTop: 5, fontStyle: "italic" }}>{e(`opp_${i}_framing`, opp.framing)}</div>
                         </div>
                       </div>
                     ))}
                   </div>
                 )}
 
-                {/* Manual additions */}
-                {_s8ManualRows.length > 0 && (
-                  <ReportTable
-                    headers={["Description", "Purpose", "Est. Cost"]}
-                    rows={_s8ManualRows.map((row: string[]) => row.map((c: string) => cell(c)))}
-                  />
-                )}
               </>
             );
           })()}

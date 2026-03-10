@@ -369,7 +369,7 @@ export async function generateQbrPrepV2Docx(
 
   // ── Compute visibility ────────────────────────────────────────────────────
   const _hasCreds = !!(manualInputs?.creditUsage?.trim());
-  const _hasOpps = !!(reportData.additionalOpportunities?.length);
+  const _hasOpps = (reportData.additionalOpportunities?.length ?? 0) > 0;
   const secNums = computeDocxSecNums(hiddenSections, hiddenTables, _hasCreds, _hasOpps);
   const secVisible = (key: string) => secNums[key] !== undefined;
   const tblVisible = (key: string) => !hiddenTables[key];
@@ -555,22 +555,50 @@ export async function generateQbrPrepV2Docx(
     docChildren.push(sectionHeading(secNums["section_opportunities"]!, "Additional Opportunities"));
     for (let i = 0; i < qssb.additionalOpportunities.length; i++) {
       const o = qssb.additionalOpportunities[i] as any;
-      const titleVal = resolveCell(`qssb_opp_${i}_0`, o.title ?? o.service ?? "", edits);
-      const descVal  = resolveCell(`qssb_opp_${i}_1`, o.description ?? "", edits);
+      const titleVal  = resolveCell(`opp_${i}_title`, o.title ?? o.service ?? "", edits);
+      const whyNow    = resolveCell(`opp_${i}_why_now`, o.why_now ?? "", edits);
+      const rec       = resolveCell(`opp_${i}_recommendation`, o.recommendation ?? "", edits);
+      const framing   = resolveCell(`opp_${i}_framing`, o.framing ?? "", edits);
+      const evidences: string[] = (o.evidence ?? []).map((ev: string, j: number) =>
+        resolveCell(`opp_${i}_evidence_${j}`, ev, edits)
+      );
+      const typeLabel = o.type === "upsell" ? "Upsell" : "Cross-sell";
       docChildren.push(
         new Paragraph({
-          spacing: { before: 100, after: 0 },
+          spacing: { before: 160, after: 0 },
           children: [
-            new TextRun({ text: `${i + 1}. `, bold: true, size: 20, color: WEBSERV_RED, font: "Calibri" }),
+            new TextRun({ text: `[${typeLabel}]  `, bold: true, size: 18, color: o.type === "upsell" ? "92400E" : "1E40AF", font: "Calibri" }),
             new TextRun({ text: titleVal, bold: true, size: 20, color: DARK_HEADER, font: "Calibri" }),
           ],
         }),
         new Paragraph({
-          spacing: { before: 24, after: 80 },
+          spacing: { before: 40, after: 0 },
+          indent: { left: 360 },
+          children: [new TextRun({ text: whyNow, size: 18, color: "374151", italics: true, font: "Calibri" })],
+        }),
+        new Paragraph({
+          spacing: { before: 60, after: 0 },
+          indent: { left: 360 },
+          children: [new TextRun({ text: "Evidence:", bold: true, size: 18, color: "6B7280", font: "Calibri" })],
+        }),
+        ...evidences.map(ev => new Paragraph({
+          spacing: { before: 20, after: 0 },
+          indent: { left: 540 },
+          bullet: { level: 0 },
+          children: [new TextRun({ text: ev, size: 18, color: "374151", font: "Calibri" })],
+        })),
+        new Paragraph({
+          spacing: { before: 60, after: 0 },
           indent: { left: 360 },
           children: [
-            new TextRun({ text: descVal, size: 18, color: "374151", font: "Calibri" }),
+            new TextRun({ text: "Recommendation:  ", bold: true, size: 18, color: "6B7280", font: "Calibri" }),
+            new TextRun({ text: rec, size: 18, color: "1B3A6B", font: "Calibri" }),
           ],
+        }),
+        new Paragraph({
+          spacing: { before: 40, after: 80 },
+          indent: { left: 360 },
+          children: [new TextRun({ text: framing, size: 16, color: "9CA3AF", italics: true, font: "Calibri" })],
         }),
       );
     }

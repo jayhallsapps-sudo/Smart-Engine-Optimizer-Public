@@ -72,6 +72,12 @@ interface ConvertingSourceRow {
   dataSource?: string;
 }
 
+interface ConversionPatternRow {
+  pattern: string;
+  whyItMatters: string;
+  evidence: string;
+}
+
 interface TrafficTopicRow {
   topic: string;
   exampleQueries: string;
@@ -135,7 +141,7 @@ interface AdditionalOpportunity {
 export interface QbrPrepPreviewProps {
   meta: QbrPrepMeta;
   section1Goals: { rows: GoalRow[] };
-  section2Conversions: { topConvertingPages: ConvertingPageRow[]; topConvertingSources: ConvertingSourceRow[]; trackingDisclaimer?: string };
+  section2Conversions: { topConvertingPages: ConvertingPageRow[]; topConversionPatterns?: ConversionPatternRow[]; topConvertingSources: ConvertingSourceRow[]; trackingDisclaimer?: string };
   section3Traffic: { topTrafficTopics: TrafficTopicRow[]; topTrafficPages: TrafficPageRow[] };
   section4Services: { services: ServiceRow[] };
   section5Diagnosis: { tier: number; tierName: string; diagnosis: string };
@@ -862,7 +868,9 @@ export function QbrPrepPreview({
                     <SectionHeading num={sectionNums["section_credits"]} title="How Credits Are Used Each Month" onHide={hideSecBtn("section_credits")} />
                     {creditMonths.length > 0 ? creditMonths.map((cm, mi) => (
                       <div key={mi} style={{ marginBottom: 14 }}>
-                        <div style={{ fontSize: "11px", fontWeight: 700, color: "#374151", marginBottom: 4 }}>{cm.month}</div>
+                        <div style={{ fontSize: "11px", fontWeight: 700, color: "#374151", marginBottom: 4 }}>
+                          <EditableCell editKey={`credit_${mi}_month`} value={cm.month} edits={edits} onEdit={onEdit} />
+                        </div>
                         {cm.rows.length > 0 && (
                           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px" }}>
                             <thead><tr style={{ backgroundColor: "#F3F4F6" }}>
@@ -871,8 +879,12 @@ export function QbrPrepPreview({
                             </tr></thead>
                             <tbody>{cm.rows.map((row, ri) => (
                               <tr key={ri} style={{ borderBottom: "1px solid #F3F4F6" }}>
-                                <td style={{ padding: "5px 8px", color: "#1B3A6B", fontWeight: 600 }}>{row.credits}</td>
-                                <td style={{ padding: "5px 8px", color: "#374151" }}>{row.activity}</td>
+                                <td style={{ padding: "5px 8px", color: "#1B3A6B", fontWeight: 600 }}>
+                                  <EditableCell editKey={`credit_${mi}_${ri}_credits`} value={row.credits} edits={edits} onEdit={onEdit} />
+                                </td>
+                                <td style={{ padding: "5px 8px", color: "#374151" }}>
+                                  <EditableCell editKey={`credit_${mi}_${ri}_activity`} value={row.activity} edits={edits} onEdit={onEdit} />
+                                </td>
                               </tr>
                             ))}</tbody>
                           </table>
@@ -937,30 +949,38 @@ export function QbrPrepPreview({
                       <div key={i} style={{ border: "1px solid #E5E7EB", borderRadius: 6, overflow: "hidden", fontSize: "11px" }} data-testid={`card-additional-opportunity-${i}`}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", backgroundColor: "#F9FAFB", borderBottom: "1px solid #E5E7EB" }}>
                           <span style={{ display: "inline-block", padding: "1px 8px", borderRadius: 10, fontSize: "9px", fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.06em", backgroundColor: opp.type === "upsell" ? "#FEF3C7" : "#DBEAFE", color: opp.type === "upsell" ? "#92400E" : "#1E40AF" }} data-testid={`badge-opp-type-${i}`}>{opp.type === "upsell" ? "Upsell" : "Cross-sell"}</span>
-                          <span style={{ fontWeight: 700, fontSize: "12px", color: "#111827" }} data-testid={`text-opp-title-${i}`}>{opp.title}</span>
+                          <span style={{ fontWeight: 700, fontSize: "12px", color: "#111827" }} data-testid={`text-opp-title-${i}`}>
+                            <EditableCell editKey={`opp_${i}_title`} value={opp.title} edits={edits} onEdit={onEdit} />
+                          </span>
                         </div>
                         <div style={{ padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
-                          <div style={{ color: "#374151", fontStyle: "italic" }} data-testid={`text-opp-whynow-${i}`}>{opp.why_now}</div>
+                          <div style={{ color: "#374151", fontStyle: "italic" }} data-testid={`text-opp-whynow-${i}`}>
+                            <EditableCell editKey={`opp_${i}_why_now`} value={opp.why_now} edits={edits} onEdit={onEdit} />
+                          </div>
                           <div>
                             <div style={{ fontWeight: 600, fontSize: "10px", color: "#6B7280", textTransform: "uppercase" as const, letterSpacing: "0.05em", marginBottom: 3 }}>Evidence</div>
                             <ul style={{ margin: 0, paddingLeft: 16, color: "#374151" }}>
-                              {opp.evidence.map((ev, j) => (<li key={j} style={{ marginBottom: 2 }} data-testid={`text-opp-evidence-${i}-${j}`}>{ev}</li>))}
+                              {opp.evidence.map((ev, j) => (
+                                <li key={j} style={{ marginBottom: 2 }} data-testid={`text-opp-evidence-${i}-${j}`}>
+                                  <EditableCell editKey={`opp_${i}_evidence_${j}`} value={ev} edits={edits} onEdit={onEdit} />
+                                </li>
+                              ))}
                             </ul>
                           </div>
                           <div>
                             <div style={{ fontWeight: 600, fontSize: "10px", color: "#6B7280", textTransform: "uppercase" as const, letterSpacing: "0.05em", marginBottom: 3 }}>Recommendation</div>
-                            <div style={{ color: "#1B3A6B" }} data-testid={`text-opp-recommendation-${i}`}>{opp.recommendation}</div>
+                            <div style={{ color: "#1B3A6B" }} data-testid={`text-opp-recommendation-${i}`}>
+                              <EditableCell editKey={`opp_${i}_recommendation`} value={opp.recommendation} edits={edits} onEdit={onEdit} />
+                            </div>
                           </div>
-                          <div style={{ fontSize: "10px", color: "#9CA3AF", borderTop: "1px solid #F3F4F6", paddingTop: 6, fontStyle: "italic" }}>{opp.framing}</div>
+                          <div style={{ fontSize: "10px", color: "#9CA3AF", borderTop: "1px solid #F3F4F6", paddingTop: 6, fontStyle: "italic" }}>
+                            <EditableCell editKey={`opp_${i}_framing`} value={opp.framing} edits={edits} onEdit={onEdit} />
+                          </div>
                         </div>
                       </div>
                     ))}
                   </div>
                 )}
-                {(additionalOpportunities?.length ?? 0) > 0 && (
-                  <div style={{ fontSize: "10px", color: "#6B7280", marginBottom: 6, fontWeight: 600, textTransform: "uppercase" as const, letterSpacing: "0.04em" }}>Additional manual entries</div>
-                )}
-                <AddableReportTable tableId="s8_opportunities" headers={["Description", "Purpose", "Est. Cost"]} sourceRows={[]} edits={edits} onEdit={onEdit} />
               </>
             ) : null}
 

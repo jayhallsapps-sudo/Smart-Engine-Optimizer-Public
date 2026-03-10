@@ -1180,9 +1180,15 @@ function generateSection2(
     topConvertingPages.push(row);
   }
 
-  // Final fallback
+  // Final fallback — only reached when no GA4 conversion rows and no call-tracking rows exist
   if (topConvertingPages.length === 0) {
-    topConvertingPages.push({ type: ME, page: ME, conversionSource: "—", notes: ME, dataSource: undefined });
+    topConvertingPages.push({
+      type: "No qualified data yet",
+      page: "No qualifying conversion page identified",
+      conversionSource: "GA4 / Call Tracking not detected",
+      notes: "No GA4 conversion events or call-tracking landing-page data found. Connect GA4 event tracking or a call tracking provider to populate this table.",
+      dataSource: undefined,
+    });
   }
 
   console.log(`[Section2] Top Converting Pages: ${topConvertingPages.length} rows (pool had ${pagePool.length} candidates; GA4=${pagePool.filter(c=>c.confidence===5).length}, callTracking=${pagePool.filter(c=>c.confidence===4).length})`);

@@ -304,11 +304,20 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
   let gscPrevQueryPageRows: any[] = [];
   const gscAvailable = !!(gscToken && client.gscSiteUrl);
   if (gscAvailable) {
-    const analysisDays = Math.round((new Date(quarter.analysisEnd).getTime() - new Date(quarter.analysisStart).getTime()) / 86400000);
-    const prevEnd = new Date(new Date(quarter.analysisStart).getTime() - 86400000);
-    const prevStart = new Date(prevEnd.getTime() - analysisDays * 86400000);
-    const prevStartStr = prevStart.toISOString().slice(0, 10);
-    const prevEndStr = prevEnd.toISOString().slice(0, 10);
+    // True QoQ: compare current quarter-to-date against the full prior calendar quarter.
+    // Prior quarter boundaries are exact calendar boundaries (Q1=Jan-Mar, Q2=Apr-Jun, etc.).
+    const qStartDate = new Date(quarter.analysisStart + "T00:00:00");
+    const currQYear = qStartDate.getFullYear();
+    const currQNum = Math.ceil((qStartDate.getMonth() + 1) / 3); // 1–4
+    const prevQNum = currQNum === 1 ? 4 : currQNum - 1;
+    const prevQYear = currQNum === 1 ? currQYear - 1 : currQYear;
+    // Q boundary month indices (0-based): Q1=0, Q2=3, Q3=6, Q4=9
+    const prevQStartMonth = (prevQNum - 1) * 3;       // e.g. Q4 → 9 (October)
+    const prevQEndMonth   = prevQStartMonth + 2;       // e.g. Q4 → 11 (December)
+    const prevStartStr = new Date(prevQYear, prevQStartMonth, 1).toISOString().slice(0, 10);
+    // Last day of prevQEndMonth: use day 0 of the following month
+    const prevEndStr = new Date(prevQYear, prevQEndMonth + 1, 0).toISOString().slice(0, 10);
+    console.log(`[GSC] QoQ windows — Current Q${currQNum} ${currQYear}: ${quarter.analysisStart}→${quarter.analysisEnd} | Prior Q${prevQNum} ${prevQYear}: ${prevStartStr}→${prevEndStr}`);
 
     [gscQueryRows, gscPageRows, gscQueryPageRows, gscPrevQueryRows, gscPrevPageRows, gscPrevQueryPageRows] = await Promise.all([
       gscFetch(gscToken!, client.gscSiteUrl!, quarter.analysisStart, quarter.analysisEnd, ["query"], 200),
@@ -436,7 +445,7 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
     generatedOn: input.generationDate,
   };
 
-  const section1 = generateSection1(nsmData, ga4FunnelCurr, quarter, client, callTrackingSources, prevNsmData, input.prevQtrAssessment);
+  const section1 = generateSection1(nsmData, ga4FunnelCurr, quarter, client, callTrackingSources, prevNsmData, input.prevQtrAssessment, input.hypothesis, (input as any).clientNotes, input.sentiment);
   const section2 = generateSection2(ga4LandingRows, gscPageRows, client, callTrackingLandingPages, callTrackingSources);
   const section3 = generateSection3(gscQueryRows, gscPageRows, ga4LandingRows, client, gscPrevQueryRows, gscPrevPageRows, gscQueryPageRows, gscPrevQueryPageRows);
   const section4 = generateSection4(sfData, sfHeaders, client);
@@ -927,7 +936,86 @@ function computeGoalShiftPct(currentGoal: string, prevGoal: string): string {
   return pct > 0 ? `+${pct}%` : `${pct}%`;
 }
 
-function generateSection1(nsmData: any, ga4Funnel: any, quarter: QuarterInfo, client: Client, callTrackingSources: Array<{ source: string; calls: number }> = [], prevNsmData: any = null, prevQtrAssessment?: string): Section1Goals {
+function buildPrimaryGoalReason(p: {
+  primaryKpiLabel: string;
+  kpiLower: string;
+  nsmMvpGoalNum: number | null;
+  nsmMvpActNum: number | null;
+  nsmData: any;
+  prevNsmData: any;
+  prevQtrAssessment?: string;
+  amThoughts?: string;
+  clientNotes?: string;
+  clientSentiment?: string;
+  callTrackingProvider: string | null;
+  admitsShift: string;
+  admitsSource: string;
+}): string {
+  const {
+    primaryKpiLabel, kpiLower, nsmMvpGoalNum, nsmMvpActNum, nsmData,
+    prevNsmData, prevQtrAssessment, amThoughts, clientNotes, clientSentiment,
+    callTrackingProvider, admitsShift, admitsSource,
+  } = p;
+  const parts: string[] = [];
+
+  // ── Part 1: Prior quarter data context from NSM sheet ─────────────────────
+  const prevMvpGoal = prevNsmData?.mvpGoal !== "—" ? prevNsmData?.mvpGoal : null;
+  const prevMvpAct  = prevNsmData?.mvpActual !== "—" ? prevNsmData?.mvpActual : null;
+  if (prevMvpGoal && prevMvpAct) {
+    const prevPct = prevNsmData?.mvpPercent && prevNsmData.mvpPercent !== "—"
+      ? ` (${prevNsmData.mvpPercent} to target)` : "";
+    parts.push(`Last quarter: ${primaryKpiLabel} tracked at ${prevMvpAct}/${prevMvpGoal}${prevPct}.`);
+  } else if (prevMvpGoal) {
+    parts.push(`Last quarter: ${primaryKpiLabel} goal was ${prevMvpGoal}.`);
+  }
+
+  // ── Part 2: AM's narrative of last quarter ────────────────────────────────
+  if (prevQtrAssessment?.trim()) {
+    const assessed = prevQtrAssessment.trim().replace(/[.!\s]+$/, "");
+    parts.push(`${assessed}.`);
+  }
+
+  // ── Part 3: This quarter's goal and pacing ────────────────────────────────
+  if (nsmMvpGoalNum !== null && nsmMvpActNum !== null) {
+    const pacing = nsmMvpActNum / nsmMvpGoalNum;
+    const shiftNote = admitsShift !== "—" ? ` (${admitsShift} vs last quarter)` : "";
+    const pacingDesc = pacing >= 0.9 ? "on pace" : pacing >= 0.7 ? "tracking below pace" : "behind pace";
+    parts.push(`This quarter targets ${fmtNum(nsmMvpGoalNum)} ${kpiLower}${shiftNote} — currently ${pacingDesc} at ${nsmMvpActNum}/${nsmMvpGoalNum}, measured via ${admitsSource}.`);
+  } else if (nsmMvpGoalNum !== null) {
+    const shiftNote = admitsShift !== "—" ? ` (${admitsShift} vs last quarter)` : "";
+    parts.push(`This quarter targets ${fmtNum(nsmMvpGoalNum)} ${kpiLower}${shiftNote}, measured via ${admitsSource}. Actuals not yet recorded for this quarter.`);
+  } else if (nsmData) {
+    // NSM data exists but goal field is empty — tracking type is known, goal TBD
+    parts.push(`${primaryKpiLabel} is the configured primary KPI, tracked via ${admitsSource}. Goal is pending entry in the NSM Tracker for this quarter.`);
+  } else {
+    // No NSM data at all
+    const sourceNote = callTrackingProvider
+      ? `${callTrackingProvider} is configured as the tracking source.`
+      : "Connect a call tracking source to begin tracking actuals.";
+    parts.push(`${primaryKpiLabel} is the primary KPI for this account. ${sourceNote}`);
+  }
+
+  // ── Part 4: AM hypothesis alignment ──────────────────────────────────────
+  if (amThoughts?.trim()) {
+    const h = amThoughts.toLowerCase();
+    const isRelevant = /admissions|conversion|care access|vob|insurance|form|cta|service page|trust|content|refresh|ranking|position|clicks|traffic|pipeline|leads/.test(h);
+    if (isRelevant) {
+      const truncated = amThoughts.trim().replace(/[.!\s]+$/, "").slice(0, 120);
+      parts.push(`AM focus: ${truncated}.`);
+    }
+  }
+
+  // ── Part 5: Sentiment pulse (only when elevated — avoids noise) ───────────
+  if (clientSentiment === "Frustrated" || clientSentiment === "Concerned") {
+    parts.push(`Client is ${clientSentiment.toLowerCase()} — clear progress evidence and realistic expectations are the priority this quarter.`);
+  }
+
+  return parts.length > 0
+    ? parts.join(" ")
+    : `${primaryKpiLabel} is the primary strategic KPI, measured via ${admitsSource}.`;
+}
+
+function generateSection1(nsmData: any, ga4Funnel: any, quarter: QuarterInfo, client: Client, callTrackingSources: Array<{ source: string; calls: number }> = [], prevNsmData: any = null, prevQtrAssessment?: string, amThoughts?: string, clientNotes?: string, clientSentiment?: string): Section1Goals {
   const rows: GoalRow[] = [];
 
   const callTrackingProvider = detectCallTrackingProvider(client);
@@ -998,10 +1086,22 @@ function generateSection1(nsmData: any, ga4Funnel: any, quarter: QuarterInfo, cl
 
   console.log(`[Section1] Primary Goal=${primaryKpiLabel}, goal=${admitsGoalDisplay}, source=${admitsSource}, shift=${admitsShift}`);
 
-  // Inject prior-quarter context into Primary Goal reason when AM provided it
-  const primaryReason = prevQtrAssessment?.trim()
-    ? `Prior quarter: ${prevQtrAssessment.trim()} — ${admitsReason}`
-    : admitsReason;
+  // Build full comparative reason using NSM data, prevNsmData, AM inputs, and tracking source
+  const primaryReason = buildPrimaryGoalReason({
+    primaryKpiLabel,
+    kpiLower: primaryKpiLabel.toLowerCase(),
+    nsmMvpGoalNum,
+    nsmMvpActNum,
+    nsmData,
+    prevNsmData,
+    prevQtrAssessment,
+    amThoughts,
+    clientNotes,
+    clientSentiment,
+    callTrackingProvider,
+    admitsShift,
+    admitsSource,
+  });
 
   rows.push({
     goalType: "Primary Goal/MVP NSM",

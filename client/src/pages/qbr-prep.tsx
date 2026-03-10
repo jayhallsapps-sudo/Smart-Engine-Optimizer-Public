@@ -164,9 +164,10 @@ export default function QbrPrepPage() {
 
   function validateAmInputs(): boolean {
     const errors: Record<string, string> = {};
-    if (!sentiment) errors.sentiment = "Client Sentiment is required";
     if (!amThoughts.trim()) errors.amThoughts = "AM's Hypothesis is required";
+    if (!prevQtrAssessment.trim()) errors.prevQtrAssessment = "Previous Quarter Assessment is required";
     if (!priorityChecks.trim()) errors.priorityChecks = "Priority Checks is required";
+    if (!sentiment) errors.sentiment = "Client Sentiment is required";
     setAmValidationErrors(errors);
     if (Object.keys(errors).length > 0) {
       setShowAmInputs(true);
@@ -447,20 +448,6 @@ export default function QbrPrepPage() {
             {showAmInputs && (
               <div className="space-y-3">
                 <div>
-                  <Label className="text-xs mb-1 block">Client Sentiment <span className="text-destructive">*</span></Label>
-                  <Select value={sentiment} onValueChange={(v) => { setSentiment(v); setAmValidationErrors(prev => { const n = {...prev}; delete n.sentiment; return n; }); }}>
-                    <SelectTrigger className={`h-8 text-xs ${amValidationErrors.sentiment ? "border-destructive" : ""}`} data-testid="select-sentiment">
-                      <SelectValue placeholder="Select…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {CLIENT_SENTIMENT_OPTIONS.map(s => (
-                        <SelectItem key={s} value={s}>{s}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {amValidationErrors.sentiment && <p className="text-destructive text-[10px] mt-0.5">{amValidationErrors.sentiment}</p>}
-                </div>
-                <div>
                   <Label className="text-xs mb-1 block">AM's Hypothesis <span className="text-destructive">*</span></Label>
                   <Textarea
                     className={`text-xs min-h-[60px] ${amValidationErrors.amThoughts ? "border-destructive" : ""}`}
@@ -472,14 +459,15 @@ export default function QbrPrepPage() {
                   {amValidationErrors.amThoughts && <p className="text-destructive text-[10px] mt-0.5">{amValidationErrors.amThoughts}</p>}
                 </div>
                 <div>
-                  <Label className="text-xs mb-1 block text-muted-foreground">Previous Quarter Assessment <span className="text-muted-foreground text-[10px]">(optional)</span></Label>
+                  <Label className="text-xs mb-1 block">Previous Quarter Assessment <span className="text-destructive">*</span></Label>
                   <Textarea
-                    className="text-xs min-h-[60px]"
-                    placeholder="Brief assessment of what happened last quarter — helps ground why this quarter's goals are changing or continuing…"
+                    className={`text-xs min-h-[60px] ${amValidationErrors.prevQtrAssessment ? "border-destructive" : ""}`}
+                    placeholder="Brief assessment of what happened last quarter — goals hit, what underperformed, and why this quarter's direction is set where it is…"
                     value={prevQtrAssessment}
-                    onChange={e => setPrevQtrAssessment(e.target.value)}
+                    onChange={e => { setPrevQtrAssessment(e.target.value); setAmValidationErrors(prev => { const n = {...prev}; delete n.prevQtrAssessment; return n; }); }}
                     data-testid="textarea-prev-qtr-assessment"
                   />
+                  {amValidationErrors.prevQtrAssessment && <p className="text-destructive text-[10px] mt-0.5">{amValidationErrors.prevQtrAssessment}</p>}
                 </div>
                 <div>
                   <Label className="text-xs mb-1 block">Priority Checks <span className="text-destructive">*</span></Label>
@@ -501,6 +489,20 @@ export default function QbrPrepPage() {
                     onChange={e => setClientNotes(e.target.value)}
                     data-testid="textarea-client-notes"
                   />
+                </div>
+                <div>
+                  <Label className="text-xs mb-1 block">Client Sentiment <span className="text-destructive">*</span></Label>
+                  <Select value={sentiment} onValueChange={(v) => { setSentiment(v); setAmValidationErrors(prev => { const n = {...prev}; delete n.sentiment; return n; }); }}>
+                    <SelectTrigger className={`h-8 text-xs ${amValidationErrors.sentiment ? "border-destructive" : ""}`} data-testid="select-sentiment">
+                      <SelectValue placeholder="Select…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CLIENT_SENTIMENT_OPTIONS.map(s => (
+                        <SelectItem key={s} value={s}>{s}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {amValidationErrors.sentiment && <p className="text-destructive text-[10px] mt-0.5">{amValidationErrors.sentiment}</p>}
                 </div>
               </div>
             )}

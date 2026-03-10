@@ -1164,45 +1164,15 @@ function generateSection2(
     }
   }
 
-  // P3/P4 — GSC pages split into high-intent (2) and informational (1)
-  const HIGH_INTENT_TYPES = new Set(["Verify Insurance", "Contact / Admissions", "Detox", "Residential / Inpatient", "PHP / IOP", "Outpatient", "Dual Diagnosis", "Therapies"]);
-  if (gscPages.length > 0) {
-    const sortedGsc = [...gscPages].sort((a: any, b: any) => (b.clicks ?? 0) - (a.clicks ?? 0));
-    for (const row of sortedGsc) {
-      const pageUrl = row.keys?.[0] ?? "";
-      if (!pageUrl) continue;
-      const pageKey = shortUrl(pageUrl);
-      if (seenPageKeys.has(pageKey)) continue;
-      seenPageKeys.add(pageKey);
-      const internalType = classifyPageType(pageUrl);
-      const isHighIntent = HIGH_INTENT_TYPES.has(internalType);
-      pagePool.push({
-        confidence: isHighIntent ? 2 : 1,
-        row: {
-          type: clientReadableType(internalType),
-          page: shortUrl(pageUrl),
-          conversionSource: "GSC",
-          notes: buildConvertingPageNote(internalType, "GSC", 0, 0),
-          dataSource: "GSC",
-        },
-      });
-    }
-  }
-
-  // Sort pool by confidence descending, then pick exactly top 2 (QSSB requirement)
+  // Sort pool by confidence descending, then pick exactly top 2
+  // Only GA4 (confidence 5) and call tracking (confidence 4) rows are in the pool.
   pagePool.sort((a, b) => b.confidence - a.confidence);
 
   const typeCount = new Map<string, number>();
-  let gscInfoCount = 0;
 
   for (const { row, confidence } of pagePool) {
     if (topConvertingPages.length >= 2) break;
-    // Cap purely-informational GSC rows to prevent them dominating
-    if (confidence <= 1) {
-      if (gscInfoCount >= 1) continue;
-      gscInfoCount++;
-    }
-    // Diversity cap: no more than 1 row of the same type if confidence < 4
+    // Diversity cap: no more than 1 row of the same type
     const typeKey = row.type;
     const currentCount = typeCount.get(typeKey) ?? 0;
     if (currentCount >= 1 && confidence < 4) continue;
@@ -1215,7 +1185,7 @@ function generateSection2(
     topConvertingPages.push({ type: ME, page: ME, conversionSource: "—", notes: ME, dataSource: undefined });
   }
 
-  console.log(`[Section2] Top Converting Pages: ${topConvertingPages.length} rows (pool had ${pagePool.length} candidates; GA4=${pagePool.filter(c=>c.confidence===5).length}, callTracking=${pagePool.filter(c=>c.confidence===4).length}, GSC-hi=${pagePool.filter(c=>c.confidence===2).length}, GSC-info=${pagePool.filter(c=>c.confidence===1).length})`);
+  console.log(`[Section2] Top Converting Pages: ${topConvertingPages.length} rows (pool had ${pagePool.length} candidates; GA4=${pagePool.filter(c=>c.confidence===5).length}, callTracking=${pagePool.filter(c=>c.confidence===4).length})`);
   for (const r of topConvertingPages) {
     console.log(`[Section2]   → [${r.dataSource}] ${r.type} | ${r.page}`);
   }
@@ -1241,9 +1211,7 @@ function generateSection2(
       whyItMatters: "Direct contact, intake, and insurance-verification pages are the last digital step before a prospective client reaches the admissions team. Conversion friction on these pages costs admits directly.",
       evidence: hasGA4Signal
         ? "GA4 conversion events confirm on-site form activity on admissions-path pages."
-        : hasCallSignal
-          ? `${callTrackingSource} landing-page data shows call volume attributable to admissions or VOB pages.`
-          : "Site crawl confirms presence of admissions and/or VOB utility pages on the primary domain.",
+        : `${callTrackingSource} landing-page data shows call volume attributable to admissions or VOB pages.`,
     });
   }
 
@@ -1253,7 +1221,7 @@ function generateSection2(
       whyItMatters: "VOB pages are the clearest digital pre-admission signal — completing a benefits check substantially increases the probability of an intake conversation.",
       evidence: hasGA4Signal
         ? "GA4 shows Verify Insurance page driving the largest share of on-site conversion events."
-        : "Site crawl confirms a dedicated VOB/insurance verification page is indexed and accessible.",
+        : `${callTrackingSource} data confirms call activity originating from the insurance verification page.`,
     });
   }
 
@@ -1263,9 +1231,7 @@ function generateSection2(
       whyItMatters: "Core service pages (Detox, Residential, PHP/IOP) are the primary entry point for treatment-intent searches. Visitors landing here are actively evaluating fit — page quality and clear conversion paths determine whether they move toward admissions.",
       evidence: hasCallSignal
         ? `${callTrackingSource} confirms service pages are driving qualified inbound calls.`
-        : hasGA4Signal
-          ? "GA4 conversion data shows service page sessions converting at measurable rates."
-          : "GSC shows service pages receiving treatment-intent organic clicks from relevant queries.",
+        : "GA4 conversion data shows service page sessions converting at measurable rates.",
     });
   }
 
@@ -1273,7 +1239,9 @@ function generateSection2(
     candidatePatterns.push({
       pattern: "Informational Assist to Conversion",
       whyItMatters: "Educational and resource content plays a supporting role in the patient decision journey — high-ranking informational pages build trust and often precede direct admit actions. Internal linking from these pages toward conversion pages amplifies their value.",
-      evidence: `GSC data shows informational pages generating organic impressions and clicks, suggesting they participate in the pre-admission research phase.`,
+      evidence: hasCallSignal
+        ? `${callTrackingSource} shows informational pages generating pre-call engagement that converts to inbound contact.`
+        : "GA4 session data shows informational pages participating in the conversion path before admission-intent actions.",
     });
   }
 
@@ -1283,23 +1251,23 @@ function generateSection2(
       whyItMatters: "Homepage conversion events or direct traffic through the homepage indicates strong brand recall or referral-driven behavior — users who already know the brand and are returning to take action.",
       evidence: hasGA4Signal
         ? "GA4 shows homepage sessions contributing to conversion events — confirm these are admit-aligned actions."
-        : "Homepage is among the top-traffic pages by GSC click volume, suggesting brand or direct-navigation intent.",
+        : `${callTrackingSource} data shows inbound calls attributed to homepage sessions.`,
     });
   }
 
-  // Fallback pattern if pool is sparse
+  // Fallback pattern if pool is empty (no GA4 or call tracking data available)
   if (candidatePatterns.length === 0) {
     candidatePatterns.push({
       pattern: "High-Intent Organic Traffic Capture",
       whyItMatters: "Treatment-intent organic queries (e.g., detox near me, rehab programs, insurance-covered treatment) represent the strongest mid-funnel intent. Pages ranking for these terms need optimized conversion paths to close the gap between clicks and contacts.",
-      evidence: "GSC data provides the primary signal — confirm GA4 event tracking is active on key pages.",
+      evidence: "GA4 event tracking is not yet confirmed on key pages — connect GA4 or call tracking to qualify conversion-driving pages.",
     });
   }
   if (candidatePatterns.length < 2) {
     candidatePatterns.push({
       pattern: "Tracking Gap as Conversion Floor",
       whyItMatters: "When conversion tracking is incomplete, high-value actions (form submits, call initiations, chat starts) go unattributed. This understates the true conversion rate and creates a systematic blind spot in reporting.",
-      evidence: `${poolTypes.has("GSC") ? "GSC" : "Available data"} is the primary signal — GA4 conversion events are not yet confirmed on key admissions-path pages.`,
+      evidence: "GA4 conversion events are not yet confirmed on key admissions-path pages — call tracking or GA4 setup is needed to qualify these pages.",
     });
   }
 

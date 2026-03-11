@@ -1,0 +1,445 @@
+The DOCX / Google Docs export is a total failure.
+
+Do not treat this as styling cleanup.
+Do not treat this as hierarchy tuning.
+Do not treat this as “Google Docs strips some formatting.”
+The current export is visually broken and unreadable.
+
+The required standard has changed:
+
+The DOCX and Google Docs rendering must look as close to the PDF as possible.
+Not “same content.”
+Not “same hierarchy.”
+As close to the PDF as possible.
+
+Allowed difference:
+
+page breaks / pagination differences
+
+Not allowed:
+
+collapsed narrow columns
+
+vertically stacked letters
+
+missing header treatment
+
+missing visual shell
+
+wrong table colour system
+
+wrong spacing system
+
+wrong section composition
+
+Google Docs rendering that looks materially different from the PDF
+
+If the exported DOCX opened in Google Docs does not look substantially like the PDF, the task is not complete.
+
+==================================================
+HARD TRUTH
+
+The current export approach is wrong.
+
+Evidence from the latest Google Docs screenshots:
+
+content is collapsing into ultra-thin columns
+
+letters are stacking vertically because table widths are broken
+
+cover/meta structure is broken
+
+header treatment is missing
+
+Section 1 is unreadable
+
+colour treatment does not match the PDF
+
+layout logic does not match the PDF
+
+the document is not client-usable
+
+Do not patch around this.
+Rework the export approach so the rendered DOCX behaves like the PDF.
+
+==================================================
+PRIMARY REQUIREMENT
+
+The DOCX / Google Docs export must visually mirror the PDF report.
+
+That means:
+
+same header/logo treatment
+
+same section title treatment
+
+same colour family
+
+same table composition
+
+same readable width behavior
+
+same block structure
+
+same visual rhythm
+
+same footer behavior on every page
+
+same shell logic
+
+This is no longer about generic DOCX styling.
+This is about export fidelity.
+
+==================================================
+LIKELY ROOT PROBLEM
+
+The current DOCX generator is trying to recreate the report structurally using Word-native tables and paragraph styles, but Google Docs is reinterpreting widths/layout badly.
+
+That means one of these must happen:
+
+Option A — Preferred if feasible
+Rebuild DOCX export using fixed-layout, PDF-like page composition primitives that Google Docs preserves better.
+
+Option B
+Embed key visual sections as generated images when necessary so Google Docs cannot destroy their layout.
+
+Option C
+Use hybrid export:
+
+text remains live/editable where safe
+
+visually sensitive sections are rendered as images or tightly controlled full-width blocks
+
+You must choose the approach that best preserves PDF fidelity in Google Docs.
+
+Do not stay attached to the current all-native-table strategy if it keeps collapsing.
+
+==================================================
+NON-NEGOTIABLE VISUAL REQUIREMENTS
+
+Full-width usable layout
+No critical table or metadata block may render as narrow columns.
+No stacked vertical letters.
+No narrow-column collapse.
+
+Cover/header fidelity
+The top of the document must visually resemble the PDF:
+
+report title
+
+client name
+
+top visual/header treatment
+
+brand-consistent shell
+
+Section fidelity
+Every visible section in Google Docs must clearly resemble its PDF counterpart:
+
+same section title placement
+
+same block framing
+
+same table/header colour logic
+
+same overall composition
+
+Colour fidelity
+Do not substitute black/gray table treatments where the PDF uses the QBS red system unless absolutely unavoidable.
+The export should visually inherit the PDF palette.
+
+Footer fidelity
+Footer on every page is required.
+Keep it.
+
+Page break fidelity
+Use page breaks intentionally so major sections begin in the right places where appropriate.
+
+==================================================
+REQUIRED STRATEGY SHIFT
+
+Stop assuming the DOCX should be built as a generic document first.
+
+Instead:
+Treat the PDF as the visual source of truth.
+Then choose the export mechanism that gets closest to that visual result inside DOCX / Google Docs.
+
+If that means some sections need to be rendered as images instead of fragile Word tables, do it.
+
+Priority order:
+
+visual fidelity to PDF
+
+readability
+
+Google Docs survivability
+
+editability where possible
+
+Editability is not more important than fidelity.
+A live-editable DOCX that looks terrible is a failed deliverable.
+
+==================================================
+SECTION-BY-SECTION REQUIREMENTS
+
+You must explicitly fix these:
+
+A. Cover / header area
+Current state: broken
+Requirements:
+
+restore the visual header treatment
+
+restore readable horizontal metadata layout
+
+no narrow meta columns
+
+must look close to PDF
+
+B. Section 1
+Current state: unreadable
+Requirements:
+
+full-width layout
+
+readable columns or block structure
+
+no vertical letter stacking
+
+colour/header treatment must resemble PDF
+
+page-width utilization must resemble PDF
+
+C. Section 2 and other table-heavy sections
+Requirements:
+
+must use page width properly
+
+must not collapse into thin columns
+
+must visually resemble PDF tables
+
+D. Section 6
+Requirements:
+
+preserve PDF-like structure
+
+readable blocks
+
+no cramped text walls
+
+E. Additional Opportunities
+Requirements:
+
+visually resemble PDF block styling
+
+no fragmented paragraph dump
+
+no repeated loose labels
+
+one coherent block per opportunity
+
+==================================================
+LAYOUT HARD RULES
+
+Do not allow any major section to render inside narrow left-side columns.
+
+Use full-page width intentionally.
+
+If native table layout keeps collapsing in Google Docs, abandon it for that section.
+
+Prefer full-width block sections over multi-column layouts when Google Docs proves unstable.
+
+Do not rely on percentage widths if Google Docs is collapsing them.
+
+Test absolute/fixed widths or image-based rendering if needed.
+
+Every major section must be visually readable at normal zoom without manual resizing by the user.
+
+==================================================
+IMPLEMENTATION OPTIONS YOU ARE ALLOWED TO USE
+
+You are explicitly allowed to change the export method.
+
+Possible acceptable solutions:
+
+fixed-width tables with page-width control
+
+section screenshots/images generated from the HTML/PDF layout and inserted into DOCX
+
+hybrid export where complex visual sections are embedded as images
+
+one image per section or per page if necessary
+
+background/header image treatment if supported and stable
+
+tighter PDF-to-DOCX approximation strategy
+
+You are not required to keep the DOCX purely semantic/live-native if that causes the layout to fail.
+
+==================================================
+IF YOU USE IMAGES / HYBRID RENDERING
+
+That is acceptable if it materially improves fidelity.
+
+Requirements:
+
+high resolution
+
+crisp text
+
+page-width fit
+
+proper page breaks
+
+footer still present
+
+document not absurdly bloated if avoidable
+
+preserve readability in Google Docs
+
+This may be the correct solution for:
+
+cover/header
+
+Section 1
+
+Section 6
+
+Additional Opportunities
+
+any visually sensitive table section
+
+==================================================
+STRICT QA ACCEPTANCE CRITERIA
+
+Do not mark complete until every item below passes.
+
+Google Docs rendering looks substantially like the PDF
+
+cover/header visually resembles PDF
+
+metadata is readable horizontally, not collapsed vertically
+
+Section 1 is readable without manual resizing
+
+no vertically stacked letters in major content blocks
+
+major sections use page width correctly
+
+colour system resembles PDF/QBS styling
+
+Section 6 is readable and structurally faithful
+
+Additional Opportunities is readable and structurally faithful
+
+footer appears correctly on every page
+
+page breaks are intentional
+
+no major visual regressions relative to PDF
+
+Anchored Tides DOCX in Google Docs is client-presentable
+
+the result is not merely “better than before”; it is actually acceptable
+
+==================================================
+REQUIRED TEST SCENARIOS
+
+You must explicitly test and show proof for:
+
+PDF render
+
+DOCX file render in Word-compatible viewer
+
+DOCX import in Google Docs
+
+Cover/header in Google Docs
+
+Section 1 in Google Docs
+
+one mid-document table-heavy section in Google Docs
+
+Section 6 in Google Docs
+
+Additional Opportunities in Google Docs
+
+footer across multiple pages
+
+page break behavior
+
+==================================================
+REQUIRED OUTPUT FORMAT
+
+Return a proof report with these exact sections:
+
+Export strategy chosen
+
+native DOCX rebuild
+
+hybrid image/text export
+
+image-first export
+
+or other
+Explain why this strategy was chosen.
+
+Root cause of the collapse
+
+why Google Docs was collapsing the previous layout
+
+which structures were incompatible
+
+Files changed
+
+every file changed
+
+what changed in each
+
+Sections rebuilt
+
+exact sections rebuilt
+
+what rendering method each now uses
+
+Fidelity improvements
+
+how the DOCX/Google Docs output was brought closer to the PDF
+
+Render proof
+Provide screenshots/render evidence for:
+
+cover/header
+
+Section 1
+
+one middle table-heavy section
+
+Section 6
+
+Additional Opportunities
+
+footer on later page
+
+QA scenarios tested
+
+one line each
+
+pass/fail
+
+observed result
+
+Final status
+
+explicitly state whether the Google Docs rendering is now visually acceptable relative to the PDF
+
+==================================================
+FINAL HARD RULE
+
+If the latest Google Docs rendering still looks materially different from the PDF in structure, width behavior, colour system, and readability, the task is not complete.
+
+Do not give me another “technically improved” export.
+Give me a visually faithful export.
+
+And going forward, use this standard by default:
+When I say export should match the PDF, assume I mean visual fidelity first, not semantic approximation.

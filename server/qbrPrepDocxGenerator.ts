@@ -7,6 +7,7 @@ import {
   TableRow,
   TableCell,
   WidthType,
+  TableLayoutType,
   BorderStyle,
   AlignmentType,
   ShadingType,
@@ -17,6 +18,10 @@ import {
 } from "docx";
 import * as fs from "fs";
 import * as path from "path";
+
+// ── Page geometry (DXA = twips, 1 inch = 1440 DXA) ───────────────────────────
+// US Letter 8.5" — 1" margin left — 1" margin right = 6.5" usable
+const PAGE_WIDTH = 9360; // 6.5 × 1440
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const WEBSERV_RED  = "C0392B";
@@ -32,10 +37,9 @@ const BLACK        = "111827";
 const BORDER_COLOR = "D1D5DB";
 const LABEL_BG     = "F3F4F6";
 
-// Cell margin constants (DXA units)
+// Cell margin constants (DXA units — 1/1440 inch)
 const HDR_MARGIN  = { top: 100, bottom: 100, left: 140, right: 140 };
-const CELL_MARGIN = { top: 90,  bottom: 90,  left: 140, right: 140 };
-const LABEL_MARGIN = { top: 90, bottom: 90,  left: 120, right: 120 };
+const CELL_MARGIN = { top: 100, bottom: 100, left: 140, right: 140 };
 
 // ── Prompt artifact safety guard ──────────────────────────────────────────────
 const DOCX_PROMPT_ARTIFACT_SIGNALS = [
@@ -49,8 +53,7 @@ function docxContainsPromptArtifact(text: string | undefined): boolean {
   return DOCX_PROMPT_ARTIFACT_SIGNALS.some(s => upper.includes(s));
 }
 
-// ── Primitive helpers ─────────────────────────────────────────────────────────
-
+// ── Border helpers ────────────────────────────────────────────────────────────
 function thinBorder() {
   return {
     top:    { style: BorderStyle.SINGLE, size: 2, color: BORDER_COLOR },
@@ -60,34 +63,26 @@ function thinBorder() {
   };
 }
 
-function noBorder() {
-  return {
-    top:    { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-    bottom: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-    left:   { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-    right:  { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-  };
+function noBorderSide() {
+  return { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
 }
 
-/** Bold label cell used in structured block tables (25% col). */
-function labelCell(text: string): TableCell {
-  return new TableCell({
-    width: { size: 25, type: WidthType.PERCENTAGE },
-    shading: { type: ShadingType.SOLID, color: LABEL_BG },
-    borders: thinBorder(),
-    margins: LABEL_MARGIN,
-    children: [
-      new Paragraph({
-        children: [new TextRun({ text, bold: true, size: 17, color: GRAY, font: "Calibri" })],
-      }),
-    ],
-  });
+// ── DXA column width helpers ─────────────────────────────────────────────────
+// Convert percentage of page width → DXA
+function pct(percent: number): number {
+  return Math.round(PAGE_WIDTH * percent / 100);
 }
 
-/** Standard header cell for makeTable */
-function hdrCell(text: string, widthPct?: number) {
+function dxaCell(widthDxa: number) {
+  return { size: widthDxa, type: WidthType.DXA };
+}
+
+// ── Primitive cell builders ───────────────────────────────────────────────────
+
+/** Header cell: dark background, white bold text */
+function hdrCell(text: string, widthDxa: number) {
   return new TableCell({
-    width: widthPct ? { size: widthPct, type: WidthType.PERCENTAGE } : undefined,
+    width: dxaCell(widthDxa),
     shading: { type: ShadingType.SOLID, color: DARK_HEADER },
     borders: thinBorder(),
     margins: HDR_MARGIN,
@@ -99,11 +94,11 @@ function hdrCell(text: string, widthPct?: number) {
   });
 }
 
-/** Standard body cell for makeTable */
-function bodyCell(text: string, shade = false, widthPct?: number) {
+/** Body cell: optional alternating shade */
+function bodyCell(text: string, shade = false, widthDxa?: number) {
   const isManual = (text ?? "").includes("Manual entry needed");
   const display  = text || "—";
-  const lines = display.split(/\n/);
+  const lines    = display.split(/\n/);
   const runs: TextRun[] = [];
   lines.forEach((line, i) => {
     runs.push(new TextRun({
@@ -116,7 +111,7 @@ function bodyCell(text: string, shade = false, widthPct?: number) {
     }));
   });
   return new TableCell({
-    width: widthPct ? { size: widthPct, type: WidthType.PERCENTAGE } : undefined,
+    width: widthDxa != null ? dxaCell(widthDxa) : undefined,
     shading: shade ? { type: ShadingType.SOLID, color: ALT_ROW } : undefined,
     borders: thinBorder(),
     margins: CELL_MARGIN,
@@ -124,32 +119,47 @@ function bodyCell(text: string, shade = false, widthPct?: number) {
   });
 }
 
-/** Generic table: headers + rows, with optional column widths (percentages). */
-function makeTable(headers: string[], rows: string[][], colWidths?: number[]) {
+/** Bold label cell used in structured block tables */
+function labelCell(text: string, widthDxa: number): TableCell {
+  return new TableCell({
+    width: dxaCell(widthDxa),
+    shading: { type: ShadingType.SOLID, color: LABEL_BG },
+    borders: thinBorder(),
+    margins: CELL_MARGIN,
+    children: [
+      new Paragraph({
+        children: [new TextRun({ text, bold: true, size: 17, color: GRAY, font: "Calibri" })],
+      }),
+    ],
+  });
+}
+
+// ── Generic table builder (uses DXA widths for Google Docs stability) ─────────
+function makeTable(headers: string[], rows: string[][], colWidthsDxa: number[]) {
   const headerRow = new TableRow({
     tableHeader: true,
-    children: headers.map((h, i) => hdrCell(h, colWidths?.[i])),
+    children: headers.map((h, i) => hdrCell(h, colWidthsDxa[i])),
   });
   const dataRows = rows.map((row, ri) =>
     new TableRow({
-      children: row.map((cell, ci) => bodyCell(cell, ri % 2 === 1, colWidths?.[ci])),
+      children: row.map((cell, ci) => bodyCell(cell, ri % 2 === 1, colWidthsDxa[ci])),
     })
   );
   return new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
+    width: { size: PAGE_WIDTH, type: WidthType.DXA },
+    layout: TableLayoutType.FIXED,
     rows: [headerRow, ...dataRows],
   });
 }
 
-// ── Section / subheading helpers ──────────────────────────────────────────────
-
+// ── Section heading / sub-heading ─────────────────────────────────────────────
 function sectionHeading(num: number, title: string, addPageBreak = false) {
   return new Paragraph({
     pageBreakBefore: addPageBreak,
     children: [
       new TextRun({ text: `${num}.  ${title}`, bold: true, size: 28, color: WEBSERV_RED, font: "Calibri" }),
     ],
-    spacing: { before: addPageBreak ? 0 : 560, after: 180 },
+    spacing: { before: addPageBreak ? 0 : 560, after: 200 },
     border: {
       bottom: { style: BorderStyle.SINGLE, size: 6, color: WEBSERV_RED },
     },
@@ -159,7 +169,7 @@ function sectionHeading(num: number, title: string, addPageBreak = false) {
 function subHeading(text: string) {
   return new Paragraph({
     children: [new TextRun({ text, bold: true, size: 21, color: "374151", font: "Calibri" })],
-    spacing: { before: 320, after: 120 },
+    spacing: { before: 320, after: 140 },
   });
 }
 
@@ -168,21 +178,26 @@ function spacer(pts = 120) {
 }
 
 // ── Meta fields table ─────────────────────────────────────────────────────────
+// 30/70 split in DXA — critical: DXA prevents collapse in Google Docs
+const META_LABEL = pct(30); // 2808
+const META_VALUE = pct(70); // 6552
+
 function metaTable(fields: [string, string][]): Table {
   return new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
+    width: { size: PAGE_WIDTH, type: WidthType.DXA },
+    layout: TableLayoutType.FIXED,
     rows: fields.map(([label, val]) =>
       new TableRow({
         children: [
           new TableCell({
-            width: { size: 30, type: WidthType.PERCENTAGE },
+            width: dxaCell(META_LABEL),
             shading: { type: ShadingType.SOLID, color: LABEL_BG },
             borders: thinBorder(),
-            margins: LABEL_MARGIN,
+            margins: CELL_MARGIN,
             children: [new Paragraph({ children: [new TextRun({ text: label, bold: true, size: 17, color: GRAY, font: "Calibri" })] })],
           }),
           new TableCell({
-            width: { size: 70, type: WidthType.PERCENTAGE },
+            width: dxaCell(META_VALUE),
             borders: thinBorder(),
             margins: CELL_MARGIN,
             children: [new Paragraph({ children: [new TextRun({ text: val ?? "—", size: 17, color: "374151", font: "Calibri" })] })],
@@ -194,6 +209,9 @@ function metaTable(fields: [string, string][]): Table {
 }
 
 // ── AM Context block ──────────────────────────────────────────────────────────
+const AM_LABEL_W = pct(28); // 2621
+const AM_VALUE_W = pct(72); // 6739
+
 function amContextBlock(manualInputs: any): Table | null {
   const amThoughts      = manualInputs?.amThoughts ?? manualInputs?.hypothesis;
   const prevQtrAssess   = manualInputs?.prevQtrAssessment;
@@ -211,11 +229,12 @@ function amContextBlock(manualInputs: any): Table | null {
 
   const rows: TableRow[] = [];
 
-  // Title header row
+  // Title header row (full width span)
   rows.push(new TableRow({
     children: [
       new TableCell({
         columnSpan: 2,
+        width: dxaCell(PAGE_WIDTH),
         shading: { type: ShadingType.SOLID, color: AM_BG },
         borders: {
           top:    { style: BorderStyle.SINGLE, size: 4, color: AM_BORDER },
@@ -245,10 +264,10 @@ function amContextBlock(manualInputs: any): Table | null {
       lines.forEach((line, i) => {
         runs.push(new TextRun({ text: line, size: 18, color: "4B5563", font: "Calibri", break: i === 0 ? undefined : 1 }));
       });
-      valueContent = new Paragraph({ children: runs, spacing: { before: 0, after: 0 } });
+      valueContent = new Paragraph({ spacing: { before: 0, after: 0 }, children: runs });
     }
 
-    const borderDef = {
+    const leftBorder = {
       top:    { style: BorderStyle.SINGLE, size: 2, color: AM_BORDER },
       bottom: { style: BorderStyle.SINGLE, size: 2, color: AM_BORDER },
       left:   { style: BorderStyle.THICK,  size: 24, color: WEBSERV_RED },
@@ -258,32 +277,40 @@ function amContextBlock(manualInputs: any): Table | null {
     rows.push(new TableRow({
       children: [
         new TableCell({
-          width: { size: 28, type: WidthType.PERCENTAGE },
+          width: dxaCell(AM_LABEL_W),
           shading: { type: ShadingType.SOLID, color: AM_BG },
-          borders: borderDef,
-          margins: { top: 80, bottom: 80, left: 180, right: 120 },
+          borders: leftBorder,
+          margins: { top: 90, bottom: 90, left: 180, right: 120 },
           children: [new Paragraph({ children: [new TextRun({ text: label, bold: true, size: 17, color: "374151", font: "Calibri" })] })],
         }),
         new TableCell({
-          width: { size: 72, type: WidthType.PERCENTAGE },
+          width: dxaCell(AM_VALUE_W),
           shading: { type: ShadingType.SOLID, color: AM_BG },
           borders: {
             top:    { style: BorderStyle.SINGLE, size: 2, color: AM_BORDER },
             bottom: { style: BorderStyle.SINGLE, size: 2, color: AM_BORDER },
             left:   { style: BorderStyle.SINGLE, size: 2, color: AM_BORDER },
-            right:  { style: BorderStyle.SINGLE, size: 2, color: AM_BORDER },
+            right:  { style: BorderStyle.SINGLE, size: 4, color: AM_BORDER },
           },
-          margins: { top: 80, bottom: 80, left: 140, right: 140 },
+          margins: CELL_MARGIN,
           children: [valueContent],
         }),
       ],
     }));
   }
 
-  return new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows });
+  return new Table({
+    width: { size: PAGE_WIDTH, type: WidthType.DXA },
+    layout: TableLayoutType.FIXED,
+    rows,
+  });
 }
 
-// ── Goal block (Section 1) — structured 2-column per-goal card ───────────────
+// ── Goal block (Section 1) ────────────────────────────────────────────────────
+// 2-column card: label col (25%) + value col (75%)
+const GOAL_LABEL_W = pct(25); // 2340
+const GOAL_VALUE_W = pct(75); // 7020
+
 function goalBlock(row: any, ri: number, edits?: Record<string, string>): Table {
   const goalType = resolveCell(`s1_${ri}_0`, row.goalType, edits);
   const goal     = resolveCell(`s1_${ri}_1`, row.goal, edits);
@@ -294,13 +321,15 @@ function goalBlock(row: any, ri: number, edits?: Record<string, string>): Table 
   const shiftColor = shift.startsWith("+") ? "16A34A" : shift.startsWith("-") ? "DC2626" : GRAY;
 
   return new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
+    width: { size: PAGE_WIDTH, type: WidthType.DXA },
+    layout: TableLayoutType.FIXED,
     rows: [
-      // Goal type header
+      // Header: full-width goal type
       new TableRow({
         children: [
           new TableCell({
             columnSpan: 2,
+            width: dxaCell(PAGE_WIDTH),
             shading: { type: ShadingType.SOLID, color: DARK_HEADER },
             borders: thinBorder(),
             margins: HDR_MARGIN,
@@ -310,12 +339,12 @@ function goalBlock(row: any, ri: number, edits?: Record<string, string>): Table 
           }),
         ],
       }),
-      // Goal
+      // Goal row
       new TableRow({
         children: [
-          labelCell("Goal"),
+          labelCell("Goal", GOAL_LABEL_W),
           new TableCell({
-            width: { size: 75, type: WidthType.PERCENTAGE },
+            width: dxaCell(GOAL_VALUE_W),
             borders: thinBorder(),
             margins: CELL_MARGIN,
             children: [new Paragraph({
@@ -324,12 +353,12 @@ function goalBlock(row: any, ri: number, edits?: Record<string, string>): Table 
           }),
         ],
       }),
-      // Source
+      // Source row
       new TableRow({
         children: [
-          labelCell("Source"),
+          labelCell("Source", GOAL_LABEL_W),
           new TableCell({
-            width: { size: 75, type: WidthType.PERCENTAGE },
+            width: dxaCell(GOAL_VALUE_W),
             borders: thinBorder(),
             margins: CELL_MARGIN,
             children: [new Paragraph({
@@ -338,12 +367,12 @@ function goalBlock(row: any, ri: number, edits?: Record<string, string>): Table 
           }),
         ],
       }),
-      // Shift
+      // Shift row
       new TableRow({
         children: [
-          labelCell("Shift vs Last Quarter"),
+          labelCell("Shift vs Last Quarter", GOAL_LABEL_W),
           new TableCell({
-            width: { size: 75, type: WidthType.PERCENTAGE },
+            width: dxaCell(GOAL_VALUE_W),
             borders: thinBorder(),
             margins: CELL_MARGIN,
             children: [new Paragraph({
@@ -352,11 +381,12 @@ function goalBlock(row: any, ri: number, edits?: Record<string, string>): Table 
           }),
         ],
       }),
-      // Reason (full width)
+      // Reason: full width
       new TableRow({
         children: [
           new TableCell({
             columnSpan: 2,
+            width: dxaCell(PAGE_WIDTH),
             shading: { type: ShadingType.SOLID, color: ALT_ROW },
             borders: thinBorder(),
             margins: { top: 100, bottom: 100, left: 140, right: 140 },
@@ -374,7 +404,11 @@ function goalBlock(row: any, ri: number, edits?: Record<string, string>): Table 
   });
 }
 
-// ── Priority block (Section 6) — structured per-priority card ────────────────
+// ── Priority block (Section 6) ────────────────────────────────────────────────
+// 2-column card: red num col (8%) + content col (92%)
+const PRI_NUM_W     = pct(8);  // 749
+const PRI_CONTENT_W = pct(92); // 8611
+
 function priorityBlock(r: any, ri: number, edits?: Record<string, string>): Table {
   const num        = resolveCell(`s6_${ri}_0`, String(r.priority), edits);
   const initiative = resolveCell(`s6_${ri}_1`, r.initiative, edits);
@@ -383,13 +417,14 @@ function priorityBlock(r: any, ri: number, edits?: Record<string, string>): Tabl
   const reason     = resolveCell(`s6_${ri}_4`, r.reason, edits);
 
   return new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
+    width: { size: PAGE_WIDTH, type: WidthType.DXA },
+    layout: TableLayoutType.FIXED,
     rows: [
-      // Header: num + initiative + tier
+      // Header row: red num + dark initiative + tier
       new TableRow({
         children: [
           new TableCell({
-            width: { size: 8, type: WidthType.PERCENTAGE },
+            width: dxaCell(PRI_NUM_W),
             shading: { type: ShadingType.SOLID, color: WEBSERV_RED },
             borders: thinBorder(),
             margins: HDR_MARGIN,
@@ -399,70 +434,53 @@ function priorityBlock(r: any, ri: number, edits?: Record<string, string>): Tabl
             })],
           }),
           new TableCell({
-            width: { size: 73, type: WidthType.PERCENTAGE },
+            width: dxaCell(PRI_CONTENT_W),
             shading: { type: ShadingType.SOLID, color: DARK_HEADER },
             borders: thinBorder(),
             margins: HDR_MARGIN,
             children: [new Paragraph({
-              children: [new TextRun({ text: initiative, bold: true, size: 20, color: WHITE, font: "Calibri" })],
-            })],
-          }),
-          new TableCell({
-            width: { size: 19, type: WidthType.PERCENTAGE },
-            shading: { type: ShadingType.SOLID, color: DARK_HEADER },
-            borders: thinBorder(),
-            margins: HDR_MARGIN,
-            children: [new Paragraph({
-              alignment: AlignmentType.RIGHT,
-              children: [new TextRun({ text: tier, size: 16, color: MID_GRAY, font: "Calibri" })],
+              children: [
+                new TextRun({ text: initiative, bold: true, size: 20, color: WHITE, font: "Calibri" }),
+                new TextRun({ text: `   \u00b7   ${tier}`, size: 16, color: MID_GRAY, font: "Calibri" }),
+              ],
             })],
           }),
         ],
       }),
-      // Action
+      // Action row
       new TableRow({
         children: [
           new TableCell({
-            width: { size: 8, type: WidthType.PERCENTAGE },
+            width: dxaCell(PRI_NUM_W),
             shading: { type: ShadingType.SOLID, color: LABEL_BG },
-            borders: thinBorder(),
-            margins: LABEL_MARGIN,
-            children: [new Paragraph({
-              children: [new TextRun({ text: "Action", bold: true, size: 16, color: GRAY, font: "Calibri" })],
-            })],
-          }),
-          new TableCell({
-            width: { size: 92, type: WidthType.PERCENTAGE },
-            columnSpan: 2,
             borders: thinBorder(),
             margins: CELL_MARGIN,
-            children: [new Paragraph({
-              children: [new TextRun({ text: action, size: 18, color: "374151", font: "Calibri" })],
-            })],
+            children: [new Paragraph({ children: [new TextRun({ text: "Action", bold: true, size: 16, color: GRAY, font: "Calibri" })] })],
+          }),
+          new TableCell({
+            width: dxaCell(PRI_CONTENT_W),
+            borders: thinBorder(),
+            margins: CELL_MARGIN,
+            children: [new Paragraph({ children: [new TextRun({ text: action, size: 18, color: "374151", font: "Calibri" })] })],
           }),
         ],
       }),
-      // Reason
+      // Reason row
       new TableRow({
         children: [
           new TableCell({
-            width: { size: 8, type: WidthType.PERCENTAGE },
+            width: dxaCell(PRI_NUM_W),
             shading: { type: ShadingType.SOLID, color: LABEL_BG },
             borders: thinBorder(),
-            margins: LABEL_MARGIN,
-            children: [new Paragraph({
-              children: [new TextRun({ text: "Reason", bold: true, size: 16, color: GRAY, font: "Calibri" })],
-            })],
+            margins: CELL_MARGIN,
+            children: [new Paragraph({ children: [new TextRun({ text: "Reason", bold: true, size: 16, color: GRAY, font: "Calibri" })] })],
           }),
           new TableCell({
-            width: { size: 92, type: WidthType.PERCENTAGE },
-            columnSpan: 2,
+            width: dxaCell(PRI_CONTENT_W),
             shading: { type: ShadingType.SOLID, color: ALT_ROW },
             borders: thinBorder(),
             margins: CELL_MARGIN,
-            children: [new Paragraph({
-              children: [new TextRun({ text: reason, size: 17, color: GRAY, italics: true, font: "Calibri" })],
-            })],
+            children: [new Paragraph({ children: [new TextRun({ text: reason, size: 17, color: GRAY, italics: true, font: "Calibri" })] })],
           }),
         ],
       }),
@@ -470,7 +488,10 @@ function priorityBlock(r: any, ri: number, edits?: Record<string, string>): Tabl
   });
 }
 
-// ── Opportunity block (Additional Opportunities) — structured card ────────────
+// ── Opportunity block (Additional Opportunities) ──────────────────────────────
+const OPP_LABEL_W   = pct(22); // 2059
+const OPP_CONTENT_W = pct(78); // 7301
+
 function opportunityBlock(o: any, i: number, edits?: Record<string, string>): Table {
   const titleVal  = resolveCell(`opp_${i}_title`, o.title ?? o.service ?? "", edits);
   const whyNow    = resolveCell(`opp_${i}_why_now`, o.why_now ?? "", edits);
@@ -487,7 +508,7 @@ function opportunityBlock(o: any, i: number, edits?: Record<string, string>): Ta
     new TableRow({
       children: [
         new TableCell({
-          width: { size: 22, type: WidthType.PERCENTAGE },
+          width: dxaCell(OPP_LABEL_W),
           shading: { type: ShadingType.SOLID, color: DARK_HEADER },
           borders: thinBorder(),
           margins: HDR_MARGIN,
@@ -496,7 +517,7 @@ function opportunityBlock(o: any, i: number, edits?: Record<string, string>): Ta
           })],
         }),
         new TableCell({
-          width: { size: 78, type: WidthType.PERCENTAGE },
+          width: dxaCell(OPP_CONTENT_W),
           shading: { type: ShadingType.SOLID, color: DARK_HEADER },
           borders: thinBorder(),
           margins: HDR_MARGIN,
@@ -512,14 +533,14 @@ function opportunityBlock(o: any, i: number, edits?: Record<string, string>): Ta
     rows.push(new TableRow({
       children: [
         new TableCell({
-          width: { size: 22, type: WidthType.PERCENTAGE },
+          width: dxaCell(OPP_LABEL_W),
           shading: { type: ShadingType.SOLID, color: LABEL_BG },
           borders: thinBorder(),
-          margins: LABEL_MARGIN,
+          margins: CELL_MARGIN,
           children: [new Paragraph({ children: [new TextRun({ text: "Why Now", bold: true, size: 16, color: GRAY, font: "Calibri" })] })],
         }),
         new TableCell({
-          width: { size: 78, type: WidthType.PERCENTAGE },
+          width: dxaCell(OPP_CONTENT_W),
           borders: thinBorder(),
           margins: CELL_MARGIN,
           children: [new Paragraph({ children: [new TextRun({ text: whyNow, size: 18, color: "374151", italics: true, font: "Calibri" })] })],
@@ -532,14 +553,14 @@ function opportunityBlock(o: any, i: number, edits?: Record<string, string>): Ta
     rows.push(new TableRow({
       children: [
         new TableCell({
-          width: { size: 22, type: WidthType.PERCENTAGE },
+          width: dxaCell(OPP_LABEL_W),
           shading: { type: ShadingType.SOLID, color: LABEL_BG },
           borders: thinBorder(),
-          margins: LABEL_MARGIN,
+          margins: CELL_MARGIN,
           children: [new Paragraph({ children: [new TextRun({ text: "Evidence", bold: true, size: 16, color: GRAY, font: "Calibri" })] })],
         }),
         new TableCell({
-          width: { size: 78, type: WidthType.PERCENTAGE },
+          width: dxaCell(OPP_CONTENT_W),
           borders: thinBorder(),
           margins: CELL_MARGIN,
           children: evidences.map(ev =>
@@ -557,14 +578,14 @@ function opportunityBlock(o: any, i: number, edits?: Record<string, string>): Ta
     rows.push(new TableRow({
       children: [
         new TableCell({
-          width: { size: 22, type: WidthType.PERCENTAGE },
+          width: dxaCell(OPP_LABEL_W),
           shading: { type: ShadingType.SOLID, color: LABEL_BG },
           borders: thinBorder(),
-          margins: LABEL_MARGIN,
+          margins: CELL_MARGIN,
           children: [new Paragraph({ children: [new TextRun({ text: "Recommendation", bold: true, size: 16, color: GRAY, font: "Calibri" })] })],
         }),
         new TableCell({
-          width: { size: 78, type: WidthType.PERCENTAGE },
+          width: dxaCell(OPP_CONTENT_W),
           shading: { type: ShadingType.SOLID, color: ALT_ROW },
           borders: thinBorder(),
           margins: CELL_MARGIN,
@@ -579,6 +600,7 @@ function opportunityBlock(o: any, i: number, edits?: Record<string, string>): Ta
       children: [
         new TableCell({
           columnSpan: 2,
+          width: dxaCell(PAGE_WIDTH),
           borders: thinBorder(),
           margins: CELL_MARGIN,
           children: [new Paragraph({ children: [new TextRun({ text: framing, size: 16, color: MID_GRAY, italics: true, font: "Calibri" })] })],
@@ -587,17 +609,23 @@ function opportunityBlock(o: any, i: number, edits?: Record<string, string>): Ta
     }));
   }
 
-  return new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows });
+  return new Table({
+    width: { size: PAGE_WIDTH, type: WidthType.DXA },
+    layout: TableLayoutType.FIXED,
+    rows,
+  });
 }
 
 // ── Tier Diagnosis callout block ──────────────────────────────────────────────
 function tierDiagnosisBlock(tier: number, tierName: string, diagnosis: string): Table {
   return new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
+    width: { size: PAGE_WIDTH, type: WidthType.DXA },
+    layout: TableLayoutType.FIXED,
     rows: [
       new TableRow({
         children: [
           new TableCell({
+            width: dxaCell(PAGE_WIDTH),
             shading: { type: ShadingType.SOLID, color: ALT_ROW },
             borders: {
               top:    { style: BorderStyle.SINGLE, size: 4, color: BORDER_COLOR },
@@ -627,7 +655,7 @@ function resolveCell(key: string, value: string, edits?: Record<string, string>)
   return edits?.[key] ?? value ?? "";
 }
 
-// ── Section visibility helpers ────────────────────────────────────────────────
+// ── Section visibility ────────────────────────────────────────────────────────
 const DOCX_SECTION_DEFS = [
   { key: "section_goals" },
   { key: "section_conversions" },
@@ -660,6 +688,26 @@ function computeDocxSecNums(hs: Record<string, boolean>, ht: Record<string, bool
   return out;
 }
 
+// ── Column width presets (DXA) ────────────────────────────────────────────────
+// Section 2 — Top Converting Pages [Type, Page, Conv Source, Notes]
+const S2A_COLS = [pct(12), pct(26), pct(18), pct(44)];   // 1123, 2434, 1685, 4118
+// Section 2 — Top Conversion Patterns [Pattern, Why, Evidence]
+const S2C_COLS = [pct(20), pct(42), pct(38)];             // 1872, 3931, 3557
+// Section 2 — Top Converting Sources [Source, What, Notes]
+const S2B_COLS = [pct(15), pct(30), pct(55)];             // 1404, 2808, 5148
+// Section 3 — Topics no-delta [Topic, Queries, Admits, Insight]
+const S3A_ND_COLS = [pct(22), pct(28), pct(16), pct(34)];
+// Section 3 — Topics with-delta
+const S3A_WD_COLS = [pct(14), pct(7), pct(7), pct(8), pct(8), pct(20), pct(12), pct(24)];
+// Section 3 — Pages no-delta [Page, Clicks, CTR, Admits, Insight]
+const S3B_ND_COLS = [pct(28), pct(10), pct(10), pct(17), pct(35)];
+// Section 3 — Pages with-delta
+const S3B_WD_COLS = [pct(16), pct(7), pct(7), pct(8), pct(7), pct(6), pct(7), pct(6), pct(10), pct(26)];
+// Section 4
+const S4_COLS = [pct(38), pct(62)];
+// Section 7
+const S7_COLS = [pct(18), pct(18), pct(12), pct(12), pct(40)];
+
 // ── Main export function ──────────────────────────────────────────────────────
 export async function generateQbrPrepV2Docx(
   reportData: any,
@@ -685,13 +733,14 @@ export async function generateQbrPrepV2Docx(
       ],
     }),
     new Paragraph({
-      spacing: { before: 0, after: 100 },
+      spacing: { before: 0, after: 120 },
       children: [
         new TextRun({ text: resolveCell("meta_site", meta.site, edits), bold: true, size: 32, color: BLACK, font: "Calibri" }),
       ],
     }),
   );
 
+  // Meta table — DXA fixed so Google Docs cannot collapse columns
   docChildren.push(
     metaTable([
       ["Domain",                resolveCell("meta_domain",   meta.domain, edits)],
@@ -708,7 +757,7 @@ export async function generateQbrPrepV2Docx(
   if (manualInputs) {
     const amBlock = amContextBlock(manualInputs);
     if (amBlock) {
-      docChildren.push(spacer(160));
+      docChildren.push(spacer(180));
       docChildren.push(amBlock);
     }
   }
@@ -725,7 +774,7 @@ export async function generateQbrPrepV2Docx(
     docChildren.push(sectionHeading(secNums["section_goals"], "What Matters Most This Quarter", true));
     for (let ri = 0; ri < s1.rows.length; ri++) {
       docChildren.push(goalBlock(s1.rows[ri], ri, edits));
-      if (ri < s1.rows.length - 1) docChildren.push(spacer(100));
+      if (ri < s1.rows.length - 1) docChildren.push(spacer(120));
     }
   }
 
@@ -736,33 +785,33 @@ export async function generateQbrPrepV2Docx(
 
     if (tblVisible("table_s2_pages") && s2.topConvertingPages?.length) {
       docChildren.push(subHeading("Top Converting Pages"));
-      const s2aRows = s2.topConvertingPages.map((r: any, ri: number) => [
+      const rows = s2.topConvertingPages.map((r: any, ri: number) => [
         resolveCell(`s2a_${ri}_0`, r.dataSource ? `${r.type} [${r.dataSource}]` : r.type, edits),
         resolveCell(`s2a_${ri}_1`, r.page, edits),
         resolveCell(`s2a_${ri}_2`, r.conversionSource ?? r.source ?? "", edits),
         resolveCell(`s2a_${ri}_3`, r.notes, edits),
       ]);
-      docChildren.push(makeTable(["Type", "Page / Pattern", "Conversion Source", "Notes / What We're Learning"], s2aRows, [12, 26, 18, 44]));
+      docChildren.push(makeTable(["Type", "Page / Pattern", "Conversion Source", "Notes / What We're Learning"], rows, S2A_COLS));
     }
 
     if (tblVisible("table_s2_patterns") && s2.topConversionPatterns?.length) {
       docChildren.push(subHeading("Top Conversion Patterns"));
-      const s2cRows = s2.topConversionPatterns.map((r: any, ri: number) => [
+      const rows = s2.topConversionPatterns.map((r: any, ri: number) => [
         resolveCell(`s2c_${ri}_0`, r.pattern, edits),
         resolveCell(`s2c_${ri}_1`, r.whyItMatters, edits),
         resolveCell(`s2c_${ri}_2`, r.evidence, edits),
       ]);
-      docChildren.push(makeTable(["Pattern", "Why It Matters", "Evidence"], s2cRows, [20, 42, 38]));
+      docChildren.push(makeTable(["Pattern", "Why It Matters", "Evidence"], rows, S2C_COLS));
     }
 
     if (tblVisible("table_s2_sources") && s2.topConvertingSources?.length) {
       docChildren.push(subHeading("Top Converting Sources"));
-      const s2bRows = s2.topConvertingSources.map((r: any, ri: number) => [
+      const rows = s2.topConvertingSources.map((r: any, ri: number) => [
         resolveCell(`s2b_${ri}_0`, r.source, edits),
         resolveCell(`s2b_${ri}_1`, r.whatsConverting, edits),
         resolveCell(`s2b_${ri}_2`, r.notes, edits),
       ]);
-      docChildren.push(makeTable(["Source", "What's Converting", "Notes"], s2bRows, [15, 30, 55]));
+      docChildren.push(makeTable(["Source", "What's Converting", "Notes"], rows, S2B_COLS));
     }
 
     if (s2.trackingDisclaimer) {
@@ -781,37 +830,31 @@ export async function generateQbrPrepV2Docx(
 
     if (tblVisible("table_s3_topics") && s3.topTrafficTopics?.length) {
       docChildren.push(subHeading("Top Traffic Topics"));
-      const s3aRows = s3.topTrafficTopics.map((r: any, ri: number) => {
+      const rows = s3.topTrafficTopics.map((r: any, ri: number) => {
         const cells = [resolveCell(`s3a_${ri}_0`, r.topic, edits)];
         if (hasTopicDeltas) cells.push(String(r.queryCount ?? "—"), r.queryCountDelta ?? "—", r.impressions != null ? r.impressions.toLocaleString("en-US") : "—", r.impressionsDelta ?? "—");
-        cells.push(
-          resolveCell(`s3a_${ri}_1`, r.exampleQueries, edits),
-          resolveCell(`s3a_${ri}_2`, r.connectionToAdmits, edits),
-          resolveCell(`s3a_${ri}_3`, r.insight ?? "", edits),
-        );
+        cells.push(resolveCell(`s3a_${ri}_1`, r.exampleQueries, edits), resolveCell(`s3a_${ri}_2`, r.connectionToAdmits, edits), resolveCell(`s3a_${ri}_3`, r.insight ?? "", edits));
         return cells;
       });
-      const s3aHeaders = hasTopicDeltas
+      const headers = hasTopicDeltas
         ? ["Topic", "# Queries", "\u0394 Queries", "Impressions", "\u0394 Impressions", "Example Queries", "Admits", "Insight"]
         : ["Topic", "Example Queries", "Admits", "Insight"];
-      const s3aWidths = hasTopicDeltas ? [14, 7, 7, 8, 8, 20, 12, 24] : [22, 28, 16, 34];
-      docChildren.push(makeTable(s3aHeaders, s3aRows, s3aWidths));
+      docChildren.push(makeTable(headers, rows, hasTopicDeltas ? S3A_WD_COLS : S3A_ND_COLS));
     }
 
     const hasPageDeltas = s3.topTrafficPages.some((r: any) => r.clicksDelta || r.impressions || r.queries);
     if (tblVisible("table_s3_pages") && s3.topTrafficPages?.length) {
       docChildren.push(subHeading("Top Traffic Pages"));
-      const s3bRows = s3.topTrafficPages.map((r: any, ri: number) => {
+      const rows = s3.topTrafficPages.map((r: any, ri: number) => {
         const cells = [resolveCell(`s3b_${ri}_0`, r.page, edits), resolveCell(`s3b_${ri}_1`, r.clicks, edits)];
         if (hasPageDeltas) cells.push(r.clicksDelta ?? "—", r.impressions ?? "—", r.impressionsDelta ?? "—", r.queries ?? "—", r.queriesDelta ?? "—");
         cells.push(resolveCell(`s3b_${ri}_2`, r.ctr, edits), resolveCell(`s3b_${ri}_3`, r.connectionToAdmits, edits), resolveCell(`s3b_${ri}_4`, r.insight ?? "", edits));
         return cells;
       });
-      const s3bHeaders = hasPageDeltas
+      const headers = hasPageDeltas
         ? ["Page", "Clicks", "\u0394 Clicks", "Impressions", "\u0394 Impressions", "# Queries", "\u0394 Queries", "CTR", "Admits", "Insight"]
         : ["Page", "Clicks", "CTR", "Admits", "Insight"];
-      const s3bWidths = hasPageDeltas ? [16, 6, 7, 8, 7, 6, 7, 6, 10, 27] : [28, 10, 10, 17, 35];
-      docChildren.push(makeTable(s3bHeaders, s3bRows, s3bWidths));
+      docChildren.push(makeTable(headers, rows, hasPageDeltas ? S3B_WD_COLS : S3B_ND_COLS));
     }
   }
 
@@ -820,11 +863,11 @@ export async function generateQbrPrepV2Docx(
   if (secVisible("section_services")) {
     docChildren.push(sectionHeading(secNums["section_services"], "Site Service Overview"));
     if (tblVisible("table_s4_services") && s4.services?.length) {
-      const s4Rows = s4.services.map((r: any, ri: number) => [
+      const rows = s4.services.map((r: any, ri: number) => [
         resolveCell(`s4_${ri}_0`, r.service, edits),
         resolveCell(`s4_${ri}_1`, r.examplePage, edits),
       ]);
-      docChildren.push(makeTable(["Service", "Example Page"], s4Rows, [38, 62]));
+      docChildren.push(makeTable(["Service", "Example Page"], rows, S4_COLS));
     }
   }
 
@@ -848,7 +891,7 @@ export async function generateQbrPrepV2Docx(
   }
 
   // ── Section 7: What We Track ─────────────────────────────────────────────────
-  // Credit usage is intentionally preview-only and excluded from all exports.
+  // Credit usage is preview-only and intentionally excluded from all exports.
   const s7 = reportData.section7Tracking;
   if (secVisible("section_tracking") && s7?.tracking?.length) {
     docChildren.push(sectionHeading(secNums["section_tracking"], "What We Track"));
@@ -861,14 +904,14 @@ export async function generateQbrPrepV2Docx(
       }
     }
     if (tblVisible("table_s8")) {
-      const s7Rows = s7.tracking.map((r: any, ri: number) => [
+      const rows = s7.tracking.map((r: any, ri: number) => [
         resolveCell(`s7_${ri}_0`, r.focusArea, edits),
         resolveCell(`s7_${ri}_1`, r.metric, edits),
         resolveCell(`s7_${ri}_2`, r.source, edits),
         resolveCell(`s7_${ri}_3`, r.status ?? "Needs Verification", edits),
         resolveCell(`s7_${ri}_4`, r.whyItMatters, edits),
       ]);
-      docChildren.push(makeTable(["Focus Area", "Metric", "Source", "Status", "Why It Matters"], s7Rows, [18, 18, 12, 12, 40]));
+      docChildren.push(makeTable(["Focus Area", "Metric", "Source", "Status", "Why It Matters"], rows, S7_COLS));
     }
   }
 

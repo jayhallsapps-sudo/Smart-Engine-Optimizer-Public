@@ -1533,7 +1533,7 @@ export async function registerRoutes(
     try {
       const buffer = await generateQbrPrepV2Docx(injectQbrPrepCustomRows(reportData, edits), edits, hiddenSections, hiddenTables);
       const slug = (reportData.meta?.site ?? "report").toLowerCase().replace(/\s+/g, "_");
-      const filename = `${slug}_qbr_prep_${reportData.meta?.planningQuarter?.replace(/\s+/g, "_") ?? "report"}.docx`;
+      const filename = `QBS_${slug}_${reportData.meta?.planningQuarter?.replace(/\s+/g, "_") ?? "report"}.docx`;
       logExport("QBR Prep DOCX", t0, true);
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
       res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);

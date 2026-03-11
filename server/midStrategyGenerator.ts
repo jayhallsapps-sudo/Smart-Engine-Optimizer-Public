@@ -104,6 +104,18 @@ function fmtNum(n: number | string | undefined): string {
   return Math.round(num).toString();
 }
 
+// Parse a formatted number string like "12.3K" or "1.2M" back into a raw number for chart scaling
+function parseFormattedNum(s: string | number | undefined): number {
+  if (typeof s === "number") return s;
+  const cleaned = String(s ?? "").replace(/,/g, "");
+  if (cleaned === DASH || cleaned === MNE || cleaned === "") return 0;
+  const m = cleaned.match(/^([\d.]+)([KMB]?)$/i);
+  if (!m) return 0;
+  const n = parseFloat(m[1]);
+  const mult = m[2]?.toUpperCase() === "K" ? 1_000 : m[2]?.toUpperCase() === "M" ? 1_000_000 : m[2]?.toUpperCase() === "B" ? 1_000_000_000 : 1;
+  return n * mult;
+}
+
 function fmtDate(d: Date) {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
@@ -560,29 +572,31 @@ function generateSlides(
 
   // ── Agenda ────────────────────────────────────────────────────────────────
   const agendaItems = [
-    "Competitive landscape & positioning",
-    "Website structure & navigation findings",
-    "Content quality & gap analysis",
-    "Technical & crawl findings",
-    "Trust, credibility & conversion findings",
-    "Integration gaps & tracking fixes",
-    "Priority actions & what we're addressing first",
-    "What's next",
+    "Competitive Benchmarking",
+    "Website Findings",
+    "Content Quality & Gap Analysis",
+    "Technical & Integration Findings",
+    "Trust, Credibility & Conversion",
+    "Priority Fixes",
+    "What's Next",
   ];
-  if (input.includeDomainStrategy && input.domainStrategy?.currentDomain) agendaItems.splice(1, 0, "Domain strategy recommendation");
-  slides.push({ id: "s02_agenda", type: "bullets", title: "Mid-Strategy Agenda", bullets: agendaItems });
+  if (input.includeDomainStrategy && input.domainStrategy?.currentDomain) agendaItems.splice(1, 0, "Domain Strategy Recommendation");
+  slides.push({ id: "s02_agenda", type: "bullets", title: "Mid-Strategy Agenda", sectionLabel: `${clientName.toUpperCase()} · CONTENT & SEO MID-STRATEGY CHECK-IN`, bullets: agendaItems });
 
   // ── Next Checkpoint ───────────────────────────────────────────────────────
+  const checkpointMonth = sources.today.toLocaleDateString("en-US", { month: "long", year: "numeric" });
   slides.push({
     id: "s03_checkpoint",
     type: "bullets",
-    title: "Strategy Month: Next Checkpoint",
-    subtitle: "Launch Strategy & Roadmap Review — 2 weeks from now (Date TBD)",
+    title: `Strategy Month: ${checkpointMonth}`,
+    sectionLabel: "NEXT CHECKPOINT",
+    subtitle: "Launch Strategy & Roadmap Review — what happens at our next touchpoint",
     bullets: [
-      "Finalize goals, North Star Metrics, and success benchmarks for the next quarter",
-      "Align on the execution plan across content, technical SEO, and site improvements",
-      "Confirm launch-ready priorities and delivery ownership",
-      "Signal the formal transition from planning → active execution",
+      "Review this diagnostic against actual data — confirm findings hold or update based on new crawl/analytics evidence",
+      "Finalize the execution plan: content briefs, technical cleanup timeline, integration fixes, and ownership",
+      "Align on North Star Metrics and success benchmarks for the next 60–90 days",
+      "Confirm any upcoming changes, campaigns, new programs, or events to incorporate into the strategy",
+      "Greenlight — signal the formal transition from strategy → active execution",
     ],
   });
 
@@ -616,8 +630,8 @@ function generateSlides(
   // ── Competitive Baseline ──────────────────────────────────────────────────
   const benchmarkChartData = allRows.map(r => ({
     label: r.isClient ? `★ ${r.name}` : r.name,
-    "Organic KW": parseFloat(String(r.organicKeywords).replace(/[K,M]/g, m => m === "K" ? "000" : "000000")) || 0,
-    "Organic Traffic": parseFloat(String(r.organicTraffic).replace(/[K,M]/g, m => m === "K" ? "000" : "000000")) || 0,
+    "Organic KW": parseFormattedNum(r.organicKeywords),
+    "Organic Traffic": parseFormattedNum(r.organicTraffic),
   }));
 
   const clientDR = parseFloat(String(wb.competitorBenchmark.clientRow.dr).replace(/[^0-9.]/g, "")) || 0;
@@ -1028,6 +1042,16 @@ function generateSlides(
   } as any);
 
   // ── Next Steps ─────────────────────────────────────────────────────────────
+  const clientNextSteps = [
+    "Review this diagnostic and confirm the priority sequence aligns with internal goals",
+    input.trustPages?.hasInsurance === false
+      ? "Work with developer to create or update the Verify Insurance / VOB page and add it to main navigation"
+      : "Confirm redirect plan and technical cleanup timeline with internal team and developer",
+    input.clientInsights
+      ? `Provide any additional context on upcoming changes: ${input.clientInsights.slice(0, 120)}`
+      : "Flag any upcoming site changes, campaigns, new programs, or events that should be incorporated",
+    "Confirm next checkpoint date and format (call, async update, or presentation)",
+  ];
   slides.push({
     id: "s15_next_steps",
     type: "two-col",
@@ -1036,19 +1060,18 @@ function generateSlides(
       type: "bullets",
       bullets: [
         "Webserv:",
-        "Finalize site structure plan and share proposed IA",
+        "Finalize site structure plan and share proposed IA for review",
         "Begin redirect map and technical cleanup execution",
-        "Deliver content briefs for top priority pages",
-        "Set up missing integrations and verify tracking coverage",
+        "Deliver content briefs for the top priority pages identified in this audit",
+        "Set up any missing integrations and verify tracking coverage",
         "Schedule next checkpoint in 2 weeks",
       ],
     },
     rightContent: {
-      type: "metrics",
-      metrics: [
-        { label: `${clientName} Team:`, current: "Review and approve proposed site structure", isPositive: true },
-        { label: " ", current: input.trustPages?.hasInsurance === false ? "Work with developer to create/update Verify Insurance page" : "Confirm redirect plan with internal team and developer", isPositive: true },
-        { label: " ", current: input.clientInsights ? `Context provided: "${input.clientInsights.slice(0, 80)}..."` : "Confirm any upcoming changes, campaigns, or new programs to incorporate", isPositive: true },
+      type: "bullets",
+      bullets: [
+        "Client Team:",
+        ...clientNextSteps,
       ],
     },
   } as any);

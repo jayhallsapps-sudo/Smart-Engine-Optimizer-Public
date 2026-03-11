@@ -104,6 +104,23 @@ export interface MidStrategyAmInputs {
   focusNext60Days?: string;
   salesAdmissionsContext?: string;
   clientDependencyNotes?: string;
+  domainStrategy?: {
+    enabled?: boolean;
+    currentDomain?: string;
+    proposedDomain?: string;
+    recommendation?: string;
+    customRationale?: string;
+  };
+  iaData?: {
+    currentNav?: Array<{ label: string; children?: string[] }>;
+    futureNav?: Array<{ label: string; children?: string[] }>;
+    clusters?: Array<{ hub: string; pages: string[] }>;
+    credibilityPages?: Array<{ hub: string; pages: string[] }>;
+  };
+  firstFocusBullets?: string[];
+  whatsNextBullets?: string[];
+  webservNextSteps?: string[];
+  clientNextSteps?: string[];
 }
 
 function normalizeMidStrategyAmInputs(raw: MidStrategyAmInputs): MidStrategyAmInputs {
@@ -552,19 +569,17 @@ function generateSlides(
 ): Slide[] {
   const allRows = [wb.competitorBenchmark.clientRow, ...wb.competitorBenchmark.competitorRows];
   const { urlAudit } = wb;
+  const slides: Slide[] = [];
 
-  const allSlides: Slide[] = [];
-
-  // ── s01: Title ─────────────────────────────────────────────────────────────
-  const s01: Slide = {
+  // ── s01: Cover ──────────────────────────────────────────────────────────────
+  slides.push({
     id: "s01_title",
     type: "title",
     title: "Building durable organic performance with purpose.",
     subtitle: "Content & SEO Mid-Strategy Check-in",
     clientName,
     date: reportDate,
-  };
-  allSlides.push(s01);
+  });
 
   if (gapContext && gapContext.hasAnswers) {
     const gapBullets: string[] = [];
@@ -572,35 +587,28 @@ function generateSlides(
     if (gapContext.businessChanges) gapBullets.push(`Business: ${gapContext.businessChanges}`);
     if (gapContext.blockers) gapBullets.push(`Blockers: ${gapContext.blockers}`);
     if (gapContext.narrativeNotes) gapBullets.push(`Notes: ${gapContext.narrativeNotes}`);
-
-    allSlides.push({
-      id: "gap_insights",
-      type: "bullets",
-      title: "Gap Analysis Insights",
-      subtitle: "Clarifying context collected before generation",
-      bullets: gapBullets,
-    });
+    if (gapBullets.length > 0) {
+      slides.push({ id: "gap_insights", type: "bullets", title: "Gap Analysis Insights", subtitle: "Clarifying context collected before generation", bullets: gapBullets });
+    }
   }
 
-  // ── s02: Agenda ────────────────────────────────────────────────────────────
-  const s02: Slide = {
-    id: "s02_agenda",
-    type: "bullets",
-    title: "Mid-Strategy Agenda",
-    bullets: [
-      "Competitive Benchmarking",
-      "Immediate Focus: Core Services, Conversions & Structural Cleanup",
-      "Risk Flag: Cannibalization & Low-impact URLs",
-      "What's Next",
-    ],
-  };
+  // ── s02: Agenda ─────────────────────────────────────────────────────────────
+  const agendaBullets = [
+    "Competitive Benchmarking",
+  ];
+  if (amInputs.domainStrategy?.enabled) agendaBullets.push("Domain Strategy Recommendation");
+  agendaBullets.push(
+    `Core Focus: Structural Cleanup for ${clientName}`,
+    "What's Next",
+  );
+  slides.push({ id: "s02_agenda", type: "bullets", title: "Mid-Strategy Agenda", bullets: agendaBullets });
 
-  // ── s03: Next Checkpoint ───────────────────────────────────────────────────
-  const s03: Slide = {
+  // ── s03: Next Checkpoint ────────────────────────────────────────────────────
+  slides.push({
     id: "s03_checkpoint",
     type: "bullets",
     title: "Strategy Month: Next Checkpoint",
-    subtitle: "Launch Strategy & Roadmap Review — Date TBD",
+    subtitle: "Launch Strategy & Roadmap Review — Date TBD (2 weeks from now)",
     bullets: [
       "Finalizes goals, North Star Metrics, and success benchmarks",
       "Aligns on the execution plan across content, SEO, and site improvements",
@@ -608,83 +616,147 @@ function generateSlides(
       "Signals the transition from planning → active execution",
     ],
     commentary: amInputs.accountFeeling || undefined,
-  };
+  });
 
-  // ── s04: Competitive Analysis — Authority / Foundation ─────────────────────
-  const authorityHeaders = ["Name", "Website", "Domain Age (yrs)", "DR", "Ref. Domains", "Backlinks", "Indexed Pages"];
-  const authorityRows = allRows.map(r => [
-    r.isClient ? `★ ${r.name}` : r.name,
-    r.url.replace("https://", "").replace(/\/$/, "").slice(0, 30),
-    r.domainAge,
-    r.dr,
-    r.referringDomains,
-    r.backlinks,
-    r.indexedPages,
-  ]);
-  const s04: Slide = {
-    id: "s04_competitive_authority",
-    type: "table",
+  // ── s04: Domain Strategy Recommendation (conditional) ───────────────────────
+  const ds = amInputs.domainStrategy;
+  if (ds?.enabled && ds.currentDomain && ds.proposedDomain) {
+    slides.push({
+      id: "s04_domain_strategy",
+      type: "decision-card",
+      title: "Domain Strategy Recommendation",
+      subtitle: `Should we launch on ${ds.currentDomain} and switch later — or launch directly on ${ds.proposedDomain}?`,
+      decisionOptions: [
+        {
+          label: `Launch on ${ds.currentDomain}, Migrate Later`,
+          subtitle: "Higher Complexity + Slower Momentum",
+          pros: [],
+          cons: [
+            "Two full Google reprocessing cycles",
+            "Two indexing periods",
+            "Additional redirect management",
+            "Temporary visibility volatility",
+            "More development + SEO overhead",
+          ],
+        },
+        {
+          label: `Launch on ${ds.proposedDomain} from Day One`,
+          subtitle: "Cleaner + Stronger Long-Term Strategy",
+          recommended: true,
+          pros: [
+            "Aligns brand and domain immediately",
+            "No future migration required",
+            "Clearer trust + recognition signals",
+            "Builds authority in the right place from the start",
+          ],
+        },
+      ],
+      decisionConclusion: ds.customRationale || "Result: Stronger foundation and faster compounding authority.",
+    });
+
+    // ── s05: Migration / Redirect Logic (conditional) ─────────────────────────
+    slides.push({
+      id: "s05_migration_logic",
+      type: "bullets",
+      title: `What Happens to ${ds.currentDomain}?`,
+      subtitle: "We Will Implement a Full 301 Redirect Strategy",
+      bullets: [
+        `301 redirect every page from ${ds.currentDomain} → ${ds.proposedDomain}`,
+        "Maintain identical URL paths wherever possible",
+        "Preserve any authority or signals tied to the old domain",
+        "Submit updated sitemap in Google Search Console",
+        "Monitor indexing + traffic during transition",
+      ],
+    });
+
+    slides.push({
+      id: "s05b_migration_risk",
+      type: "bullets",
+      title: "Why This Is Low Risk",
+      bullets: [
+        "Site is effectively launching from zero",
+        "Minimal authority to protect",
+        "No meaningful rankings at risk",
+        "Cleaner to migrate now vs. after growth begins",
+        "Switching later creates unnecessary disruption.",
+        "Switching now creates clarity and compounding growth.",
+      ],
+    });
+  }
+
+  // ── s06: Competitive Baseline — DR + Indexed Pages (chart-ready) ────────────
+  const benchmarkChartData = allRows.map(r => ({
+    label: r.isClient ? `★ ${r.name}` : r.name,
+    DR: parseFloat(String(r.dr).replace(/[^0-9.]/g, "")) || 0,
+    "Indexed Pages": parseFloat(String(r.indexedPages).replace(/[^0-9.]/g, "")) || 0,
+  }));
+  slides.push({
+    id: "s06_competitive_dr",
+    type: "two-col",
     title: "Competitive Analysis — Authority & Foundation",
+    sectionLabel: `${clientName.toUpperCase()}: COMPETITIVE ANALYSIS BASELINE`,
     subtitle: "Where you stand vs. everybody else",
-    commentary: `Top competitors have established authority through years of consistent publishing. ${clientName}'s smaller footprint means we can grow faster by focusing resources on the pages and clusters that matter most.`,
-    table: { headers: authorityHeaders, rows: authorityRows },
-  };
+    leftContent: {
+      type: "bullets",
+      bullets: [
+        `${clientName} has a ${parseFloat(String(wb.competitorBenchmark.clientRow.dr).replace(/[^0-9.]/g, "")) > 30 ? "solid" : "developing"} DR foundation, but may have fewer indexed pages than top competitors.`,
+        "That means the site is credible, but underrepresented in search — it doesn't have enough optimized, intent-aligned pages to compete across the full set of queries.",
+        "Opportunity: Grow efficiently by expanding the right pages (Programs / Treatment / What We Treat / Admissions), strengthening internal linking, and building targeted authority.",
+      ],
+    },
+    rightContent: {
+      type: "chart-bar",
+      chartData: benchmarkChartData,
+      chartKeys: ["DR", "Indexed Pages"],
+    },
+  });
 
-  // ── s05: Competitive Analysis — Keyword Visibility ─────────────────────────
-  const visibilityHeaders = ["Name", "Organic KW", "Top 10 KW", "Organic Traffic", "Featured Snippets", "KW Velocity"];
-  const visibilityRows = allRows.map(r => [
-    r.isClient ? `★ ${r.name}` : r.name,
-    r.organicKeywords,
-    r.top10Keywords,
-    r.organicTraffic,
-    r.featuredSnippets,
-    DASH,
-  ]);
-  const s05: Slide = {
-    id: "s05_competitive_visibility",
-    type: "table",
-    title: "Competitive Analysis — Keyword Visibility",
+  // ── s07: Competitive Baseline — AI Visibility + Snippet/AIO ────────────────
+  const aiChartData = allRows.map(r => ({
+    label: r.isClient ? `★ ${r.name}` : r.name,
+    "AI Visibility": parseFloat(String(r.aiVisibilityScore).replace(/[^0-9.]/g, "")) || 0,
+    "Featured Snippets": parseFloat(String(r.featuredSnippets).replace(/[^0-9.]/g, "")) || 0,
+  }));
+  slides.push({
+    id: "s07_competitive_ai",
+    type: "two-col",
+    title: "Competitive Analysis — AI Visibility & Snippet/AIO",
+    sectionLabel: `${clientName.toUpperCase()}: COMPETITIVE ANALYSIS BASELINE`,
     subtitle: "Where you stand vs. everybody else",
-    commentary: `Competitors ranking for thousands of keywords don't always convert that into visibility — many have shallow Top 10 presence. ${clientName} has a good mix of both, which we can use to leverage growth.`,
-    table: { headers: visibilityHeaders, rows: visibilityRows },
-  };
+    leftContent: {
+      type: "bullets",
+      bullets: [
+        "A few competitors are showing up more in AI-generated results and featured snippets — a sign of structured, answer-first content.",
+        `${clientName} is in the lower-to-mid range for AI Visibility and has minimal snippet/AIO coverage.`,
+        "Focus: increase snippet/AIO wins by building concise FAQ-style answers across key pages, adding clear headings/definitions, and strengthening internal linking.",
+      ],
+    },
+    rightContent: {
+      type: "chart-bar",
+      chartData: aiChartData,
+      chartKeys: ["AI Visibility", "Featured Snippets"],
+    },
+  });
 
-  // ── s06: Competitive Analysis — AI Visibility ──────────────────────────────
-  const aiHeaders = ["Name", "AI Visibility Score", "AI Mentions", "Cited Sources", "Mention Rate %"];
-  const aiRows = allRows.map(r => [
-    r.isClient ? `★ ${r.name}` : r.name,
-    r.aiVisibilityScore,
-    r.aiMentions,
-    r.citedSources,
-    DASH,
-  ]);
-  const s06: Slide = {
-    id: "s06_competitive_ai",
-    type: "table",
-    title: "Competitive Analysis — AI Visibility",
-    subtitle: "Where you stand vs. everybody else",
-    commentary: `A few competitors appear in AI-generated results — an early sign of structured, information-rich content. We'll focus efforts on appearing more in Google snippets by providing concise, direct answers to common questions.`,
-    table: { headers: aiHeaders, rows: aiRows },
-  };
-
-  // ── s07: Competitive Scorecard ─────────────────────────────────────────────
+  // ── s08: Competitive Efficiency Summary ─────────────────────────────────────
   const clientRank = wb.competitorBenchmark.clientRank;
   const total = wb.competitorBenchmark.totalCompetitors + 1;
   const percentile = wb.competitorBenchmark.percentile;
-  const scorecardHeaders = ["Name", "Organic KW", "Organic Traffic", "Indexed Pages", "Rank Among Peers"];
-  const scorecardRows = allRows.map((r, i) => [
+  const scorecardHeaders = ["Name", "Organic KW", "Organic Traffic", "Indexed Pages", "Rank"];
+  const scorecardRows = allRows.map(r => [
     r.isClient ? `★ ${r.name}` : r.name,
     r.organicKeywords,
     r.organicTraffic,
     r.indexedPages,
     r.rank !== DASH ? `#${r.rank} of ${total}` : DASH,
   ]);
-  const s07: Slide = {
-    id: "s07_competitive_scorecard",
+  slides.push({
+    id: "s08_competitive_scorecard",
     type: "scorecard",
-    title: "Competitive Efficiency Scorecard",
+    title: "Competitive Efficiency Summary",
+    sectionLabel: "COMPETITIVE ANALYSIS BASELINE",
     subtitle: "Where you stand vs. everybody else",
-    commentary: `Across all key metrics: authority, visibility, and AI readiness, ${clientName} currently ranks ${clientRank > 0 ? `#${clientRank} of ${total}` : "near the bottom"} — giving us a clear benchmark for where to close the gap. The data shows our fastest growth levers are structure and depth: not just more pages, but smarter ones.`,
+    commentary: `Across all key metrics: authority, visibility, and AI readiness, ${clientName} currently ranks ${clientRank > 0 ? `#${clientRank} of ${total}` : "near the bottom"} — giving us a clear benchmark for where to close the gap. The data shows our fastest growth levers are trust and content depth — not just more pages, but smarter ones that earn visibility across both traditional and AI search.`,
     table: { headers: scorecardHeaders, rows: scorecardRows },
     metrics: [
       { label: "Rank Among Peers", current: clientRank > 0 ? `#${clientRank} of ${total}` : MNE, isPositive: clientRank <= Math.ceil(total / 2) },
@@ -692,206 +764,167 @@ function generateSlides(
       { label: "Organic Keywords", current: wb.competitorBenchmark.clientRow.organicKeywords, isPositive: true },
       { label: "Organic Traffic", current: wb.competitorBenchmark.clientRow.organicTraffic, isPositive: true },
     ],
-  } as any;
+  } as any);
 
-  // ── s08: Immediate Focus ───────────────────────────────────────────────────
-  const s08: Slide = {
-    id: "s08_immediate_focus",
+  // ── s09: First Focus / Structural Cleanup ───────────────────────────────────
+  const firstFocusBullets = amInputs.firstFocusBullets?.length ? amInputs.firstFocusBullets : [
+    `Clarify the site's core structure: Define what lives at the top level (treatment, programs, admissions, etc.) and remove navigation ambiguity.`,
+    `Align the site with how patients evaluate treatment: Services first, conditions second, education later — reducing friction for users deciding if ${clientName} is the right fit.`,
+    "Create a shared prioritization framework for growth: Ensure future blogs, geo pages, and condition pages support core services and scale cleanly without rework.",
+    ...(amInputs.amThoughts ? [`Strategist focus: ${amInputs.amThoughts}`] : []),
+  ];
+  slides.push({
+    id: "s09_first_focus",
     type: "bullets",
     title: "Core Services, Conversions & Structural Cleanup",
-    subtitle: "Immediate Focus",
-    bullets: [
-      `Defining and strengthening ${clientName}'s primary service pages`,
-      "Fixing conversion gaps — Verify Insurance CRO updates, launching a clear standalone Contact Us page",
-      "Addressing structural SEO issues that are currently suppressing performance",
-      "Phase 1 navigation cleanup (conversion-focused)",
-      `Moving Admissions-related pages under About Us`,
-      "Replacing the Admissions nav item with Verify Insurance",
-      ...(amInputs.amThoughts ? [`AM's Hypothesis: ${amInputs.amThoughts}`] : []),
-    ],
+    sectionLabel: "FIRST FOCUS",
+    subtitle: `Our top priority is aligning on a clear, scalable site structure before production begins.`,
+    bullets: firstFocusBullets,
     commentary: amInputs.focusNext60Days || undefined,
-  };
+  });
 
-  // ── s09: Navigation Structure ──────────────────────────────────────────────
-  const s09: Slide = {
-    id: "s09_nav_structure",
-    type: "bullets",
-    title: "Phase 1 Navigation Cleanup",
-    subtitle: "Conversion-focused restructuring",
-    bullets: [
-      "About Us → How to Get Started, Admissions, Leadership & Clinical Team, Tour Our Facility, Testimonials",
-      "Programs → (no change)",
-      "Addictions Treated → (no change)",
-      "Therapies & Experiences → (no change)",
-      "Verify Insurance → /verify-insurance/ (new top-level nav item)",
-      "Contact Us → /contact-us/ (new standalone page)",
-    ],
-    commentary: "Phase 1 is designed to improve conversions by giving users direct access to Verify Insurance and a true Contact page, while moving Admissions and How to Get Started into About Us for a clearer, more logical path to care.",
-  };
+  // ── s10: Current vs Future IA ───────────────────────────────────────────────
+  const ia = amInputs.iaData;
+  const currentNav = ia?.currentNav?.length ? ia.currentNav : [
+    { label: "ABOUT" }, { label: "PROGRAMS" }, { label: "ADMISSIONS" },
+    { label: "TREATMENT" }, { label: "RESOURCES" },
+    { label: "VERIFY INSURANCE" }, { label: "CALL NOW" }, { label: "WHAT WE TREAT" },
+  ];
+  const futureNav = ia?.futureNav?.length ? ia.futureNav : [
+    { label: "TREATMENT", children: ["/treatment/", "/treatment/therapies-modalities/", "/treatment/trauma-integrated-care/"] },
+    { label: "PROGRAMS", children: ["/programs/", "/programs/residential/", "/programs/detox/", "/programs/php/"] },
+    { label: "WHAT WE TREAT", children: ["/what-we-treat/", "/what-we-treat/substance-use/", "/what-we-treat/alcohol/"] },
+    { label: "ADMISSIONS", children: ["/admissions/", "/admissions/verify-insurance/", "/admissions/start-here/"] },
+    { label: "ABOUT", children: ["/about/", "/about/our-story/", "/about/clinical-team/"] },
+    { label: "RESOURCES", children: ["/resources/", "/resources/blog/", "/resources/faq/"] },
+  ];
+  slides.push({
+    id: "s10_ia_comparison",
+    type: "ia-comparison",
+    title: "Current vs Future Information Architecture",
+    commentary: "Our goal: improve both usability and search performance. The new IA creates clear topics that map to real searches and support stronger internal linking — helping key pages rank, earn snippets, and convert.",
+    currentIA: currentNav,
+    futureIA: futureNav,
+  });
 
-  // ── s10: Cannibalization Intro ─────────────────────────────────────────────
-  const overlappingCount = urlAudit.deleteRedirectCount > 0 ? urlAudit.deleteRedirectCount : null;
+  // ── s11: Scalable Blueprint / Cluster Expansion ─────────────────────────────
+  const clusters = ia?.clusters?.length ? ia.clusters : [
+    { hub: "Treatment", pages: ["/treatment/", "/treatment/therapies-modalities/", "/treatment/trauma-integrated-care/", "/treatment/medical-psychiatry/", "/treatment/wellness-experiential/"] },
+    { hub: "Programs", pages: ["/programs/", "/programs/residential/", "/programs/detox/", "/programs/php/", "/programs/iop/", "/programs/aftercare-alumni/"] },
+    { hub: "Admissions", pages: ["/admissions/", "/admissions/start-here/", "/admissions/insurance-cost/", "/admissions/verify-insurance/", "/admissions/what-to-bring/"] },
+    { hub: "What We Treat", pages: ["/what-we-treat/", "/what-we-treat/substance-use/", "/what-we-treat/alcohol/", "/what-we-treat/opioids/", "/what-we-treat/mental-health/"] },
+  ];
+  slides.push({
+    id: "s11_cluster_blueprint",
+    type: "cluster-map",
+    title: "Scalable Blueprint: Content Cluster Expansion",
+    commentary: `A scalable blueprint for what we publish next. We'll grow these top-level hubs into complete topic clusters — adding the pages that matter most, in the order that drives rankings and admissions.`,
+    clusters,
+  });
+
+  // ── s12: Credibility Layer / About + Resources ──────────────────────────────
+  const credPages = ia?.credibilityPages?.length ? ia.credibilityPages : [
+    { hub: "About", pages: ["/about/", "/about/our-story/", "/about/mission-values/", "/about/leadership/", "/about/clinical-team/", "/about/quality-accreditation/", "/about/treatment-outcomes/", "/about/careers/"] },
+    { hub: "Resources", pages: ["/resources/", "/resources/blog/", "/resources/continuing-education/", "/resources/in-the-media/", "/resources/faq/"] },
+  ];
+  slides.push({
+    id: "s12_credibility_layer",
+    type: "cluster-map",
+    title: "Credibility Layer: About + Resources",
+    commentary: "About + Resources are the credibility layer. About consolidates core E-E-A-T signals — team, standards, accreditation, and outcomes — so trust is easy to verify. Resources extends that authority through helpful, structured content that answers real questions and supports search visibility over time.",
+    clusters: credPages,
+  });
+
+  // ── URL Audit slides (conditional — only when crawl data exists) ────────────
+  const flagCount = urlAudit.deleteRedirectCount;
   const delta = urlAudit.crawlDelta;
+  const hasCrawlData = urlAudit.totalUrlsCrawled > 0;
 
-  // Build delta context lines for s10 when comparison crawl is available
-  const s10DeltaBullets: string[] = [];
-  if (delta?.hasComparison) {
-    if (delta.addedUrls.length > 0) {
-      s10DeltaBullets.push(`${delta.addedUrls.length} new URL${delta.addedUrls.length !== 1 ? "s" : ""} added since comparison crawl: ${delta.addedUrls.slice(0, 3).join(", ")}${delta.addedUrls.length > 3 ? " and more" : ""}`);
+  if (hasCrawlData) {
+    const s10DeltaBullets: string[] = [];
+    if (delta?.hasComparison) {
+      if (delta.addedUrls.length > 0) s10DeltaBullets.push(`${delta.addedUrls.length} new URL${delta.addedUrls.length !== 1 ? "s" : ""} added since comparison crawl`);
+      if (delta.removedUrls.length > 0) s10DeltaBullets.push(`${delta.removedUrls.length} URL${delta.removedUrls.length !== 1 ? "s" : ""} removed since comparison crawl`);
+      if (delta.indexableCountDelta !== 0) s10DeltaBullets.push(`Indexable URL count changed by ${delta.indexableCountDelta > 0 ? "+" : ""}${delta.indexableCountDelta}`);
+      if (delta.deleteRedirectDelta !== 0) {
+        const improving = delta.deleteRedirectDelta < 0;
+        s10DeltaBullets.push(`Consolidation candidates ${improving ? "reduced" : "increased"} by ${Math.abs(delta.deleteRedirectDelta)} — ${improving ? "cleanup is working" : "new low-performance pages detected"}`);
+      }
     }
-    if (delta.removedUrls.length > 0) {
-      s10DeltaBullets.push(`${delta.removedUrls.length} URL${delta.removedUrls.length !== 1 ? "s" : ""} removed since comparison crawl: ${delta.removedUrls.slice(0, 3).join(", ")}${delta.removedUrls.length > 3 ? " and more" : ""}`);
-    }
-    if (delta.indexableCountDelta !== 0) {
-      const dir = delta.indexableCountDelta > 0 ? "+" : "";
-      s10DeltaBullets.push(`Indexable URL count changed by ${dir}${delta.indexableCountDelta} (${delta.comparisonIndexableCount} → ${delta.comparisonIndexableCount + delta.indexableCountDelta})`);
-    }
-    if (delta.deleteRedirectDelta !== 0) {
-      const improving = delta.deleteRedirectDelta < 0;
-      s10DeltaBullets.push(`Consolidation candidates ${improving ? "reduced" : "increased"} by ${Math.abs(delta.deleteRedirectDelta)} since comparison crawl (${delta.comparisonDeleteRedirectCount} → ${delta.comparisonDeleteRedirectCount + delta.deleteRedirectDelta}) — ${improving ? "cleanup is working" : "new low-performance pages detected"}`);
+
+    slides.push({
+      id: "s_audit_intro",
+      type: "bullets",
+      title: "Risk Flag: Cannibalization & Low-impact URLs",
+      sectionLabel: "URL AUDIT",
+      bullets: [
+        flagCount > 0 ? `${clientName} currently has ${flagCount} URLs flagged for consolidation — many competing for the same keywords` : `${clientName} has overlapping URLs competing for the same keywords`,
+        "Many were created historically to target 'near me,' duplicate location, or thin service variations",
+        "Risk: Keyword cannibalization — multiple pages targeting the same core intent dilute authority",
+        ...(urlAudit.cannibalizationNotes.length > 0 ? urlAudit.cannibalizationNotes : []),
+        ...s10DeltaBullets,
+      ],
+    });
+
+    if (flagCount > 0) {
+      slides.push({
+        id: "s_audit_action",
+        type: "bullets",
+        title: "Redirect & Consolidation Action",
+        subtitle: "Structural cleanup in progress",
+        bullets: [
+          `We are deleting and 301-redirecting ${flagCount} low-impact, cannibalizing URLs — each averaging less than one organic visit over the past three months`,
+          "This approach: Reduces internal competition | Improves clarity for Google | Protects existing performance | Creates a stronger foundation for future content",
+          "Authority consolidates into the correct primary service pages",
+          ...(amInputs.contextAnomalies ? [`Context: ${amInputs.contextAnomalies}`] : []),
+        ],
+        ...(urlAudit.flaggedRows.length > 0 ? {
+          table: {
+            headers: ["URL", "Type", "Sessions (3mo)", "Action", "Redirect Target"],
+            rows: urlAudit.flaggedRows
+              .filter(r => r.action === "delete & redirect")
+              .slice(0, 15)
+              .map(r => [r.url, r.pageType, r.sessions, r.action, r.redirectTarget || "/"]),
+          },
+        } : {}),
+      });
     }
   }
 
-  const s10: Slide = {
-    id: "s10_cannibalization_intro",
-    type: "bullets",
-    title: "Risk Flag: Cannibalization & Low-impact URLs",
-    subtitle: "Core Services, Conversions & Structural Cleanup",
-    bullets: [
-      overlappingCount
-        ? `${clientName} currently has ${overlappingCount} URLs flagged for consolidation — many competing for the same keywords`
-        : `${clientName} currently has multiple overlapping URLs competing for the same keywords (${MNE} — upload crawl for details)`,
-      "Many of these were created historically to target 'near me,' duplicate location, or thin service variations",
-      "Risk flag: Keyword cannibalization — multiple pages targeting the same core intent dilute authority",
-      ...(urlAudit.cannibalizationNotes.length > 0 ? urlAudit.cannibalizationNotes : []),
-      ...s10DeltaBullets,
-      ...(amInputs.priorityChecks ? [`Priority Checks: ${amInputs.priorityChecks}`] : []),
-    ],
-  };
-
-  // ── s11: Cannibalization Data ──────────────────────────────────────────────
-  const totalSessions = urlAudit.lowPerformanceSessions;
-  const flagCount = urlAudit.deleteRedirectCount;
-
-  // Build comparison metrics for s11 when delta is available
-  const s11Metrics: any[] = flagCount > 0 ? [
-    {
-      label: "URLs Flagged",
-      current: String(flagCount),
-      previous: delta?.hasComparison ? String(delta.comparisonDeleteRedirectCount) : DASH,
-      deltaPercent: delta?.hasComparison && delta.comparisonDeleteRedirectCount > 0
-        ? `${Math.round(((flagCount - delta.comparisonDeleteRedirectCount) / delta.comparisonDeleteRedirectCount) * 100)}%`
-        : DASH,
-      isPositive: false,
-    },
-    {
-      label: "Combined Sessions (3mo)",
-      current: String(totalSessions),
-      previous: DASH,
-      deltaPercent: DASH,
-      isPositive: false,
-    },
-    {
-      label: "Avg Sessions/Page",
-      current: flagCount > 0 ? String(Math.round(totalSessions / flagCount)) : DASH,
-      previous: DASH,
-      deltaPercent: DASH,
-      isPositive: false,
-    },
-    {
-      label: "Crawled URLs Total",
-      current: fmtNum(urlAudit.totalUrlsCrawled),
-      previous: delta?.hasComparison ? fmtNum(delta.comparisonCrawledCount) : DASH,
-      deltaPercent: delta?.hasComparison && delta.comparisonCrawledCount > 0
-        ? `${Math.round(((urlAudit.totalUrlsCrawled - delta.comparisonCrawledCount) / delta.comparisonCrawledCount) * 100)}%`
-        : DASH,
-      isPositive: true,
-    },
-  ] : [];
-
-  const s11: Slide = {
-    id: "s11_cannibalization_data",
-    type: "bullets",
-    title: "Key Insight: Low-Performance Page Data",
-    bullets: [
-      "Despite the volume of pages, their actual performance is extremely low.",
-      flagCount > 0
-        ? `The ${flagCount} pages identified for consolidation generated only ${totalSessions} organic sessions total over the last 3 months`
-        : `Pages identified for consolidation: ${MNE} — upload a crawl to populate this data`,
-      ...(delta?.hasComparison && delta.deleteRedirectDelta < 0
-        ? [`Progress vs. comparison crawl: ${Math.abs(delta.deleteRedirectDelta)} fewer consolidation candidates — redirect cleanup is having an effect`]
-        : []),
-      ...(delta?.hasComparison && delta.deleteRedirectDelta > 0
-        ? [`Trend vs. comparison crawl: ${delta.deleteRedirectDelta} more consolidation candidates than before — the problem is growing`]
-        : []),
-      "This confirms: They are not meaningful traffic drivers — They are not revenue-critical pages — Their removal carries minimal risk",
-      "The real issue isn't traffic loss — it's structural drag",
-      "These low-performing pages: Dilute authority across dozens of URLs | Create internal competition for high-value keywords | Slow down ranking gains for core service pages | Add unnecessary crawl and index bloat",
-    ],
-    metrics: s11Metrics.length > 0 ? s11Metrics : undefined,
-  };
-
-  // ── s12: January Action ────────────────────────────────────────────────────
-  const s12: Slide = {
-    id: "s12_january_action",
-    type: "bullets",
-    title: "Redirect & Consolidation Action",
-    subtitle: "Structural cleanup in progress",
-    bullets: [
-      flagCount > 0
-        ? `We are deleting and 301-redirecting ${flagCount} low-impact, cannibalizing URLs — each averaging less than one organic visit over the past three months`
-        : `Redirect and consolidation plan: ${MNE} — upload a crawl to generate the list`,
-      "This approach: Reduces internal competition | Improves clarity for Google | Protects existing performance | Creates a stronger foundation for future content",
-      "Authority consolidates into the correct primary service pages",
-      ...(amInputs.contextAnomalies ? [`Context: ${amInputs.contextAnomalies}`] : []),
-    ],
-    ...(flagCount > 0 && urlAudit.flaggedRows.length > 0 ? {
-      table: {
-        headers: ["URL", "Type", "Sessions (3mo)", "Action", "Redirect Target"],
-        rows: urlAudit.flaggedRows
-          .filter(r => r.action === "delete & redirect")
-          .slice(0, 15)
-          .map(r => [r.url, r.pageType, r.sessions, r.action, r.redirectTarget || "/"]),
-      },
-    } : {}),
-  };
-
-  // ── s13: What's Next Detail ────────────────────────────────────────────────
-  const s13: Slide = {
-    id: "s13_whats_next_detail",
+  // ── What's Next ─────────────────────────────────────────────────────────────
+  const whatsNextBullets = amInputs.whatsNextBullets?.length ? amInputs.whatsNextBullets : [
+    "Confirm the proposed long-term site structure: Ensure this organization reflects how you want your services and offerings to be understood over time.",
+    "Continued Content Planning: In parallel, we'll map out how this works in your current scope.",
+    "Local SEO & Visibility Foundations: As we move beyond initial cleanup and core service work, we'll begin laying groundwork for local SEO initiatives, including location relevance, GBP optimization, and supporting infrastructure.",
+    ...(amInputs.leadershipNote ? [`For leadership: ${amInputs.leadershipNote}`] : []),
+  ];
+  slides.push({
+    id: "s_whats_next",
     type: "bullets",
     title: "What's Next",
-    bullets: [
-      "Redirect Review & Confirmation: We'll share a list of the URLs identified for removal along with their corresponding redirect targets — giving you full visibility before implementation.",
-      "Continued Content Planning: Mapping out the next phase of content and site expansion — a clear roadmap focused on supporting core services, strengthening topical authority, and improving conversions.",
-      "Local SEO & Visibility Foundations: As we move beyond initial cleanup and core service work, we'll begin laying groundwork for local SEO initiatives, including location relevance, GBP optimization, and supporting infrastructure.",
-      ...(amInputs.leadershipNote ? [`For leadership: ${amInputs.leadershipNote}`] : []),
-    ],
-  };
+    bullets: whatsNextBullets,
+  });
 
-  // ── s14: Next Steps ────────────────────────────────────────────────────────
-  const webservActions = [
+  // ── Next Steps / Ownership ──────────────────────────────────────────────────
+  const webservActions = amInputs.webservNextSteps?.length ? amInputs.webservNextSteps : [
     "Content planning for the rest of the quarter",
     `Defining and strengthening ${clientName}'s primary service pages`,
     "Fixing conversion gaps",
     "Phase 1 navigation cleanup (conversion-focused)",
-    "Redirect & archiving cannibalizing URLs",
+    ...(hasCrawlData ? ["Redirect & archiving cannibalizing URLs"] : []),
     ...(amInputs.focusNext60Days ? [amInputs.focusNext60Days] : []),
   ];
-  const clientActions = [
-    "Confirm the redirect plan for the cannibalizing URLs",
-    "Confirm the Phase 1 menu adjustment",
+  const clientActions = amInputs.clientNextSteps?.length ? amInputs.clientNextSteps : [
+    "Confirm the proposed future site structure",
+    ...(hasCrawlData ? ["Confirm the redirect plan for the cannibalizing URLs"] : []),
     ...(amInputs.salesAdmissionsContext ? [amInputs.salesAdmissionsContext] : []),
     ...(amInputs.clientDependencyNotes ? [amInputs.clientDependencyNotes] : []),
   ];
-  const s14: Slide = {
-    id: "s14_next_steps",
+  slides.push({
+    id: "s_next_steps",
     type: "two-col",
     title: "Next Steps",
-    leftContent: {
-      type: "bullets",
-      bullets: [`Webserv:`, ...webservActions],
-    },
+    leftContent: { type: "bullets", bullets: [`Webserv:`, ...webservActions] },
     rightContent: {
       type: "metrics",
       metrics: clientActions.map((action, i) => ({
@@ -900,14 +933,9 @@ function generateSlides(
         isPositive: true,
       })),
     },
-  };
+  });
 
-  // AM Inputs standalone slide removed. AM context (sentiment, thoughts, priority checks,
-  // notes) is used inline within the relevant strategy sections above, not as a separate block.
-
-  const allSlides = [s01, s02, s03, s04, s05, s06, s07, s08, s09, s10, s11, s12, s13, s14];
-
-  return allSlides;
+  return slides;
 }
 
 // ─── Main Entry Point ─────────────────────────────────────────────────────────

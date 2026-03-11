@@ -19,6 +19,7 @@ import MonthlyPage from "@/pages/monthly";
 import MonthlyPrintPage from "@/pages/monthly-print";
 import QbrFullPage from "@/pages/qbr-full";
 import MidStrategyPage from "@/pages/mid-strategy";
+import MidStrategyPrintPage from "@/pages/mid-strategy-print";
 import DashboardPage from "@/pages/dashboard";
 import SampleReportsPage from "@/pages/sample-reports";
 import TemplateBuilderPage from "@/pages/template-builder";
@@ -30,7 +31,7 @@ function RootRedirect() {
   return null;
 }
 
-const PRINT_ROUTES = ["/biweekly/print", "/monthly/print", "/biweekly/pdf-render", "/qbr-prep-print"];
+const PRINT_ROUTES = ["/biweekly/print", "/monthly/print", "/biweekly/pdf-render", "/qbr-prep-print", "/mid-strategy/pdf-render"];
 
 function Router() {
   return (
@@ -71,6 +72,7 @@ export default function App() {
           <Route path="/biweekly/pdf-render" component={BiweeklyPdfPage} />
           <Route path="/monthly/print" component={MonthlyPrintPage} />
           <Route path="/qbr-prep-print" component={QbrPrepPrintPage} />
+          <Route path="/mid-strategy/pdf-render" component={MidStrategyPrintPage} />
         </Switch>
       </QueryClientProvider>
     );

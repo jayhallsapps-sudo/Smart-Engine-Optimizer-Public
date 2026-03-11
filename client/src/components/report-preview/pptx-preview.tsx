@@ -4,14 +4,33 @@ import { EditableSection } from "./editable-section";
 import { ReportBarChart, ReportLineChart, MetricCard } from "./report-chart";
 import { getCustomRows, setCustomRows } from "./report-table";
 
+export interface DecisionOption {
+  label: string;
+  subtitle?: string;
+  pros: string[];
+  cons?: string[];
+  recommended?: boolean;
+}
+
+export interface IAItem {
+  label: string;
+  children?: string[];
+}
+
+export interface ContentCluster {
+  hub: string;
+  pages: string[];
+}
+
 export interface Slide {
   id: string;
-  type: "title" | "divider" | "metrics" | "table" | "chart-bar" | "chart-line" | "bullets" | "two-col" | "scorecard";
+  type: "title" | "divider" | "metrics" | "table" | "chart-bar" | "chart-line" | "bullets" | "two-col" | "scorecard" | "decision-card" | "ia-comparison" | "cluster-map";
   title?: string;
   subtitle?: string;
   commentary?: string;
   clientName?: string;
   date?: string;
+  sectionLabel?: string;
   metrics?: Array<{ label: string; current: string; previous?: string; delta?: string; isPositive?: boolean; source?: string }>;
   table?: { headers: string[]; rows: (string | number)[][] };
   chartData?: Array<{ label: string; [key: string]: string | number }>;
@@ -20,6 +39,12 @@ export interface Slide {
   leftContent?: { type: "bullets" | "table"; bullets?: string[]; table?: { headers: string[]; rows: (string | number)[][] } };
   rightContent?: { type: "chart-bar" | "chart-line" | "metrics"; chartData?: Array<{ label: string; [key: string]: string | number }>; chartKeys?: string[]; metrics?: Array<{ label: string; current: string; previous?: string; delta?: string; isPositive?: boolean; source?: string }> };
   loading?: boolean;
+  decisionOptions?: DecisionOption[];
+  decisionConclusion?: string;
+  currentIA?: IAItem[];
+  futureIA?: IAItem[];
+  clusters?: ContentCluster[];
+  hidden?: boolean;
 }
 
 interface PptxPreviewProps {
@@ -35,9 +60,10 @@ const RED = "#C0392B";
 const LIGHT_BLUE = "#E8F0FE";
 
 export function PptxPreview({ slides, edits, onEdit }: PptxPreviewProps) {
+  const visibleSlides = slides.filter(s => !s.hidden);
   const [current, setCurrent] = useState(0);
-  const total = slides.length;
-  const slide = slides[current];
+  const total = visibleSlides.length;
+  const slide = visibleSlides[current];
 
   function prev() { setCurrent(c => Math.max(0, c - 1)); }
   function next() { setCurrent(c => Math.min(total - 1, c + 1)); }
@@ -92,7 +118,7 @@ export function PptxPreview({ slides, edits, onEdit }: PptxPreviewProps) {
         </div>
 
         <div className="w-28 bg-gray-900 overflow-y-auto p-2 flex flex-col gap-2 shrink-0" data-testid="slide-thumbnails">
-          {slides.map((s, i) => (
+          {visibleSlides.map((s, i) => (
             <button
               key={s.id}
               onClick={() => setCurrent(i)}
@@ -550,6 +576,145 @@ export function SlideRenderer({ slide, edits, onEdit }: { slide: Slide; edits: R
                 <EditableSection editKey={`${slide.id}_commentary`} value={commentary} edits={edits} onEdit={onEdit} as="div" multiline style={{ fontSize: 8, color: "#374151", fontStyle: "italic", lineHeight: 1.5 } as any} />
               </div>
             )}
+          </div>
+        </div>
+        <SlideFooter />
+      </div>
+    );
+  }
+
+  if (slide.type === "decision-card" && slide.decisionOptions) {
+    const options = slide.decisionOptions;
+    const conclusion = edits[`${slide.id}_conclusion`] ?? slide.decisionConclusion;
+    return (
+      <div style={{ position: "absolute", inset: 0 }}>
+        <SlideHeader slideTitle={edits[`${slide.id}_title`] ?? slide.title} />
+        <div style={{ position: "absolute", top: 55, left: 16, right: 16, bottom: 28, display: "flex", flexDirection: "column", gap: 8, justifyContent: "center" }}>
+          {slide.subtitle && (
+            <div style={{ fontSize: 9, color: "#6B7280", marginBottom: 2, textAlign: "center" }}>
+              <EditableSection editKey={`${slide.id}_subtitle`} value={slide.subtitle} edits={edits} onEdit={onEdit} as="div" style={{ fontSize: 9 } as any} />
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 10, flex: 1, minHeight: 0 }}>
+            {options.map((opt, oi) => (
+              <div key={oi} style={{
+                flex: 1, border: opt.recommended ? `2px solid ${RED}` : "1px solid #D1D5DB",
+                borderRadius: 6, padding: 10, display: "flex", flexDirection: "column", gap: 4,
+                background: opt.recommended ? "#FFF5F5" : "white",
+              }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: NAVY }}>
+                  <EditableSection editKey={`${slide.id}_opt_${oi}_label`} value={opt.label} edits={edits} onEdit={onEdit} as="div" style={{ fontSize: 10, fontWeight: 700 } as any} />
+                </div>
+                {opt.subtitle && <div style={{ fontSize: 8, color: opt.recommended ? RED : "#6B7280", fontWeight: 600 }}>{opt.subtitle}</div>}
+                {opt.recommended && <div style={{ fontSize: 7, color: RED, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>Recommended</div>}
+                <div style={{ marginTop: 2 }}>
+                  {opt.pros.map((p, pi) => (
+                    <div key={pi} style={{ display: "flex", gap: 4, fontSize: 8, color: "#374151", marginBottom: 2 }}>
+                      <span style={{ color: "#10B981", fontWeight: 700 }}>✓</span>
+                      <EditableSection editKey={`${slide.id}_opt_${oi}_pro_${pi}`} value={p} edits={edits} onEdit={onEdit} as="span" style={{ fontSize: 8 } as any} />
+                    </div>
+                  ))}
+                  {(opt.cons ?? []).map((c, ci) => (
+                    <div key={ci} style={{ display: "flex", gap: 4, fontSize: 8, color: "#374151", marginBottom: 2 }}>
+                      <span style={{ color: "#EF4444", fontWeight: 700 }}>✗</span>
+                      <EditableSection editKey={`${slide.id}_opt_${oi}_con_${ci}`} value={c} edits={edits} onEdit={onEdit} as="span" style={{ fontSize: 8 } as any} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          {conclusion && (
+            <div style={{ marginTop: 4, padding: "5px 10px", background: "#F0F4FA", borderLeft: `3px solid ${RED}`, borderRadius: 2 }}>
+              <EditableSection editKey={`${slide.id}_conclusion`} value={slide.decisionConclusion ?? ""} edits={edits} onEdit={onEdit} as="div" multiline style={{ fontSize: 9, color: "#374151", fontStyle: "italic", lineHeight: 1.5 } as any} />
+            </div>
+          )}
+        </div>
+        <SlideFooter />
+      </div>
+    );
+  }
+
+  if (slide.type === "ia-comparison") {
+    const currentItems = slide.currentIA ?? [];
+    const futureItems = slide.futureIA ?? [];
+    return (
+      <div style={{ position: "absolute", inset: 0 }}>
+        <SlideHeader slideTitle={edits[`${slide.id}_title`] ?? slide.title} />
+        <div style={{ position: "absolute", top: 55, left: 16, right: 16, bottom: 28, display: "flex", flexDirection: "column", gap: 6 }}>
+          {slide.commentary && (
+            <div style={{ fontSize: 8, color: "#6B7280", marginBottom: 2 }}>
+              <EditableSection editKey={`${slide.id}_commentary`} value={slide.commentary} edits={edits} onEdit={onEdit} as="div" multiline style={{ fontSize: 8 } as any} />
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 12, flex: 1, minHeight: 0 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 9, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>Current</div>
+              <div style={{ border: "1px solid #E5E7EB", borderRadius: 4, padding: 6, background: "#FAFAFA", height: "calc(100% - 20px)", overflow: "auto" }}>
+                {currentItems.map((item, ii) => (
+                  <div key={ii} style={{ marginBottom: 4 }}>
+                    <div style={{ fontSize: 8, fontWeight: 700, color: NAVY, padding: "2px 4px", background: "#E8F0FE", borderRadius: 2, display: "inline-block" }}>
+                      <EditableSection editKey={`${slide.id}_cur_${ii}`} value={item.label} edits={edits} onEdit={onEdit} as="span" style={{ fontSize: 8, fontWeight: 700 } as any} />
+                    </div>
+                    {item.children?.map((c, ci) => (
+                      <div key={ci} style={{ fontSize: 7, color: "#4B5563", paddingLeft: 10, marginTop: 1 }}>— {c}</div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center" }}>
+              <span style={{ fontSize: 18, color: RED, fontWeight: 700 }}>→</span>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 9, fontWeight: 700, color: "#10B981", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>Future</div>
+              <div style={{ border: `1px solid ${RED}30`, borderRadius: 4, padding: 6, background: "#FFF5F5", height: "calc(100% - 20px)", overflow: "auto" }}>
+                {futureItems.map((item, ii) => (
+                  <div key={ii} style={{ marginBottom: 4 }}>
+                    <div style={{ fontSize: 8, fontWeight: 700, color: NAVY, padding: "2px 4px", background: `${RED}15`, borderRadius: 2, display: "inline-block" }}>
+                      <EditableSection editKey={`${slide.id}_fut_${ii}`} value={item.label} edits={edits} onEdit={onEdit} as="span" style={{ fontSize: 8, fontWeight: 700 } as any} />
+                    </div>
+                    {item.children?.map((c, ci) => (
+                      <div key={ci} style={{ fontSize: 7, color: "#4B5563", paddingLeft: 10, marginTop: 1 }}>— {c}</div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+        <SlideFooter />
+      </div>
+    );
+  }
+
+  if (slide.type === "cluster-map" && slide.clusters) {
+    const cols = Math.min(4, slide.clusters.length);
+    return (
+      <div style={{ position: "absolute", inset: 0 }}>
+        <SlideHeader slideTitle={edits[`${slide.id}_title`] ?? slide.title} />
+        <div style={{ position: "absolute", top: 55, left: 16, right: 16, bottom: 28, display: "flex", flexDirection: "column" }}>
+          {slide.commentary && (
+            <div style={{ fontSize: 8, color: "#6B7280", marginBottom: 6 }}>
+              <EditableSection editKey={`${slide.id}_commentary`} value={slide.commentary} edits={edits} onEdit={onEdit} as="div" multiline style={{ fontSize: 8 } as any} />
+            </div>
+          )}
+          <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 8, flex: 1, minHeight: 0, overflow: "auto" }}>
+            {slide.clusters.map((cluster, ci) => (
+              <div key={ci} style={{ border: "1px solid #E5E7EB", borderRadius: 4, overflow: "hidden" }}>
+                <div style={{ background: NAVY, color: "white", fontSize: 8, fontWeight: 700, padding: "4px 8px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  <EditableSection editKey={`${slide.id}_cluster_${ci}_hub`} value={cluster.hub} edits={edits} onEdit={onEdit} as="span" style={{ fontSize: 8, fontWeight: 700, color: "white" } as any} />
+                </div>
+                <div style={{ padding: 4 }}>
+                  {cluster.pages.map((page, pi) => (
+                    <div key={pi} style={{ fontSize: 7, color: "#374151", padding: "1px 4px", borderBottom: "1px solid #F3F4F6", display: "flex", gap: 3, alignItems: "center" }}>
+                      <span style={{ color: RED, fontSize: 6 }}>●</span>
+                      <EditableSection editKey={`${slide.id}_cluster_${ci}_page_${pi}`} value={page} edits={edits} onEdit={onEdit} as="span" style={{ fontSize: 7 } as any} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
         <SlideFooter />

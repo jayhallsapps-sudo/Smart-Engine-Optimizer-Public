@@ -25,6 +25,8 @@ import {
   Database,
   CheckCircle2,
   AlertCircle,
+  Activity,
+  FileText,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { PptxPreview } from "@/components/report-preview/pptx-preview";
@@ -65,6 +67,14 @@ export default function MidStrategyPage() {
   const [amClientDependency, setAmClientDependency] = useState("");
 
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [healthChecks, setHealthChecks] = useState<Record<string, { status: string; detail?: string }> | null>(null);
+  const [healthLoading, setHealthLoading] = useState(false);
+  const [showHealthPanel, setShowHealthPanel] = useState(false);
+
+  const [domainStrategyEnabled, setDomainStrategyEnabled] = useState(false);
+  const [domainCurrent, setDomainCurrent] = useState("");
+  const [domainProposed, setDomainProposed] = useState("");
+  const [domainRationale, setDomainRationale] = useState("");
 
   const { data: clients = [] } = useQuery<Client[]>({ queryKey: ["/api/clients"] });
   const clientName = (clients as Client[]).find(c => String(c.id) === clientId)?.name ?? "";
@@ -97,6 +107,21 @@ export default function MidStrategyPage() {
   const editsRef = useRef(edits);
   editsRef.current = edits;
 
+  async function runHealthCheck(cId: string) {
+    if (!cId) return;
+    setHealthLoading(true);
+    try {
+      const res = await apiRequest("POST", "/api/reports/mid-strategy/health-check", { clientId: Number(cId) });
+      const data = await res.json();
+      setHealthChecks(data.checks ?? null);
+      setShowHealthPanel(true);
+    } catch {
+      setHealthChecks(null);
+    } finally {
+      setHealthLoading(false);
+    }
+  }
+
   function getAmInputs() {
     return {
       clientSentiment,
@@ -109,6 +134,14 @@ export default function MidStrategyPage() {
       focusNext60Days: amFocusNext60Days || undefined,
       salesAdmissionsContext: amSalesAdmissions || undefined,
       clientDependencyNotes: amClientDependency || undefined,
+      ...(domainStrategyEnabled ? {
+        domainStrategy: {
+          enabled: true,
+          currentDomain: domainCurrent || undefined,
+          proposedDomain: domainProposed || undefined,
+          customRationale: domainRationale || undefined,
+        },
+      } : {}),
     };
   }
 
@@ -217,6 +250,26 @@ export default function MidStrategyPage() {
     },
   });
 
+  const pdfMut = useMutation({
+    mutationFn: async () => {
+      if (!report) throw new Error("Generate report first");
+      const res = await apiRequest("POST", "/api/reports/mid-strategy/pdf", { json: report, edits });
+      if (!res.ok) throw new Error((await res.json()).message ?? "PDF export failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const cd = res.headers.get("content-disposition") ?? "";
+      const match = cd.match(/filename="([^"]+)"/);
+      a.download = match?.[1] ?? "mid_strategy.pdf";
+      a.click();
+      URL.revokeObjectURL(url);
+    },
+    onError: (err: any) => {
+      toast({ title: "PDF download failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   async function uploadToDrive() {
     if (!report) return;
     setIsUploading(true);
@@ -249,6 +302,12 @@ export default function MidStrategyPage() {
     setWorkbookBuilt(false);
     setBuildStep("idle");
     reportSave.setSavedReportId(null);
+    setHealthChecks(null);
+    setDomainStrategyEnabled(false);
+    setDomainCurrent("");
+    setDomainProposed("");
+    setDomainRationale("");
+    if (val) runHealthCheck(val);
   }
 
   const handleGenerateClick = async () => {
@@ -355,6 +414,108 @@ export default function MidStrategyPage() {
                 onComparisonChange={setComparisonCrawlId}
                 showComparison
               />
+            </div>
+          )}
+
+          {/* Integration Health Check Panel */}
+          {clientId && (healthChecks || healthLoading) && (
+            <>
+              <Separator />
+              <div className="space-y-1.5">
+                <button
+                  className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground w-full hover:text-foreground transition-colors"
+                  onClick={() => setShowHealthPanel(v => !v)}
+                  data-testid="toggle-health-panel"
+                >
+                  <Activity className="w-3 h-3" />
+                  {showHealthPanel ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                  Integration Health
+                  {healthLoading && <Loader2 className="w-3 h-3 animate-spin ml-auto" />}
+                </button>
+                {showHealthPanel && healthChecks && (
+                  <div className="rounded-md border p-2 space-y-1 text-xs bg-muted/30" data-testid="health-check-panel">
+                    {Object.entries(healthChecks).map(([name, check]) => {
+                      const isOk = check.status === "connected";
+                      const isWarn = check.status.includes("no data") || check.status.includes("stale");
+                      return (
+                        <div key={name} className="flex items-start gap-1.5">
+                          <span className="mt-0.5 shrink-0">
+                            {isOk ? <CheckCircle2 className="w-3 h-3 text-green-500" /> : isWarn ? <AlertCircle className="w-3 h-3 text-amber-500" /> : <AlertCircle className="w-3 h-3 text-red-400" />}
+                          </span>
+                          <div className="min-w-0">
+                            <span className={`font-medium ${isOk ? "text-foreground" : isWarn ? "text-amber-600" : "text-muted-foreground"}`}>{name}</span>
+                            {check.detail && <span className="text-[9px] text-muted-foreground ml-1">— {check.detail}</span>}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <button
+                      onClick={() => runHealthCheck(clientId)}
+                      className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-1 mt-1"
+                      data-testid="button-refresh-health"
+                    >
+                      <RefreshCw className="w-2.5 h-2.5" /> Refresh
+                    </button>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          <Separator />
+
+          {/* Domain Strategy (Optional) */}
+          {clientId && (
+            <div className="space-y-2">
+              <div className="flex items-start space-x-2">
+                <Checkbox
+                  id="mid-strategy-domain-strategy"
+                  checked={domainStrategyEnabled}
+                  onCheckedChange={(checked) => setDomainStrategyEnabled(!!checked)}
+                  data-testid="checkbox-domain-strategy"
+                  className="mt-1"
+                />
+                <div className="grid gap-1 leading-none">
+                  <Label htmlFor="mid-strategy-domain-strategy" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground cursor-pointer">
+                    Domain Strategy
+                  </Label>
+                  <p className="text-[10px] text-muted-foreground">Include domain recommendation slide</p>
+                </div>
+              </div>
+              {domainStrategyEnabled && (
+                <div className="space-y-2 pl-6">
+                  <div className="space-y-1">
+                    <Label className="text-[10px] text-muted-foreground">Current domain</Label>
+                    <input
+                      value={domainCurrent}
+                      onChange={e => setDomainCurrent(e.target.value)}
+                      placeholder="e.g. forgingnewlives.com"
+                      className="w-full text-xs px-2 py-1 border rounded bg-background"
+                      data-testid="input-domain-current"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] text-muted-foreground">Proposed domain</Label>
+                    <input
+                      value={domainProposed}
+                      onChange={e => setDomainProposed(e.target.value)}
+                      placeholder="e.g. foundrysteamboat.com"
+                      className="w-full text-xs px-2 py-1 border rounded bg-background"
+                      data-testid="input-domain-proposed"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] text-muted-foreground">Custom rationale (optional)</Label>
+                    <Textarea
+                      value={domainRationale}
+                      onChange={e => setDomainRationale(e.target.value)}
+                      placeholder="Override the default conclusion..."
+                      className="text-xs min-h-[40px] resize-none"
+                      data-testid="input-domain-rationale"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -578,6 +739,16 @@ export default function MidStrategyPage() {
                 <Button
                   variant="outline"
                   className="w-full"
+                  onClick={() => pdfMut.mutate()}
+                  disabled={pdfMut.isPending}
+                  data-testid="button-download-pdf-mid"
+                >
+                  {pdfMut.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <FileText className="w-4 h-4 mr-2" />}
+                  Export PDF
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full"
                   onClick={uploadToDrive}
                   disabled={isUploading}
                   data-testid="button-upload-drive-mid"
@@ -611,12 +782,14 @@ export default function MidStrategyPage() {
             </div>
             <div className="grid grid-cols-2 gap-2 text-left max-w-xs w-full mt-2">
               {[
-                "Competitive analysis (4 slides)",
-                "Authority & AI visibility scores",
-                "Immediate focus priorities",
-                "Risk flag: cannibalization",
+                "Competitive benchmarking",
+                "Authority & AI visibility charts",
+                "Domain strategy recommendation",
+                "Current vs future IA",
+                "Content cluster blueprints",
+                "Credibility layer (E-E-A-T)",
                 "URL audit & action plan",
-                "Next steps for both parties",
+                "Next steps / ownership",
               ].map(item => (
                 <div key={item} className="flex items-start gap-1.5 text-xs text-gray-400">
                   <div className="w-1.5 h-1.5 rounded-full bg-red-500 mt-1.5 shrink-0" />

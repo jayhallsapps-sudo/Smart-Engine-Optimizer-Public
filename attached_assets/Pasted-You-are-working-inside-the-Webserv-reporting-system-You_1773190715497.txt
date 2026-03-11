@@ -1,0 +1,956 @@
+You are working inside the Webserv reporting system. Your task is to upgrade the Mid-Strategy report so it is production-ready, design-consistent with QBS/QBR-style reporting, export-stable, and faithful to the attached PowerPoint reference deck titled “NRT_ Mid-SEO Strategy Month.pptx.”
+
+This is not a loose redesign task.
+This is not a “best guess” task.
+Do not drift.
+Do not invent.
+Do not imply missing data exists when it does not.
+Do not use placeholder charts, fake numbers, or generic SEO language.
+If a data source is unavailable, surface that fact explicitly in the UI and export, and ask for the missing source only where truly necessary.
+
+MISSION
+
+Build a Mid-Strategy report flow intended for new SEO clients.
+Its purpose is to show:
+1. what we have learned so far,
+2. what structural or strategic issues matter most,
+3. what we recommend next,
+4. that Webserv has done real thinking and real analysis,
+5. without trying to be a full quarterly review.
+
+The report must feel like the same reporting family as QBS/QBR, but optimized for an earlier-stage client relationship.
+It should be cleaner, sharper, and more confident than the existing PowerPoint, while preserving its logic, narrative flow, and information architecture.
+
+PRIMARY DELIVERABLES
+
+1. Audit the current QBS implementation and identify all improvements that should be ported to Mid-Strategy and any other report types.
+2. Implement those applicable improvements into Mid-Strategy.
+3. Rebuild the Mid-Strategy report structure, generation, preview, and exports using the attached PowerPoint as the content and layout reference.
+4. Ensure export support for:
+   - in-app preview,
+   - PDF,
+   - PPTX,
+   - Google Slides export handoff or compatible export pathway.
+5. Ensure integration health checks exist for all relevant data sources before or during generation.
+6. Ensure the system can scan the client’s website and use it as a first-pass discovery source for Mid-Strategy.
+7. If logos or brand assets are required and missing, the system must explicitly request them rather than silently substituting junk.
+
+NON-NEGOTIABLE BEHAVIOR
+
+- No fake data.
+- No silent fallbacks that create misleading output.
+- No stale saved-report bleed-through.
+- No pretending a connector is working when it is not.
+- No hardcoded sample content in production generation.
+- No generic “SEO best practices” filler if the report can be grounded in actual account data.
+- Preserve preview/export parity as much as possible.
+- If the preview shows something important, the export should show it too unless explicitly excluded by product rule.
+- Every table, chart, label, narrative block, section heading, and recommendation must map back to a real source or a documented manual AM input.
+
+PHASE 0 — FIRST, AUDIT WHAT QBS/QBR CHANGES SHOULD PORT OVER
+
+Before making Mid-Strategy changes, inspect the existing codebase and produce an internal implementation checklist of QBS/QBR improvements that should be portable to Mid-Strategy and possibly other reports.
+
+At minimum, check for these categories:
+
+A. REPORT GENERATION + DATA FRESHNESS
+- fresh generation path vs saved report loading path
+- stale saved report risk
+- report JSON snapshot behavior
+- whether preview can accidentally reuse old data
+- whether “generate” always calls live logic
+- whether exports are generated from current in-memory report data, not stale saved payloads
+
+B. PREVIEW / EXPORT PARITY
+- same content structure between preview and PDF/PPTX exports
+- page-break handling
+- sections hidden in preview but still exported, or vice versa
+- print container consistency
+- chart/table truncation risk
+- missing type/notes mismatches like prior page-pattern issues
+
+C. EDITABILITY + MANUAL OVERRIDES
+- editable tables
+- custom row support across tables
+- row deletion support where needed
+- section deletion support where appropriate
+- editable narrative fields
+- AM override fields
+- manual notes persistence
+
+D. GAP / FILL-IN-THE-GAPS LOGIC
+- if user activates gap mode, report generates first, then asks only meaningful follow-up questions
+- no useless questions like “do we have tools connected”
+- questions must target actual holes in the generated report
+- questions must be specific, report-aware, and client-aware
+- no questions asked when gap mode is off
+- answer usage mapping
+- draft recovery
+- session storage
+- clear UI for questions modal
+
+E. SOURCE TRANSPARENCY + CONNECTOR VALIDATION
+- connector health checks
+- missing integration warnings
+- source labeling
+- safe fallbacks
+- explicit handling for unavailable Asana, unavailable call tracking, unavailable GBP, unavailable Screaming Frog, etc.
+
+F. EXPORT HARDENING
+- PDF generation reliability
+- PPTX generation reliability
+- Google Slides compatibility or export handoff
+- asset embedding
+- safe URLs only
+- no javascript:, data:, file:, ftp:, or mailto: unsafe handling
+- export failure surfacing
+
+G. REPORT FAMILY CONSISTENCY
+- typography
+- spacing
+- section card structure
+- heading hierarchy
+- badge treatment
+- chart container styles
+- editable UI affordances
+- section collapsibility if already supported elsewhere
+- shared design tokens if available
+
+H. REQUIRED MID-STRATEGY-SPECIFIC INPUTS
+- AM notes / strategist notes
+- client sentiment if relevant
+- domain recommendation input
+- structural cleanup focus
+- next-step confirmation items
+- optional asset requests
+
+After the audit, implement only what makes sense for Mid-Strategy now, but do not ignore obvious shared-report hardening opportunities.
+
+MID-STRATEGY REPORT: CORE DATA SOURCES TO CHECK
+
+Before generating the report, inspect and validate these integrations:
+
+1. Client website scan / crawl seed
+   - This may be the first meaningful scan for a new client.
+   - Crawl site structure, navigation, main templates, service areas, admissions flow, verify insurance presence, location structure, and trust signals.
+
+2. Screaming Frog
+   - technical audit source
+   - structural issues
+   - crawlability/indexability
+   - internal linking
+   - metadata
+   - canonicals
+   - redirects
+   - broken links
+   - noindex issues
+   - sitemap / robots signals
+   - response codes
+
+3. Google Search Console
+   - page and query visibility
+   - indexing state where available
+   - search performance
+   - cluster opportunities
+   - early baseline queries
+
+4. GA4
+   - organic landing pages
+   - engagement
+   - conversions if available
+   - destination or event-based indicators
+
+5. SEO NSM Sheet
+   - north star metrics
+   - goals
+   - pacing context
+   - baseline reference
+
+6. Notion
+   - SOP / playbook logic
+   - page requirements
+   - treatment center structural frameworks
+   - verify insurance and primary location page rules
+
+7. Google Business Profile
+   - local presence
+   - reviews
+   - call visibility where available
+
+8. Call tracking
+   - detect whether client uses:
+     - CallRail
+     - Call Tracking Metrics
+     - Nimbata
+   - system must check which is connected and use the correct source
+   - do not assume one exists
+
+9. Ahrefs and SEMrush
+   - last resort / secondary support tools
+   - use sparingly
+   - helpful for competitive baselines, keyword gaps, authority context, snippet/AIO benchmarking
+
+10. Airtable
+   - work tracking
+   - planned work
+   - completed work
+   - content pipeline / technical work / refresh history
+
+11. Asana
+   - verify integration health explicitly
+   - if missing or broken, surface it
+   - use for implementation/workstream visibility where connected
+
+If any of the above are missing, clearly state:
+- connected,
+- not connected,
+- connected but no usable data,
+- connected but stale,
+- unavailable during generation.
+
+MID-STRATEGY REPORT NARRATIVE MODEL
+
+The report should answer, in order:
+
+1. What are we seeing so far?
+2. How do they compare structurally and competitively?
+3. What are the most important strategic and structural cleanup issues right now?
+4. What should the future site or content architecture look like?
+5. What happens next?
+
+The tone should match Webserv’s operating philosophy:
+- business-growth oriented, not traffic-only,
+- defensible,
+- clear,
+- calm,
+- trust-first,
+- grounded in actual data,
+- aligned to admissions / VOB / lead quality rather than vanity metrics.
+
+Reference internal operating logic from Webserv docs:
+- SEO is a business growth channel, not a traffic exercise
+- rankings are indicators, admissions are the goal
+- transparency > false certainty
+- explain why, not just what
+- expectations must be explicit, documented, and proactive
+- trust, clarity, and defensibility matter in behavioral health SEO
+- verify insurance, local SEO, and primary location pages must follow the exact trust-first structural principles in the SOPs
+- monthlies are strategic and forward-looking, not dashboard dumps
+
+MID-STRATEGY DESIGN SYSTEM TO BUILD
+
+Blend:
+1. the visual restraint and consistency already established in QBS/QBR work,
+2. the structure and pacing of the attached PowerPoint,
+3. a Webserv-wide reporting identity.
+
+Use these design principles from the attached deck:
+- generous white/light-gray canvas
+- large black hero bands for major narrative turns
+- strong red-orange accent used sparingly for section labels, emphasis words, bullets, and highlights
+- large white main headlines on black section bands
+- left-text / right-chart split for analysis slides
+- clean footer with small Webserv logo
+- lots of whitespace
+- simple charts, not cluttered dashboards
+- diagram slides that explain IA changes visually
+- minimal decorative noise
+
+Apply these upgraded design principles from QBS/QBR family:
+- tighter spacing discipline
+- cleaner typography hierarchy
+- more polished cards and containers
+- export-safe tables and charts
+- consistent headers, footers, and report shell
+- clearly editable regions in preview
+- stable rendering in PDF and PPTX
+- no overflow
+- no accidental clipping
+- no misaligned labels
+- no chart legend collisions
+- no page-break ugliness
+
+MID-STRATEGY REPORT SECTIONS TO SUPPORT
+
+At minimum, support these sections in the generator, preview, and export:
+
+1. Title / Cover
+2. Agenda
+3. Strategy Month Next Checkpoint
+4. Domain Strategy Recommendation
+5. Redirect / Migration Logic
+6. Competitive Baseline — Authority + Indexed Pages
+7. Competitive Baseline — AI Visibility + Snippet/AIO
+8. Competitive Efficiency Summary
+9. First Focus / Structural Cleanup
+10. Current vs Future IA
+11. Scalable Blueprint / Cluster Expansion
+12. Credibility Layer / About + Resources
+13. Additional site examples if multiple sites are being compared
+14. What’s Next
+15. Next Steps / Ownership split
+
+If the account only has one site, the report should gracefully collapse dual-site views into single-site views.
+If the account has two related sites or brands, support paired analysis like the attached deck.
+
+SLIDE-BY-SLIDE CONTENT BREAKDOWN FROM THE ATTACHED DECK
+You must use this as the reference narrative and layout map.
+
+SLIDE 1 — COVER
+Text:
+- Content & SEO Mid-Strategy Check-in
+- NRT: Front Range & Steamboat
+- Building durable organic performance with purpose.
+- Date: Feb 12, 2026
+Visual treatment:
+- minimalist cover
+- light gray background
+- small Webserv logo top-left
+- large account title
+- small subheading and date beneath
+
+SLIDE 2 — AGENDA
+Heading:
+- Mid-Strategy Agenda
+Bullets:
+- Competitive Benchmarking
+- Feb Core Focus: Structural Cleanup for Forging New Lives + Foundry Front Range
+- What’s next
+Visual treatment:
+- clean left-aligned bullets
+- thin red accent line
+
+SLIDE 3 — NEXT CHECKPOINT
+Heading:
+- Strategy Month: Next Checkpoint
+Body:
+- Launch Strategy & Roadmap Review - Date TBD (2 weeks from now)
+- Finalizes goals, North Star Metrics, and success benchmarks
+- Aligns on the execution plan across content, SEO, and site improvements
+- Confirms launch-ready priorities for the next phase
+- Signals the transition from planning → active execution
+Purpose:
+- explain what the next formal milestone is
+- bridge discovery into execution
+
+SLIDE 4 — DOMAIN STRATEGY RECOMMENDATION
+Heading:
+- Domain Strategy Recommendation
+Question:
+- Should we launch on forgingnewlives.com and switch later — or launch directly on foundrysteamboat.com?
+Option 1:
+- Launch Now, Migrate Later
+- Higher Complexity + Slower Momentum
+- Two full Google reprocessing cycles
+- Two indexing periods
+- Additional redirect management
+- Temporary visibility volatility
+- More development + SEO overhead
+Option 2:
+- Launch on foundrysteamboat.com from Day One
+- Cleaner + Stronger Long-Term Strategy
+- Aligns brand and domain immediately
+- No future migration required
+- Clearer trust + recognition signals
+- Builds authority in the right place from the start
+Conclusion:
+- Result: Stronger foundation and faster compounding authority.
+Requirement:
+- build a decision card comparison component for domain recommendations
+- allow strategist override and custom rationale
+
+SLIDE 5 — WHAT HAPPENS TO THE OLD DOMAIN
+Heading:
+- What Happens to forgingnewlives.com?
+Body:
+- We Will Implement a Full 301 Redirect Strategy
+- Because the URLs appear to have a 1:1 relationship already structured in WordPress, this will be a clean redirect process.
+Execution Plan bullets:
+- 301 redirect every page from forgingnewlives.com → foundrysteamboat.com
+- Maintain identical URL paths wherever possible
+- Preserve any authority or signals tied to the old domain
+- Submit updated sitemap in Google Search Console
+- Monitor indexing + traffic during transition
+Requirement:
+- if redirect or domain migration logic is part of Mid-Strategy, generator must support a migration-strategy section
+- must only render if applicable
+
+SLIDE 6 — WHY THIS IS LOW RISK
+Heading:
+- Why This Is Low Risk
+Bullets:
+- Site is effectively launching from zero
+- Minimal authority to protect
+- No meaningful rankings at risk
+- Cleaner to migrate now vs. after growth begins
+Closing:
+- Switching later creates unnecessary disruption.
+- Switching now creates clarity and compounding growth.
+Requirement:
+- allow short risk framing slides for domain, IA, or migration decisions
+
+SLIDE 7 — COMPETITIVE BASELINE, FORGING NEW LIVES, DR + INDEXED PAGES
+Section label:
+- FORGING NEW LIVES: COMPETITIVE ANALYSIS BASELINE
+Main headline:
+- Where you stand vs. everybody else
+Narrative text:
+- You have a solid DR foundation, but it’s still the lowest in the set and has fewer indexed pages.
+- That means your site is credible, but they’re underrepresented in search—it simply doesn’t have enough optimized, intent-aligned pages to compete across the full set of queries.
+- Our Opportunity:
+- Grow efficiently by expanding the right pages and content (Programs / Treatment / What We Treat / Admissions), strengthening internal linking, and building targeted authority—so new pages rank faster and DR gap closes.
+Chart structure:
+- dual-axis bar chart
+- blue series = DR
+- red series = Indexed Pages
+Competitor labels shown:
+- Forging New Lives
+- The Redpoint Center
+- Mindsprings Health
+- Harmony Recovery
+- North Point Colorado
+- Red Rock Recovery
+- Aspen Ridge
+- Footprints to Recovery
+- Palmer Lake
+- Sandstone Care
+The highlighted subject is Forging New Lives.
+Requirement:
+- chart component must support:
+  - competitor benchmark bars
+  - subject highlight box or highlight treatment
+  - dual-axis values
+  - legend
+  - narrative summary on left
+- do not hardcode these labels; feed from benchmark dataset
+- if exact chart benchmark source is unavailable, surface missing-source warning rather than fabricating
+
+SLIDE 8 — COMPETITIVE BASELINE, FOUNDRY FRONT RANGE, DR + INDEXED PAGES
+Section label:
+- FOUNDRY FRONT RANGE: COMPETITIVE ANALYSIS BASELINE
+Main headline:
+- Where you stand vs. everybody else
+Narrative:
+- You’re currently lowest in DR and have one of the smallest indexed page footprints in this set.
+- That means you’re credible—but underrepresented in search.
+- Opportunity:
+- Expand intent-led, indexable pages, and strengthen internal linking, and add targeted authority building so new pages rank faster and the DR gap closes.
+Chart structure:
+- same dual-axis benchmark treatment
+Competitor labels shown:
+- Foundry Front Range
+- CuraWest
+- NorthStar Transitions
+- The Raleigh House
+- Red Rock Recovery ...
+- Clinical Family Heal...
+- Mile High Recovery...
+- Peaks Recovery C...
+- Denver Springs
+- BHG Recovery
+Requirement:
+- paired-site competitive analysis must be supported
+
+SLIDE 9 — COMPETITIVE BASELINE, FORGING NEW LIVES, AI VISIBILITY + SNIPPET/AIO
+Section label:
+- FORGING NEW LIVES: COMPETITIVE ANALYSIS BASELINE
+Main headline:
+- Where you stand vs. everybody else
+Narrative:
+- A few competitors are showing up more in AI-generated results and featured snippets — a sign of structured, answer-first content.
+- Forging New Lives is in the lower-to-mid range for AI Visibility and has minimal snippet/AIO coverage.
+- That means they’re being recognized, but they’re not winning the “direct answer” placements that drive disproportionate clicks.
+- Focus:
+- increase snippet/AIO wins by building concise FAQ-style answers across key pages, adding clear headings/definitions, and strengthening internal linking to those pages.
+Chart structure:
+- blue series = AI Visibility Score
+- red series = featured snippet / AIO count
+Competitor labels shown:
+- North Point Colorado
+- Harmony Recovery
+- Forging New Lives
+- The Redpoint Center
+- Redrock Recovery
+- Mindsprings Health
+- Palmer Lake
+- Aspen Ridge
+- Footprints to ...
+- Sandstone Care
+Requirement:
+- build support for AI search benchmarking sections
+- include snippet/AIO readiness framing
+- do not generalize; tie it to answer-first content structure and internal linking
+
+SLIDE 10 — COMPETITIVE BASELINE, FOUNDRY FRONT RANGE, AI VISIBILITY + SNIPPET/AIO
+Section label:
+- FOUNDRY FRONT RANGE: COMPETITIVE ANALYSIS BASELINE
+Main headline:
+- Where you stand vs. everybody else
+Narrative:
+- A few competitors are capturing featured snippets / AI answers — and that’s translating into outsized SERP visibility.
+- Foundry Front Range sits mid-range on AI Visibility, but has minimal snippet/AIO placements, which limits “direct answer” clicks.
+- Opportunity:
+- Win more snippets/AIO by adding concise Q&A blocks + clear definitions on key pages, tightening on-page structure, and internally linking to those answers.
+Chart structure:
+- blue series = AI Visibility Score
+- red series = featured snippet / AIO
+Competitor labels shown:
+- The Raleigh House
+- Red Rock Recover...
+- CuraWest
+- Foundry Front Range
+- Denver Springs
+- NorthStar Transitions
+- Mile High Recovery...
+- Clinical Family Heal...
+- Peaks Recovery C...
+- BHG Recovery
+
+SLIDE 11 — COMPETITIVE EFFICIENCY SUMMARY
+Section label:
+- COMPETITIVE ANALYSIS BASELINE
+Main headline:
+- Where you stand vs. everybody else
+Narrative:
+- Across all key metrics: authority, visibility, and AI readiness, Forging New Lives currently ranks at the bottom of the pack, giving us a clear benchmark for where to close the gap.
+- Forging New Lives & Foundry Front Range Competitive Efficiency Score: 10th percentile
+- The data shows our fastest growth levers are trust, and content depth.
+- Not just more pages, but smarter ones that earn visibility and trust across both traditional and AI search.
+Requirement:
+- support a rolled-up benchmark summary card
+- allow percentile or composite score if source exists
+- if composite score source does not exist, do not invent it
+
+SLIDE 12 — FIRST FOCUS / STRUCTURAL CLEANUP
+Section label:
+- FIRST FOCUS
+Main headline:
+- Core Services, Conversions & Structural Cleanup
+Narrative:
+- Our top priority for both sites is aligning on a clear, scalable site structure before production begins.
+Bullets:
+1. Clarify the site’s core structure: Define what lives at the top level (treatment, programs, admissions etc.) and remove navigation ambiguity. This will help us define redirects from the Outpatient Steamboat site.
+2. Align the site with how patients evaluate treatment: Services first, conditions second, education later — reducing friction for users deciding if Invicta is the right fit.
+3. Create a shared prioritization framework for growth: Ensure future blogs, geo pages, and condition pages support core services and scale cleanly without rework.
+Requirement:
+- Mid-Strategy must support a “first focus” or “core focus” section driven by crawl + strategist interpretation
+- make this editable
+- keep it tight and executive-facing
+
+SLIDE 13 — CURRENT VS FUTURE IA, SITE 1
+Narrative header:
+- Our goal: improve both usability and search performance.
+- The new IA creates clear topics (Treatment / Programs / What We Treat / Admissions) that map to real searches and support stronger internal linking—helping key pages rank, earn snippets, and convert.
+Labels:
+- Current:
+- Future:
+Current nav items shown:
+- ABOUT
+- PROGRAMS
+- ADMISSIONS
+- TREATMENT
+- RESOURCES
+- VERIFY INSURANCE
+- CALL NOW
+- WHAT WE TREAT
+Visual:
+- current nav screenshot
+- future nav screenshot
+- red hand-drawn arrows showing restructuring
+Requirement:
+- generator must support side-by-side current vs future IA visuals
+- use actual site nav screenshot or generated nav capture if possible
+- allow annotations
+- no sloppy scaling
+
+SLIDE 14 — SCALABLE BLUEPRINT / CLUSTER MAP, SITE 1 PART A
+Narrative:
+- A scalable blueprint for what we publish next.
+- We’ll grow these top-level hubs into complete topic clusters—adding the pages that matter most, in the order that drives rankings and admissions.
+Columns / cluster lists:
+Treatment:
+- /treatment/
+- /treatment/therapies-modalities/
+- /treatment/trauma-integrated-care/
+- /treatment/medical-psychiatry/
+- /treatment/wellness-experiential/
+- /treatment/environment-location/
+Programs:
+- /programs/
+- /programs/residential/
+- /programs/detox/
+- /programs/php/
+- /programs/iop-virtual/
+- /programs/iop-in-person/
+- /programs/aftercare-alumni/
+- /programs/family-program/
+Admissions:
+- /admissions/
+- /admissions/start-here/
+- /admissions/insurance-cost/
+- /admissions/verify-insurance/
+- /admissions/what-to-bring/
+- /admissions/travel-planning/
+- /admissions/frequently-asked-questions/
+- /admissions/contact-admissions/
+What We Treat:
+- /what-we-treat/
+- /what-we-treat/substance-use/
+- /what-we-treat/alcohol/
+- /what-we-treat/opioids/
+- /what-we-treat/stimulants/
+- /what-we-treat/benzodiazepines/
+- /what-we-treat/polysubstance/
+- /what-we-treat/mental-health/
+- /what-we-treat/trauma-ptsd/
+- /what-we-treat/anxiety/
+- /what-we-treat/depression/
+Requirement:
+- build structured IA cluster rendering from data
+- each hub should be a typed content cluster, not just free text
+- must be export-safe
+
+SLIDE 15 — CREDIBILITY LAYER / ABOUT + RESOURCES, SITE 1 PART B
+Resources:
+- /resources/
+- /resources/blog/
+- /resources/continuing-education/
+- /resources/in-the-media/
+- /resources/faq/
+About:
+- /about/
+- /about/our-story/
+- /about/mission-values/
+- /about/leadership/
+- /about/clinical-team/
+- /about/quality-accreditation/
+- /about/treatment-outcomes/
+- /about/careers/
+- /about/facility-tour/
+Narrative:
+- About + Resources are the credibility layer.
+- About consolidates core E-E-A-T signals—team, standards, accreditation, and outcomes—so trust is easy to verify.
+- Resources extends that authority through helpful, structured content (blog, FAQs, continuing education, media coverage) that answers real questions and supports search visibility over time.
+Requirement:
+- Mid-Strategy must explicitly support trust / E-E-A-T / credibility-layer recommendations
+- especially important for behavioral health clients
+
+SLIDE 16 — CURRENT VS FUTURE IA, SITE 2
+Labels:
+- Current:
+- Future:
+Visual:
+- current Foundry Front Range nav screenshot
+- future nav screenshot
+- red annotation arrows
+Requirement:
+- support multiple site examples in one report if needed
+
+SLIDE 17 — SCALABLE BLUEPRINT / CLUSTER MAP, SITE 2 PART A
+Treatment:
+- /treatment/
+- /treatment/trauma-integrated-care/
+- /treatment/evidence-based-therapies/ (future hub)
+- /treatment/individual-therapy/
+- /treatment/group-therapy/
+- /treatment/family-therapy/
+- /treatment/psychiatry-medication-management/
+- /treatment/wellness-nutrition-fitness/
+Programs:
+- /programs/
+- /programs/detox/
+- /programs/residential-treatment/
+- /programs/womens-program/
+- /programs/family-program/
+- /programs/aftercare-continuing-care/
+What We Treat:
+- /what-we-treat/
+- /what-we-treat/alcohol/
+- /what-we-treat/opioids/
+- /what-we-treat/fentanyl/
+- /what-we-treat/stimulants/
+- /what-we-treat/cannabis/
+- /what-we-treat/co-occurring-disorders/
+Requirement:
+- same cluster-mapping support as slide 14
+
+SLIDE 18 — CREDIBILITY LAYER / ABOUT + RESOURCES, SITE 2 PART B
+About:
+- /about/
+- /about/mission-approach/
+- /about/tour-our-facility
+- /about/clinical-leadership-team/
+- /about/our-team/
+- /about/accreditation-licensing/
+- /about/insurance-medicaid/
+- /about/careers/
+Resources:
+- /resources/
+- /resources/blog/
+- /resources/faqs/
+- /resources/for-families/
+Requirement:
+- same credibility-layer support as slide 15
+
+SLIDE 19 — WHAT’S NEXT
+Heading:
+- What’s Next:
+Bullets:
+1. Confirm the proposed long-term site structure: Ensure this organization reflects how you want Invicta’s services and offerings to be understood over time.
+2. Continued Content Planning: In parallel, we’ll map out how this works in your current scope.
+3. Local SEO & Visibility Foundations: As we move beyond initial cleanup and core service work, we’ll also begin laying the groundwork for local SEO initiatives, including location relevance, GBP optimization, and supporting infrastructure.
+Requirement:
+- build a “What’s Next” strategic close slide / section
+- should auto-populate from identified next actions plus strategist edits
+
+SLIDE 20 — NEXT STEPS / OWNERSHIP
+Heading:
+- Next Steps
+Ownership:
+- Webserv:
+- NRT Team Team:
+- Confirm future site structure
+Requirement:
+- build a split-ownership next steps module
+- support internal owner, client owner, due date, and status if available
+- no blank awkward lists in export
+
+NOW BUILD THE MID-STRATEGY PRODUCT AROUND THIS
+
+IMPLEMENTATION REQUIREMENTS
+
+1. REPORT GENERATOR
+Create or refactor Mid-Strategy generator logic so the report is built from structured sections and data models, not brittle freeform blobs.
+
+Recommended data model families:
+- reportMeta
+- connectorHealth
+- accountContext
+- websiteScanSummary
+- technicalFindings
+- competitiveBenchmarks
+- aiVisibilityBenchmarks
+- structuralRecommendations
+- currentVsFutureIA
+- contentClusterBlueprints
+- credibilityLayerRecommendations
+- migrationRecommendation
+- whatsNext
+- nextSteps
+- manualOverrides
+- missingDataFlags
+
+2. WEBSITE SCAN FIRST-PASS
+For new clients, the generator should be able to run a first-pass site assessment using:
+- homepage
+- nav
+- footer
+- key templates
+- service/program pages
+- verify insurance page
+- location pages
+- about/team/accreditation pages
+- resources/blog/faqs
+Detect:
+- top-level IA ambiguity
+- missing verify insurance prominence
+- missing or weak trust pages
+- location structure problems
+- doorway/local SEO risk
+- service vs condition vs educational hierarchy issues
+- conversion friction clues
+- duplicated or thin patterns
+- internal linking weakness clues
+
+3. BEHAVIORAL HEALTH RULES
+Apply Webserv’s behavioral health logic from the SOPs:
+- verify insurance is a high-intent utility page and must be treated accordingly
+- local SEO is about geographic legitimacy, not city spam
+- primary location pages require real addresses
+- trust, legitimacy, E-E-A-T, admissions clarity, and compliance matter
+- do not build recommendations that violate those SOPs
+
+4. COMPETITIVE BENCHMARKING
+Support two benchmark families:
+- authority / indexed footprint
+- AI visibility / snippet-AIO
+Need:
+- subject highlight
+- competitor ordering
+- legends
+- dual axes where needed
+- narrative summary blocks
+- export-safe rendering
+If source data is missing:
+- show “Benchmark source unavailable”
+- allow manual import / strategist paste-in
+- do not fabricate values
+
+5. IA / FUTURE STRUCTURE MODULES
+Build visual modules for:
+- current nav snapshot
+- future nav proposal
+- content hub / cluster architecture
+- credibility layer
+- local SEO / location structure where relevant
+Allow:
+- screenshot or generated nav rendering
+- annotations
+- text-backed cluster lists
+- manual edits before export
+
+6. MANUAL INPUTS
+Require or support the following strategist inputs:
+- AM / strategist thoughts
+- first focus narrative
+- domain / migration recommendation
+- benchmark interpretation notes
+- custom next steps
+- client-specific caveats
+- optional sentiment / relationship note if product decides it belongs in internal-only context
+
+7. GAP QUESTIONS
+If fill-in-the-gaps mode is enabled:
+- generate the report draft first
+- analyze the draft for missing critical context
+- ask only specific questions that improve the report
+Examples of acceptable question types:
+- “You marked this account as frustrated. What specifically is creating friction right now?”
+- “The report recommends IA restructuring. Which nav labels are non-negotiable from the client’s perspective?”
+- “Benchmark visuals are unavailable. Do you want to paste a benchmark table or omit the section?”
+Examples of unacceptable question types:
+- “Do we have the tools connected?”
+- “Can SEO tasks be implemented?”
+- anything generic, obvious, or operationally meaningless
+If gap mode is off:
+- ask nothing
+
+8. PREVIEW EXPERIENCE
+The preview should feel premium and editable.
+Need:
+- section-based rendering
+- good modal / editor UI
+- clear edit points
+- table row add/delete where appropriate
+- section hide/delete controls where appropriate
+- no ugly wall-of-text forms
+- safe draft recovery where useful
+
+9. EXPORTS
+Must work for:
+- PDF
+- PPTX
+- Google Slides compatible handoff/export
+Requirements:
+- no truncation
+- no clipped charts
+- no missing images
+- no stale data
+- no broken links
+- no unsafe URLs
+- preserve layout integrity
+
+10. PPTX / GOOGLE SLIDES EXPORT PATH
+If current architecture does not support high-quality PPTX/Google Slides export:
+- build it properly
+- do not fake a .pptx wrapper around HTML
+- do not ship broken slide exports
+The output must preserve:
+- slide-like page structure
+- headers
+- charts
+- screenshots
+- annotations
+- bullet hierarchy
+- brand styling
+
+11. INTEGRATION HEALTH PANEL
+Before generation or in an expandable diagnostics area, show:
+- Screaming Frog: connected / not connected / stale / no data
+- GSC: connected / not connected / no property / low data
+- GA4: connected / not connected / no organic conversion data
+- NSM Sheet: connected / not connected
+- Notion: connected / not connected
+- GBP: connected / not connected
+- Call tracking: which vendor is live
+- Airtable: connected / not connected
+- Asana: connected / not connected
+- Ahrefs / SEMrush: connected / not connected / optional
+If Asana is supposed to be connected and isn’t, call it out visibly.
+
+12. LOGO / BRAND ASSET REQUESTS
+If client logo or report visual assets are missing:
+- ask for them explicitly
+- do not silently insert low-quality placeholders unless product already has an approved fallback state
+
+13. TESTING + QA
+Before marking complete, verify:
+- Mid-Strategy preview renders with live data
+- saved vs live generation behavior is correct
+- no stale report reuse
+- PDF export works
+- PPTX export works
+- Google Slides flow works or is honestly flagged as pending
+- chart labels do not overlap
+- long cluster lists do not clip
+- section hide/delete works
+- row add/delete works where applicable
+- gap questions only appear when enabled
+- all connector states render honestly
+- dual-site and single-site scenarios both work
+- missing benchmark data fails gracefully
+- all sections match design system
+- all exports open successfully
+
+DELIVERABLE FORMAT I WANT FROM YOU
+
+Return all of the following:
+
+1. A concise “QBS portability audit” list:
+   - what improvements were found in QBS/QBR that should port to Mid-Strategy
+   - what was ported now
+   - what still needs later hardening
+
+2. A file-by-file implementation summary:
+   - exact files changed
+   - why each changed
+
+3. A Mid-Strategy data-flow summary:
+   - source → transform → section mapping
+
+4. A design-system summary:
+   - what was inherited from QBS family
+   - what was inherited from the PowerPoint
+   - what was normalized across report types
+
+5. A QA report with explicit pass/fail on:
+   - preview
+   - PDF
+   - PPTX
+   - Google Slides handoff/export
+   - gap logic
+   - connector health checks
+   - single-site
+   - dual-site
+   - missing-data behavior
+
+6. A list of any blocked items requiring human input:
+   - exact asset/data needed
+   - exact place in report affected
+
+FINAL WARNING
+
+If any benchmark chart, integration source, or export path is not truly working, say so plainly.
+Do not pass off approximation as completion.
+Do not soften missing pieces with vague language.
+If the current codebase has weak spots, fix them.
+If it cannot be fully fixed in one pass, harden the critical path for tomorrow’s Olivia review first:
+- preview
+- PDF
+- report narrative
+- structural recommendations
+- connector truthfulness
+- export stability
+- design consistency
+
+Ship something real, defensible, and polished.

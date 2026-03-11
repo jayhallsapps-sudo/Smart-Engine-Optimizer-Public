@@ -248,7 +248,7 @@ export async function registerRoutes(
     "/crawl-assets", "/sf-reports", "/call-tracking-reports", "/print-cache",
     "/reports/export", "/reports/upload-to-drive",
   ];
-  const EXPORT_PATH_PATTERNS = ["/docx", "/pptx", "/docx-v2", "/upload-to-drive", "/preview-pdf", "/export"];
+  const EXPORT_PATH_PATTERNS = ["/docx", "/pptx", "/docx-v2", "/upload-to-drive", "/preview-pdf", "/export", "/pdf"];
   app.use("/api", (req: Request, res: Response, next: NextFunction) => {
     const contentLength = Number(req.headers["content-length"] ?? 0);
     if (!contentLength) return next();
@@ -1967,6 +1967,87 @@ export async function registerRoutes(
   });
 
   // ─── Mid-Strategy SEO Report ─────────────────────────────────────────────
+  app.post("/api/reports/mid-strategy/health-check", async (req, res) => {
+    const { clientId } = req.body;
+    if (!clientId) return res.status(400).json({ message: "clientId is required" });
+    try {
+      const client = await storage.getClient(Number(clientId));
+      if (!client) return res.status(404).json({ message: "Client not found" });
+
+      const checks: Record<string, { status: string; detail?: string }> = {};
+
+      const crawls = await storage.getSfReports(Number(clientId));
+      checks["Screaming Frog"] = crawls.length > 0
+        ? { status: "connected", detail: `${crawls.length} crawl${crawls.length !== 1 ? "s" : ""} uploaded` }
+        : { status: "not connected", detail: "No crawl assets uploaded" };
+
+      const gscUrl = client.gscSiteUrl;
+      checks["Google Search Console"] = gscUrl
+        ? { status: "connected", detail: gscUrl }
+        : { status: "not connected", detail: "No GSC property configured" };
+
+      const ga4Prop = client.ga4PropertyId;
+      checks["Google Analytics 4"] = ga4Prop
+        ? { status: "connected", detail: `Property: ${ga4Prop}` }
+        : { status: "not connected", detail: "No GA4 property configured" };
+
+      try {
+        const { fetchNsmGoals } = await import("./sheetsClient");
+        const nsmData = await fetchNsmGoals(Number(clientId));
+        checks["NSM Sheet"] = nsmData
+          ? { status: "connected", detail: "Goals loaded" }
+          : { status: "connected but no data", detail: "Sheet accessible but no goals for this client" };
+      } catch {
+        checks["NSM Sheet"] = { status: "not connected", detail: "Sheet unavailable" };
+      }
+
+      const gbpAccountId = client.gbpAccountId;
+      checks["Google Business Profile"] = gbpAccountId
+        ? { status: "connected", detail: `Account: ${gbpAccountId}` }
+        : { status: "not connected", detail: "No GBP configured" };
+
+      const callCreds = await storage.getApiCredentialsByService("callrail");
+      const ctmCreds = await storage.getApiCredentialsByService("calltrackingmetrics");
+      if (callCreds.length > 0) {
+        checks["Call Tracking"] = { status: "connected", detail: "CallRail" };
+      } else if (ctmCreds.length > 0) {
+        checks["Call Tracking"] = { status: "connected", detail: "CallTrackingMetrics" };
+      } else {
+        checks["Call Tracking"] = { status: "not connected", detail: "No call tracking vendor configured" };
+      }
+
+      const airtableCreds = await storage.getApiCredentialsByService("airtable");
+      checks["Airtable"] = airtableCreds.length > 0
+        ? { status: "connected" }
+        : { status: "not connected" };
+
+      try {
+        const { ReplitConnectors } = await import("@replit/connectors-sdk");
+        const connectors = new ReplitConnectors();
+        const asanaRes = await connectors.proxy("asana", "/api/1.0/users/me", { method: "GET" });
+        checks["Asana"] = asanaRes.ok
+          ? { status: "connected" }
+          : { status: "not connected", detail: "Connector returned error" };
+      } catch {
+        checks["Asana"] = { status: "not connected", detail: "Connector unavailable" };
+      }
+
+      const semrushCreds = await storage.getApiCredentialsByService("semrush");
+      checks["SEMrush"] = semrushCreds.length > 0
+        ? { status: "connected" }
+        : { status: "not connected", detail: "Optional — used for competitive benchmarks" };
+
+      const ahrefsCreds = await storage.getApiCredentialsByService("ahrefs");
+      checks["Ahrefs"] = ahrefsCreds.length > 0
+        ? { status: "connected", detail: "Optional" }
+        : { status: "not connected", detail: "Optional" };
+
+      res.json({ checks });
+    } catch (err: any) {
+      res.status(500).json({ message: "Health check failed: " + err.message });
+    }
+  });
+
   app.post("/api/reports/mid-strategy/generate", async (req, res) => {
     const { clientId, currentCrawlAssetId, comparisonCrawlAssetId, amInputs, gapAnswers, gapSessionId } = req.body;
     if (!clientId) return res.status(400).json({ message: "clientId is required" });
@@ -2014,6 +2095,37 @@ export async function registerRoutes(
           if (s.bullets) items.push({ manualText: (s.bullets as string[]).map((b: string, bi: number) => edits?.[`${s.id}_bullet_${bi}`] ?? b).join("\n") });
           if (s.leftContent?.bullets) items.push({ manualText: (s.leftContent.bullets as string[]).join("\n") });
           if (s.rightContent?.metrics) items.push({ summary: s.rightContent.metrics.map((m: any) => ({ label: m.label, current: m.current, isPositive: m.isPositive ?? true })) });
+          if (s.type === "decision-card" && s.decisionOptions?.length) {
+            const optText = (s.decisionOptions as any[]).map((opt: any, oi: number) => {
+              const lbl = edits?.[`${s.id}_opt_${oi}_label`] ?? opt.label;
+              const pros = (opt.pros ?? []).map((p: string, pi: number) => `  ✓ ${edits?.[`${s.id}_opt_${oi}_pro_${pi}`] ?? p}`).join("\n");
+              const cons = (opt.cons ?? []).map((c: string, ci: number) => `  ✗ ${edits?.[`${s.id}_opt_${oi}_con_${ci}`] ?? c}`).join("\n");
+              return `${opt.recommended ? "★ " : ""}${lbl}${opt.subtitle ? ` — ${opt.subtitle}` : ""}\n${pros}${cons ? "\n" + cons : ""}`;
+            }).join("\n\n");
+            items.push({ manualText: optText });
+            const conclusion = edits?.[`${s.id}_conclusion`] ?? s.decisionConclusion;
+            if (conclusion) items.push({ manualText: `Recommendation: ${conclusion}` });
+          }
+          if (s.type === "ia-comparison") {
+            const curItems = (s.currentIA ?? []).map((item: any, ii: number) => {
+              const lbl = edits?.[`${s.id}_cur_${ii}`] ?? item.label;
+              const children = (item.children ?? []).map((c: string) => `    — ${c}`).join("\n");
+              return `${lbl}${children ? "\n" + children : ""}`;
+            }).join("\n");
+            const futItems = (s.futureIA ?? []).map((item: any, ii: number) => {
+              const lbl = edits?.[`${s.id}_fut_${ii}`] ?? item.label;
+              const children = (item.children ?? []).map((c: string) => `    — ${c}`).join("\n");
+              return `${lbl}${children ? "\n" + children : ""}`;
+            }).join("\n");
+            items.push({ manualText: `CURRENT STRUCTURE:\n${curItems}\n\n→ FUTURE STRUCTURE:\n${futItems}` });
+          }
+          if (s.type === "cluster-map" && s.clusters?.length) {
+            const clusterRows = (s.clusters as any[]).flatMap((cl: any, ci: number) => {
+              const hub = edits?.[`${s.id}_cluster_${ci}_hub`] ?? cl.hub;
+              return (cl.pages ?? []).map((pg: string, pi: number) => [hub, edits?.[`${s.id}_cluster_${ci}_page_${pi}`] ?? pg]);
+            });
+            items.push({ tables: [{ title: "Content Clusters", headers: ["Hub", "Page"], rows: clusterRows }] });
+          }
           return { sectionId: `slide_${idx}`, title: edits?.[`${s.id}_title`] ?? s.title ?? "", items };
         });
       const clientName = json.client_name ?? "Client";
@@ -2031,6 +2143,28 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/reports/mid-strategy/pdf", async (req, res) => {
+    const t0 = Date.now();
+    const { json, edits } = req.body as { json: any; edits?: Record<string, string> };
+    if (!json || !json.slides?.length) { logExport("Mid-Strategy PDF", t0, false, "No slides"); return res.status(400).json({ message: "No slide data found. Generate the report first." }); }
+    const id = randomUUID();
+    printCache.set(id, { data: { report: json, edits: edits ?? {} }, ts: Date.now() });
+    try {
+      const buffer = await generatePdfViaPuppeteer(id, "mid-strategy/pdf-render");
+      const clientName = json.client_name ?? "Client";
+      const slug = clientName.toLowerCase().replace(/\s+/g, "_");
+      logExport("Mid-Strategy PDF", t0, true);
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="${slug}_Mid_Strategy.pdf"`);
+      res.send(buffer);
+    } catch (err: any) {
+      logExport("Mid-Strategy PDF", t0, false, err.message);
+      res.status(500).json({ message: "Failed to generate PDF: " + err.message });
+    } finally {
+      printCache.delete(id);
+    }
+  });
+
   app.post("/api/reports/mid-strategy/upload-to-drive", async (req, res) => {
     const { json, edits } = req.body as { json: any; edits?: Record<string, string> };
     if (!json) return res.status(400).json({ message: "json is required" });
@@ -2045,6 +2179,37 @@ export async function registerRoutes(
           if (s.table) { const resolvedRows = (s.table.rows as any[][]).map((row: any[], ri: number) => row.map((cell: any, ci: number) => edits?.[`${s.id}_cell_${ri}_${ci}`] ?? String(cell))); const tableKey = s.type === "scorecard" ? `${s.id}_scorecard` : `${s.id}_table`; const crRows = parseCustomRowsFromEdits(edits, tableKey); items.push({ tables: [{ title: edits?.[`${s.id}_subtitle`] ?? s.subtitle ?? "", headers: s.table.headers, rows: [...resolvedRows, ...crRows] }] }); }
           if (s.bullets) items.push({ manualText: (s.bullets as string[]).map((b: string, bi: number) => edits?.[`${s.id}_bullet_${bi}`] ?? b).join("\n") });
           if (s.leftContent?.bullets) items.push({ manualText: (s.leftContent.bullets as string[]).join("\n") });
+          if (s.type === "decision-card" && s.decisionOptions?.length) {
+            const optText = (s.decisionOptions as any[]).map((opt: any, oi: number) => {
+              const lbl = edits?.[`${s.id}_opt_${oi}_label`] ?? opt.label;
+              const pros = (opt.pros ?? []).map((p: string, pi: number) => `  ✓ ${edits?.[`${s.id}_opt_${oi}_pro_${pi}`] ?? p}`).join("\n");
+              const cons = (opt.cons ?? []).map((c: string, ci: number) => `  ✗ ${edits?.[`${s.id}_opt_${oi}_con_${ci}`] ?? c}`).join("\n");
+              return `${opt.recommended ? "★ " : ""}${lbl}${opt.subtitle ? ` — ${opt.subtitle}` : ""}\n${pros}${cons ? "\n" + cons : ""}`;
+            }).join("\n\n");
+            items.push({ manualText: optText });
+            const conclusion = edits?.[`${s.id}_conclusion`] ?? s.decisionConclusion;
+            if (conclusion) items.push({ manualText: `Recommendation: ${conclusion}` });
+          }
+          if (s.type === "ia-comparison") {
+            const curItems = (s.currentIA ?? []).map((item: any, ii: number) => {
+              const lbl = edits?.[`${s.id}_cur_${ii}`] ?? item.label;
+              const children = (item.children ?? []).map((c: string) => `    — ${c}`).join("\n");
+              return `${lbl}${children ? "\n" + children : ""}`;
+            }).join("\n");
+            const futItems = (s.futureIA ?? []).map((item: any, ii: number) => {
+              const lbl = edits?.[`${s.id}_fut_${ii}`] ?? item.label;
+              const children = (item.children ?? []).map((c: string) => `    — ${c}`).join("\n");
+              return `${lbl}${children ? "\n" + children : ""}`;
+            }).join("\n");
+            items.push({ manualText: `CURRENT STRUCTURE:\n${curItems}\n\n→ FUTURE STRUCTURE:\n${futItems}` });
+          }
+          if (s.type === "cluster-map" && s.clusters?.length) {
+            const clusterRows = (s.clusters as any[]).flatMap((cl: any, ci: number) => {
+              const hub = edits?.[`${s.id}_cluster_${ci}_hub`] ?? cl.hub;
+              return (cl.pages ?? []).map((pg: string, pi: number) => [hub, edits?.[`${s.id}_cluster_${ci}_page_${pi}`] ?? pg]);
+            });
+            items.push({ tables: [{ title: "Content Clusters", headers: ["Hub", "Page"], rows: clusterRows }] });
+          }
           return { sectionId: `slide_${idx}`, title: edits?.[`${s.id}_title`] ?? s.title ?? "", items };
         });
       const msClientName = json.client_name ?? "Client";

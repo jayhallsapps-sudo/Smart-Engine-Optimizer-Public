@@ -49,3 +49,14 @@ The NSM (North Star Metric) Tracker is a Google Sheets-based goal tracking syste
 - **QBR Full generator**: NSM Next-Quarter Goals slide (Slide 15) — NSM Tracker goals override smart projections when available
 - **Bi-weekly generator**: Performance Pulse section — NSM metrics displayed alongside GA4/GSC/CallRail data
 - **Dashboard**: Client Info tab — NSM quarter, goals, actuals, and on-track status
+
+## Mid-Strategy Report
+The Mid-Strategy SEO report is a slide-based PowerPoint-aligned report with 14+ sections. Key architecture:
+- **Generator**: `server/midStrategyGenerator.ts` — produces structured slides (Cover, Agenda, Checkpoint, Domain Strategy, Migration, Competitive DR, AI Visibility, Efficiency Scorecard, First Focus, IA Comparison, Cluster Blueprint, Credibility Layer, URL Audit, What's Next, Next Steps)
+- **Preview**: `client/src/components/report-preview/pptx-preview.tsx` — renders all slide types including `decision-card`, `ia-comparison`, `cluster-map`, `scorecard`, `two-col`, `bullets`, `table`, `metrics`, `chart-bar`, `chart-line`
+- **Print page**: `client/src/pages/mid-strategy-print.tsx` — Puppeteer-renderable print layout for PDF generation
+- **Exports**: PPTX (via PptxGenJS), PDF (via Puppeteer rendering print page), Google Drive upload
+- **Routes**: `/api/reports/mid-strategy/generate`, `/api/reports/mid-strategy/pptx`, `/api/reports/mid-strategy/pdf`, `/api/reports/mid-strategy/upload-to-drive`, `/api/reports/mid-strategy/health-check`
+- **Health Check**: Integration health panel checks Screaming Frog, GSC, GA4, NSM Sheet, GBP, CallRail/CTM, Airtable, Asana, SEMrush, Ahrefs status per client
+- **New slide types**: `DecisionOption` (domain strategy pros/cons), `IAItem` (current/future nav structure), `ContentCluster` (hub/spoke content clusters)
+- **PPTX export hardening**: decision-card → text with ✓/✗ markers, ia-comparison → current/future text blocks, cluster-map → Hub/Page table

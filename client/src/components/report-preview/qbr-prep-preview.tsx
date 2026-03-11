@@ -536,7 +536,9 @@ export function QbrPrepPreview({
 
         <div style={{ padding: "24px 56px 0", flex: 1, display: "flex", flexDirection: "column" }}>
           <div style={{ flex: 1 }}>
-            <div style={{ marginBottom: "4px", fontSize: "20px", fontWeight: 700 }}>
+            <div
+              style={{ marginBottom: "4px", fontSize: "20px", fontWeight: 700 }}
+              className="text-[32px] font-extrabold text-[#f0000f]">
               Quarterly Business Snapshot
             </div>
             <div style={{ fontSize: "14px", fontWeight: 600, color: "#374151", marginBottom: "12px" }}>

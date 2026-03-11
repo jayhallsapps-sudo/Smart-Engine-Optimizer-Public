@@ -524,6 +524,20 @@ export function QbrPrepPreview({
     <EditableCell key="n" editKey={`s2b_${ri}_2`} value={r.notes} edits={edits} onEdit={onEdit} />,
   ]);
 
+  // Compute actual source tags per Section 2 sub-table from row-level dataSource values
+  const s2aActualSources = [...new Set(
+    section2Conversions.topConvertingPages
+      .map(r => r.dataSource)
+      .filter((s): s is string => !!s && s !== "Manual entry needed" && s !== "Site Structure")
+  )];
+  const s2bActualSources = [...new Set(
+    section2Conversions.topConvertingSources
+      .map(r => r.dataSource)
+      .filter((s): s is string => !!s && s !== "Manual entry needed")
+  )];
+  // Patterns table has no per-row dataSource — derive from the pool sources used in s2a + s2b
+  const s2cActualSources = [...new Set([...s2aActualSources, ...s2bActualSources])];
+
   const hasTopicDeltas = section3Traffic.topTrafficTopics.some(r => r.queryCount != null);
   const topicColCount = hasTopicDeltas ? 7 : 3;
 
@@ -679,15 +693,15 @@ export function QbrPrepPreview({
             ) : !isSectionAutoHidden("section_conversions", hiddenTables) && sectionNums["section_conversions"] !== undefined ? (
               <>
                 <SectionHeading num={sectionNums["section_conversions"]} title="Where Conversions Actually Happen" onHide={hideSecBtn("section_conversions")} />
-                {tblSubLabel("table_s2_pages", "Top Converting Pages", !!hiddenTables["table_s2_pages"], ["Multi-source"])}
+                {tblSubLabel("table_s2_pages", "Top Converting Pages", !!hiddenTables["table_s2_pages"], s2aActualSources.length > 0 ? s2aActualSources : ["Multi-source"])}
                 {hiddenTables["table_s2_pages"] ? tblHiddenBar("table_s2_pages", "Top Converting Pages") : (
                   <AddableReportTable tableId="s2a" headers={["Type", "Page / Pattern", "Notes / What We're Learning"]} sourceRows={s2aSourceRows} edits={edits} onEdit={onEdit} />
                 )}
-                {tblSubLabel("table_s2_patterns", "Top Conversion Patterns", !!hiddenTables["table_s2_patterns"], ["Multi-source"])}
+                {tblSubLabel("table_s2_patterns", "Top Conversion Patterns", !!hiddenTables["table_s2_patterns"], s2cActualSources.length > 0 ? s2cActualSources : ["Multi-source"])}
                 {hiddenTables["table_s2_patterns"] ? tblHiddenBar("table_s2_patterns", "Top Conversion Patterns") : (
                   <AddableReportTable tableId="s2c" headers={["Pattern", "Why It Matters", "Evidence"]} sourceRows={s2cSourceRows} edits={edits} onEdit={onEdit} />
                 )}
-                {tblSubLabel("table_s2_sources", "Top Converting Sources", !!hiddenTables["table_s2_sources"], ["Multi-source"])}
+                {tblSubLabel("table_s2_sources", "Top Converting Sources", !!hiddenTables["table_s2_sources"], s2bActualSources.length > 0 ? s2bActualSources : ["Multi-source"])}
                 {hiddenTables["table_s2_sources"] ? tblHiddenBar("table_s2_sources", "Top Converting Sources") : (
                   <AddableReportTable tableId="s2b" headers={["Source", "What's Converting", "Notes / What We're Learning"]} sourceRows={s2bSourceRows} edits={edits} onEdit={onEdit} />
                 )}

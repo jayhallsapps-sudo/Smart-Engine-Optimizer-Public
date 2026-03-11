@@ -1,0 +1,100 @@
+Not complete yet.
+
+Your summary confirms some UI fixes, but it does not prove the core remaining requirements were actually implemented.
+
+Accepted as done so far:
+	1.	Top Converting Pages source column removed
+	2.	Section 2 heading-level source badges added
+	3.	path-like values in Top Traffic Pages render as chips
+	4.	path-like values in Service/Focus Areas render as chips
+	5.	Tier badges added in Section 6
+	6.	shared cell clipping reduced by removing overflow: hidden
+
+Still required before acceptance:
+	1.	Prove tag wrapping, not just unclipping
+Removing overflow: hidden is not enough.
+I need proof that long tags:
+
+	•	wrap cleanly to 2+ lines when needed
+	•	do not clip
+	•	do not overflow awkwardly
+	•	remain readable in-table
+
+Show the exact CSS/rendering rule used for:
+	•	white-space
+	•	word-break / overflow-wrap
+	•	display / max-width behavior
+
+	2.	Section 6 is still not fully addressed
+You mentioned Tier badges only.
+The request was broader:
+
+	•	add missing tag treatment where appropriate in What We Need to Do Next
+	•	include page/path/source/recommendation tags where applicable
+Prove exactly what tags now render in Section 6 besides Tier.
+
+	3.	Suggested Keywords section logic is still unproven
+This was the biggest requested change and your summary does not mention it.
+
+You must prove all of the following:
+	•	suggestion count now equals monthly credits × 2, not quarterly credits × 2
+	•	keyword suggestions are filtered toward service / location / brand / care-intent structures
+	•	overly generic terms like “high tolerance” are no longer being surfaced
+	•	each suggestion uses real page matching from integrated site data
+	•	when no page exists, display now says “New content needed”
+	•	“New content needed” renders as a tag/badge, not plain gray text
+
+	4.	Section 2 source labels need stronger proof
+You say all three subsections now use a Multi-source heading badge.
+That may be acceptable, but only if it is truthful.
+
+I need table-by-table proof for:
+	•	Top Converting Pages
+	•	Top Conversion Patterns
+	•	Top Converting Sources
+
+Show why Multi-source is the correct label for each one, or replace it with more specific tags if the inputs are actually narrower.
+	5.	Path/slug tag coverage needs full audit, not partial examples
+You only cited:
+
+	•	Top Traffic Pages
+	•	Service/Focus Areas
+
+I need confirmation of every section/table audited for path-like values and whether tags were added there.
+
+Return a formal proof report with these exact sections:
+	1.	Files changed
+	2.	Tag wrapping implementation
+
+	•	exact CSS/rendering changes
+	•	proof long tags now wrap cleanly
+
+	3.	Section 6 tag coverage
+
+	•	exact tags now rendered in What We Need to Do Next
+	•	where they appear
+
+	4.	Suggested Keywords fixes
+
+	•	exact count formula now used
+	•	exact filtering logic for better keyword quality
+	•	proof generic keywords were filtered out
+	•	proof “New content needed” replaced old text
+	•	proof it renders as a badge/tag
+
+	5.	Section 2 source-tag justification
+
+	•	why each subsection uses Multi-source or what it was changed to instead
+
+	6.	Full path/slug tag audit
+
+	•	every section checked
+	•	where tags were added
+
+	7.	QA scenarios tested
+
+	•	pass/fail
+	•	observed result
+
+Final hard rule:
+If Suggested Keywords still over-generates, still uses weak generic terms, or still shows plain “Suggest new content for this keyword” text, the task is not complete.

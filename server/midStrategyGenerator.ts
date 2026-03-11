@@ -162,7 +162,12 @@ function monthLabel(d: Date) {
 async function getSemrushKey(): Promise<string | null> {
   const creds = await storage.getApiCredentialsByService("semrush");
   if (!creds.length) return null;
-  return decrypt(creds[0].encryptedValue);
+  try {
+    return decrypt(creds[0].encryptedValue);
+  } catch (err) {
+    console.warn("[midStrategy] Failed to decrypt SEMrush credential — re-auth needed:", (err as Error).message);
+    return null;
+  }
 }
 
 async function semrushDomainRanks(apiKey: string, domain: string): Promise<{ organicKw: string; organicTraffic: string } | null> {

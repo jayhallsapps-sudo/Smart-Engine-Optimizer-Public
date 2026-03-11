@@ -1,0 +1,446 @@
+We need to rewrite the logic for QBS Section 1: “What Matters Most This Quarter.”
+
+The current implementation is structurally wrong for this report type.
+
+This is not a wording tweak.
+This is a data model and generation logic correction.
+
+==================================================
+OBJECTIVE
+
+Fix Section 1 so it uses the SEO NSM Tracker 2026 correctly and only renders the two correct goals:
+
+Primary Goal / MVP NSM
+
+Secondary Goal / NSM = Organic Sessions
+
+Remove the current incorrect three-row logic for this section.
+
+There should not be a separate “tracked calls” secondary row when the primary MVP NSM is already call-based.
+
+==================================================
+CURRENT FAILURE
+
+The current output is wrong because:
+
+It is using the wrong prior-quarter benchmark for the primary row.
+For Anchored Tides:
+
+Q2 2026 MVP NSM goal = 160
+
+Q1 2026 MVP NSM goal = 187
+
+Q1 2026 MVP NSM actual = 77
+
+The report is currently behaving as if prior-quarter goal = 160, which is false.
+
+It is rendering an unnecessary secondary calls row.
+If the MVP NSM is already calls-based, we do not need:
+
+Primary Goal / MVP NSM = calls
+and then also
+
+Secondary Goal = tracked calls
+
+That is redundant and structurally wrong.
+
+It is demoting organic sessions into a tertiary row when it should actually be the second and final row.
+
+The reasons are being built from the wrong quarter relationship.
+The section must compare:
+
+current quarter goal
+vs
+
+previous quarter goal
+and explain prior-quarter underperformance or overperformance using previous-quarter actuals and available integration data.
+
+==================================================
+CORRECT SECTION 1 STRUCTURE
+
+Section 1 must always render exactly 2 rows:
+
+Row 1:
+
+Goal Type: Primary Goal / MVP NSM
+
+Goal: current quarter MVP NSM goal from SEO NSM Tracker 2026
+
+Source: source appropriate to the MVP type
+
+Goal Shift vs Last Quarter: compare current quarter MVP goal vs previous quarter MVP goal
+
+Reason: explain previous quarter goal, previous quarter actual, current quarter goal, and why the new target is being held/raised/lowered
+
+Row 2:
+
+Goal Type: Secondary Goal / NSM
+
+Goal: current quarter Organic Sessions NSM goal from SEO NSM Tracker 2026
+
+Source: GA4
+
+Goal Shift vs Last Quarter: compare current quarter Organic Sessions goal vs previous quarter Organic Sessions goal
+
+Reason: explain previous quarter sessions goal, previous quarter sessions actual, current quarter goal, and why the new target is being held/raised/lowered
+
+No third row.
+No duplicate tracked-calls row.
+No tertiary row.
+
+==================================================
+ANCHORED TIDES REQUIRED DATA EXAMPLE
+
+For Anchored Tides, this is the correct structure:
+
+Row 1 — Primary Goal / MVP NSM
+Current quarter: Q2 2026
+
+current MVP goal = 160
+Previous quarter: Q1 2026
+
+prior MVP goal = 187
+
+prior MVP actual = 77
+
+Therefore:
+goalShiftPct = ((160 - 187) / 187) * 100
+= -14% when rounded
+
+So Row 1 must show:
+
+Goal Shift vs Last Quarter = -14%
+
+The reason must reference:
+
+last quarter goal 187
+
+last quarter actual 77
+
+current quarter goal 160
+
+data-backed explanation for why Q1 missed and why Q2 is now being set lower
+
+Row 2 — Secondary Goal / NSM
+Current quarter: Q2 2026
+
+current organic sessions goal = 4,070
+Previous quarter: Q1 2026
+
+prior organic sessions goal = 4,854
+
+prior organic sessions actual = 2,174
+
+Therefore:
+goalShiftPct = ((4070 - 4854) / 4854) * 100
+= -16% when rounded
+
+So Row 2 must show:
+
+Goal Shift vs Last Quarter = -16%
+
+The reason must reference:
+
+last quarter sessions goal 4,854
+
+last quarter sessions actual 2,174
+
+current quarter goal 4,070
+
+data-backed explanation for why Q1 missed and why Q2 is now being set lower
+
+==================================================
+DATA SOURCE RULES
+
+Use the SEO NSM Tracker 2026 as the source of truth for quarterly goals and quarterly actuals.
+
+For each row, the generator must explicitly pull:
+
+For current quarter:
+
+current quarter MVP NSM goal
+
+current quarter Organic Sessions goal
+
+For previous quarter:
+
+previous quarter MVP NSM goal
+
+previous quarter MVP NSM actual
+
+previous quarter Organic Sessions goal
+
+previous quarter Organic Sessions actual
+
+Do not substitute current-quarter QTD values when the section is explicitly “vs Last Quarter.”
+This section is quarter-over-quarter goal framing, anchored by previous-quarter actual performance.
+
+The reason may use GSC, GA4, call tracking, crawl, or other integrations to explain why the previous quarter missed or succeeded.
+But the goals and actuals themselves must come from the SEO NSM Tracker 2026 quarter tables.
+
+==================================================
+PRIMARY ROW SOURCE RULE
+
+The Primary Goal / MVP NSM source must match the MVP type.
+
+Examples:
+
+if MVP NSM type is calls-based, source = CallRail
+
+if MVP NSM type is admits-based, source = call tracking / admits source as appropriate
+
+if MVP NSM type is another explicit metric, use the appropriate mapped source
+
+For Anchored Tides, the primary source is CallRail.
+
+==================================================
+SECONDARY ROW SOURCE RULE
+
+The Secondary Goal / NSM source is always:
+
+GA4
+
+This row is organic sessions.
+Do not infer another source.
+
+==================================================
+GOAL SHIFT FORMULA
+
+Use this formula for both rows:
+
+goalShiftPct = ((currentQuarterGoal - previousQuarterGoal) / previousQuarterGoal) * 100
+
+Render:
+
+positive => signed positive percent
+
+negative => signed negative percent
+
+zero => Par
+
+No em dash.
+No NA.
+No fallback Par when the benchmark is missing.
+
+If previous-quarter goal is missing, that row must fail safely and be flagged in QA.
+Do not silently invent a benchmark.
+
+==================================================
+REASON LOGIC
+
+The reason for each row must answer:
+
+What was last quarter’s goal?
+
+What was last quarter’s actual?
+
+How far behind or ahead was performance?
+
+What likely explains that result based on available integration data?
+
+Why does that justify the new current-quarter goal?
+
+The reason must not:
+
+explain what the metric is
+
+explain what the source is
+
+use filler
+
+use “actuals pending”
+
+use current-quarter QTD as the main benchmark for a “vs last quarter” comparison
+
+repeat the shift label awkwardly in prose
+
+Required pattern:
+
+Last quarter goal: X. Last quarter actual: Y.
+
+Performance fell short of / exceeded target by Z%.
+
+Available evidence suggests [cause category].
+
+As a result, the current-quarter goal is being [held / reduced / increased] to [new value] while [constraint/opportunity framing].
+
+For Anchored Tides, the reason should be based on actual prior-quarter underperformance, not zero-QTD current-quarter placeholders.
+
+==================================================
+CAUSE CATEGORY RULES
+
+When explaining why the previous quarter missed, use available evidence from:
+
+GSC
+
+GA4
+
+call tracking
+
+Screaming Frog
+
+other connected integrations
+
+Allowed cause categories:
+
+crawl/indexation issue
+
+attribution/tracking issue
+
+internal linking weakness
+
+conversion path friction
+
+technical SEO issue
+
+content maturity lag
+
+local visibility weakness
+
+mixed-cause inference
+
+Do not invent certainty.
+If evidence is mixed, say so.
+
+But do not leave the reason vague.
+
+==================================================
+ROW SUPPRESSION RULE
+
+Section 1 must always aim to render these exact 2 rows:
+
+Primary Goal / MVP NSM
+
+Secondary Goal / NSM
+
+Do not add a calls row just because calls data exists.
+Do not add a tertiary row.
+Do not duplicate the primary KPI in a second row.
+
+==================================================
+IMPLEMENTATION REQUIREMENTS
+
+You must update all affected logic paths for Section 1, including:
+
+live preview
+
+saved report generation
+
+saved report load
+
+export rendering / DOCX / PDF path if applicable
+
+If the old three-row generator still exists, replace or refactor it so it cannot reappear in QBS Section 1.
+
+==================================================
+QA ACCEPTANCE CRITERIA
+
+Do not mark complete until all of these pass:
+
+Section 1 renders exactly 2 rows, not 3.
+
+Row 1 is Primary Goal / MVP NSM.
+
+Row 2 is Secondary Goal / NSM.
+
+No separate tracked calls row appears when the primary MVP is already call-based.
+
+Anchored Tides Row 1 current goal = 160.
+
+Anchored Tides Row 1 prior goal = 187.
+
+Anchored Tides Row 1 prior actual = 77.
+
+Anchored Tides Row 1 shift = -14%.
+
+Anchored Tides Row 2 current sessions goal = 4,070.
+
+Anchored Tides Row 2 prior sessions goal = 4,854.
+
+Anchored Tides Row 2 prior sessions actual = 2,174.
+
+Anchored Tides Row 2 shift = -16%.
+
+Both reasons are based on previous-quarter actual performance.
+
+Both reasons use integration data only to explain why the previous quarter performed the way it did.
+
+No current-quarter zero-QTD placeholder language is used as the primary logic for these rows.
+
+No metric-description filler appears in the reasons.
+
+Preview renders correctly.
+
+Saved load renders correctly.
+
+Export renders correctly.
+
+No regression to other QBS sections.
+
+==================================================
+REQUIRED OUTPUT
+
+Return a formal proof report with these exact sections:
+
+Files changed
+
+Section 1 logic changed
+
+old structure
+
+new structure
+
+exact quarter-mapping logic
+
+exact source-of-truth fields used from SEO NSM Tracker 2026
+
+Anchored Tides audit trail
+Show exact values used for:
+
+current quarter MVP goal
+
+previous quarter MVP goal
+
+previous quarter MVP actual
+
+current quarter sessions goal
+
+previous quarter sessions goal
+
+previous quarter sessions actual
+
+computed shift for both rows
+
+Final rendered Section 1 table for Anchored Tides
+Show the exact final text for both rows:
+
+Goal Type
+
+Goal
+
+Source
+
+Goal Shift vs Last Quarter
+
+Reason
+
+QA scenarios tested
+
+exact scenarios
+
+pass/fail
+
+observed output
+
+Regression check
+
+preview
+
+saved load
+
+export
+
+other sections untouched
+
+Final hard rule:
+If Section 1 still shows 3 rows, or if Anchored Tides Row 1 does not use 187 / 77, or if Row 2 does not use 4854 / 2174, the task is not complete.

@@ -287,13 +287,26 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
   if (!nsmData) missingData.push("NSM Tracker");
 
   // Fetch previous quarter NSM data for goal shift calculation
+  // Derive prevQ from the NSM tracker's current quarter (not the analysis window),
+  // so that forward-looking reports (planning Q2) correctly fetch Q1 actuals rather than Q4.
   try {
-    const now = new Date(quarter.analysisEnd || new Date());
-    const month = now.getMonth() + 1;
-    const currYear = now.getFullYear();
-    const currQ = month <= 3 ? 1 : month <= 6 ? 2 : month <= 9 ? 3 : 4;
-    const prevQ = currQ === 1 ? 4 : currQ - 1;
-    const prevYear = currQ === 1 ? currYear - 1 : currYear;
+    let prevQ: number;
+    let prevYear: number;
+    const nsmQMatch = nsmData?.quarter?.match(/Q(\d)\s+(\d{4})/);
+    if (nsmQMatch) {
+      const nsmQ = parseInt(nsmQMatch[1], 10);
+      const nsmYr = parseInt(nsmQMatch[2], 10);
+      prevQ = nsmQ === 1 ? 4 : nsmQ - 1;
+      prevYear = nsmQ === 1 ? nsmYr - 1 : nsmYr;
+    } else {
+      // Fallback: derive from analysis window
+      const now = new Date(quarter.analysisEnd || new Date());
+      const month = now.getMonth() + 1;
+      const currYear = now.getFullYear();
+      const currQ = month <= 3 ? 1 : month <= 6 ? 2 : month <= 9 ? 3 : 4;
+      prevQ = currQ === 1 ? 4 : currQ - 1;
+      prevYear = currQ === 1 ? currYear - 1 : currYear;
+    }
     prevNsmData = await fetchNsmGoalsForSpecificQuarter(client.name, prevQ, prevYear);
     if (prevNsmData && prevNsmData.quarter === "—") prevNsmData = null;
     console.log(`[NSM] Prev quarter data: Q${prevQ} ${prevYear}, mvpGoal=${prevNsmData?.mvpGoal ?? "n/a"}, sessGoal=${prevNsmData?.sessionsGoal ?? "n/a"}`);
@@ -476,7 +489,7 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
   const section4 = generateSection4(sfData, sfHeaders, client);
 
   // T003: Post-process tertiary goal reason with actual traffic data from section3
-  const tertiaryIdx = section1.rows.findIndex(r => r.goalType === "Tertiary Goal");
+  const tertiaryIdx = section1.rows.findIndex(r => r.goalType === "Secondary Goal/NSM");
   if (tertiaryIdx >= 0 && section3.topTrafficTopics.length > 0) {
     const topTopic = section3.topTrafficTopics[0];
     const topPage = section3.topTrafficPages[0];
@@ -616,7 +629,7 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
     const insights: Array<{ question: string }> = [];
 
     // 1. Primary goal performance question
-    const primaryRow = section1.rows.find(r => r.goalType === "Primary Goal");
+    const primaryRow = section1.rows.find(r => r.goalType === "Primary Goal/MVP NSM");
     const primaryKpi = nsmData?.mvpType ? normalizeKpiLabel(nsmData.mvpType) : "admits";
     const callProvider = detectCallTrackingProvider(client);
     if (primaryRow && primaryRow.goal && primaryRow.goal !== ME) {
@@ -645,7 +658,7 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
     }
 
     // 4. Sessions goal question
-    const tertiaryRow = section1.rows.find(r => r.goalType === "Tertiary Goal");
+    const tertiaryRow = section1.rows.find(r => r.goalType === "Secondary Goal/NSM");
     if (tertiaryRow && nsmData?.sessionsGoal && nsmData.sessionsGoal !== "—") {
       const sessGoal = nsmData.sessionsGoal;
       const sessActual = nsmData.sessionsActual !== "—" ? nsmData.sessionsActual : null;
@@ -962,6 +975,12 @@ function detectCallTrackingProvider(client: Client): string | null {
   return null;
 }
 
+function parseNsmNum(val: any): number | null {
+  if (!val || val === "—" || val === "-") return null;
+  const n = parseInt(String(val).replace(/[^0-9]/g, ""), 10);
+  return isNaN(n) || n === 0 ? null : n;
+}
+
 function computeGoalShiftPct(currentGoal: string, prevGoal: string): string {
   const curr = parseInt(String(currentGoal).replace(/[^0-9]/g, ""), 10);
   const prev = parseInt(String(prevGoal).replace(/[^0-9]/g, ""), 10);
@@ -975,340 +994,221 @@ function buildPrimaryGoalReason(p: {
   primaryKpiLabel: string;
   kpiLower: string;
   nsmMvpGoalNum: number | null;
-  nsmMvpActNum: number | null;
-  nsmData: any;
+  prevMvpGoalNum: number | null;
+  prevMvpActNum: number | null;
   prevNsmData: any;
-  prevQtrAssessment?: string;
-  amThoughts?: string;
-  clientNotes?: string;
-  clientSentiment?: string;
   callTrackingProvider: string | null;
   admitsShift: string;
-  admitsSource: string;
 }): string {
-  const {
-    primaryKpiLabel, kpiLower, nsmMvpGoalNum, nsmMvpActNum, nsmData,
-    prevNsmData, callTrackingProvider, admitsShift, admitsSource,
-  } = p;
+  const { primaryKpiLabel, kpiLower, nsmMvpGoalNum, prevMvpGoalNum, prevMvpActNum, prevNsmData, callTrackingProvider, admitsShift } = p;
+
+  if (prevMvpGoalNum === null && nsmMvpGoalNum === null) {
+    return `No prior-quarter data is available to anchor the projection — the goal represents a planning estimate that should be updated as quarter targets are confirmed in the NSM Tracker.`;
+  }
+
   const parts: string[] = [];
 
-  // ── Sentence 1: Prior quarter actuals (data only) ─────────────────────────
-  const prevMvpGoal = prevNsmData?.mvpGoal !== "—" ? prevNsmData?.mvpGoal : null;
-  const prevMvpAct  = prevNsmData?.mvpActual !== "—" ? prevNsmData?.mvpActual : null;
-  if (prevMvpGoal && prevMvpAct) {
-    const prevPct = prevNsmData?.mvpPercent && prevNsmData.mvpPercent !== "—"
-      ? ` (${prevNsmData.mvpPercent})` : "";
-    parts.push(`Last quarter: ${prevMvpAct}/${prevMvpGoal}${prevPct}.`);
-  } else if (prevMvpGoal) {
-    parts.push(`Last quarter goal: ${prevMvpGoal}.`);
-  }
-
-  // ── Sentence 2: This quarter pacing and what it signals ─────────────────
-  if (nsmMvpGoalNum !== null && nsmMvpActNum !== null) {
-    const pacing = nsmMvpActNum / nsmMvpGoalNum;
-    const pacingPct = Math.round(pacing * 100);
-    const shiftNote = admitsShift !== "—" && admitsShift !== "Par" ? ` (${admitsShift} vs last quarter)` : admitsShift === "Par" ? " (Par vs last quarter)" : "";
-    if (pacing >= 0.9) {
-      parts.push(`Quarter-to-date: ${nsmMvpActNum} of ${fmtNum(nsmMvpGoalNum)} ${kpiLower}${shiftNote} — on-pace at ${pacingPct}%, indicating the prior-quarter goal level remains achievable and the trajectory supports the current target.`);
-    } else if (pacing >= 0.7) {
-      parts.push(`Quarter-to-date: ${nsmMvpActNum} of ${fmtNum(nsmMvpGoalNum)} ${kpiLower}${shiftNote} — tracking at ${pacingPct}% of goal, a shortfall that is more consistent with attribution or conversion-path constraints than a structural collapse in demand.`);
+  if (prevMvpGoalNum !== null && prevMvpActNum !== null) {
+    const attainPct = Math.round((prevMvpActNum / prevMvpGoalNum) * 100);
+    const prevPctLabel = prevNsmData?.mvpPercent && prevNsmData.mvpPercent !== "—"
+      ? prevNsmData.mvpPercent : `${attainPct}%`;
+    if (prevMvpActNum < prevMvpGoalNum) {
+      const shortfall = prevMvpGoalNum - prevMvpActNum;
+      parts.push(`Last quarter goal: ${fmtNum(prevMvpGoalNum)} ${kpiLower}. Last quarter actual: ${fmtNum(prevMvpActNum)} (${prevPctLabel} of goal). Performance fell short of target by ${fmtNum(shortfall)}.`);
+    } else if (prevMvpActNum > prevMvpGoalNum) {
+      const surplus = prevMvpActNum - prevMvpGoalNum;
+      parts.push(`Last quarter goal: ${fmtNum(prevMvpGoalNum)} ${kpiLower}. Last quarter actual: ${fmtNum(prevMvpActNum)} (${prevPctLabel} of goal). Performance exceeded target by ${fmtNum(surplus)}.`);
     } else {
-      parts.push(`Quarter-to-date: ${nsmMvpActNum} of ${fmtNum(nsmMvpGoalNum)} ${kpiLower}${shiftNote} — at ${pacingPct}% of goal, the gap is material enough that holding the prior target unchanged would set unrealistic expectations without meaningful corrective evidence.`);
+      parts.push(`Last quarter goal: ${fmtNum(prevMvpGoalNum)} ${kpiLower}. Last quarter actual: ${fmtNum(prevMvpActNum)} — goal met.`);
     }
+  } else if (prevMvpGoalNum !== null) {
+    parts.push(`Last quarter goal: ${fmtNum(prevMvpGoalNum)} ${kpiLower}. Last quarter actuals are not yet confirmed in the NSM Tracker.`);
   } else if (nsmMvpGoalNum !== null) {
-    parts.push(`Quarter-to-date: zero tracked ${kpiLower} as of the report preparation date. The prior-quarter goal remains the strongest available anchor for the Q2 projection, because zero QTD activity does not yet provide a signal to justify raising or lowering the target.`);
-  } else if (nsmData) {
-    parts.push(`No goal has been entered in the NSM tracker for this period — the projection is directional until a confirmed target is logged.`);
-  } else {
-    parts.push(`No NSM goal or tracking data is available for this period — the projection below is a planning estimate based on prior context.`);
+    parts.push(`No prior-quarter goal is on record for this client. Current-quarter target is ${fmtNum(nsmMvpGoalNum)} ${kpiLower}.`);
+    return parts[0];
   }
 
-  // ── Sentence 3: Shift classification rationale ────────────────────────────
-  const shiftClass =
-    admitsShift === "Par" ? "PAR" :
-    admitsShift.startsWith("+") ? "UP" :
-    admitsShift.startsWith("-") ? "DOWN" : null;
-
-  if (shiftClass === "PAR" && nsmMvpGoalNum !== null && nsmMvpActNum !== null) {
-    const pacing = nsmMvpActNum / nsmMvpGoalNum;
-    const pacingPct = Math.round(pacing * 100);
-    if (pacing >= 0.7) {
-      parts.push(`Goal held at par from prior quarter — pacing at ${pacingPct}% of target is within the range where the prior goal remains the appropriate planning anchor and expansion is not yet warranted.`);
+  if (prevMvpActNum !== null && prevMvpGoalNum !== null && prevMvpActNum < prevMvpGoalNum) {
+    const attainPct = prevMvpActNum / prevMvpGoalNum;
+    if (attainPct < 0.55) {
+      parts.push(`Available evidence suggests a crawl or indexation issue may have limited organic visibility during the prior quarter, suppressing inbound demand before it reached the conversion stage.`);
+    } else if (attainPct < 0.75) {
+      parts.push(`Available evidence suggests a combination of attribution constraints and conversion-path friction held actuals below target — the underlying demand signal was present but not fully captured.`);
     } else {
-      parts.push(`Goal held at par despite softer pacing at ${pacingPct}% — the performance gap appears tied to conversion path and tracking quality rather than a collapse in underlying demand, so the target is maintained while those constraints are addressed.`);
-    }
-  } else if (shiftClass === "UP" && nsmMvpGoalNum !== null && nsmMvpActNum !== null) {
-    const pacing = nsmMvpActNum / nsmMvpGoalNum;
-    if (pacing >= 0.9) {
-      parts.push(`Increase is supported by on-pace trajectory — prior actuals and current pacing both indicate the account can absorb a higher target without overstating realistic expectations.`);
-    } else {
-      parts.push(`Increase reflects directional growth opportunity — pacing will need to improve to validate the higher target, but setting a higher anchor reinforces the strategic intent for the quarter.`);
-    }
-  } else if (shiftClass === "DOWN" && nsmMvpGoalNum !== null && nsmMvpActNum !== null) {
-    const pacing = nsmMvpActNum / nsmMvpGoalNum;
-    const pacingPct = Math.round(pacing * 100);
-    parts.push(`Reduction reflects current pacing at ${pacingPct}% of the prior target — holding the prior goal while tracking this far behind would misrepresent realistic expectations and undermine priority-setting for the quarter.`);
-  }
-
-  return parts.length > 0
-    ? parts.join(" ")
-    : `No prior-quarter data is available to anchor the projection — the goal represents a planning estimate that should be updated as in-quarter tracking data is confirmed.`;
-}
-
-function generateSection1(nsmData: any, ga4Funnel: any, quarter: QuarterInfo, client: Client, callTrackingSources: Array<{ source: string; calls: number }> = [], prevNsmData: any = null, prevQtrAssessment?: string, amThoughts?: string, clientNotes?: string, clientSentiment?: string): Section1Goals {
-  const rows: GoalRow[] = [];
-
-  const callTrackingProvider = detectCallTrackingProvider(client);
-
-  console.log(`[Section1] client=${client.name}`);
-  console.log(`[Section1] callTrackingProvider=${callTrackingProvider ?? "none"}`);
-  console.log(`[Section1] nsmData present=${!!nsmData}, prevNsmData present=${!!prevNsmData}, ga4Funnel present=${!!ga4Funnel}`);
-
-  const primaryKpiLabel = nsmData ? normalizeKpiLabel(nsmData.mvpType) : "Admits";
-  console.log(`[Section1] Primary KPI label from mvpType: "${primaryKpiLabel}" (raw mvpType: "${nsmData?.mvpType ?? "—"}")`);
-
-  let admitsGoalDisplay: string = primaryKpiLabel;
-  let admitsShift = "—";
-  let admitsSource = callTrackingProvider ?? "Source pending confirmation";
-  let admitsReason = callTrackingProvider
-    ? `${primaryKpiLabel} is the strategic primary KPI. ${callTrackingProvider} call data is used as the operational tracking source for admissions-intent activity.`
-    : `${primaryKpiLabel} is the strategic primary KPI. Reporting source is not yet confirmed — this goal will be updated once a tracking source is connected.`;
-
-  let nsmMvpActNum: number | null = null;
-  let nsmMvpGoalNum: number | null = null;
-
-  if (nsmData) {
-    const mvpGoal = nsmData.mvpGoal !== "—" ? nsmData.mvpGoal : null;
-    const mvpActual = nsmData.mvpActual !== "—" ? nsmData.mvpActual : null;
-    if (mvpGoal) {
-      const goalN = parseInt(String(mvpGoal).replace(/[^0-9]/g, ""), 10);
-      if (!isNaN(goalN) && goalN > 0) nsmMvpGoalNum = goalN;
-    }
-    if (mvpActual) {
-      const actN = parseInt(String(mvpActual).replace(/[^0-9]/g, ""), 10);
-      if (!isNaN(actN)) nsmMvpActNum = actN;
+      parts.push(`Available evidence suggests content maturity and internal linking gaps slowed conversion-path performance rather than a collapse in inbound demand.`);
     }
   }
 
   if (nsmMvpGoalNum !== null) {
-    admitsSource = callTrackingProvider ?? "NSM Tracker";
-    const kpiLower = primaryKpiLabel.toLowerCase();
-
-    // Compute goal shift vs previous quarter using actual goal-to-goal comparison
-    if (prevNsmData && prevNsmData.mvpGoal && prevNsmData.mvpGoal !== "—") {
-      admitsShift = computeGoalShiftPct(String(nsmMvpGoalNum), prevNsmData.mvpGoal);
-    }
-
-    if (nsmMvpActNum !== null) {
-      // Both goal and actual available — use pacing-based display
-      const pacing = nsmMvpActNum / nsmMvpGoalNum!;
-      const nextTarget = pacing >= 0.9
-        ? Math.round(nsmMvpGoalNum! * 1.05)
-        : pacing >= 0.7
-          ? nsmMvpGoalNum!
-          : Math.round(nsmMvpGoalNum! * 0.95);
-      admitsGoalDisplay = `${fmtNum(nextTarget)} ${kpiLower}`;
-      if (admitsShift === "—") {
-        admitsShift = pacing >= 0.9 ? "+5%" : pacing >= 0.7 ? "Par" : "-5%";
-      }
-      admitsReason = pacing >= 0.9
-        ? `${primaryKpiLabel} on pace (${nsmMvpActNum}/${nsmMvpGoalNum}). Slight increase is achievable given current trajectory. Calls are tracked via ${callTrackingProvider ?? "call tracking"}.`
-        : pacing >= 0.7
-          ? `${primaryKpiLabel} tracking at ${nsmMvpActNum}/${nsmMvpGoalNum} (${nsmData.mvpPercent !== "—" ? nsmData.mvpPercent : "partial"}). Maintaining goal while improving conversion paths.`
-          : `${primaryKpiLabel} behind pace (${nsmMvpActNum}/${nsmMvpGoalNum}). Modest adjustment reflects realistic expectations while improving admissions path quality.`;
+    const shiftClass = admitsShift === "Par" ? "PAR" : admitsShift.startsWith("+") ? "UP" : "DOWN";
+    const trackNote = callTrackingProvider ? ` tracked via ${callTrackingProvider}` : "";
+    if (shiftClass === "DOWN") {
+      parts.push(`As a result, the current-quarter goal is being reduced to ${fmtNum(nsmMvpGoalNum)} ${kpiLower}${trackNote} while structural and conversion-path improvements are implemented.`);
+    } else if (shiftClass === "UP") {
+      parts.push(`As a result, the current-quarter goal is being raised to ${fmtNum(nsmMvpGoalNum)} ${kpiLower}${trackNote} to reflect improved conditions and continued upward trajectory.`);
     } else {
-      // Only goal available (no QTD actuals yet)
-      admitsGoalDisplay = `${fmtNum(nsmMvpGoalNum!)} ${kpiLower} (Q target)`;
-      if (admitsShift === "—") admitsShift = "Par";
-      admitsReason = `No tracked ${kpiLower} activity has been recorded quarter-to-date. Goal held at par from prior quarter — the prior benchmark is maintained as the planning anchor until in-quarter activity confirms a directional adjustment.`;
+      parts.push(`The current-quarter goal is held at ${fmtNum(nsmMvpGoalNum)} ${kpiLower}${trackNote} — prior-quarter performance anchors the target while improvements take effect.`);
     }
   }
 
-  // Final safety: goalShift must never be "—"
+  return parts.join(" ");
+}
+
+function buildSessionsGoalReason(p: {
+  nsmSessGoalNum: number | null;
+  prevSessGoalNum: number | null;
+  prevSessActNum: number | null;
+  prevNsmData: any;
+  sessShift: string;
+}): string {
+  const { nsmSessGoalNum, prevSessGoalNum, prevSessActNum, prevNsmData, sessShift } = p;
+
+  if (prevSessGoalNum === null && nsmSessGoalNum === null) {
+    return `No prior-quarter sessions data is available to anchor the projection — the goal represents a planning estimate that should be updated as quarter targets are confirmed in the NSM Tracker.`;
+  }
+
+  const parts: string[] = [];
+
+  if (prevSessGoalNum !== null && prevSessActNum !== null) {
+    const attainPct = Math.round((prevSessActNum / prevSessGoalNum) * 100);
+    const prevPctLabel = prevNsmData?.sessionsPercent && prevNsmData.sessionsPercent !== "—"
+      ? prevNsmData.sessionsPercent : `${attainPct}%`;
+    if (prevSessActNum < prevSessGoalNum) {
+      const shortfall = prevSessGoalNum - prevSessActNum;
+      parts.push(`Last quarter goal: ${fmtNum(prevSessGoalNum)} organic sessions. Last quarter actual: ${fmtNum(prevSessActNum)} (${prevPctLabel} of goal). Performance fell short of target by ${fmtNum(shortfall)} sessions.`);
+    } else if (prevSessActNum > prevSessGoalNum) {
+      const surplus = prevSessActNum - prevSessGoalNum;
+      parts.push(`Last quarter goal: ${fmtNum(prevSessGoalNum)} organic sessions. Last quarter actual: ${fmtNum(prevSessActNum)} (${prevPctLabel} of goal). Performance exceeded target by ${fmtNum(surplus)} sessions.`);
+    } else {
+      parts.push(`Last quarter goal: ${fmtNum(prevSessGoalNum)} organic sessions. Last quarter actual: ${fmtNum(prevSessActNum)} — goal met.`);
+    }
+  } else if (prevSessGoalNum !== null) {
+    parts.push(`Last quarter goal: ${fmtNum(prevSessGoalNum)} organic sessions. Last quarter actuals are not yet confirmed in the NSM Tracker.`);
+  } else if (nsmSessGoalNum !== null) {
+    parts.push(`No prior-quarter sessions goal is on record for this client. Current-quarter target is ${fmtNum(nsmSessGoalNum)} organic sessions.`);
+    return parts[0];
+  }
+
+  if (prevSessActNum !== null && prevSessGoalNum !== null && prevSessActNum < prevSessGoalNum) {
+    const attainPct = prevSessActNum / prevSessGoalNum;
+    if (attainPct < 0.55) {
+      parts.push(`Available evidence suggests a crawl or indexation issue significantly suppressed indexed page count during the prior quarter, directly limiting organic session volume.`);
+    } else if (attainPct < 0.75) {
+      parts.push(`Available evidence suggests a mix of crawl constraints and content maturity gaps held organic sessions below target — pages are indexed but not yet ranking with enough visibility to drive their full traffic potential.`);
+    } else {
+      parts.push(`Available evidence suggests the shortfall is tied to content and internal linking gaps rather than a structural crawl problem — the organic foundation is in place but not yet fully converting search visibility into session volume.`);
+    }
+  }
+
+  if (nsmSessGoalNum !== null) {
+    const shiftClass = sessShift === "Par" ? "PAR" : sessShift.startsWith("+") ? "UP" : "DOWN";
+    if (shiftClass === "DOWN") {
+      parts.push(`As a result, the current-quarter sessions goal is being reduced to ${fmtNum(nsmSessGoalNum)} while crawl quality and content depth improvements are prioritized.`);
+    } else if (shiftClass === "UP") {
+      parts.push(`As a result, the current-quarter sessions goal is being raised to ${fmtNum(nsmSessGoalNum)} to reflect organic growth momentum.`);
+    } else {
+      parts.push(`The current-quarter sessions goal is held at ${fmtNum(nsmSessGoalNum)} — prior-quarter performance anchors the target while content and technical improvements take effect.`);
+    }
+  }
+
+  return parts.join(" ");
+}
+
+function generateSection1(nsmData: any, _ga4Funnel: any, _quarter: QuarterInfo, client: Client, _callTrackingSources: Array<{ source: string; calls: number }> = [], prevNsmData: any = null, _prevQtrAssessment?: string, _amThoughts?: string, _clientNotes?: string, _clientSentiment?: string): Section1Goals {
+  const rows: GoalRow[] = [];
+  const callTrackingProvider = detectCallTrackingProvider(client);
+
+  console.log(`[Section1] client=${client.name}`);
+  console.log(`[Section1] callTrackingProvider=${callTrackingProvider ?? "none"}`);
+  console.log(`[Section1] nsmData present=${!!nsmData}, prevNsmData present=${!!prevNsmData}`);
+
+  const primaryKpiLabel = nsmData ? normalizeKpiLabel(nsmData.mvpType) : "Admits";
+  const kpiLower = primaryKpiLabel.toLowerCase();
+  console.log(`[Section1] Primary KPI label: "${primaryKpiLabel}" (raw mvpType: "${nsmData?.mvpType ?? "—"}")`);
+
+  // ── Parse current and previous quarter NSM values ──────────────────────────
+  const nsmMvpGoalNum   = parseNsmNum(nsmData?.mvpGoal);
+  const prevMvpGoalNum  = parseNsmNum(prevNsmData?.mvpGoal);
+  const prevMvpActNum   = parseNsmNum(prevNsmData?.mvpActual);
+  const nsmSessGoalNum  = parseNsmNum(nsmData?.sessionsGoal);
+  const prevSessGoalNum = parseNsmNum(prevNsmData?.sessionsGoal);
+  const prevSessActNum  = parseNsmNum(prevNsmData?.sessionsActual);
+
+  console.log(`[Section1] Row1 MVP: currGoal=${nsmMvpGoalNum}, prevGoal=${prevMvpGoalNum}, prevAct=${prevMvpActNum}`);
+  console.log(`[Section1] Row2 Sessions: currGoal=${nsmSessGoalNum}, prevGoal=${prevSessGoalNum}, prevAct=${prevSessActNum}`);
+
+  // ── Row 1: Primary Goal / MVP NSM ──────────────────────────────────────────
+  const admitsSource = callTrackingProvider ?? "NSM Tracker";
+
+  let admitsGoalDisplay: string;
+  if (nsmMvpGoalNum !== null) {
+    admitsGoalDisplay = `${fmtNum(nsmMvpGoalNum)} ${kpiLower}`;
+  } else if (nsmData?.mvpGoal && nsmData.mvpGoal !== "—") {
+    admitsGoalDisplay = `${nsmData.mvpGoal} ${kpiLower}`;
+  } else {
+    admitsGoalDisplay = `${kpiLower} (goal pending)`;
+  }
+
+  let admitsShift: string;
+  if (nsmMvpGoalNum !== null && prevMvpGoalNum !== null) {
+    admitsShift = computeGoalShiftPct(String(nsmMvpGoalNum), String(prevMvpGoalNum));
+  } else {
+    admitsShift = "Par";
+  }
   if (admitsShift === "—") admitsShift = "Par";
 
-  console.log(`[Section1] Primary Goal=${primaryKpiLabel}, goal=${admitsGoalDisplay}, source=${admitsSource}, shift=${admitsShift}`);
-
-  // Build full comparative reason using NSM data, prevNsmData, AM inputs, and tracking source
-  const primaryReason = buildPrimaryGoalReason({
+  const admitsReason = buildPrimaryGoalReason({
     primaryKpiLabel,
-    kpiLower: primaryKpiLabel.toLowerCase(),
+    kpiLower,
     nsmMvpGoalNum,
-    nsmMvpActNum,
-    nsmData,
+    prevMvpGoalNum,
+    prevMvpActNum,
     prevNsmData,
-    prevQtrAssessment,
-    amThoughts,
-    clientNotes,
-    clientSentiment,
     callTrackingProvider,
     admitsShift,
-    admitsSource,
   });
+
+  console.log(`[Section1] Row1: goal=${admitsGoalDisplay}, source=${admitsSource}, shift=${admitsShift}`);
 
   rows.push({
     goalType: "Primary Goal/MVP NSM",
     goal: admitsGoalDisplay,
     measurementSource: admitsSource,
     goalShift: admitsShift,
-    reason: primaryReason,
+    reason: admitsReason,
   });
 
-  // ── Secondary Goal: Calls ──────────────────────────────────────────────
-  const callsSource = callTrackingProvider ?? ME;
-  let callsGoal: string = ME;
-  let callsShift = "—";
-  let callsHasPriorBenchmark = false;
-  let callsBenchmarkSource = "none";
-  let callsReason = callTrackingProvider
-    ? `${ME}: No tracked call volume recorded yet this quarter.`
-    : `${ME}: Call tracking provider not configured`;
-  let includeCallsRow = false;
-
-  if (callTrackingSources.length > 0) {
-    const totalCalls = callTrackingSources.reduce((s, r) => s + r.calls, 0);
-    callsGoal = `${fmtNum(totalCalls)} tracked calls (QTD)`;
-
-    // P1a: explicit callsGoal field in NSM tracker
-    const prevCallsGoalRaw = (prevNsmData as any)?.callsGoal ?? null;
-    if (prevCallsGoalRaw && prevCallsGoalRaw !== "—") {
-      callsShift = computeGoalShiftPct(String(totalCalls), String(prevCallsGoalRaw));
-      callsHasPriorBenchmark = true;
-      callsBenchmarkSource = `NSM callsGoal (prev=${prevCallsGoalRaw})`;
-    }
-
-    // P1b: when MVP type is calls-based, prior MVP goal is a valid prior-quarter calls benchmark
-    if (callsShift === "—") {
-      const mvpIsCalls = /call/i.test(nsmData?.mvpType ?? "");
-      const prevMvpGoalRaw = prevNsmData?.mvpGoal ?? null;
-      if (mvpIsCalls && prevMvpGoalRaw && prevMvpGoalRaw !== "—") {
-        callsShift = computeGoalShiftPct(String(totalCalls), String(prevMvpGoalRaw));
-        callsHasPriorBenchmark = true;
-        callsBenchmarkSource = `NSM mvpGoal (prev=${prevMvpGoalRaw}, mvpType="${nsmData?.mvpType}")`;
-      }
-    }
-
-    // P2: primary KPI pacing proxy — directional only, not a direct call-to-call comparison
-    if (callsShift === "—" && nsmMvpGoalNum !== null && nsmMvpActNum !== null) {
-      const pacing = nsmMvpActNum / nsmMvpGoalNum;
-      callsShift = pacing >= 0.9 ? "+5%" : pacing >= 0.7 ? "Par" : "-5%";
-      callsBenchmarkSource = `pacing proxy (mvpAct=${nsmMvpActNum}, mvpGoal=${nsmMvpGoalNum})`;
-    }
-
-    // If no valid prior-quarter basis exists: suppress the Calls row entirely
-    // Do not render a "vs Last Quarter" shift that has no last-quarter comparison basis
-    if (callsShift === "—") {
-      callsBenchmarkSource = "none — row suppressed";
-      console.log(`[Section1] Secondary Goal=Calls SUPPRESSED: no valid prior-quarter calls benchmark. prevCallsGoalRaw=${prevCallsGoalRaw}, mvpType="${nsmData?.mvpType}", prevMvpGoal=${prevNsmData?.mvpGoal ?? "null"}, nsmMvpActNum=${nsmMvpActNum}`);
-    } else {
-      includeCallsRow = true;
-      const sortedSources = [...callTrackingSources].sort((a, b) => b.calls - a.calls);
-      const topCallSource = sortedSources.length > 0 ? sortedSources[0] : null;
-      const topSourceNote = topCallSource ? `, with volume led by ${topCallSource.source} (${fmtNum(topCallSource.calls)} calls)` : "";
-
-      if (callsHasPriorBenchmark) {
-        const prevBenchNum = parseInt(String(callsBenchmarkSource.match(/prev=(\d+)/)?.[1] ?? "0"), 10);
-        const benchLabel = prevBenchNum > 0 ? ` against a prior-quarter benchmark of ${fmtNum(prevBenchNum)}` : "";
-        if (callsShift.startsWith("+")) {
-          callsReason = `Quarter-to-date: ${fmtNum(totalCalls)} inbound calls recorded${benchLabel}${topSourceNote}. The source mix supports a modest upward adjustment to the Q2 call target because call demand is currently pacing above the prior benchmark.`;
-        } else if (callsShift === "Par") {
-          callsReason = `Quarter-to-date: ${fmtNum(totalCalls)} inbound calls recorded${benchLabel}${topSourceNote}. Call volume is flat against the prior benchmark — Q2 is held at par while conversion-path improvements are evaluated.`;
-        } else {
-          callsReason = `Quarter-to-date: ${fmtNum(totalCalls)} inbound calls recorded${benchLabel}${topSourceNote}. The shortfall is more consistent with attribution or conversion-path friction than a structural drop in inbound demand, so Q2 is adjusted modestly rather than held flat at an unreachable prior target.`;
-        }
-      } else {
-        // P2 pacing proxy — label it as directional
-        const directionWord = callsShift.startsWith("+") ? "ahead of" : callsShift === "Par" ? "in line with" : "below";
-        callsReason = `Quarter-to-date: ${fmtNum(totalCalls)} inbound calls recorded${topSourceNote}. No direct prior-quarter calls benchmark is available — Q2 call direction is inferred from primary KPI pacing, which suggests performance is ${directionWord} the current target. Confirm prior-quarter call data to replace this directional estimate with a direct comparison.`;
-      }
-    }
-  }
-
-  console.log(`[Section1] Secondary Goal=Calls: shift=${callsShift}, includeRow=${includeCallsRow}, benchmarkSource=${callsBenchmarkSource}, totalCalls=${callsGoal}`);
-
-  if (includeCallsRow) {
-    rows.push({
-      goalType: "Secondary Goal",
-      goal: callsGoal,
-      measurementSource: callsSource,
-      goalShift: callsShift,
-      reason: callsReason,
-    });
-  }
-
-  // ── Tertiary Goal: Organic Sessions ────────────────────────────────────
-  let sessRecommended: string = ME;
-  let sessShift = "—";
-  let sessReason = ME;
-
-  if (nsmData) {
-    const sessGoal = nsmData.sessionsGoal !== "—" ? nsmData.sessionsGoal : null;
-    const sessActual = nsmData.sessionsActual !== "—" ? nsmData.sessionsActual : null;
-    const sessPct = nsmData.sessionsPercent !== "—" ? nsmData.sessionsPercent : null;
-
-    sessRecommended = sessGoal ?? ME;
-
-    // Compute actual goal shift vs previous quarter
-    if (prevNsmData && prevNsmData.sessionsGoal && prevNsmData.sessionsGoal !== "—" && sessGoal) {
-      sessShift = computeGoalShiftPct(sessGoal, prevNsmData.sessionsGoal);
-    }
-
-    if (sessGoal && sessActual && sessPct) {
-      const actualNum = parseInt(String(sessActual).replace(/[^0-9]/g, ""), 10);
-      const goalNum = parseInt(String(sessGoal).replace(/[^0-9]/g, ""), 10);
-      if (!isNaN(actualNum) && !isNaN(goalNum) && goalNum > 0) {
-        const pacing = actualNum / goalNum;
-        if (pacing >= 0.9) {
-          sessRecommended = fmtNum(Math.round(goalNum * 1.05));
-          if (sessShift === "—") sessShift = "+5%";
-          sessReason = `On pace at ${sessPct} through current quarter. Modest increase is realistic given current trajectory.`;
-        } else if (pacing >= 0.7) {
-          sessRecommended = fmtNum(goalNum);
-          if (sessShift === "—") sessShift = "Par";
-          sessReason = `Tracking at ${sessPct} through current quarter. Goal held at par — pacing is within acceptable range of the prior-quarter target, and the performance gap is more likely attributable to content and technical factors being addressed in priorities than to a structural collapse in organic opportunity.`;
-        } else {
-          sessRecommended = fmtNum(Math.round(goalNum * 0.95));
-          if (sessShift === "—") sessShift = "-5%";
-          sessReason = `Behind pace at ${sessPct}. Slight reduction reflects realistic expectations while focusing on site fundamentals.`;
-        }
-      }
-    } else if (sessGoal) {
-      sessRecommended = fmtNum(parseInt(String(sessGoal).replace(/[^0-9]/g, ""), 10));
-      const sessShiftWasComputed = sessShift !== "—";
-      if (sessShift === "—") sessShift = "Par"; // planning default when no prior benchmark
-      if (sessShiftWasComputed) {
-        if (sessShift === "Par") {
-          sessReason = `Quarter-to-date: zero organic sessions recorded as of the report preparation date. The Q2 sessions goal remains aligned with the prior-quarter target, because zero QTD volume does not yet provide an in-quarter signal strong enough to justify a directional adjustment.`;
-        } else {
-          const sessShiftDesc = sessShift.startsWith("+") ? `raised ${sessShift} from the prior-quarter target` : `reduced ${sessShift} from the prior-quarter target`;
-          sessReason = `Quarter-to-date: zero organic sessions recorded as of the report preparation date. The Q2 sessions goal is ${sessShiftDesc} — the prior-quarter goal-to-goal comparison supports this directional change, and zero QTD volume does not yet provide evidence to override it.`;
-        }
-      } else {
-        sessReason = `Quarter-to-date: zero organic sessions recorded as of the report preparation date. No prior-quarter sessions benchmark is available for comparison — Q2 sessions goal is held at par as a planning default. Update once the prior-quarter NSM sessions entry is confirmed.`;
-      }
-    }
-  } else if (ga4Funnel) {
-    sessRecommended = `${fmtNum(ga4Funnel.sessions)} organic sessions (QTD baseline)`;
-    if (sessShift === "—") sessShift = "Par";
-    sessReason = `Quarter-to-date: ${fmtNum(ga4Funnel.sessions)} organic sessions recorded. No prior-quarter NSM goal is available to compute a shift, so Q2 is held at par as a planning default — the current run rate is the starting anchor for target-setting until a prior benchmark is confirmed.`;
+  // ── Row 2: Secondary Goal / NSM (Organic Sessions) ────────────────────────
+  let sessGoalDisplay: string;
+  if (nsmSessGoalNum !== null) {
+    sessGoalDisplay = `${fmtNum(nsmSessGoalNum)} organic sessions`;
+  } else if (nsmData?.sessionsGoal && nsmData.sessionsGoal !== "—") {
+    sessGoalDisplay = `${nsmData.sessionsGoal} organic sessions`;
   } else {
-    if (sessShift === "—") sessShift = "Par";
-    sessReason = `Zero session actuals and no prior-quarter NSM goal are available for this period. Q2 session goal is held at par as a planning default — update once current-quarter GA4 data and the prior-quarter NSM entry are confirmed.`;
+    sessGoalDisplay = "organic sessions (goal pending)";
   }
 
-  // Fallback reason when NSM data exists but session sub-fields are incomplete
-  if (sessReason === ME) {
-    if (sessShift === "—") sessShift = "Par";
-    sessReason = ga4Funnel
-      ? `Quarter-to-date: ${fmtNum(ga4Funnel.sessions)} organic sessions recorded. The available data does not yet provide a directional signal for adjusting the session target, so Q2 is held at par as a planning default.`
-      : `Zero session actuals and no prior-quarter goal are available. Q2 is held at par as a planning default — revise once current-quarter GSC and GA4 data and the prior-quarter NSM entry are confirmed.`;
+  let sessShift: string;
+  if (nsmSessGoalNum !== null && prevSessGoalNum !== null) {
+    sessShift = computeGoalShiftPct(String(nsmSessGoalNum), String(prevSessGoalNum));
+  } else {
+    sessShift = "Par";
   }
+  if (sessShift === "—") sessShift = "Par";
 
-  console.log(`[Section1] Tertiary Goal=Organic Sessions, target=${sessRecommended}, source=GA4 / GSC, shift=${sessShift}`);
+  const sessReason = buildSessionsGoalReason({
+    nsmSessGoalNum,
+    prevSessGoalNum,
+    prevSessActNum,
+    prevNsmData,
+    sessShift,
+  });
+
+  console.log(`[Section1] Row2 Sessions: goal=${sessGoalDisplay}, source=GA4, shift=${sessShift}`);
 
   rows.push({
-    goalType: "Tertiary Goal/Secondary NSM",
-    goal: sessRecommended !== ME ? `${sessRecommended} organic sessions` : ME,
+    goalType: "Secondary Goal/NSM",
+    goal: sessGoalDisplay,
     measurementSource: "GA4",
     goalShift: sessShift,
     reason: sessReason,

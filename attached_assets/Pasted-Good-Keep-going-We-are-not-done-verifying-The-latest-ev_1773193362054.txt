@@ -1,0 +1,167 @@
+Good. Keep going. We are not done verifying.
+
+The latest evidence proves:
+- generation can succeed
+- PPTX can be emitted
+- PDF can be emitted
+- minimal-input generation does not crash
+- one e2e browser path passes
+
+It does NOT yet prove:
+- stale-data protection
+- per-slide-type parity
+- native Google Slides support vs simple Drive upload
+- rendered missing-data honesty
+- section-by-section narrative fidelity
+- preview/PDF/PPTX content parity
+
+You are now doing the final truth pass for Mid-Strategy.
+
+RULES
+- No summary language.
+- No “all good.”
+- No “working cleanly.”
+- No “should.”
+- Every claim must tie to a direct test result.
+- If not tested, mark NOT TESTED.
+- If partially tested, mark PARTIAL.
+- If unsupported, mark FAIL or NOT IMPLEMENTED.
+
+PHASE 1 — STALE-DATA / CACHE INTEGRITY TEST
+
+Run a controlled two-pass export test.
+
+Test procedure:
+1. Generate Mid-Strategy with a distinctive manual text marker in a user-editable/narrative field.
+   Example marker A: MIDSTRAT_CACHE_TEST_ALPHA_731
+2. Export PDF and PPTX.
+3. Regenerate or update the same report with the field changed to:
+   MIDSTRAT_CACHE_TEST_BRAVO_924
+4. Export PDF and PPTX again.
+5. Prove the second preview and both second exports contain BRAVO and do not contain ALPHA.
+
+Return:
+- exact field used
+- where that field appears in preview
+- whether preview updated
+- whether PDF updated
+- whether PPTX updated
+- whether old cached content persisted anywhere
+- PASS / FAIL
+
+PHASE 2 — FULL SLIDE-TYPE COVERAGE MATRIX
+
+Validate every Mid-Strategy slide type against:
+- preview
+- PDF
+- PPTX
+- Drive/Slides pathway
+
+Required slide types:
+- title
+- divider
+- metrics
+- table
+- chart-bar
+- chart-line
+- bullets
+- two-col
+- scorecard
+- decision-card
+- ia-comparison
+- cluster-map
+
+Return a matrix with:
+- slide type
+- preview result
+- PDF result
+- PPTX result
+- Drive/Slides result
+- exact renderer/export mapping
+- PASS / PARTIAL / FAIL / NOT TESTED
+- notes
+
+Do not skip any type.
+
+PHASE 3 — DRIVE / GOOGLE SLIDES TRUTH TEST
+
+State exactly what is implemented.
+
+Test and report:
+- Does the route upload a PPTX file to Google Drive? YES/NO
+- Does the system create a native Google Slides deck? YES/NO
+- If native Slides is NO, say “Native Google Slides export is not implemented.”
+- If only Drive upload exists, say “Drive upload is not the same as Google Slides export.”
+- Report any formatting implications.
+
+No euphemisms.
+
+PHASE 4 — PREVIEW / PDF / PPTX PARITY CHECK BY SECTION
+
+Using one real generated Mid-Strategy report, validate whether each narrative block appears in:
+- preview
+- PDF
+- PPTX
+
+Sections to check:
+- cover
+- agenda
+- next checkpoint
+- domain strategy recommendation
+- redirect/migration logic
+- competitive baseline
+- AI visibility baseline
+- competitive summary
+- first focus
+- current vs future IA
+- scalable blueprint / cluster map
+- credibility layer
+- what’s next
+- next steps / ownership
+
+For each:
+- preview: PASS / FAIL / PARTIAL
+- PDF: PASS / FAIL / PARTIAL
+- PPTX: PASS / FAIL / PARTIAL
+- notes on omissions, clipping, or formatting degradation
+
+PHASE 5 — MISSING-DATA HONESTY TEST
+
+Directly test these missing-data cases and report what the user actually sees in preview/export:
+
+1. missing benchmark dataset
+2. missing Asana connection
+3. missing call-tracking source
+4. missing Screaming Frog
+5. missing logo / brand asset
+6. missing website scan details
+7. missing IA data
+
+For each case:
+- preview message shown
+- PDF/export message shown
+- does the system fabricate a chart/table/recommendation anyway? YES/NO
+- PASS / FAIL
+
+PHASE 6 — FINAL BLOCKER ASSESSMENT
+
+Return only these categories at the end:
+
+BLOCKING
+- anything that would make tomorrow’s Olivia review risky or misleading
+
+NON-BLOCKING
+- imperfections that do not threaten credibility
+
+FINAL VERDICT
+Choose exactly one:
+- READY FOR OLIVIA REVIEW
+- READY WITH CAVEATS
+- NOT READY
+
+You are not allowed to choose READY FOR OLIVIA REVIEW unless:
+- stale-data test passes
+- slide-type matrix is complete
+- Drive/Slides truth is explicit
+- section parity is checked
+- missing-data honesty is checked

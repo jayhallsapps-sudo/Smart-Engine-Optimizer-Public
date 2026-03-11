@@ -65,7 +65,7 @@ export async function screenshotHtml(html: string): Promise<ScreenshotResult> {
   const browser = await getBrowser();
   const page = await browser.newPage();
   try {
-    await page.setViewport({ width: VIEWPORT_WIDTH, height: 900, deviceScaleFactor: 1.5 });
+    await page.setViewport({ width: VIEWPORT_WIDTH, height: 900, deviceScaleFactor: 2 });
     await page.setContent(html, { waitUntil: "networkidle0" });
 
     const body = await page.$("div.page");

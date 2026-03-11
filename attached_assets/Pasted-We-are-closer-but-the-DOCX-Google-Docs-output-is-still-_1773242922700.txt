@@ -1,0 +1,247 @@
+We are closer, but the DOCX/Google Docs output is still not acceptable. Treat this as a design-parity correction pass against the reference PDF. Do not interpret loosely. Match the PDF layout and behavior as closely as possible within DOCX/Google Docs constraints.
+
+Core instruction:
+The goal is not “good enough in Word.” The goal is a DOCX that, when opened in Google Docs, visually tracks as closely as possible to the PDF design. Fix layout behavior first, then styling parity, then spacing efficiency. Do not make assumptions about what “looks fine.” Audit every page against the PDF and correct the structure accordingly.
+
+High-priority problems to fix
+
+Header/top swoosh behavior is wrong
+
+The top red swoosh/header treatment is supposed to appear on every page.
+
+It currently does not appear consistently.
+
+It must be flush to the page edges: no gap at the top, no gap on the left, no gap on the right.
+
+It must not float lower on the page.
+
+It currently feels low-res or soft; improve rendering quality so it looks crisp, not degraded.
+
+It should behave like a locked page header element, not like a loose decorative shape drifting in document space.
+
+Footer behavior is wrong
+
+The footer is supposed to appear on every page, not just the last page.
+
+It must be locked to the bottom of every page.
+
+It must visually resemble the footer in the PDF.
+
+It must not float upward, disappear on some pages, or behave like a body object.
+
+Audit section breaks, footer linkage, and anchoring. The footer should persist consistently across the full document unless the PDF explicitly changes it on a specific page.
+
+Page-width usage is too narrow
+
+The content is using too little of the available page width.
+
+Left and right margins are too large, causing unnecessary compression.
+
+Tables are more compact than they need to be because the usable content width is too narrow.
+
+Rework page margins, table widths, inner cell padding, and section content widths so the report uses the page more efficiently while still respecting print-safe boundaries.
+
+Bottom margin / page break handling is broken
+
+Content is getting cut off near the bottom of pages.
+
+Example: Top Traffic Pages is cut off and should not be.
+
+Respect the bottom margin and page boundary on all sections.
+
+Do not allow tables/cards/section blocks to overflow past printable space.
+
+Use proper page-break rules, keep-with-next rules, row breaking rules, and section spacing so content lands cleanly.
+
+Remaining rendering artifact issues
+
+Previous pass still showed serious page rendering problems, including black footer/background-like artifacts on early pages.
+
+Eliminate any floating or anchored objects causing black blocks, clipped shapes, or corrupted page elements.
+
+If a decorative element is unstable in Google Docs, replace the implementation with a more robust method that preserves appearance.
+
+Design parity issues by section
+
+SEO Tier Diagnosis design is wrong
+
+The section does not visually match the PDF.
+
+Rebuild it to mirror the PDF’s design treatment more closely.
+
+Pay attention to color, box treatment, spacing, hierarchy, padding, and visual weight.
+
+Do not settle for approximate styling.
+
+What We Need to Do Next design is wrong
+
+The structure may be partly usable, but the styling/color treatment does not match the PDF.
+
+Rework the visual design to better match the PDF.
+
+Focus on fills, border treatments, spacing rhythm, heading treatment, and card/container styling.
+
+What We Track is comparatively good
+
+Do not unnecessarily redesign this section.
+
+Use it as a reference for the level of fidelity we want elsewhere.
+
+Additional Opportunities is close, but not done
+
+It is almost there, but still needs refinement.
+
+Tighten spacing and visual parity.
+
+Reduce unnecessary empty space on the page.
+
+Ensure footer placement does not distort the page composition.
+
+Tables are inconsistent
+
+Some tables look good; some do not.
+
+Normalize the table system across the document:
+
+consistent usable width
+
+consistent padding
+
+consistent row heights where appropriate
+
+consistent border weight and color treatment
+
+no overflow/cutoff
+
+no awkward compression from oversized margins
+
+Spacing and layout expectations
+
+Large empty gaps are still a problem
+
+Several pages are leaving huge vertical gaps for no good reason.
+
+Reduce wasted space while preserving readability.
+
+Rebalance spacing above/below sections, inside tables, and between blocks.
+
+The PDF should be the model for density and page composition.
+
+Text sizing is acceptable
+
+Keep text roughly at the current size.
+
+Do not shrink the type to solve layout problems.
+
+Solve layout with structure, margins, spacing, and width usage instead.
+
+Implementation expectations
+
+Use robust DOCX structures, not fragile floating artwork
+
+Prefer header/footer-native implementations, fixed-width tables, and page-safe structures over floating shapes where possible.
+
+Anything that is supposed to repeat on every page should be implemented as a true repeating header/footer element or an equally stable DOCX mechanism.
+
+Avoid solutions that look correct in Word but break in Google Docs.
+
+Audit section and page setup globally
+Check all of the following:
+
+page margins
+
+header distance
+
+footer distance
+
+section break behavior
+
+different first page settings
+
+link-to-previous settings
+
+anchored vs inline objects
+
+table preferred widths
+
+fixed layout tables
+
+cell margins
+
+paragraph spacing before/after
+
+page break before / keep together / keep with next
+
+row split across pages
+
+image resolution and scaling
+
+any object wrapping settings that could cause drift in Google Docs
+
+Google Docs compatibility is mandatory
+
+Do not optimize only for Microsoft Word desktop rendering.
+
+Validate behavior specifically for Google Docs import/opening.
+
+If a visual technique is fragile in Google Docs, replace it with a more stable implementation.
+
+Deliverables required in your response
+
+Exact files changed
+List every file touched.
+
+Root cause analysis
+Explain exactly why:
+
+the header was not flush or not repeating
+
+the footer only appeared on the last page or floated incorrectly
+
+content was cut off at the bottom
+
+margins were wasting usable width
+
+specific sections drifted from PDF styling
+
+What was changed
+Be explicit about structural changes, not vague summaries.
+
+Verification by page/section
+For each relevant page/section, confirm:
+
+header present and flush
+
+footer present and bottom-locked
+
+no bottom cutoff
+
+width improved
+
+styling aligned closer to PDF
+
+Non-negotiable QA proof
+Test and confirm:
+
+footer appears on every page
+
+top swoosh/header appears on every page
+
+no left/right/top gap on header
+
+no page-bottom clipping
+
+Top Traffic Pages no longer cuts off
+
+SEO Tier Diagnosis visually revised
+
+What We Need to Do Next visually revised
+
+Additional Opportunities spacing improved
+
+no black artifact blocks
+
+no regression in sections that already looked good
+
+Important constraint
+Do not give me a “should now be fixed” answer. Give me a verified answer based on actual output review. If something still cannot match the PDF exactly because of Google Docs limitations, identify the exact limitation and the exact compromise made

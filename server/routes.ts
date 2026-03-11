@@ -139,6 +139,30 @@ function validateExportPayload(
   return null;
 }
 
+// Patterns that indicate internal prompt/implementation text was accidentally submitted as AM input.
+// These are phrases that would only appear in developer instructions, not in genuine AM field notes.
+const PROMPT_ARTIFACT_PATTERNS = [
+  /PRIMARY PRODUCT GOAL/i,
+  /CURRENT PROBLEMS THAT MUST BE FIXED/i,
+  /NON-NEGOTIABLE PRODUCT RULES/i,
+  /WHAT MID-STRATEGY SHOULD ACTUALLY ANALYZE/i,
+  /REQUIRED OUTPUT/i,
+  /FINAL WARNING/i,
+  /SLIDE GENERATION PHILOSOPHY/i,
+  /DESIGN REQUIREMENT.*MUST MATCH/i,
+  /COLOUR \+ LAYOUT RULES/i,
+  /CRITICAL WORDING RULE/i,
+  /AGENDA RULE/i,
+  /NON-NEGOTIABLE FIX REQUIREMENTS/i,
+  /IMPLEMENTATION REQUIREMENTS/i,
+  /STRICT QA ACCEPTANCE CRITERIA/i,
+];
+
+function containsPromptArtifact(text: string): boolean {
+  if (!text) return false;
+  return PROMPT_ARTIFACT_PATTERNS.some(p => p.test(text));
+}
+
 function validateAmInputs(body: any): { error: string } | { amInputs: { clientSentiment: string; amThoughts: string; priorityChecks: string; clientNotes: string } } {
   const raw = body.amInputs ?? body;
   const migrated = migrateLegacyAmInputs({
@@ -151,6 +175,14 @@ function validateAmInputs(body: any): { error: string } | { amInputs: { clientSe
   if (!result.success) {
     const messages = result.error.issues.map(i => i.message).join("; ");
     return { error: `AM Inputs validation failed: ${messages}` };
+  }
+  // Reject submissions where AM input fields contain internal prompt/implementation artifacts.
+  // This prevents developer/implementation text from being saved into generated report JSON.
+  if (containsPromptArtifact(migrated.amThoughts ?? "")) {
+    return { error: "AM Inputs validation failed: AM's Hypothesis contains internal system text and cannot be submitted. Please enter actual account notes." };
+  }
+  if (containsPromptArtifact(migrated.priorityChecks ?? "")) {
+    return { error: "AM Inputs validation failed: Priority Checks contains internal system text and cannot be submitted. Please enter actual priority notes." };
   }
   return { amInputs: result.data };
 }

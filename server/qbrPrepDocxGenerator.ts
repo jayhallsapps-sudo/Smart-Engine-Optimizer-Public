@@ -34,6 +34,19 @@ const BORDER_COLOR = "E5E7EB";
 const HDR_MARGIN  = { top: 80, bottom: 80, left: 120, right: 120 };
 const CELL_MARGIN = { top: 80, bottom: 80, left: 120, right: 120 };
 
+// ── Prompt artifact safety guard ──────────────────────────────────────────────
+// Blocks internal developer/implementation text from being exported to DOCX.
+const DOCX_PROMPT_ARTIFACT_SIGNALS = [
+  "PRIMARY PRODUCT GOAL", "CURRENT PROBLEMS THAT MUST BE FIXED", "NON-NEGOTIABLE PRODUCT RULES",
+  "WHAT MID-STRATEGY SHOULD ACTUALLY ANALYZE", "REQUIRED OUTPUT", "FINAL WARNING",
+  "SLIDE GENERATION PHILOSOPHY", "NON-NEGOTIABLE FIX REQUIREMENTS", "STRICT QA ACCEPTANCE CRITERIA",
+];
+function docxContainsPromptArtifact(text: string | undefined): boolean {
+  if (!text) return false;
+  const upper = text.toUpperCase();
+  return DOCX_PROMPT_ARTIFACT_SIGNALS.some(s => upper.includes(s));
+}
+
 // ── Primitive helpers ─────────────────────────────────────────────────────────
 
 function cellBorder() {
@@ -167,6 +180,16 @@ function amContextBlock(manualInputs: any): Table | null {
 
   for (const [label, value] of fieldDefs) {
     if (!value?.trim()) continue;
+    if (docxContainsPromptArtifact(value)) {
+      cellChildren.push(new Paragraph({
+        spacing: { before: 40, after: 40 },
+        children: [
+          new TextRun({ text: `${label}: `, bold: true, size: 18, color: "374151", font: "Calibri" }),
+          new TextRun({ text: "[AM input contains invalid system text — regenerate with correct account notes]", size: 18, color: "B91C1C", italics: true, font: "Calibri" }),
+        ],
+      }));
+      continue;
+    }
     const lines = value.trim().split(/\n/);
     const runs: TextRun[] = [
       new TextRun({ text: `${label}: `, bold: true, size: 18, color: "374151", font: "Calibri" }),

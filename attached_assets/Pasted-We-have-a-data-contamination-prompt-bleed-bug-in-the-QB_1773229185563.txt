@@ -1,0 +1,417 @@
+We have a data contamination / prompt-bleed bug in the QBS report.
+
+This is not a copywriting task.
+This is a data-binding, persistence, and generation-isolation bug.
+
+Current failure:
+A massive Mid-Strategy implementation prompt is rendering inside the QBS report under Account Manager Context / AM Inputs where the AM’s actual account-specific text should appear.
+
+That is unacceptable.
+
+The QBS must only render:
+
+the actual saved/generated AM input fields for that client/report
+
+or the current editable AM input values entered in the QBS flow
+
+or a clean empty state if no AM input exists
+
+It must never render:
+
+internal implementation prompts
+
+system prompts
+
+developer instructions
+
+Mid-Strategy prompts
+
+unrelated report prompts
+
+stale text from another feature
+
+long-form prompt artifacts from localStorage, state, DB, or previous runs
+
+==================================================
+OBJECTIVE
+
+Find and fix the exact source of contamination causing Mid-Strategy prompt text to appear in QBS AM Inputs.
+
+Then harden the QBS data pipeline so this cannot happen again.
+
+==================================================
+WHAT SHOULD APPEAR IN THIS CASE
+
+For Anchored Tides, the QBS AM Inputs / Account Manager Context should render the following content and nothing else:
+
+Hypothesis
+
+Given that I’m new to the account and have not had a chance to meet with anyone from Anchored Tides yet, my hypothesis should be taken with a grain of salt. I’ll have better insights once I get into the day-to-day work and spend more time grinding through the data.
+
+That said, Anchored Tides does not look like an account that needs a reset. It looks like an account where the right content direction is already taking shape, with recent modality-focused pages showing enough traction to suggest things are moving in the right direction, even if traffic and call pacing are sitting behind the initial goal.
+
+Because I do not fully understand how those goals are being calculated yet, I’m hesitant to put too much weight on that gap and would chalk some of it up to automation not fully understanding the nuance.
+
+For Q2, the priority should be to keep strengthening the women’s modality and continuum-of-care cluster while tightening the admissions path, because based on our own framework, admits should matter more than traffic at a high level, and relevance should be improved before more volume is added.
+
+Previous Quarter Assessment
+
+From an SEO standpoint, Anchored Tides has one of the stronger content infrastructures in my client base. Even so, the account is still operating below its potential because of several factors, including a preventable technical issue at the root. My understanding is that this was tied to a solution that was not fully implemented in Q1.
+
+The conversion scaffolding is in place, and it appears to have been strengthened in Q1 as well. Q1 search visibility looks softer in reporting than it should, but that seems to be driven more by a crawl issue than by any real content or strategy gap.
+
+With only four credits per month, Q2 should be protective and structural before it becomes expansive.
+
+Client Sentiment: Concerned
+
+Priority Checks are background only and must not render in the report body.
+
+==================================================
+ROOT-CAUSE HYPOTHESES YOU MUST VERIFY
+
+You must explicitly trace and rule in / rule out each of these possible failure points:
+
+Wrong field binding
+
+QBS AM Inputs component is reading from the wrong state key
+
+e.g. midStrategyPrompt, strategyPrompt, rawPrompt, generationPrompt, reportInstructions, or similar
+instead of hypothesis / previousQuarterAssessment / clientSentiment
+
+Cross-report saved data contamination
+
+saved QBS report JSON is being hydrated with content from a Mid-Strategy saved report
+
+reportType filtering is broken
+
+setReportData() or equivalent is loading the wrong generatedReportJson blob
+
+a shared content object is being reused across report types
+
+localStorage contamination
+
+draft recovery or autosave keys are not namespaced tightly enough by:
+
+report type
+
+client id
+
+report id / session id if applicable
+
+Mid-Strategy draft text is being restored into QBS fields
+
+Server generation contamination
+
+QBS generation route is pulling raw prompt/instructions text into reportData
+
+the generator is serializing internal prompt text into output fields by mistake
+
+AM input normalization step is falling back to the wrong source
+
+Shared form state contamination
+
+QBS and Mid-Strategy are sharing a reused hook/store/schema
+
+a generic “notes” or “context” object is leaking across products
+
+field names overlap and are not properly isolated
+
+Save/load UI contamination
+
+UI preview is rendering an internal raw field instead of the clean AM input field
+
+e.g. rendering amContextRawPrompt instead of cleaned hypothesis
+
+rendering debug payload instead of display payload
+
+Migration/default-value contamination
+
+a fallback default string or seeded template was accidentally set to the Mid-Strategy prompt text
+
+old migration/test fixture/dev seed is leaking into real display
+
+==================================================
+NON-NEGOTIABLE FIX REQUIREMENTS
+
+QBS AM Inputs must only come from explicit QBS AM input fields.
+
+Allowed display sources:
+
+hypothesis
+
+previousQuarterAssessment
+
+clientSentiment
+
+optional other explicitly approved QBS AM input fields if already part of schema
+
+Forbidden display sources:
+
+prompt text
+
+generator instructions
+
+raw system/developer text
+
+Mid-Strategy content
+
+priority checks
+
+hidden background notes
+
+implementation specs
+
+Priority Checks handling
+
+may exist as background logic if intentionally stored
+
+must not render in the client-facing QBS report body
+
+must not appear inside Account Manager Context
+
+Report-type isolation
+All persisted data, autosave data, draft data, saved report data, and generation payloads must be strictly namespaced by report type.
+
+QBS must never hydrate from Mid-Strategy.
+Mid-Strategy must never hydrate from QBS.
+
+Display-model isolation
+Introduce or enforce a clean display model for QBS AM Inputs, for example:
+qbsAmInputsDisplay = {
+hypothesis: string,
+previousQuarterAssessment: string,
+clientSentiment: string
+}
+
+Render only from the display model, not from raw generation payloads.
+
+Prompt stripping / sanitization safeguard
+Even if upstream contamination occurs, the renderer must reject obvious internal prompt artifacts before display.
+
+At minimum, block display of strings containing patterns like:
+
+“PRIMARY PRODUCT GOAL”
+
+“CURRENT PROBLEMS THAT MUST BE FIXED”
+
+“NON-NEGOTIABLE PRODUCT RULES”
+
+“WHAT MID-STRATEGY SHOULD ACTUALLY ANALYZE”
+
+“REQUIRED OUTPUT”
+
+“FINAL WARNING”
+
+If one of those appears in a QBS AM input field, do not render it blindly.
+Fail safely and surface a controlled error or empty-state fallback.
+
+Important:
+This safeguard is not the main fix.
+It is only a last-resort guardrail.
+
+==================================================
+IMPLEMENTATION REQUIREMENTS
+
+You must do all of the following:
+
+A. TRACE THE DATA FLOW END TO END
+
+Trace the exact path for QBS AM Inputs through:
+
+UI form state
+
+local component state
+
+hooks
+
+autosave/localStorage
+
+request payload
+
+server route
+
+generator
+
+saved report JSON
+
+preview hydration
+
+saved-report load hydration
+
+export rendering source
+
+Identify the exact field names and objects at each stage.
+
+B. FIND THE CONTAMINATION POINT
+
+Do not guess.
+Show exactly where the Mid-Strategy prompt text enters the QBS pipeline.
+
+C. FIX THE CONTAMINATION POINT
+
+Fix the real source, not just the symptom.
+
+D. ADD HARDENING
+
+Add guardrails so cross-report prompt bleed cannot recur.
+
+E. VERIFY RENDER PATHS
+
+Confirm the correct Anchored Tides AM Inputs render in:
+
+live preview
+
+saved load
+
+export/PDF path if applicable
+
+==================================================
+EXPECTED QBS ACCOUNT MANAGER CONTEXT STRUCTURE
+
+The QBS output should render a clean section with:
+
+Account Manager Context
+
+AM’s Hypothesis
+[anchored tides hypothesis text only]
+
+Previous Quarter Assessment
+[anchored tides assessment text only]
+
+Client Sentiment
+Concerned
+
+Do not merge sections together incorrectly.
+Do not inject labels into paragraph bodies.
+Do not render hidden background notes.
+
+==================================================
+STRICT QA ACCEPTANCE CRITERIA
+
+Do not mark complete until every item below passes.
+
+The Mid-Strategy prompt text no longer appears anywhere in QBS AM Inputs.
+
+Anchored Tides QBS renders the correct hypothesis text.
+
+Anchored Tides QBS renders the correct Previous Quarter Assessment text.
+
+Client Sentiment renders as Concerned.
+
+Priority Checks do not appear in the report body.
+
+QBS preview uses only QBS-specific AM input fields.
+
+QBS saved-load uses only QBS-specific saved data.
+
+QBS export path uses only QBS-specific display data.
+
+localStorage keys are isolated tightly enough to prevent cross-report bleed.
+
+Shared hooks/stores/schemas no longer allow Mid-Strategy content to hydrate QBS.
+
+Any obvious internal prompt artifact is blocked from rendering in QBS even if upstream data becomes contaminated again.
+
+No regression to other QBS sections.
+
+No regression to Mid-Strategy.
+
+==================================================
+REQUIRED DEBUG OUTPUT
+
+Return a formal proof-oriented report with these exact sections:
+
+Root cause
+
+exact contamination point
+
+exact field/key/object involved
+
+exact reason Mid-Strategy text was able to appear in QBS
+
+Files changed
+
+every file changed
+
+what changed in each
+
+Data-flow trace
+Show the exact QBS AM Inputs path through:
+
+form state
+
+persistence
+
+server
+
+saved JSON
+
+preview
+
+export
+
+Isolation fix
+
+how report-type isolation was enforced
+
+how display-model isolation was enforced
+
+how localStorage isolation was enforced
+
+Guardrails added
+
+prompt-artifact blocking rules
+
+renderer safety rules
+
+fallback behavior
+
+QA scenarios tested
+Include at minimum:
+
+fresh QBS generation
+
+saved QBS load
+
+Mid-Strategy draft exists in localStorage
+
+QBS draft exists in localStorage
+
+switching between report types
+
+Anchored Tides exact content verification
+
+export verification
+
+Final rendered proof
+Show the exact final rendered Account Manager Context for Anchored Tides.
+
+==================================================
+FINAL HARD RULE
+
+If the visible QBS AM Inputs contain any internal prompt language, raw instructions, section-spec text, or content from another report type, the task is not complete.
+
+Do not tell me it is fixed unless you can prove the exact contamination source and show the exact clean final rendered output.
+
+And separately, the content that should be in QBS for Anchored Tides is:
+
+AM’s Hypothesis
+
+Given that I’m new to the account and have not had a chance to meet with anyone from Anchored Tides yet, my hypothesis should be taken with a grain of salt. I’ll have better insights once I get into the day-to-day work and spend more time grinding through the data.
+
+That said, Anchored Tides does not look like an account that needs a reset. It looks like an account where the right content direction is already taking shape, with recent modality-focused pages showing enough traction to suggest things are moving in the right direction, even if traffic and call pacing are sitting behind the initial goal.
+
+Because I do not fully understand how those goals are being calculated yet, I’m hesitant to put too much weight on that gap and would chalk some of it up to automation not fully understanding the nuance.
+
+For Q2, the priority should be to keep strengthening the women’s modality and continuum-of-care cluster while tightening the admissions path, because based on our own framework, admits should matter more than traffic at a high level, and relevance should be improved before more volume is added.
+
+Previous Quarter Assessment
+
+From an SEO standpoint, Anchored Tides has one of the stronger content infrastructures in my client base. Even so, the account is still operating below its potential because of several factors, including a preventable technical issue at the root. My understanding is that this was tied to a solution that was not fully implemented in Q1.
+
+The conversion scaffolding is in place, and it appears to have been strengthened in Q1 as well. Q1 search visibility looks softer in reporting than it should, but that seems to be driven more by a crawl issue than by any real content or strategy gap.
+
+With only four credits per month, Q2 should be protective and structural before it becomes expansive.
+
+Client Sentiment
+Concerned

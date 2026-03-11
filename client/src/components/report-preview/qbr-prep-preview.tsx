@@ -6,6 +6,29 @@ import swoopHeaderFallback from "@assets/HEADER_IMAGE_1773063127856.png";
 
 const ACCENT = "#C0392B";
 
+// Last-resort guardrail: if an AM input field somehow contains internal prompt/implementation
+// artifacts (e.g. from accidental paste or upstream contamination), block rendering and surface
+// a controlled error state. This is NOT the primary fix — it is a safety net only.
+const PROMPT_ARTIFACT_SIGNALS = [
+  "PRIMARY PRODUCT GOAL",
+  "CURRENT PROBLEMS THAT MUST BE FIXED",
+  "NON-NEGOTIABLE PRODUCT RULES",
+  "WHAT MID-STRATEGY SHOULD ACTUALLY ANALYZE",
+  "REQUIRED OUTPUT",
+  "FINAL WARNING",
+  "SLIDE GENERATION PHILOSOPHY",
+  "DESIGN REQUIREMENT",
+  "COLOUR + LAYOUT RULES",
+  "CRITICAL WORDING RULE",
+  "NON-NEGOTIABLE FIX REQUIREMENTS",
+  "STRICT QA ACCEPTANCE CRITERIA",
+];
+function isPromptArtifact(text: string | undefined): boolean {
+  if (!text) return false;
+  const upper = text.toUpperCase();
+  return PROMPT_ARTIFACT_SIGNALS.some(s => upper.includes(s));
+}
+
 const SECTION_DEFS = [
   { key: "section_goals", title: "What Matters Most This Quarter" },
   { key: "section_conversions", title: "Where Conversions Actually Happen" },
@@ -555,19 +578,31 @@ export function QbrPrepPreview({
                 {amInputs.amThoughts && (
                   <div style={{ marginBottom: 6 }}>
                     <span style={{ fontWeight: 700, color: "#374151" }}>AM's Hypothesis: </span>
-                    <span style={{ color: "#4B5563", whiteSpace: "pre-wrap" }}>{amInputs.amThoughts}</span>
+                    {isPromptArtifact(amInputs.amThoughts) ? (
+                      <span style={{ color: "#B91C1C", fontStyle: "italic" }}>[AM input contains invalid system text — please regenerate with correct account notes]</span>
+                    ) : (
+                      <span style={{ color: "#4B5563", whiteSpace: "pre-wrap" }}>{amInputs.amThoughts}</span>
+                    )}
                   </div>
                 )}
                 {amInputs.prevQtrAssessment && (
                   <div style={{ marginBottom: 6 }}>
                     <span style={{ fontWeight: 700, color: "#374151" }}>Previous Quarter Assessment: </span>
-                    <span style={{ color: "#4B5563", whiteSpace: "pre-wrap" }}>{amInputs.prevQtrAssessment}</span>
+                    {isPromptArtifact(amInputs.prevQtrAssessment) ? (
+                      <span style={{ color: "#B91C1C", fontStyle: "italic" }}>[AM input contains invalid system text — please regenerate with correct account notes]</span>
+                    ) : (
+                      <span style={{ color: "#4B5563", whiteSpace: "pre-wrap" }}>{amInputs.prevQtrAssessment}</span>
+                    )}
                   </div>
                 )}
                 {amInputs.clientNotes && (
                   <div style={{ marginBottom: 6 }}>
                     <span style={{ fontWeight: 700, color: "#374151" }}>Client Insights: </span>
-                    <span style={{ color: "#4B5563", whiteSpace: "pre-wrap" }}>{amInputs.clientNotes}</span>
+                    {isPromptArtifact(amInputs.clientNotes) ? (
+                      <span style={{ color: "#B91C1C", fontStyle: "italic" }}>[AM input contains invalid system text — please regenerate with correct account notes]</span>
+                    ) : (
+                      <span style={{ color: "#4B5563", whiteSpace: "pre-wrap" }}>{amInputs.clientNotes}</span>
+                    )}
                   </div>
                 )}
                 {amInputs.clientSentiment && (

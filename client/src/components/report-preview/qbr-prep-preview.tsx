@@ -693,15 +693,15 @@ export function QbrPrepPreview({
             ) : !isSectionAutoHidden("section_conversions", hiddenTables) && sectionNums["section_conversions"] !== undefined ? (
               <>
                 <SectionHeading num={sectionNums["section_conversions"]} title="Where Conversions Actually Happen" onHide={hideSecBtn("section_conversions")} />
-                {tblSubLabel("table_s2_pages", "Top Converting Pages", !!hiddenTables["table_s2_pages"], s2aActualSources.length > 0 ? s2aActualSources : ["Multi-source"])}
+                {tblSubLabel("table_s2_pages", "Top Converting Pages", !!hiddenTables["table_s2_pages"])}
                 {hiddenTables["table_s2_pages"] ? tblHiddenBar("table_s2_pages", "Top Converting Pages") : (
                   <AddableReportTable tableId="s2a" headers={["Type", "Page / Pattern", "Notes / What We're Learning"]} sourceRows={s2aSourceRows} edits={edits} onEdit={onEdit} />
                 )}
-                {tblSubLabel("table_s2_patterns", "Top Conversion Patterns", !!hiddenTables["table_s2_patterns"], s2cActualSources.length > 0 ? s2cActualSources : ["Multi-source"])}
+                {tblSubLabel("table_s2_patterns", "Top Conversion Patterns", !!hiddenTables["table_s2_patterns"], s2cActualSources.length > 0 ? s2cActualSources : undefined)}
                 {hiddenTables["table_s2_patterns"] ? tblHiddenBar("table_s2_patterns", "Top Conversion Patterns") : (
                   <AddableReportTable tableId="s2c" headers={["Pattern", "Why It Matters", "Evidence"]} sourceRows={s2cSourceRows} edits={edits} onEdit={onEdit} />
                 )}
-                {tblSubLabel("table_s2_sources", "Top Converting Sources", !!hiddenTables["table_s2_sources"], s2bActualSources.length > 0 ? s2bActualSources : ["Multi-source"])}
+                {tblSubLabel("table_s2_sources", "Top Converting Sources", !!hiddenTables["table_s2_sources"])}
                 {hiddenTables["table_s2_sources"] ? tblHiddenBar("table_s2_sources", "Top Converting Sources") : (
                   <AddableReportTable tableId="s2b" headers={["Source", "What's Converting", "Notes / What We're Learning"]} sourceRows={s2bSourceRows} edits={edits} onEdit={onEdit} />
                 )}

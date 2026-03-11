@@ -1014,10 +1014,12 @@ function buildPrimaryGoalReason(p: {
       ? prevNsmData.mvpPercent : `${attainPct}%`;
     if (prevMvpActNum < prevMvpGoalNum) {
       const shortfall = prevMvpGoalNum - prevMvpActNum;
-      parts.push(`Last quarter goal: ${fmtNum(prevMvpGoalNum)} ${kpiLower}. Last quarter actual: ${fmtNum(prevMvpActNum)} (${prevPctLabel} of goal). Performance fell short of target by ${fmtNum(shortfall)}.`);
+      const shortfallPct = Math.round(((prevMvpGoalNum - prevMvpActNum) / prevMvpGoalNum) * 100);
+      parts.push(`Last quarter goal: ${fmtNum(prevMvpGoalNum)} ${kpiLower}. Last quarter actual: ${fmtNum(prevMvpActNum)} (${prevPctLabel} of goal). Performance fell short of target by ${fmtNum(shortfall)} ${kpiLower} (${shortfallPct}%).`);
     } else if (prevMvpActNum > prevMvpGoalNum) {
       const surplus = prevMvpActNum - prevMvpGoalNum;
-      parts.push(`Last quarter goal: ${fmtNum(prevMvpGoalNum)} ${kpiLower}. Last quarter actual: ${fmtNum(prevMvpActNum)} (${prevPctLabel} of goal). Performance exceeded target by ${fmtNum(surplus)}.`);
+      const surplusPct = Math.round(((prevMvpActNum - prevMvpGoalNum) / prevMvpGoalNum) * 100);
+      parts.push(`Last quarter goal: ${fmtNum(prevMvpGoalNum)} ${kpiLower}. Last quarter actual: ${fmtNum(prevMvpActNum)} (${prevPctLabel} of goal). Performance exceeded target by ${fmtNum(surplus)} ${kpiLower} (${surplusPct}%).`);
     } else {
       parts.push(`Last quarter goal: ${fmtNum(prevMvpGoalNum)} ${kpiLower}. Last quarter actual: ${fmtNum(prevMvpActNum)} — goal met.`);
     }
@@ -1031,11 +1033,11 @@ function buildPrimaryGoalReason(p: {
   if (prevMvpActNum !== null && prevMvpGoalNum !== null && prevMvpActNum < prevMvpGoalNum) {
     const attainPct = prevMvpActNum / prevMvpGoalNum;
     if (attainPct < 0.55) {
-      parts.push(`Available evidence suggests a crawl or indexation issue may have limited organic visibility during the prior quarter, suppressing inbound demand before it reached the conversion stage.`);
+      parts.push(`Available evidence points to a likely crawl or indexation issue that suppressed organic visibility during the prior quarter, limiting inbound demand before it reached the conversion stage.`);
     } else if (attainPct < 0.75) {
-      parts.push(`Available evidence suggests a combination of attribution constraints and conversion-path friction held actuals below target — the underlying demand signal was present but not fully captured.`);
+      parts.push(`Available evidence points to a likely combination of attribution constraints and conversion-path friction that held actuals below target — the underlying demand signal was present but not fully captured.`);
     } else {
-      parts.push(`Available evidence suggests content maturity and internal linking gaps slowed conversion-path performance rather than a collapse in inbound demand.`);
+      parts.push(`Available evidence points to content maturity and internal linking gaps as likely contributors to the conversion-path shortfall, rather than a structural collapse in inbound demand.`);
     }
   }
 
@@ -1075,10 +1077,12 @@ function buildSessionsGoalReason(p: {
       ? prevNsmData.sessionsPercent : `${attainPct}%`;
     if (prevSessActNum < prevSessGoalNum) {
       const shortfall = prevSessGoalNum - prevSessActNum;
-      parts.push(`Last quarter goal: ${fmtNum(prevSessGoalNum)} organic sessions. Last quarter actual: ${fmtNum(prevSessActNum)} (${prevPctLabel} of goal). Performance fell short of target by ${fmtNum(shortfall)} sessions.`);
+      const shortfallPct = Math.round(((prevSessGoalNum - prevSessActNum) / prevSessGoalNum) * 100);
+      parts.push(`Last quarter goal: ${fmtNum(prevSessGoalNum)} organic sessions. Last quarter actual: ${fmtNum(prevSessActNum)} (${prevPctLabel} of goal). Performance fell short of target by ${fmtNum(shortfall)} sessions (${shortfallPct}%).`);
     } else if (prevSessActNum > prevSessGoalNum) {
       const surplus = prevSessActNum - prevSessGoalNum;
-      parts.push(`Last quarter goal: ${fmtNum(prevSessGoalNum)} organic sessions. Last quarter actual: ${fmtNum(prevSessActNum)} (${prevPctLabel} of goal). Performance exceeded target by ${fmtNum(surplus)} sessions.`);
+      const surplusPct = Math.round(((prevSessActNum - prevSessGoalNum) / prevSessGoalNum) * 100);
+      parts.push(`Last quarter goal: ${fmtNum(prevSessGoalNum)} organic sessions. Last quarter actual: ${fmtNum(prevSessActNum)} (${prevPctLabel} of goal). Performance exceeded target by ${fmtNum(surplus)} sessions (${surplusPct}%).`);
     } else {
       parts.push(`Last quarter goal: ${fmtNum(prevSessGoalNum)} organic sessions. Last quarter actual: ${fmtNum(prevSessActNum)} — goal met.`);
     }
@@ -1092,11 +1096,11 @@ function buildSessionsGoalReason(p: {
   if (prevSessActNum !== null && prevSessGoalNum !== null && prevSessActNum < prevSessGoalNum) {
     const attainPct = prevSessActNum / prevSessGoalNum;
     if (attainPct < 0.55) {
-      parts.push(`Available evidence suggests a crawl or indexation issue significantly suppressed indexed page count during the prior quarter, directly limiting organic session volume.`);
+      parts.push(`Available evidence points to a likely crawl or indexation issue that significantly suppressed indexed page visibility during the prior quarter, directly limiting organic session volume.`);
     } else if (attainPct < 0.75) {
-      parts.push(`Available evidence suggests a mix of crawl constraints and content maturity gaps held organic sessions below target — pages are indexed but not yet ranking with enough visibility to drive their full traffic potential.`);
+      parts.push(`Available evidence points to a likely mix of crawl constraints and content maturity gaps that held organic sessions below target — pages are indexed but not yet ranking with enough visibility to drive their full traffic potential.`);
     } else {
-      parts.push(`Available evidence suggests the shortfall is tied to content and internal linking gaps rather than a structural crawl problem — the organic foundation is in place but not yet fully converting search visibility into session volume.`);
+      parts.push(`Available evidence points to content and internal linking gaps as likely contributors to the sessions shortfall, rather than a structural crawl problem — the organic foundation is in place but not yet fully converting search visibility into session volume.`);
     }
   }
 

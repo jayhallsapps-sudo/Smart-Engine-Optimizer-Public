@@ -1,0 +1,499 @@
+The Google Docs / DOCX export is still failing.
+
+Do not interpret this as “good enough with some styling differences.”
+Do not interpret this as a semantic export success.
+Do not optimize for content survival.
+Optimize for visual fidelity to the PDF.
+
+The current Google Docs output still looks like exported content, not the actual report.
+
+==================================================
+HARD PROBLEM STATEMENT
+
+The DOCX / Google Docs version is still not visually faithful to the PDF.
+
+It is failing in these exact ways:
+
+Cover/header fidelity is missing
+
+the top of the document does not behave like a real cover/header zone
+
+there is no proper visual shell
+
+there is no hero/header composition matching the PDF
+
+it reads like plain title text plus metadata, not a report cover
+
+Metadata block is dumped instead of designed
+
+domain
+
+location
+
+positioning
+
+analysis window
+
+planning quarter
+
+generated date
+are being rendered like admin text instead of a structured summary block
+
+Account Manager Context is readable but still too plain
+
+not enough visual grouping
+
+not enough containment
+
+not enough scan structure
+
+not enough resemblance to the PDF’s section shell
+
+Section 1 still does not visually match the PDF
+
+rows and headers still feel like spreadsheet export
+
+labels wrap awkwardly
+
+visual hierarchy is weak
+
+columns and block treatment do not resemble the PDF layout
+
+The table system is still wrong overall
+
+too generic
+
+too grey/black
+
+not enough QBS red-led styling
+
+not enough shell treatment
+
+not enough padding and spacing discipline
+
+does not feel like the same report family as the PDF
+
+Narrative cells are still too dense
+
+Reason
+
+Evidence
+
+Notes
+
+Insight
+
+Action
+still become walls of text instead of designed report content blocks
+
+Section 2 is content-present but not design-faithful
+
+subsections are there
+
+but it still looks like database output, not a polished report section
+
+Section 3 and other table-heavy areas feel like worksheets
+
+not client-facing report composition
+
+too mechanical
+
+too grid-heavy without enough design framing
+
+Section 6 is still a major failure
+
+“What We Need to Do Next” still feels like an internal table, not a strategic action section
+
+action hierarchy is weak
+
+wrapping is ugly
+
+no strong visual emphasis
+
+no polished closing structure
+
+Section 8 is still weak
+
+Additional Opportunities does not look like real opportunity cards/blocks
+
+headings like UPSELL / EVIDENCE / RECOMMENDATION are still too raw
+
+it does not resemble the PDF structure
+
+Overall page composition is wrong
+
+content order is present
+
+page design is not
+
+section rhythm is not
+
+transitions are not
+
+the Google Docs version feels continuous and mechanical, not intentionally composed like the PDF
+
+==================================================
+NON-NEGOTIABLE STANDARD
+
+The DOCX / Google Docs export must be treated as a visual clone target of the PDF.
+
+Allowed difference:
+
+pagination / page break differences
+
+Not allowed:
+
+plain-text-feeling cover
+
+generic metadata dump
+
+generic spreadsheet tables
+
+weak section shells
+
+generic grey/black table treatment where the PDF uses the QBS visual system
+
+wall-of-text narrative cells
+
+worksheet-like sections
+
+action sections that do not feel like action sections
+
+opportunity sections that do not feel like designed opportunity blocks
+
+If the Google Docs output still feels like exported content rather than the actual report, the task is not complete.
+
+==================================================
+PRIMARY STRATEGY SHIFT REQUIRED
+
+Stop thinking of the DOCX as a native semantic document first.
+
+Treat the PDF as the visual source of truth.
+Then choose the rendering strategy that gets closest to that look inside DOCX / Google Docs.
+
+You are explicitly allowed to change the export method.
+
+Acceptable strategies include:
+
+hybrid image/text export
+
+image-based rendering for visually sensitive sections
+
+per-section screenshot/render insertion from the real HTML/PDF layout
+
+full-page image rendering if necessary
+
+native text only for low-risk sections and image-based blocks for high-risk sections
+
+You are not required to keep everything live-editable if editability destroys fidelity.
+
+Priority order:
+
+visual fidelity to PDF
+
+readability
+
+Google Docs survivability
+
+editability where safe
+
+==================================================
+SECTIONS THAT MUST BE VISUALLY REBUILT
+
+You must specifically address these:
+
+A. Cover / Header
+Current state: unacceptable
+Required:
+
+restore actual cover/header treatment
+
+restore visual shell
+
+restore hero-like top structure
+
+make it look substantially like the PDF
+
+metadata must be part of a designed summary block, not loose lines
+
+B. Account Manager Context
+Current state: too plain
+Required:
+
+stronger section shell
+
+stronger grouping for:
+
+AM’s Hypothesis
+
+Previous Quarter Assessment
+
+Client Sentiment
+
+should scan like a report block, not plain paragraphs
+
+C. Section 1 — What Matters Most This Quarter
+Current state: still too spreadsheet-like
+Required:
+
+make it visually resemble the PDF section
+
+improve header treatment
+
+improve row containment
+
+reduce ugly wrapping
+
+make Goal Type / Goal / Source / Shift / Reason feel like report content, not sheet output
+
+D. Section 2
+Current state: content only, not design-faithful
+Required:
+
+stronger subsection separation
+
+stronger shells around converting pages / patterns / sources
+
+better visual pacing and hierarchy
+
+E. Section 3 and other heavy tables
+Current state: worksheet-like
+Required:
+
+add report framing
+
+do not let them read like raw exports
+
+where necessary, convert to image-based blocks if native tables keep looking ugly
+
+F. Section 6 — What We Need to Do Next
+Current state: unacceptable
+Required:
+
+this section must feel like a strategic action section
+
+not a dense table
+
+use strong block/card/action layout
+
+action hierarchy must be visually obvious
+
+wrapping must be controlled
+
+this section should look intentional and presentation-grade
+
+G. Section 8 — Additional Opportunities
+Current state: unacceptable
+Required:
+
+one opportunity block per item
+
+clear title
+
+clear type treatment
+
+visually structured fields
+
+evidence and recommendation must not appear as raw labels with text dumps
+
+should resemble the PDF structure, not loose document headings
+
+==================================================
+DESIGN SYSTEM REQUIREMENTS
+
+The Google Docs export must inherit the QBS visual system more faithfully.
+
+Required:
+
+same red-led accent logic as the PDF
+
+same section heading treatment
+
+same shell logic
+
+same block logic
+
+similar spacing rhythm
+
+similar table/header styling
+
+similar footer behavior
+
+similar visual professionalism
+
+Do not let the Google Docs document fall back to generic document styling.
+
+==================================================
+WHEN TO ABANDON NATIVE TABLES
+
+If a section still looks generic, cramped, or structurally wrong in Google Docs when rendered natively, stop using native layout for that section.
+
+You are explicitly allowed to render those sections as images pulled from:
+
+HTML preview
+
+PDF-like rendered DOM
+
+section screenshots
+
+page screenshots
+
+Likely candidates for image/hybrid rendering:
+
+cover/header
+
+Section 1
+
+Section 6
+
+Section 8
+
+any heavy table section that still reads like a worksheet
+
+Do not stay attached to live DOCX tables if they are the reason the export looks wrong.
+
+==================================================
+STRICT QA ACCEPTANCE CRITERIA
+
+Do not mark complete until every item below passes.
+
+Google Docs output visually resembles the PDF in overall structure
+
+cover/header has real visual fidelity to the PDF
+
+metadata is part of a designed block, not a loose dump
+
+Account Manager Context feels like a designed section
+
+Section 1 feels like a designed report section, not spreadsheet output
+
+Section 2 has stronger subsection structure and pacing
+
+heavy table sections no longer feel like worksheets
+
+Section 6 feels like a strategic action section
+
+Section 8 feels like designed opportunity blocks
+
+QBS colour system is visibly present
+
+narrative content is readable and not just wall-of-text cells
+
+footer remains correct
+
+page breaks are intentional
+
+output is client-presentable
+
+result is substantially closer to the PDF, not just technically improved
+
+==================================================
+REQUIRED TEST SCENARIOS
+
+You must explicitly test and show rendered proof for:
+
+cover/header in Google Docs
+
+metadata block in Google Docs
+
+Account Manager Context in Google Docs
+
+Section 1 in Google Docs
+
+Section 2 in Google Docs
+
+one heavy table section in Google Docs
+
+Section 6 in Google Docs
+
+Section 8 in Google Docs
+
+later page/footer in Google Docs
+
+side-by-side comparison against the PDF for those same sections
+
+==================================================
+REQUIRED OUTPUT FORMAT
+
+Return a proof report with these exact sections:
+
+Export strategy chosen
+
+native DOCX
+
+hybrid image/text
+
+image-first
+
+or other
+Explain why this was chosen.
+
+Root cause of visual mismatch
+
+why the previous approach still did not resemble the PDF
+
+which sections could not be made faithful with native layout alone
+
+Files changed
+
+every file changed
+
+what changed in each
+
+Section rendering method
+For each major section, say whether it now renders as:
+
+native text/table
+
+hybrid block
+
+image-based block
+
+full-page rendered image
+and why
+
+Fidelity improvements
+
+exactly how the new output was brought closer to the PDF
+
+Render proof
+Provide rendered evidence for:
+
+cover/header
+
+metadata block
+
+Account Manager Context
+
+Section 1
+
+Section 2
+
+one heavy table section
+
+Section 6
+
+Section 8
+
+footer on a later page
+
+QA scenarios tested
+
+one line each
+
+pass/fail
+
+observed result
+
+Final status
+
+explicitly state whether the Google Docs export is now visually acceptable relative to the PDF
+
+==================================================
+FINAL HARD RULE
+
+If the exported DOCX still looks like exported content instead of the actual report when opened in Google Docs, the task is not complete.
+
+Do not give me another semantic export.
+Do not give me another “cleaner document.”
+Give me visual fidelity to the PDF.

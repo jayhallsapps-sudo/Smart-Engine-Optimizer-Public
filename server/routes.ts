@@ -1557,24 +1557,46 @@ export async function registerRoutes(
       const connectors = new ReplitConnectors();
 
       const filename = (reportTitle ?? "QBR Prep Report") + ".docx";
-      const metadata = JSON.stringify({ name: filename });
-      const boundary = "-------smarteo_qbrv2_boundary";
-      const CRLF = "\r\n";
+      const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
-      const metaBuf = Buffer.from(`--${boundary}${CRLF}Content-Type: application/json; charset=UTF-8${CRLF}${CRLF}${metadata}${CRLF}`, "utf8");
-      const filePrefixBuf = Buffer.from(`--${boundary}${CRLF}Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document${CRLF}${CRLF}`, "utf8");
-      const closeBuf = Buffer.from(`${CRLF}--${boundary}--`, "utf8");
-      const bodyBuffer = Buffer.concat([metaBuf, filePrefixBuf, docxBuffer, closeBuf]);
-
-      const uploadRes = await connectors.proxy(
+      // ── Step 1: Initiate a resumable upload session (small body — safe through proxy) ──
+      const initRes = await connectors.proxy(
         "google-drive",
-        "/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink",
+        `/upload/drive/v3/files?uploadType=resumable&fields=id,name,webViewLink`,
         {
           method: "POST",
-          headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
-          body: bodyBuffer,
+          headers: {
+            "Content-Type": "application/json; charset=UTF-8",
+            "X-Upload-Content-Type": DOCX_MIME,
+            "X-Upload-Content-Length": String(docxBuffer.length),
+          },
+          body: Buffer.from(JSON.stringify({ name: filename })),
         }
       );
+
+      if (!initRes.ok) {
+        const errBody = await initRes.json().catch(() => ({})) as any;
+        const msg = errBody?.error?.message || initRes.statusText;
+        return res.status(initRes.status).json({ message: `Google Drive upload init failed: ${msg}` });
+      }
+
+      // The session URI is returned in the Location header
+      const sessionUri = initRes.headers.get("location") as string;
+      if (!sessionUri) {
+        return res.status(502).json({ message: "Google Drive did not return a resumable upload session URI" });
+      }
+
+      // ── Step 2: Upload the file directly to the session URI (bypasses proxy body limit) ──
+      // No extra auth needed — Google's resumable session URI is self-contained (auth embedded in URL)
+      const uploadRes = await fetch(sessionUri, {
+        method: "PUT",
+        headers: {
+          "Content-Type": DOCX_MIME,
+          "Content-Length": String(docxBuffer.length),
+          // The session URI already embeds the auth token — no extra auth needed
+        },
+        body: docxBuffer,
+      });
 
       if (!uploadRes.ok) {
         const errBody = await uploadRes.json().catch(() => ({})) as any;

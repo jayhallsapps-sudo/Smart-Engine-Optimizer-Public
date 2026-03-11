@@ -1,0 +1,343 @@
+You are fixing the final three blocking credibility issues in Mid-Strategy before tomorrow’s Olivia review.
+
+This is not a polish pass.
+This is a truth-and-safety pass.
+
+The product is already close on generation and export stability.
+The remaining risk is that the report can present generic fallback content as if it were client-specific analysis.
+That is unacceptable.
+
+Your job is to eliminate misleading output and make Mid-Strategy honest, review-safe, and presentation-safe.
+
+NON-NEGOTIABLE RULES
+
+- Do not present generic fallback strategy as client-specific analysis.
+- Do not silently substitute template IA, template cluster maps, or template recommendations.
+- Do not keep “default strategist language” in sections that appear authored if no strategist input exists.
+- Do not preserve the current behavior behind a softer label unless the label is unmistakably clear.
+- Do not tell me it is fixed unless you prove the new behavior with exact examples and pass/fail QA.
+
+MISSION
+
+Fix all three blocking issues:
+
+1. IA / cluster slides currently use hardcoded treatment-center template content when client-specific IA data is missing.
+2. First Focus / What’s Next / Next Steps currently use generator defaults that read like real strategist-authored recommendations when no user-authored inputs were provided.
+3. PPTX cover currently does not match preview cover closely enough, which makes the export feel like a different product.
+
+PRIORITY ORDER
+
+Priority 1 = content honesty
+Priority 2 = preview/export parity
+Priority 3 = UX clarity for missing required strategy inputs
+
+If there is any tradeoff, choose honesty over completeness.
+
+==================================================
+BLOCKER 1 — FIX GENERIC IA / CLUSTER FALLBACK MISREPRESENTATION
+==================================================
+
+CURRENT PROBLEM
+
+When iaData.currentNav / futureNav / clusters are missing, the generator inserts a plausible generic treatment-center structure and presents it under:
+- Current vs Future Information Architecture
+- Scalable Blueprint / Cluster Expansion
+- Credibility Layer
+
+In the standard UI flow, these fields are not sent, so the report looks custom when it is not.
+
+REQUIRED FIX
+
+You must remove the possibility of misleading fallback behavior.
+
+Allowed safe behaviors:
+A. suppress those sections entirely when client-specific IA inputs are missing
+B. render them with an unmistakable draft/template badge and explanatory text
+C. require explicit strategist confirmation before rendering them in final preview/export
+
+Preferred safest behavior for tomorrow:
+- For exportable/final report states, suppress these sections unless real IA data exists OR the strategist explicitly enables a “Use draft framework” toggle.
+- In editable preview, allow a draft/template mode only if it is clearly marked.
+
+IMPLEMENTATION REQUIREMENTS
+
+1. Identify every place the generator injects generic IA/future-nav/cluster/credibility template data.
+2. Replace hardcoded fallback generation with one of these safe states:
+   - missing-data placeholder section in preview only, non-exportable by default
+   - or hidden/suppressed section
+3. Add a clear data-truth flag per affected section. Example:
+   - sourceType: "client-specific" | "template-draft" | "missing"
+4. Add export gating:
+   - if section sourceType != client-specific and strategist has not explicitly approved template mode, do not include the section in PDF/PPTX/Drive export
+5. If template mode is allowed in preview, display a strong visual label directly on the slide/card:
+   - “Draft framework — not yet tailored to this client”
+   - or equivalent language that cannot be mistaken for finished analysis
+6. Do not bury the warning in a tooltip, modal, or metadata panel. It must be visible on the section itself.
+7. Make sure the generator no longer outputs fake CURRENT/FUTURE navs or fake clusters by default in final exports.
+
+SECTIONS AFFECTED
+At minimum review and fix:
+- current vs future IA
+- scalable blueprint / cluster map
+- credibility layer if it depends on generic site structure assumptions
+
+==================================================
+BLOCKER 2 — FIX GENERIC STRATEGY DEFAULTS THAT LOOK AUTHORED
+==================================================
+
+CURRENT PROBLEM
+
+These sections can currently be populated by generator defaults rather than real strategist inputs:
+- First Focus
+- What’s Next
+- Next Steps / Ownership
+
+In the current UI flow, getAmInputs() does not send the full client-specific inputs for these sections, so the report can output generic strategic language that looks authored and approved.
+
+REQUIRED FIX
+
+No section that reads like strategist judgment may appear in final export unless one of the following is true:
+1. it is derived directly from real data and labeled as system-derived
+2. it was explicitly authored or approved by the AM/strategist
+3. it is explicitly labeled as a draft template and excluded from final export unless approved
+
+Preferred safest behavior for tomorrow:
+- Add required strategist input states for export-critical recommendation sections.
+- If missing, show clear “Needs strategist input” state in preview.
+- Block final export of those sections unless input exists or the AM explicitly chooses a labeled draft mode.
+
+IMPLEMENTATION REQUIREMENTS
+
+1. Trace every default text path for:
+   - firstFocusBullets
+   - whatsNextBullets
+   - webservNextSteps
+   - clientNextSteps
+   - any related narrative intro/summary text
+2. Remove silent fallback authored language from final export paths.
+3. Add structured section status for each:
+   - complete
+   - needs_input
+   - draft_template
+4. In preview:
+   - if missing, show an honest placeholder card/section:
+     - “Needs strategist input before export”
+     - include exactly what is missing
+5. In export:
+   - omit the section if incomplete
+   - OR include only if explicitly approved in draft-template mode with an unavoidable label
+6. Add the missing fields to the frontend form/state if needed so the AM can actually provide the content.
+7. Make sure tomorrow’s flow is usable:
+   - AM can fill in these fields in-app
+   - preview updates correctly
+   - export uses the updated content
+   - no generator fallback text sneaks back in
+
+SAFE CONTENT RULE
+
+System-derived observations are allowed only when explicitly framed as observations from actual sources.
+Example acceptable framing:
+- “Based on current crawl and benchmark inputs, initial structural priority appears to be ...”
+Example unacceptable framing:
+- “Our first focus is ...” when nobody actually wrote or approved it.
+
+==================================================
+BLOCKER 3 — FIX PPTX COVER MISMATCH
+==================================================
+
+CURRENT PROBLEM
+
+Preview cover and PPTX cover follow different rendering logic.
+The PPTX export filters out title-type slides and builds a simpler metadata-only cover.
+Result: preview and export feel like different products.
+
+REQUIRED FIX
+
+Bring PPTX cover materially in line with preview cover so the export feels like the same report family.
+
+You do not need pixel-perfect parity, but you do need:
+- same hierarchy
+- same report title
+- same client title
+- same subtitle/date treatment
+- same overall visual tone
+- same branding shell
+
+IMPLEMENTATION REQUIREMENTS
+
+1. Stop filtering out the title slide in a way that breaks cover parity, OR explicitly map title slides into a styled PPTX cover renderer.
+2. Build a dedicated PPTX cover renderer that mirrors preview intent:
+   - light background
+   - Webserv branding
+   - report title
+   - client/account title
+   - subtitle/tagline if present
+   - date
+3. Ensure the PPTX cover is not a bare text dump.
+4. Ensure cover content comes from the same report data as preview.
+5. Confirm the PPTX cover does not omit key metadata shown in preview.
+
+==================================================
+FRONTEND / UX SAFETY REQUIREMENTS
+==================================================
+
+You must also make the product honest at the UI level.
+
+Add clear status signals in preview for sections that are:
+- ready
+- missing required input
+- draft template
+- derived from live data
+
+For affected sections, the AM should be able to tell at a glance:
+- what is real
+- what is missing
+- what is only a draft/template
+- what will and will not export
+
+Preferred UI treatment:
+- section badge
+- short warning text
+- explicit export behavior note if needed
+
+Do not create a wall of warning text.
+Do not make the UI uglier than necessary.
+But the honesty must be obvious.
+
+==================================================
+EXPORT RULES
+==================================================
+
+For tomorrow’s Olivia review, final exports must obey these rules:
+
+1. No generic unlabeled IA / cluster / credibility content in export
+2. No generic unlabeled strategist recommendations in export
+3. No fake completeness
+4. If sections are omitted because inputs are missing, exports must still render cleanly
+5. Page/slide order must remain coherent after omissions
+6. No blank slides
+7. No broken numbering or awkward empty headings
+8. PPTX / PDF / Drive-upload outputs must all follow the same section truth rules
+
+==================================================
+DATA MODEL / STATUS MODEL
+==================================================
+
+Add or normalize whatever section-level metadata you need, such as:
+
+- section.status = ready | needs_input | draft_template | suppressed
+- section.sourceType = client_specific | system_derived | template_draft | missing
+- section.exportAllowed = true | false
+- section.requiresApproval = true | false
+
+Use a real model. Do not scatter ad hoc booleans everywhere unless you must for speed.
+If speed forces minimal implementation, at least keep the logic centralized and understandable.
+
+==================================================
+REQUIRED TESTS
+==================================================
+
+You must run and report explicit QA for all three blockers.
+
+TEST SET A — IA / CLUSTER HONESTY
+Case 1: no iaData provided
+Expected:
+- preview shows honest missing/draft state OR section suppressed
+- export does not show fake client-specific IA/clusters
+Case 2: iaData provided
+Expected:
+- preview renders section as ready
+- export includes real IA/clusters
+
+TEST SET B — STRATEGY DEFAULT HONESTY
+Case 1: no firstFocus / whatsNext / nextSteps inputs
+Expected:
+- preview says needs strategist input or similar
+- export does not include fake authored strategy
+Case 2: fields provided
+Expected:
+- preview updates
+- export includes exact provided content
+
+TEST SET C — PPTX COVER PARITY
+Case 1: generate preview + PPTX
+Expected:
+- same report title
+- same client/account title
+- same date/subtitle family
+- clearly same design family
+- no bare metadata dump
+
+TEST SET D — EXPORT CLEANLINESS AFTER SUPPRESSION
+Case: omit one or more incomplete sections
+Expected:
+- PDF clean
+- PPTX clean
+- no blank placeholders
+- no broken sequencing
+
+TEST SET E — STALE-DATA SANITY RECHECK
+After the fixes, rerun one quick marker test on an edited strategist-input field to ensure preview/export still updates correctly.
+
+==================================================
+DELIVERABLE FORMAT
+==================================================
+
+Return exactly this structure:
+
+1. IMPLEMENTATION SUMMARY
+- exact files changed
+- what changed in each
+
+2. BLOCKER 1 RESULT
+- old behavior
+- new behavior
+- proof from preview
+- proof from PDF/PPTX
+
+3. BLOCKER 2 RESULT
+- old behavior
+- new behavior
+- proof from preview
+- proof from PDF/PPTX
+
+4. BLOCKER 3 RESULT
+- old behavior
+- new behavior
+- proof from PPTX vs preview
+
+5. QA MATRIX
+Rows:
+- missing IA data
+- provided IA data
+- missing strategist recommendation inputs
+- provided strategist recommendation inputs
+- PPTX cover parity
+- export cleanliness after section suppression
+- stale-data sanity recheck
+Columns:
+- preview
+- PDF
+- PPTX
+- Drive upload
+- PASS / PARTIAL / FAIL
+- notes
+
+6. ANY REMAINING CAVEATS
+- only real caveats
+- no padding
+
+7. FINAL VERDICT
+Choose one:
+- SAFE FOR OLIVIA REVIEW
+- SAFE WITH DISCLOSED LIMITATIONS
+- NOT SAFE YET
+
+==================================================
+FINAL WARNING
+==================================================
+
+Do not preserve misleading defaults behind prettier UI.
+Do not solve this cosmetically.
+Do not keep template content exportable unless it is clearly and explicitly approved as template content.
+Tomorrow’s review must not be undermined by a polished generic recommendation pretending to be real client analysis.

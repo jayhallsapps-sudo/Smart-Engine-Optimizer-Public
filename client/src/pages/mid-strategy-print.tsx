@@ -27,6 +27,8 @@ interface SlideData {
   futureIA?: Array<{ label: string; children?: string[] }>;
   clusters?: Array<{ hub: string; pages: string[] }>;
   hidden?: boolean;
+  sourceType?: "client_specific" | "system_derived" | "needs_input" | "template_draft";
+  exportAllowed?: boolean;
 }
 
 function resolveEdit(edits: Record<string, string>, key: string, fallback: string): string {
@@ -100,8 +102,21 @@ function PrintTable({ headers, rows }: { headers: string[]; rows: (string | numb
   );
 }
 
+function SlideDraftBadge({ slideId }: { slideId: string }) {
+  return (
+    <div style={{ background: "#FEF3C7", border: "2px solid #F59E0B", borderRadius: 4, padding: "7px 14px", margin: "0 0 12px 0", display: "flex", alignItems: "flex-start", gap: 10 }}>
+      <span style={{ color: "#92400E", fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: 1, lineHeight: "18px", whiteSpace: "nowrap" }}>⚠ Needs strategist input</span>
+      <span style={{ color: "#78350F", fontSize: 10, lineHeight: "18px" }}>
+        This section requires strategist-authored content before export. Add the required inputs in the sidebar, then regenerate.
+        <span style={{ display: "block", marginTop: 2, fontStyle: "italic" }}>Section: {slideId} — not included in PPTX / PDF exports until complete.</span>
+      </span>
+    </div>
+  );
+}
+
 function PrintSlide({ slide, edits }: { slide: SlideData; edits: Record<string, string> }) {
   const r = (key: string, fallback: string) => resolveEdit(edits, key, fallback);
+  const needsInput = slide.sourceType === "needs_input" || slide.sourceType === "template_draft";
 
   if (slide.type === "title") {
     return (
@@ -194,6 +209,7 @@ function PrintSlide({ slide, edits }: { slide: SlideData; edits: Record<string, 
       <div>
         <PrintSlideHeader title={title} />
         <div style={{ padding: "12px 20px 8px" }}>
+          {needsInput && <SlideDraftBadge slideId={slide.id} />}
           {slide.subtitle && <div style={{ fontSize: 10, color: "#6B7280", marginBottom: 6 }}>{r(`${slide.id}_subtitle`, slide.subtitle)}</div>}
           {(slide.bullets ?? []).map((b, bi) => (
             <div key={bi} style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 5 }}>
@@ -211,33 +227,36 @@ function PrintSlide({ slide, edits }: { slide: SlideData; edits: Record<string, 
     return (
       <div>
         <PrintSlideHeader title={title} />
-        <div style={{ padding: "12px 20px 8px", display: "flex", gap: 16 }}>
-          <div style={{ flex: 1 }}>
-            {slide.leftContent.type === "bullets" && (slide.leftContent.bullets ?? []).map((b, bi) => (
-              <div key={bi} style={{ display: "flex", gap: 6, marginBottom: 4, fontSize: 10 }}>
-                <span style={{ color: RED, fontWeight: "bold" }}>•</span>
-                <span style={{ color: "#1F2937" }}>{b}</span>
-              </div>
-            ))}
-            {slide.leftContent.type === "table" && slide.leftContent.table && (
-              <PrintTable headers={slide.leftContent.table.headers} rows={slide.leftContent.table.rows} />
-            )}
-          </div>
-          <div style={{ flex: 1 }}>
-            {slide.rightContent.type === "metrics" && (
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                {(slide.rightContent.metrics ?? []).map((m: any, mi: number) => <MetricBox key={mi} m={m} />)}
-              </div>
-            )}
-            {(slide.rightContent.type === "chart-bar" || slide.rightContent.type === "chart-line") && slide.rightContent.chartData && (
-              <div style={{ fontSize: 10, color: "#6B7280", fontStyle: "italic" }}>
-                [Chart data — see PPTX export for interactive chart]
-                <PrintTable
-                  headers={["Label", ...(slide.rightContent.chartKeys ?? ["value"])]}
-                  rows={(slide.rightContent.chartData as any[]).map(d => [d.label, ...(slide.rightContent!.chartKeys ?? ["value"]).map(k => String(d[k] ?? ""))])}
-                />
-              </div>
-            )}
+        <div style={{ padding: "12px 20px 8px", display: "flex", gap: 16, flexDirection: "column" }}>
+          {needsInput && <SlideDraftBadge slideId={slide.id} />}
+          <div style={{ display: "flex", gap: 16 }}>
+            <div style={{ flex: 1 }}>
+              {slide.leftContent.type === "bullets" && (slide.leftContent.bullets ?? []).map((b, bi) => (
+                <div key={bi} style={{ display: "flex", gap: 6, marginBottom: 4, fontSize: 10 }}>
+                  <span style={{ color: RED, fontWeight: "bold" }}>•</span>
+                  <span style={{ color: "#1F2937" }}>{b}</span>
+                </div>
+              ))}
+              {slide.leftContent.type === "table" && slide.leftContent.table && (
+                <PrintTable headers={slide.leftContent.table.headers} rows={slide.leftContent.table.rows} />
+              )}
+            </div>
+            <div style={{ flex: 1 }}>
+              {slide.rightContent.type === "metrics" && (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  {(slide.rightContent.metrics ?? []).map((m: any, mi: number) => <MetricBox key={mi} m={m} />)}
+                </div>
+              )}
+              {(slide.rightContent.type === "chart-bar" || slide.rightContent.type === "chart-line") && slide.rightContent.chartData && (
+                <div style={{ fontSize: 10, color: "#6B7280", fontStyle: "italic" }}>
+                  [Chart data — see PPTX export for interactive chart]
+                  <PrintTable
+                    headers={["Label", ...(slide.rightContent.chartKeys ?? ["value"])]}
+                    rows={(slide.rightContent.chartData as any[]).map(d => [d.label, ...(slide.rightContent!.chartKeys ?? ["value"]).map(k => String(d[k] ?? ""))])}
+                  />
+                </div>
+              )}
+            </div>
           </div>
         </div>
         <PrintSlideFooter />
@@ -323,6 +342,7 @@ function PrintSlide({ slide, edits }: { slide: SlideData; edits: Record<string, 
       <div>
         <PrintSlideHeader title={title} />
         <div style={{ padding: "12px 20px 8px" }}>
+          {needsInput && <SlideDraftBadge slideId={slide.id} />}
           {slide.commentary && (
             <div style={{ fontSize: 10, color: "#6B7280", marginBottom: 8 }}>{r(`${slide.id}_commentary`, slide.commentary)}</div>
           )}
@@ -367,17 +387,18 @@ function PrintSlide({ slide, edits }: { slide: SlideData; edits: Record<string, 
     );
   }
 
-  if (slide.type === "cluster-map" && slide.clusters) {
-    const cols = Math.min(4, slide.clusters.length);
+  if (slide.type === "cluster-map") {
+    const cols = Math.max(1, Math.min(4, (slide.clusters ?? []).length));
     return (
       <div>
         <PrintSlideHeader title={title} />
         <div style={{ padding: "12px 20px 8px" }}>
+          {needsInput && <SlideDraftBadge slideId={slide.id} />}
           {slide.commentary && (
             <div style={{ fontSize: 10, color: "#6B7280", marginBottom: 8 }}>{r(`${slide.id}_commentary`, slide.commentary)}</div>
           )}
           <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 10 }}>
-            {slide.clusters.map((cluster, ci) => (
+            {(slide.clusters ?? []).map((cluster, ci) => (
               <div key={ci} style={{ border: "1px solid #E5E7EB", borderRadius: 4, overflow: "hidden" }}>
                 <div style={{ background: NAVY, color: "white", fontSize: 10, fontWeight: 700, padding: "5px 10px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                   {r(`${slide.id}_cluster_${ci}_hub`, cluster.hub)}

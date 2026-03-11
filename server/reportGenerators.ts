@@ -826,6 +826,69 @@ export async function generatePptx(
   return buffer;
 }
 
+function addMidStrategyTitleSlide(pptx: any, clientName: string, reportLabel: string, date: string) {
+  const slide = pptx.addSlide();
+  slide.background = { color: SLIDE_ACCENT };
+
+  slide.addShape(pptx.ShapeType.rect, {
+    x: 0, y: 0, w: "100%", h: 0.07,
+    fill: { color: "C0392B" },
+    line: { color: "C0392B" },
+  });
+
+  slide.addShape(pptx.ShapeType.rect, {
+    x: 0, y: 7.28, w: "100%", h: 0.07,
+    fill: { color: "C0392B" },
+    line: { color: "C0392B" },
+  });
+
+  slide.addText(reportLabel, {
+    x: 0.6, y: 1.1, w: 8.8, h: 0.9,
+    fontSize: 32, bold: true, color: "FFFFFF",
+    align: "left",
+  });
+
+  slide.addText(clientName, {
+    x: 0.6, y: 2.15, w: 8.8, h: 0.6,
+    fontSize: 22, color: "BFD7FF",
+    align: "left",
+  });
+
+  slide.addText(date, {
+    x: 0.6, y: 2.9, w: 8.8, h: 0.4,
+    fontSize: 12, color: "93C5FD",
+    align: "left",
+  });
+
+  slide.addText("Webserv  |  webserv.io", {
+    x: 0.6, y: 6.8, w: 8.8, h: 0.3,
+    fontSize: 10, color: "BFD7FF",
+    align: "left",
+  });
+}
+
+export async function generateMidStrategyPptx(
+  clientName: string,
+  reportLabel: string,
+  date: string,
+  sections: SectionData[]
+): Promise<Buffer> {
+  const pptx = new PptxGenJS();
+  pptx.layout = "LAYOUT_WIDE";
+  pptx.author = "Webserv SmartEO";
+  pptx.subject = reportLabel;
+  pptx.title = `${clientName} — ${reportLabel}`;
+
+  addMidStrategyTitleSlide(pptx, clientName, reportLabel, date);
+
+  sections.forEach((section, idx) => {
+    addSectionSlide(pptx, idx + 1, section.title, section.items);
+  });
+
+  const buffer = await pptx.write({ outputType: "nodebuffer" }) as Buffer;
+  return buffer;
+}
+
 const PRIORITY_COLORS: Record<string, string> = {
   P0: "C0392B",
   P1: "D68910",

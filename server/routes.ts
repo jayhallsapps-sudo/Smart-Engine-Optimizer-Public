@@ -30,7 +30,7 @@ import { encrypt, decrypt, deriveInternalToken } from "./encryption";
 import { buildGoogleAuthUrl, exchangeCodeForToken, callbackHtml, isGoogleConfigured } from "./googleAuth";
 import { testCredential } from "./connectionTest";
 import { insertSfReportSchema, insertCallTrackingReportSchema, amInputsSchema, migrateLegacyAmInputs } from "@shared/schema";
-import { generateBiweeklyDocx, generatePptx, generateQbrPrepDocx } from "./reportGenerators";
+import { generateBiweeklyDocx, generatePptx, generateMidStrategyPptx, generateQbrPrepDocx } from "./reportGenerators";
 import { generateBiweeklyPdf, generateMonthlyPdf } from "./pdfGenerator";
 import { generatePdfViaPuppeteer } from "./puppeteerPdfGenerator";
 import type { SectionData } from "./reportGenerators";
@@ -2052,6 +2052,7 @@ export async function registerRoutes(
     const { clientId, currentCrawlAssetId, comparisonCrawlAssetId, amInputs, gapAnswers, gapSessionId } = req.body;
     if (!clientId) return res.status(400).json({ message: "clientId is required" });
 
+    const rawAmInputs = req.body.amInputs ?? {};
     const amValidation = validateAmInputs(req.body);
     if ("error" in amValidation) return res.status(400).json({ message: amValidation.error });
 
@@ -2059,11 +2060,12 @@ export async function registerRoutes(
       const client = await storage.getClient(Number(clientId));
       if (!client) return res.status(404).json({ message: "Client not found" });
       const { generateMidStrategy } = await import("./midStrategyGenerator");
+      const mergedAmInputs = ("error" in amValidation) ? {} : { ...rawAmInputs, ...amValidation.amInputs };
       const output = await generateMidStrategy({
         clientId: Number(clientId),
         currentCrawlAssetId: currentCrawlAssetId ?? null,
         comparisonCrawlAssetId: comparisonCrawlAssetId ?? null,
-        amInputs: ("error" in amValidation) ? {} : amValidation.amInputs,
+        amInputs: mergedAmInputs,
         gapContext: gapAnswers ? buildGapContext(gapAnswers) : undefined,
       });
       if (gapAnswers?.length && gapSessionId) {
@@ -2085,7 +2087,7 @@ export async function registerRoutes(
     if (!json || !json.slides?.length) { logExport("Mid-Strategy PPTX", t0, false, "No slides"); return res.status(400).json({ message: "No slide data found. Generate the report first." }); }
     try {
       const sections: SectionData[] = (json.slides ?? [])
-        .filter((s: any) => s.type !== "title")
+        .filter((s: any) => s.type !== "title" && s.exportAllowed !== false)
         .map((s: any, idx: number) => {
           const items: any[] = [];
           if (s.metrics?.length) items.push({ summary: s.metrics.map((m: any) => ({ label: m.label, current: m.current, previous: m.previous ?? "—", deltaPercent: m.delta ?? "—", isPositive: m.isPositive ?? true })) });
@@ -2131,7 +2133,7 @@ export async function registerRoutes(
       const clientName = json.client_name ?? "Client";
       const reportTitle = json.report_title ?? "Mid-Strategy SEO Report";
       const generatedAt = json.generated_at ? new Date(json.generated_at).toLocaleDateString("en-US") : new Date().toLocaleDateString("en-US");
-      const buffer = await generatePptx(clientName, reportTitle, generatedAt, sections);
+      const buffer = await generateMidStrategyPptx(clientName, reportTitle, generatedAt, sections);
       const slug = clientName.toLowerCase().replace(/\s+/g, "_");
       logExport("Mid-Strategy PPTX", t0, true);
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
@@ -2148,7 +2150,8 @@ export async function registerRoutes(
     const { json, edits } = req.body as { json: any; edits?: Record<string, string> };
     if (!json || !json.slides?.length) { logExport("Mid-Strategy PDF", t0, false, "No slides"); return res.status(400).json({ message: "No slide data found. Generate the report first." }); }
     const id = randomUUID();
-    printCache.set(id, { data: { report: json, edits: edits ?? {} }, ts: Date.now() });
+    const pdfJson = { ...json, slides: (json.slides ?? []).filter((s: any) => s.exportAllowed !== false) };
+    printCache.set(id, { data: { report: pdfJson, edits: edits ?? {} }, ts: Date.now() });
     try {
       const buffer = await generatePdfViaPuppeteer(id, "mid-strategy/pdf-render");
       const clientName = json.client_name ?? "Client";
@@ -2170,7 +2173,7 @@ export async function registerRoutes(
     if (!json) return res.status(400).json({ message: "json is required" });
     try {
       const sections: SectionData[] = (json.slides ?? [])
-        .filter((s: any) => s.type !== "title")
+        .filter((s: any) => s.type !== "title" && s.exportAllowed !== false)
         .map((s: any, idx: number) => {
           const items: any[] = [];
           if (s.metrics?.length) items.push({ summary: s.metrics.map((m: any) => ({ label: m.label, current: m.current, previous: m.previous ?? "—", deltaPercent: m.delta ?? "—", isPositive: m.isPositive ?? true })) });
@@ -2215,7 +2218,7 @@ export async function registerRoutes(
       const msClientName = json.client_name ?? "Client";
       const msReportTitle = json.report_title ?? "Mid-Strategy SEO Report";
       const msGeneratedAt = json.generated_at ? new Date(json.generated_at).toLocaleDateString("en-US") : new Date().toLocaleDateString("en-US");
-      const buffer = await generatePptx(msClientName, msReportTitle, msGeneratedAt, sections);
+      const buffer = await generateMidStrategyPptx(msClientName, msReportTitle, msGeneratedAt, sections);
       const { ReplitConnectors } = await import("@replit/connectors-sdk");
       const connectors = new ReplitConnectors();
       const filename = `${msClientName} Mid-Strategy SEO Report.pptx`;

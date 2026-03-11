@@ -76,6 +76,18 @@ export default function MidStrategyPage() {
   const [domainProposed, setDomainProposed] = useState("");
   const [domainRationale, setDomainRationale] = useState("");
 
+  const [showStrategyInputs, setShowStrategyInputs] = useState(false);
+  const [firstFocusBulletsRaw, setFirstFocusBulletsRaw] = useState("");
+  const [whatsNextBulletsRaw, setWhatsNextBulletsRaw] = useState("");
+  const [webservNextStepsRaw, setWebservNextStepsRaw] = useState("");
+  const [clientNextStepsRaw, setClientNextStepsRaw] = useState("");
+
+  const [showIaInputs, setShowIaInputs] = useState(false);
+  const [iaCurrentNavRaw, setIaCurrentNavRaw] = useState("");
+  const [iaFutureNavRaw, setIaFutureNavRaw] = useState("");
+  const [iaClustersRaw, setIaClustersRaw] = useState("");
+  const [iaCredPagesRaw, setIaCredPagesRaw] = useState("");
+
   const { data: clients = [] } = useQuery<Client[]>({ queryKey: ["/api/clients"] });
   const clientName = (clients as Client[]).find(c => String(c.id) === clientId)?.name ?? "";
 
@@ -122,7 +134,47 @@ export default function MidStrategyPage() {
     }
   }
 
+  function parseLines(raw: string): string[] {
+    return raw.split("\n").map(s => s.trim()).filter(Boolean);
+  }
+
+  function parseNavItems(raw: string): Array<{ label: string; children?: string[] }> {
+    return raw.split("\n").map(line => {
+      const trimmed = line.trim();
+      if (!trimmed) return null;
+      const colonIdx = trimmed.indexOf(":");
+      if (colonIdx === -1) return { label: trimmed };
+      const label = trimmed.substring(0, colonIdx).trim();
+      const childrenRaw = trimmed.substring(colonIdx + 1).trim();
+      const children = childrenRaw ? childrenRaw.split(",").map(s => s.trim()).filter(Boolean) : [];
+      return { label, ...(children.length ? { children } : {}) };
+    }).filter(Boolean) as Array<{ label: string; children?: string[] }>;
+  }
+
+  function parseClusters(raw: string): Array<{ hub: string; pages: string[] }> {
+    return raw.split("\n").map(line => {
+      const trimmed = line.trim();
+      if (!trimmed) return null;
+      const colonIdx = trimmed.indexOf(":");
+      if (colonIdx === -1) return { hub: trimmed, pages: [] };
+      const hub = trimmed.substring(0, colonIdx).trim();
+      const pagesRaw = trimmed.substring(colonIdx + 1).trim();
+      const pages = pagesRaw ? pagesRaw.split(",").map(s => s.trim()).filter(Boolean) : [];
+      return { hub, pages };
+    }).filter(Boolean) as Array<{ hub: string; pages: string[] }>;
+  }
+
   function getAmInputs() {
+    const firstFocusBullets = parseLines(firstFocusBulletsRaw);
+    const whatsNextBullets = parseLines(whatsNextBulletsRaw);
+    const webservNextSteps = parseLines(webservNextStepsRaw);
+    const clientNextSteps = parseLines(clientNextStepsRaw);
+    const currentNav = parseNavItems(iaCurrentNavRaw);
+    const futureNav = parseNavItems(iaFutureNavRaw);
+    const clusters = parseClusters(iaClustersRaw);
+    const credibilityPages = parseClusters(iaCredPagesRaw);
+    const hasIaData = currentNav.length > 0 || futureNav.length > 0 || clusters.length > 0 || credibilityPages.length > 0;
+
     return {
       clientSentiment,
       amThoughts,
@@ -134,6 +186,18 @@ export default function MidStrategyPage() {
       focusNext60Days: amFocusNext60Days || undefined,
       salesAdmissionsContext: amSalesAdmissions || undefined,
       clientDependencyNotes: amClientDependency || undefined,
+      ...(firstFocusBullets.length ? { firstFocusBullets } : {}),
+      ...(whatsNextBullets.length ? { whatsNextBullets } : {}),
+      ...(webservNextSteps.length ? { webservNextSteps } : {}),
+      ...(clientNextSteps.length ? { clientNextSteps } : {}),
+      ...(hasIaData ? {
+        iaData: {
+          ...(currentNav.length ? { currentNav } : {}),
+          ...(futureNav.length ? { futureNav } : {}),
+          ...(clusters.length ? { clusters } : {}),
+          ...(credibilityPages.length ? { credibilityPages } : {}),
+        },
+      } : {}),
       ...(domainStrategyEnabled ? {
         domainStrategy: {
           enabled: true,
@@ -613,6 +677,130 @@ export default function MidStrategyPage() {
                     />
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+
+          <Separator />
+
+          {/* Strategy Content Inputs */}
+          <div className="space-y-1.5">
+            <button
+              className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground w-full hover:text-foreground transition-colors"
+              onClick={() => setShowStrategyInputs(v => !v)}
+              data-testid="toggle-strategy-inputs"
+            >
+              {showStrategyInputs ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+              Strategy Content
+              {!(firstFocusBulletsRaw || whatsNextBulletsRaw || webservNextStepsRaw || clientNextStepsRaw) && (
+                <span className="ml-auto text-[9px] text-amber-500 font-normal">required for export</span>
+              )}
+            </button>
+            {showStrategyInputs && (
+              <div className="space-y-3 pt-1">
+                <p className="text-[10px] text-muted-foreground leading-snug">These sections will not appear in PPTX/PDF exports until strategist content is entered. One item per line.</p>
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-muted-foreground">First Focus bullets</Label>
+                  <Textarea
+                    value={firstFocusBulletsRaw}
+                    onChange={e => setFirstFocusBulletsRaw(e.target.value)}
+                    placeholder={"Clarify the site's core structure...\nAlign services with patient evaluation...\nCreate a shared prioritization framework..."}
+                    className="text-xs min-h-[70px] resize-none font-mono"
+                    data-testid="input-first-focus-bullets"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-muted-foreground">What's Next bullets</Label>
+                  <Textarea
+                    value={whatsNextBulletsRaw}
+                    onChange={e => setWhatsNextBulletsRaw(e.target.value)}
+                    placeholder={"Confirm the proposed long-term site structure...\nContinued content planning...\nLocal SEO foundations..."}
+                    className="text-xs min-h-[70px] resize-none font-mono"
+                    data-testid="input-whats-next-bullets"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-muted-foreground">Webserv next steps (one per line)</Label>
+                  <Textarea
+                    value={webservNextStepsRaw}
+                    onChange={e => setWebservNextStepsRaw(e.target.value)}
+                    placeholder={"Content planning for the rest of the quarter\nDefining and strengthening primary service pages\nFixing conversion gaps"}
+                    className="text-xs min-h-[60px] resize-none font-mono"
+                    data-testid="input-webserv-next-steps"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-muted-foreground">Client next steps (one per line)</Label>
+                  <Textarea
+                    value={clientNextStepsRaw}
+                    onChange={e => setClientNextStepsRaw(e.target.value)}
+                    placeholder={"Confirm the proposed future site structure\nConfirm the redirect plan"}
+                    className="text-xs min-h-[60px] resize-none font-mono"
+                    data-testid="input-client-next-steps"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          <Separator />
+
+          {/* IA Framework Inputs */}
+          <div className="space-y-1.5">
+            <button
+              className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground w-full hover:text-foreground transition-colors"
+              onClick={() => setShowIaInputs(v => !v)}
+              data-testid="toggle-ia-inputs"
+            >
+              {showIaInputs ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+              IA Framework
+              {!(iaCurrentNavRaw || iaFutureNavRaw || iaClustersRaw) && (
+                <span className="ml-auto text-[9px] text-amber-500 font-normal">required for export</span>
+              )}
+            </button>
+            {showIaInputs && (
+              <div className="space-y-3 pt-1">
+                <p className="text-[10px] text-muted-foreground leading-snug">IA and cluster slides are suppressed from exports until client-specific data is entered here. Format for nav with children: <code className="bg-muted px-0.5 rounded">LABEL: /child1/, /child2/</code></p>
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-muted-foreground">Current navigation (one label per line)</Label>
+                  <Textarea
+                    value={iaCurrentNavRaw}
+                    onChange={e => setIaCurrentNavRaw(e.target.value)}
+                    placeholder={"ABOUT\nPROGRAMS\nADMISSIONS\nTREATMENT\nRESOURCES"}
+                    className="text-xs min-h-[70px] resize-none font-mono"
+                    data-testid="input-ia-current-nav"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-muted-foreground">Future navigation (LABEL: /child1/, /child2/)</Label>
+                  <Textarea
+                    value={iaFutureNavRaw}
+                    onChange={e => setIaFutureNavRaw(e.target.value)}
+                    placeholder={"TREATMENT: /treatment/, /treatment/therapies/\nPROGRAMS: /programs/, /programs/residential/\nADMISSIONS: /admissions/"}
+                    className="text-xs min-h-[70px] resize-none font-mono"
+                    data-testid="input-ia-future-nav"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-muted-foreground">Content clusters (HUB: /page1/, /page2/)</Label>
+                  <Textarea
+                    value={iaClustersRaw}
+                    onChange={e => setIaClustersRaw(e.target.value)}
+                    placeholder={"Treatment: /treatment/, /treatment/therapies/\nPrograms: /programs/, /programs/residential/"}
+                    className="text-xs min-h-[70px] resize-none font-mono"
+                    data-testid="input-ia-clusters"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-muted-foreground">Credibility pages (HUB: /page1/, /page2/)</Label>
+                  <Textarea
+                    value={iaCredPagesRaw}
+                    onChange={e => setIaCredPagesRaw(e.target.value)}
+                    placeholder={"About: /about/, /about/our-story/, /about/clinical-team/\nResources: /resources/, /resources/blog/"}
+                    className="text-xs min-h-[60px] resize-none font-mono"
+                    data-testid="input-ia-cred-pages"
+                  />
+                </div>
               </div>
             )}
           </div>

@@ -772,10 +772,8 @@ function generateSlides(
   } as any);
 
   // ── s09: First Focus / Structural Cleanup ───────────────────────────────────
-  const firstFocusBullets = amInputs.firstFocusBullets?.length ? amInputs.firstFocusBullets : [
-    `Clarify the site's core structure: Define what lives at the top level (treatment, programs, admissions, etc.) and remove navigation ambiguity.`,
-    `Align the site with how patients evaluate treatment: Services first, conditions second, education later — reducing friction for users deciding if ${clientName} is the right fit.`,
-    "Create a shared prioritization framework for growth: Ensure future blogs, geo pages, and condition pages support core services and scale cleanly without rework.",
+  const hasFirstFocusInput = !!amInputs.firstFocusBullets?.length;
+  const firstFocusBullets = hasFirstFocusInput ? amInputs.firstFocusBullets! : [
     ...(amInputs.amThoughts ? [`Strategist focus: ${amInputs.amThoughts}`] : []),
   ];
   slides.push({
@@ -783,62 +781,62 @@ function generateSlides(
     type: "bullets",
     title: "Core Services, Conversions & Structural Cleanup",
     sectionLabel: "FIRST FOCUS",
-    subtitle: `Our top priority is aligning on a clear, scalable site structure before production begins.`,
-    bullets: firstFocusBullets,
+    subtitle: hasFirstFocusInput
+      ? `Our top priority is aligning on a clear, scalable site structure before production begins.`
+      : `Strategist input required — add First Focus bullets in the sidebar to complete this section.`,
+    bullets: firstFocusBullets.length ? firstFocusBullets : ["No strategist input provided yet."],
     commentary: amInputs.focusNext60Days || undefined,
-  });
+    sourceType: hasFirstFocusInput ? "client_specific" : "needs_input",
+    exportAllowed: hasFirstFocusInput,
+  } as any);
 
   // ── s10: Current vs Future IA ───────────────────────────────────────────────
   const ia = amInputs.iaData;
-  const currentNav = ia?.currentNav?.length ? ia.currentNav : [
-    { label: "ABOUT" }, { label: "PROGRAMS" }, { label: "ADMISSIONS" },
-    { label: "TREATMENT" }, { label: "RESOURCES" },
-    { label: "VERIFY INSURANCE" }, { label: "CALL NOW" }, { label: "WHAT WE TREAT" },
-  ];
-  const futureNav = ia?.futureNav?.length ? ia.futureNav : [
-    { label: "TREATMENT", children: ["/treatment/", "/treatment/therapies-modalities/", "/treatment/trauma-integrated-care/"] },
-    { label: "PROGRAMS", children: ["/programs/", "/programs/residential/", "/programs/detox/", "/programs/php/"] },
-    { label: "WHAT WE TREAT", children: ["/what-we-treat/", "/what-we-treat/substance-use/", "/what-we-treat/alcohol/"] },
-    { label: "ADMISSIONS", children: ["/admissions/", "/admissions/verify-insurance/", "/admissions/start-here/"] },
-    { label: "ABOUT", children: ["/about/", "/about/our-story/", "/about/clinical-team/"] },
-    { label: "RESOURCES", children: ["/resources/", "/resources/blog/", "/resources/faq/"] },
-  ];
+  const hasIaInput = !!(ia?.currentNav?.length && ia?.futureNav?.length);
+  const currentNav = hasIaInput ? ia!.currentNav! : [];
+  const futureNav = hasIaInput ? ia!.futureNav! : [];
   slides.push({
     id: "s10_ia_comparison",
     type: "ia-comparison",
     title: "Current vs Future Information Architecture",
-    commentary: "Our goal: improve both usability and search performance. The new IA creates clear topics that map to real searches and support stronger internal linking — helping key pages rank, earn snippets, and convert.",
+    commentary: hasIaInput
+      ? "Our goal: improve both usability and search performance. The new IA creates clear topics that map to real searches and support stronger internal linking — helping key pages rank, earn snippets, and convert."
+      : "Client-specific IA has not been entered yet. Add current and future navigation in the sidebar to complete this section.",
     currentIA: currentNav,
     futureIA: futureNav,
-  });
+    sourceType: hasIaInput ? "client_specific" : "needs_input",
+    exportAllowed: hasIaInput,
+  } as any);
 
   // ── s11: Scalable Blueprint / Cluster Expansion ─────────────────────────────
-  const clusters = ia?.clusters?.length ? ia.clusters : [
-    { hub: "Treatment", pages: ["/treatment/", "/treatment/therapies-modalities/", "/treatment/trauma-integrated-care/", "/treatment/medical-psychiatry/", "/treatment/wellness-experiential/"] },
-    { hub: "Programs", pages: ["/programs/", "/programs/residential/", "/programs/detox/", "/programs/php/", "/programs/iop/", "/programs/aftercare-alumni/"] },
-    { hub: "Admissions", pages: ["/admissions/", "/admissions/start-here/", "/admissions/insurance-cost/", "/admissions/verify-insurance/", "/admissions/what-to-bring/"] },
-    { hub: "What We Treat", pages: ["/what-we-treat/", "/what-we-treat/substance-use/", "/what-we-treat/alcohol/", "/what-we-treat/opioids/", "/what-we-treat/mental-health/"] },
-  ];
+  const hasClusters = !!(ia?.clusters?.length);
+  const clusters = hasClusters ? ia!.clusters! : [];
   slides.push({
     id: "s11_cluster_blueprint",
     type: "cluster-map",
     title: "Scalable Blueprint: Content Cluster Expansion",
-    commentary: `A scalable blueprint for what we publish next. We'll grow these top-level hubs into complete topic clusters — adding the pages that matter most, in the order that drives rankings and admissions.`,
+    commentary: hasClusters
+      ? `A scalable blueprint for what we publish next. We'll grow these top-level hubs into complete topic clusters — adding the pages that matter most, in the order that drives rankings and admissions.`
+      : "Content cluster map has not been entered yet. Add clusters in the sidebar IA Framework section.",
     clusters,
-  });
+    sourceType: hasClusters ? "client_specific" : "needs_input",
+    exportAllowed: hasClusters,
+  } as any);
 
   // ── s12: Credibility Layer / About + Resources ──────────────────────────────
-  const credPages = ia?.credibilityPages?.length ? ia.credibilityPages : [
-    { hub: "About", pages: ["/about/", "/about/our-story/", "/about/mission-values/", "/about/leadership/", "/about/clinical-team/", "/about/quality-accreditation/", "/about/treatment-outcomes/", "/about/careers/"] },
-    { hub: "Resources", pages: ["/resources/", "/resources/blog/", "/resources/continuing-education/", "/resources/in-the-media/", "/resources/faq/"] },
-  ];
+  const hasCredPages = !!(ia?.credibilityPages?.length);
+  const credPages = hasCredPages ? ia!.credibilityPages! : [];
   slides.push({
     id: "s12_credibility_layer",
     type: "cluster-map",
     title: "Credibility Layer: About + Resources",
-    commentary: "About + Resources are the credibility layer. About consolidates core E-E-A-T signals — team, standards, accreditation, and outcomes — so trust is easy to verify. Resources extends that authority through helpful, structured content that answers real questions and supports search visibility over time.",
+    commentary: hasCredPages
+      ? "About + Resources are the credibility layer. About consolidates core E-E-A-T signals — team, standards, accreditation, and outcomes — so trust is easy to verify. Resources extends that authority through helpful, structured content that answers real questions and supports search visibility over time."
+      : "Credibility page clusters have not been entered yet. Add credibility pages in the sidebar IA Framework section.",
     clusters: credPages,
-  });
+    sourceType: hasCredPages ? "client_specific" : "needs_input",
+    exportAllowed: hasCredPages,
+  } as any);
 
   // ── URL Audit slides (conditional — only when crawl data exists) ────────────
   const flagCount = urlAudit.deleteRedirectCount;
@@ -897,32 +895,26 @@ function generateSlides(
   }
 
   // ── What's Next ─────────────────────────────────────────────────────────────
-  const whatsNextBullets = amInputs.whatsNextBullets?.length ? amInputs.whatsNextBullets : [
-    "Confirm the proposed long-term site structure: Ensure this organization reflects how you want your services and offerings to be understood over time.",
-    "Continued Content Planning: In parallel, we'll map out how this works in your current scope.",
-    "Local SEO & Visibility Foundations: As we move beyond initial cleanup and core service work, we'll begin laying groundwork for local SEO initiatives, including location relevance, GBP optimization, and supporting infrastructure.",
+  const hasWhatsNextInput = !!amInputs.whatsNextBullets?.length;
+  const whatsNextBullets = hasWhatsNextInput ? amInputs.whatsNextBullets! : [
     ...(amInputs.leadershipNote ? [`For leadership: ${amInputs.leadershipNote}`] : []),
   ];
   slides.push({
     id: "s_whats_next",
     type: "bullets",
     title: "What's Next",
-    bullets: whatsNextBullets,
-  });
+    bullets: whatsNextBullets.length ? whatsNextBullets : ["Strategist input required — add What's Next bullets in the sidebar."],
+    sourceType: hasWhatsNextInput ? "client_specific" : "needs_input",
+    exportAllowed: hasWhatsNextInput,
+  } as any);
 
   // ── Next Steps / Ownership ──────────────────────────────────────────────────
-  const webservActions = amInputs.webservNextSteps?.length ? amInputs.webservNextSteps : [
-    "Content planning for the rest of the quarter",
-    `Defining and strengthening ${clientName}'s primary service pages`,
-    "Fixing conversion gaps",
-    "Phase 1 navigation cleanup (conversion-focused)",
-    ...(hasCrawlData ? ["Redirect & archiving cannibalizing URLs"] : []),
-    ...(amInputs.focusNext60Days ? [amInputs.focusNext60Days] : []),
-  ];
-  const clientActions = amInputs.clientNextSteps?.length ? amInputs.clientNextSteps : [
-    "Confirm the proposed future site structure",
-    ...(hasCrawlData ? ["Confirm the redirect plan for the cannibalizing URLs"] : []),
-    ...(amInputs.salesAdmissionsContext ? [amInputs.salesAdmissionsContext] : []),
+  const hasWebservInput = !!amInputs.webservNextSteps?.length;
+  const hasClientInput = !!amInputs.clientNextSteps?.length;
+  const hasNextStepsInput = hasWebservInput && hasClientInput;
+  const webservActions = hasWebservInput ? amInputs.webservNextSteps! : ["Webserv next steps not yet entered."];
+  const clientActions = hasClientInput ? amInputs.clientNextSteps! : [
+    ...(amInputs.salesAdmissionsContext ? [amInputs.salesAdmissionsContext] : ["Client next steps not yet entered."]),
     ...(amInputs.clientDependencyNotes ? [amInputs.clientDependencyNotes] : []),
   ];
   slides.push({
@@ -938,7 +930,9 @@ function generateSlides(
         isPositive: true,
       })),
     },
-  });
+    sourceType: hasNextStepsInput ? "client_specific" : "needs_input",
+    exportAllowed: hasNextStepsInput,
+  } as any);
 
   return slides;
 }

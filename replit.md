@@ -60,3 +60,8 @@ The Mid-Strategy SEO report is a slide-based PowerPoint-aligned report with 14+ 
 - **Health Check**: Integration health panel checks Screaming Frog, GSC, GA4, NSM Sheet, GBP, CallRail/CTM, Airtable, Asana, SEMrush, Ahrefs status per client
 - **New slide types**: `DecisionOption` (domain strategy pros/cons), `IAItem` (current/future nav structure), `ContentCluster` (hub/spoke content clusters)
 - **PPTX export hardening**: decision-card → text with ✓/✗ markers, ia-comparison → current/future text blocks, cluster-map → Hub/Page table
+- **Credibility controls**: IA/cluster slides (s10–s12) and strategy slides (s09, s_whats_next, s_next_steps) use `sourceType: "needs_input"` / `exportAllowed: false` when no strategist content is entered. All three export routes (PPTX, PDF, Drive) filter out suppressed slides. Preview shows amber "⚠ Needs strategist input" badge on suppressed slides.
+- **Strategy Content sidebar section**: Collapsible form for firstFocusBullets, whatsNextBullets, webservNextSteps, clientNextSteps (one per line). Shows amber warning when empty.
+- **IA Framework sidebar section**: Collapsible form for currentNav, futureNav, clusters, credibilityPages. Shows amber warning when empty. Format: "LABEL: /child1/, /child2/" for nav/clusters.
+- **Route fix**: `/api/reports/mid-strategy/generate` merges raw amInputs fields (strategy/IA) with validated core fields so extra fields reach the generator.
+- **PPTX cover**: Uses `generateMidStrategyPptx()` with red accent bars at y=0 and y=7.28, matching the preview.

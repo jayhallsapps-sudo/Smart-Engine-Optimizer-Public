@@ -22,6 +22,8 @@ import type {
   CreditMonthBlock,
   CreditRowData,
   SectionQssb,
+  SectionSuggestedKeywords,
+  SuggestedKeywordRow,
   SourceSnapshot,
   GenerationMeta,
   GoalRow,
@@ -605,13 +607,15 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
     gbpActive: false,
   };
   const section7 = generateSection7(section6, section5, section7Evidence);
-  const section7Credits = generateSection7Credits(
-    quarter,
-    s6MonthlyCredits,
-    section2,
+  const sectionSuggestedKeywords = generateSuggestedKeywords(
+    gscQueryRows,
+    gscQueryPageRows,
+    sfData,
+    sfHeaders,
     section3,
     section4,
-    section6,
+    section2,
+    s6MonthlyCredits,
   );
 
   // T004: Generate account-specific client insights
@@ -803,7 +807,7 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
     section5Diagnosis: section5,
     section6Priorities: section6,
     section7Tracking: section7,
-    section7Credits,
+    sectionSuggestedKeywords,
     sectionQssb,
     gapContext,
     sourceSnapshot,
@@ -1488,7 +1492,7 @@ export function generateSection2(
   if (candidatePatterns.length === 0) {
     candidatePatterns.push({
       pattern: "High-Intent Organic Traffic Capture",
-      whyItMatters: "Treatment-intent organic queries (e.g., detox near me, rehab programs, insurance-covered treatment) represent the strongest mid-funnel intent. Pages ranking for these terms need optimized conversion paths to close the gap between clicks and contacts.",
+      whyItMatters: "Treatment-intent organic queries — detox near me, rehab programs, insurance-covered treatment — represent the strongest mid-funnel intent. Pages ranking for these terms need optimized conversion paths to close the gap between clicks and contacts.",
       evidence: "Directional inference: Treatment-intent organic traffic is likely the strongest conversion-support pattern in this account because these queries sit closest to admission decision-making — however, page-level GA4 conversion verification is incomplete, so the full conversion contribution of this traffic remains inferred rather than confirmed.",
     });
   }
@@ -2409,11 +2413,11 @@ function generateSection6(
   const topTrafficTopic = section3.topTrafficTopics.find(t => t.connectionToAdmits === "Low" || t.connectionToAdmits === "Medium");
   const thinPagesNote = hasThinPages ? ` (${tierInput.thinPages} thin pages detected in crawl)` : "";
 
-  // Build a short list of example page slugs for tactical recommendations (3–6 pages)
+  // Build a short list of actual page slugs for tactical recommendations (3–6 pages)
   function examplePageList(pages: typeof unclearTrafficPages, max = 5): string {
     const slugs = pages.slice(0, max).map(p => p.page.replace(/^https?:\/\/[^/]+/, "").replace(/\/$/, "") || p.page);
     if (slugs.length === 0) return "";
-    return ` (e.g. ${slugs.join(", ")})`;
+    return `: ${slugs.join(", ")}`;
   }
 
   // Cluster notation helper: "Topic Name (N queries) (X% of clicks)"
@@ -3096,6 +3100,218 @@ function generateAdditionalOpportunities(report: QbrPrepReportData): AdditionalO
     .map(({ type, title, why_now, evidence, recommendation, framing }) => ({
       type, title, why_now, evidence, recommendation, framing,
     }));
+}
+
+// ─── Suggested Keywords for Next Quarter ────────────────────────────────────
+
+const BRANDED_SIGNALS = /\b(anchored tides|bliss recovery|heartland|sol women|williamsburg house|horseshoe ridge|iris healing|webserv)\b/i;
+
+function isNonBranded(query: string): boolean {
+  return !BRANDED_SIGNALS.test(query.toLowerCase());
+}
+
+function normalizePath(url: string): string {
+  try {
+    return new URL(url).pathname.replace(/\/$/, "") || "/";
+  } catch {
+    return url.replace(/^https?:\/\/[^/]+/, "").replace(/\/$/, "") || "/";
+  }
+}
+
+/** Extract all live indexed URL paths from SF crawl data */
+function extractSfPaths(sfData: Record<string, any>[], sfHeaders: string[]): Set<string> {
+  const urlCol = sfHeaders.find(h => /^address$/i.test(h) || /^url$/i.test(h)) ?? sfHeaders[0] ?? "";
+  const statusCol = sfHeaders.find(h => /^status code$/i.test(h) || /^status$/i.test(h));
+  const paths = new Set<string>();
+  if (!urlCol) return paths;
+  const liveRows = statusCol
+    ? sfData.filter(r => { const s = Number(r[statusCol]); return s === 200 || (!s && true); })
+    : sfData;
+  for (const row of liveRows) {
+    const url = String(row[urlCol] ?? "");
+    if (url.startsWith("http")) {
+      paths.add(normalizePath(url));
+    }
+  }
+  return paths;
+}
+
+/** Find the best existing page for a query from GSC query+page dimension data */
+function findBestGscPage(query: string, gscQueryPageRows: any[]): string | null {
+  const matching = gscQueryPageRows
+    .filter((r: any) => r.keys?.[0]?.toLowerCase() === query.toLowerCase())
+    .sort((a: any, b: any) => (b.impressions ?? 0) - (a.impressions ?? 0));
+  if (!matching.length) return null;
+  const url = matching[0].keys?.[1];
+  return url ? normalizePath(url) : null;
+}
+
+/** Map recommendation type to a human-readable label */
+function recTypeLabel(type: SuggestedKeywordRow["recommendationType"]): string {
+  switch (type) {
+    case "optimize-existing": return "Optimize existing page";
+    case "refresh-existing": return "Refresh existing page";
+    case "create-new": return "Create new content";
+    case "cro-update": return "CRO / supporting update";
+    case "internal-linking": return "Internal linking support";
+  }
+}
+
+/**
+ * Classify the recommendation type based on whether a page exists and its performance signals.
+ */
+function classifyRecType(
+  pagePath: string | null,
+  sfPaths: Set<string>,
+  query: string,
+  impressions: number,
+  clicks: number,
+): SuggestedKeywordRow["recommendationType"] {
+  if (!pagePath) return "create-new";
+  const inSf = sfPaths.has(pagePath);
+  if (!inSf) return "create-new";
+  const ctr = impressions > 0 ? clicks / impressions : 0;
+  // Low CTR on an existing indexed page → optimize/CRO
+  if (impressions > 100 && ctr < 0.03) return "cro-update";
+  // Reasonable impressions but low clicks → refresh
+  if (impressions > 50 && clicks < 5) return "refresh-existing";
+  return "optimize-existing";
+}
+
+/**
+ * Build a concise "why it's recommended" reason from available GSC signals.
+ */
+function buildKeywordReason(
+  query: string,
+  impressions: number,
+  clicks: number,
+  pagePath: string | null,
+  recType: SuggestedKeywordRow["recommendationType"],
+  sfPaths: Set<string>,
+): string {
+  const impStr = impressions > 1000 ? `${Math.round(impressions / 1000)}k` : String(Math.round(impressions));
+  const ctr = impressions > 0 ? ((clicks / impressions) * 100).toFixed(1) : "0.0";
+  switch (recType) {
+    case "create-new":
+      return `${impStr} impressions this quarter with no existing page capturing this query — new content would close the gap between search demand and site coverage.`;
+    case "cro-update":
+      return `${impStr} impressions but only ${ctr}% CTR on ${pagePath ?? "this page"} — conversion path or meta optimization can significantly increase click capture without new content.`;
+    case "refresh-existing":
+      return `${impStr} impressions with only ${clicks} clicks — refreshing ${pagePath ?? "the existing page"} with stronger topical relevance and CTAs should improve ranking position and click volume.`;
+    case "optimize-existing":
+      return `${impStr} impressions with strong existing page at ${pagePath ?? "this URL"} — on-page optimization and internal linking can strengthen rankings further.`;
+    case "internal-linking":
+      return `Site has a relevant page at ${pagePath ?? "this URL"} but lacks strong internal linking support — improving internal links will pass authority to this page and improve its rankings.`;
+  }
+}
+
+export function generateSuggestedKeywords(
+  gscQueryRows: any[],
+  gscQueryPageRows: any[],
+  sfData: Record<string, any>[],
+  sfHeaders: string[],
+  section3: Section3Traffic,
+  section4: Section4Services,
+  section2: Section2Conversions,
+  monthlyCredits: number,
+): SectionSuggestedKeywords {
+  const quarterlyCredits = monthlyCredits * 3;
+  const maxRecommendations = Math.min(quarterlyCredits * 2, 48);
+
+  // Build SF page inventory
+  const sfPaths = extractSfPaths(sfData, sfHeaders);
+
+  // Supplement SF paths with known pages from Section 3 and Section 4
+  for (const p of section3.topTrafficPages) {
+    if (p.page) sfPaths.add(normalizePath(p.page));
+  }
+  for (const s of section4.services) {
+    if (s.examplePage && s.examplePage !== "—" && s.examplePage.startsWith("/")) {
+      sfPaths.add(s.examplePage.replace(/\/$/, "") || s.examplePage);
+    }
+  }
+  // Also pull converting pages from Section 2
+  for (const p of section2.topConvertingPages) {
+    if (p.page && p.page.startsWith("/")) sfPaths.add(p.page.replace(/\/$/, "") || p.page);
+  }
+
+  // Get non-branded queries sorted by impressions desc
+  const candidateQueries = gscQueryRows
+    .filter((r: any) => {
+      const q = r.keys?.[0] ?? "";
+      return q.length > 2 && isNonBranded(q);
+    })
+    .sort((a: any, b: any) => (b.impressions ?? 0) - (a.impressions ?? 0));
+
+  // Deduplicate by path — only one recommendation per target page
+  const usedPaths = new Set<string>();
+  const rows: SuggestedKeywordRow[] = [];
+
+  for (const qRow of candidateQueries) {
+    if (rows.length >= maxRecommendations) break;
+
+    const query: string = qRow.keys?.[0] ?? "";
+    const impressions: number = qRow.impressions ?? 0;
+    const clicks: number = qRow.clicks ?? 0;
+
+    // Skip very low-signal queries
+    if (impressions < 5) continue;
+
+    // Find best associated page from GSC query+page data
+    const bestPage = findBestGscPage(query, gscQueryPageRows);
+    const inSf = bestPage ? sfPaths.has(bestPage) : false;
+    const targetPath = inSf ? bestPage! : (bestPage ?? null);
+
+    // Deduplicate: if same page path already used, skip unless create-new
+    const recType = classifyRecType(targetPath, sfPaths, query, impressions, clicks);
+    if (targetPath && recType !== "create-new" && usedPaths.has(targetPath)) continue;
+    if (targetPath && recType !== "create-new") usedPaths.add(targetPath);
+
+    const targetPageDisplay = recType === "create-new"
+      ? "Suggest new content for this keyword"
+      : (targetPath ?? "Suggest new content for this keyword");
+
+    const whyRecommended = buildKeywordReason(query, impressions, clicks, targetPath, recType, sfPaths);
+
+    // Determine sources used
+    const sources: string[] = ["GSC"];
+    if (inSf) sources.push("Screaming Frog");
+
+    rows.push({
+      keyword: query,
+      recommendationType: recType,
+      targetPage: targetPageDisplay,
+      whyRecommended,
+      sources,
+    });
+  }
+
+  // If GSC had no data, fall back to Section 3 traffic topics as keyword proxies
+  if (rows.length === 0 && section3.topTrafficTopics.length > 0) {
+    const fallbackSources = sfData.length > 0 ? ["GSC", "Screaming Frog"] : ["GSC"];
+    for (const topic of section3.topTrafficTopics.slice(0, Math.min(maxRecommendations, 12))) {
+      const exampleQuery = topic.exampleQueries.split(",")[0]?.trim() || topic.topic;
+      const matchingPage = section3.topTrafficPages.find(p =>
+        p.connectionToAdmits === "High" && p.insight.toLowerCase().includes(topic.topic.toLowerCase())
+      );
+      const targetPage = matchingPage
+        ? normalizePath(matchingPage.page)
+        : "Suggest new content for this keyword";
+      const recType: SuggestedKeywordRow["recommendationType"] =
+        matchingPage ? "optimize-existing" : "create-new";
+
+      rows.push({
+        keyword: exampleQuery,
+        recommendationType: recType,
+        targetPage,
+        whyRecommended: `Topic cluster "${topic.topic}" drives organic traffic with ${topic.connectionToAdmits.toLowerCase()} admit connection — prioritizing this keyword will strengthen rankings for this cluster.`,
+        sources: fallbackSources,
+      });
+      if (rows.length >= maxRecommendations) break;
+    }
+  }
+
+  return { rows, quarterlyCreditCap: maxRecommendations, monthlyCredits };
 }
 
 // ─── Section 7 Credits: auto-generated content-credit allocation ──────────────

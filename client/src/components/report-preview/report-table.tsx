@@ -38,6 +38,7 @@ export const SOURCE_COLORS: Record<string, { bg: string; text: string }> = {
   "SEMrush":             { bg: "#FEF9C3", text: "#854D0E" },
   "Ahrefs":              { bg: "#F0FDF4", text: "#166534" },
   "NSM":                 { bg: "#EEF2FF", text: "#4338CA" },
+  "Screaming Frog":      { bg: "#F0FDF4", text: "#065F46" },
   "Manual entry needed": { bg: "#F9FAFB", text: "#9CA3AF" },
 };
 

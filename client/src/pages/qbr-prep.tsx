@@ -910,6 +910,7 @@ export default function QbrPrepPage() {
             section6Priorities={reportData.section6Priorities}
             section7Tracking={reportData.section7Tracking}
             section7Credits={reportData.section7Credits}
+            sectionSuggestedKeywords={reportData.sectionSuggestedKeywords}
             sectionQssb={reportData.sectionQssb}
             additionalOpportunities={reportData.additionalOpportunities}
             edits={edits}

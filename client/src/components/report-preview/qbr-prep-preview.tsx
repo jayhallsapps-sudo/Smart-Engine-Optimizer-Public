@@ -36,7 +36,7 @@ const SECTION_DEFS = [
   { key: "section_services", title: "Site Service Overview" },
   { key: "section_diagnosis", title: "SEO Tier Diagnosis" },
   { key: "section_priorities", title: "What We Need to Do Next" },
-  { key: "section_credits", title: "Possible Credit Usage Each Month" },
+  { key: "section_keywords", title: "Suggested Keywords for Next Quarter" },
   { key: "section_tracking", title: "What We Track" },
   { key: "section_opportunities", title: "Additional Opportunities" },
 ];
@@ -51,11 +51,11 @@ function isSectionAutoHidden(secKey: string, hiddenTables: Record<string, boolea
   const tables = SECTION_TABLES[secKey];
   return !!(tables && tables.length > 0 && tables.every(t => hiddenTables[t]));
 }
-function computeSectionNums(hiddenSections: Record<string, boolean>, hiddenTables: Record<string, boolean>, hasCreditSection: boolean, hasOpps: boolean): Record<string, number> {
+function computeSectionNums(hiddenSections: Record<string, boolean>, hiddenTables: Record<string, boolean>, hasKeywords: boolean, hasOpps: boolean): Record<string, number> {
   const result: Record<string, number> = {};
   let n = 1;
   for (const def of SECTION_DEFS) {
-    if (def.key === "section_credits" && !hasCreditSection) continue;
+    if (def.key === "section_keywords" && !hasKeywords) continue;
     if (def.key === "section_opportunities" && !hasOpps) continue;
     if (hiddenSections[def.key] || isSectionAutoHidden(def.key, hiddenTables)) continue;
     result[def.key] = n++;
@@ -66,6 +66,20 @@ function computeSectionNums(hiddenSections: Record<string, boolean>, hiddenTable
 interface CreditMonthBlock {
   month: string;
   rows: Array<{ credits: number; activity: string }>;
+}
+
+interface SuggestedKeywordRow {
+  keyword: string;
+  recommendationType: "optimize-existing" | "refresh-existing" | "create-new" | "cro-update" | "internal-linking";
+  targetPage: string;
+  whyRecommended: string;
+  sources: string[];
+}
+
+interface SectionSuggestedKeywords {
+  rows: SuggestedKeywordRow[];
+  quarterlyCreditCap: number;
+  monthlyCredits: number;
 }
 
 interface QbrPrepMeta {
@@ -176,6 +190,7 @@ export interface QbrPrepPreviewProps {
   section6Priorities: { priorities: PriorityRow[] };
   section7Tracking: { tracking: TrackingRow[] };
   section7Credits?: { months: CreditMonthBlock[] };
+  sectionSuggestedKeywords?: SectionSuggestedKeywords;
   sectionQssb?: SectionQssb;
   additionalOpportunities?: AdditionalOpportunity[];
   edits: Record<string, string>;
@@ -303,26 +318,6 @@ function EditableCell({
   );
 }
 
-interface CreditMonth { month: string; rows: { credits: string; activity: string }[]; unparsed: string[]; }
-function parseCreditUsage(raw: string): CreditMonth[] {
-  const MONTH_HEADING = /^(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s+\d{4}$/i;
-  const CREDIT_LINE = /^(\d+(?:\s*[cC]redits?)?)\s*[-:]\s*(.+)$/;
-  const lines = raw.split("\n").map(l => l.trim()).filter(l => l.length > 0);
-  const months: CreditMonth[] = [];
-  let current: CreditMonth | null = null;
-  for (const line of lines) {
-    if (MONTH_HEADING.test(line)) { current = { month: line, rows: [], unparsed: [] }; months.push(current); }
-    else if (current) {
-      const m = CREDIT_LINE.exec(line);
-      if (m) {
-        const num = parseInt(m[1], 10);
-        const creditLabel = isNaN(num) ? m[1].charAt(0).toUpperCase() + m[1].slice(1) : `${num} ${num === 1 ? "Credit" : "Credits"}`;
-        current.rows.push({ credits: creditLabel, activity: m[2].trim() });
-      } else { current.unparsed.push(line); }
-    }
-  }
-  return months;
-}
 
 function HiddenSectionBar({ secKey, num, title, onShow }: { secKey: string; num?: number; title: string; onShow: () => void }) {
   return (
@@ -410,6 +405,7 @@ export function QbrPrepPreview({
   section6Priorities,
   section7Tracking,
   section7Credits,
+  sectionSuggestedKeywords,
   sectionQssb,
   additionalOpportunities,
   edits,
@@ -424,9 +420,9 @@ export function QbrPrepPreview({
   const [headerImgUrl, setHeaderImgUrl] = useState<string | null>(null);
   const [showSection8, setShowSection8] = useState(true);
 
-  const hasCreditSection = !!(section7Credits?.months?.length) || !!(amInputs?.creditUsage?.trim());
+  const hasKeywords = (sectionSuggestedKeywords?.rows?.length ?? 0) > 0;
   const hasOpps = (additionalOpportunities?.length ?? 0) > 0 || showSection8;
-  const sectionNums = computeSectionNums(hiddenSections, hiddenTables, hasCreditSection, hasOpps);
+  const sectionNums = computeSectionNums(hiddenSections, hiddenTables, hasKeywords, hasOpps);
 
   const hideSecBtn = (key: string) => onToggleSection ? () => onToggleSection(key) : undefined;
   const hideTblBtn = (key: string) => onToggleTable ? () => onToggleTable(key) : undefined;
@@ -437,9 +433,12 @@ export function QbrPrepPreview({
       <button onClick={() => onToggleTable?.(tblKey)} style={{ color: ACCENT, background: "none", border: "none", cursor: "pointer", textDecoration: "underline", padding: 0, fontSize: "10px" }}>Show</button>
     </div>
   );
-  const tblSubLabel = (tblKey: string, label: string, hidden: boolean) => (
+  const tblSubLabel = (tblKey: string, label: string, hidden: boolean, sources?: string[]) => (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: hidden ? 0 : 6 }}>
-      <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151" }}>{label}</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "11px", fontWeight: 600, color: "#374151" }}>
+        {label}
+        {sources && sources.map((src, si) => <SourceBadge key={si} source={src} />)}
+      </div>
       {onToggleTable && (
         <button onClick={() => onToggleTable(tblKey)} style={{ color: "#9CA3AF", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 2, fontSize: "9px", padding: "0 2px" }}>
           {hidden ? <><Eye size={9} /><span>Show table</span></> : <><EyeOff size={9} /><span>Hide table</span></>}
@@ -456,9 +455,17 @@ export function QbrPrepPreview({
   }, []);
 
   const s1SourceRows: React.ReactNode[][] = section1Goals.rows.map((r, ri) => [
-    <EditableCell key="g" editKey={`s1_${ri}_0`} value={r.goalType} edits={edits} onEdit={onEdit} />,
+    <span key="g" style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+      <EditableCell editKey={`s1_${ri}_0`} value={r.goalType} edits={edits} onEdit={onEdit} />
+      {r.measurementSource && r.measurementSource !== "—" && (
+        <span style={{ display: "inline-flex", flexWrap: "wrap", gap: 3 }}>
+          {(edits[`s1_${ri}_2`] ?? r.measurementSource).split(/[,+]/).map((s, si) => (
+            <SourceBadge key={si} source={s.trim()} />
+          ))}
+        </span>
+      )}
+    </span>,
     <EditableCell key="go" editKey={`s1_${ri}_1`} value={r.goal} edits={edits} onEdit={onEdit} />,
-    <EditableCell key="m" editKey={`s1_${ri}_2`} value={r.measurementSource} edits={edits} onEdit={onEdit} />,
     <EditableCell key="gs" editKey={`s1_${ri}_3`} value={r.goalShift} edits={edits} onEdit={onEdit} normalize={(v) => v === "0%" ? "Par" : v} />,
     <EditableCell key="r" editKey={`s1_${ri}_4`} value={r.reason} edits={edits} onEdit={onEdit} />,
   ]);
@@ -621,7 +628,7 @@ export function QbrPrepPreview({
             ) : sectionNums["section_goals"] !== undefined ? (
               <>
                 <SectionHeading num={sectionNums["section_goals"]} title="What Matters Most This Quarter" onHide={hideSecBtn("section_goals")} />
-                <AddableReportTable tableId="s1" headers={["Goal Type", "Goal", "Source", "Goal Shift vs Last Quarter", "Reason"]} sourceRows={s1SourceRows} edits={edits} onEdit={onEdit} />
+                <AddableReportTable tableId="s1" headers={["Goal Type", "Goal", "Goal Shift vs Last Quarter", "Reason"]} sourceRows={s1SourceRows} edits={edits} onEdit={onEdit} />
               </>
             ) : null}
 
@@ -654,7 +661,7 @@ export function QbrPrepPreview({
               <HiddenSectionBar secKey="section_traffic" title="Top Organic Traffic Drivers" onShow={() => onToggleSection?.("section_traffic")} />
             ) : !isSectionAutoHidden("section_traffic", hiddenTables) && sectionNums["section_traffic"] !== undefined ? (<>
             <SectionHeading num={sectionNums["section_traffic"]} title="Top Organic Traffic Drivers" onHide={hideSecBtn("section_traffic")} />
-            {tblSubLabel("table_s3_topics", "Top Traffic Topics", !!hiddenTables["table_s3_topics"])}
+            {tblSubLabel("table_s3_topics", "Top Traffic Topics", !!hiddenTables["table_s3_topics"], ["GSC"])}
             {hiddenTables["table_s3_topics"] ? tblHiddenBar("table_s3_topics", "Top Traffic Topics") : (
             <div style={{ border: `1px solid ${ACCENT}28`, borderRadius: 6, overflow: "hidden", marginBottom: 12, backgroundColor: "#FFFDFB" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px", tableLayout: "fixed" }}>
@@ -724,7 +731,7 @@ export function QbrPrepPreview({
               </table>
             </div>
             )}
-            {tblSubLabel("table_s3_pages", "Top Traffic Pages", !!hiddenTables["table_s3_pages"])}
+            {tblSubLabel("table_s3_pages", "Top Traffic Pages", !!hiddenTables["table_s3_pages"], ["GSC"])}
             {hiddenTables["table_s3_pages"] ? tblHiddenBar("table_s3_pages", "Top Traffic Pages") : (
             <div style={{ border: `1px solid ${ACCENT}28`, borderRadius: 6, overflow: "hidden", marginBottom: 12, backgroundColor: "#FFFDFB" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px", tableLayout: "fixed" }}>
@@ -794,7 +801,7 @@ export function QbrPrepPreview({
             ) : !isSectionAutoHidden("section_services", hiddenTables) && sectionNums["section_services"] !== undefined ? (
               <>
                 <SectionHeading num={sectionNums["section_services"]} title="Site Service Overview" onHide={hideSecBtn("section_services")} />
-                {tblSubLabel("table_s4_services", "Service Pages", !!hiddenTables["table_s4_services"])}
+                {tblSubLabel("table_s4_services", "Service Pages", !!hiddenTables["table_s4_services"], ["Screaming Frog"])}
                 {hiddenTables["table_s4_services"] ? tblHiddenBar("table_s4_services", "Service Pages") : (
                   <AddableReportTable tableId="s4" headers={["Service", "Example Page"]} sourceRows={s4SourceRows} edits={edits} onEdit={onEdit} />
                 )}
@@ -908,133 +915,89 @@ export function QbrPrepPreview({
             })()}
             </>) : null}
 
-            {hasCreditSection && (
-              hiddenSections["section_credits"] ? (
-                <HiddenSectionBar secKey="section_credits" title="Possible Credit Usage Each Month" onShow={() => onToggleSection?.("section_credits")} />
-              ) : sectionNums["section_credits"] !== undefined ? (() => {
-                if (section7Credits?.months?.length) {
-                  return (
-                    <>
-                      <SectionHeading num={sectionNums["section_credits"]} title="Possible Credit Usage Each Month" onHide={hideSecBtn("section_credits")} />
-                      {section7Credits.months.map((cm, mi) => {
-                        const newRowCount = parseInt(edits[`credit_${mi}_newrow_count`] ?? "0", 10);
-                        return (
-                          <div key={mi} style={{ marginBottom: 16 }}>
-                            <div style={{ fontSize: "11px", fontWeight: 700, color: "#374151", marginBottom: 4 }}>
-                              <EditableCell editKey={`credit_${mi}_month`} value={cm.month} edits={edits} onEdit={onEdit} />
-                            </div>
-                            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px" }}>
-                              <thead><tr style={{ backgroundColor: "#F3F4F6" }}>
-                                <th style={{ textAlign: "left", padding: "4px 8px", fontWeight: 600, color: "#6B7280", width: "22%", borderBottom: "1px solid #E5E7EB" }}>Credits</th>
-                                <th style={{ textAlign: "left", padding: "4px 8px", fontWeight: 600, color: "#6B7280", borderBottom: "1px solid #E5E7EB" }}>Activity</th>
-                                <th style={{ width: "28px", borderBottom: "1px solid #E5E7EB" }}></th>
-                              </tr></thead>
-                              <tbody>
-                                {cm.rows.map((row, ri) => {
-                                  if (edits[`credit_${mi}_${ri}_deleted`] === "1") return null;
-                                  const creditsVal = edits[`credit_${mi}_${ri}_credits`] ?? String(row.credits === 1 ? "1 Credit" : `${row.credits} Credits`);
-                                  const activityVal = edits[`credit_${mi}_${ri}_activity`] ?? row.activity;
-                                  return (
-                                    <tr key={ri} style={{ borderBottom: "1px solid #F3F4F6" }}>
-                                      <td style={{ padding: "5px 8px", color: "#1B3A6B", fontWeight: 600 }}>
-                                        <EditableCell editKey={`credit_${mi}_${ri}_credits`} value={creditsVal} edits={edits} onEdit={onEdit} />
-                                      </td>
-                                      <td style={{ padding: "5px 8px", color: "#374151" }}>
-                                        <EditableCell editKey={`credit_${mi}_${ri}_activity`} value={activityVal} edits={edits} onEdit={onEdit} />
-                                      </td>
-                                      <td style={{ padding: "5px 4px", textAlign: "center" }}>
-                                        <button
-                                          data-testid={`btn-delete-credit-${mi}-${ri}`}
-                                          onClick={() => onEdit(`credit_${mi}_${ri}_deleted`, "1")}
-                                          title="Remove row"
-                                          style={{ background: "none", border: "none", cursor: "pointer", color: "#9CA3AF", fontSize: "10px", padding: "1px 3px", lineHeight: 1 }}
-                                        >✕</button>
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
-                                {Array.from({ length: newRowCount }).map((_, ni) => (
-                                  <tr key={`new_${ni}`} style={{ borderBottom: "1px solid #F3F4F6" }}>
-                                    <td style={{ padding: "5px 8px", color: "#1B3A6B", fontWeight: 600 }}>
-                                      <EditableCell editKey={`credit_${mi}_newrow_${ni}_credits`} value={edits[`credit_${mi}_newrow_${ni}_credits`] ?? "1 Credit"} edits={edits} onEdit={onEdit} />
-                                    </td>
-                                    <td style={{ padding: "5px 8px", color: "#374151" }}>
-                                      <EditableCell editKey={`credit_${mi}_newrow_${ni}_activity`} value={edits[`credit_${mi}_newrow_${ni}_activity`] ?? ""} edits={edits} onEdit={onEdit} />
-                                    </td>
-                                    <td style={{ padding: "5px 4px", textAlign: "center" }}>
-                                      <button
-                                        data-testid={`btn-delete-credit-${mi}-new-${ni}`}
-                                        onClick={() => {
-                                          onEdit(`credit_${mi}_newrow_${ni}_credits`, "");
-                                          onEdit(`credit_${mi}_newrow_${ni}_activity`, "");
-                                          const currentCount = parseInt(edits[`credit_${mi}_newrow_count`] ?? "0", 10);
-                                          if (ni === currentCount - 1) onEdit(`credit_${mi}_newrow_count`, String(currentCount - 1));
-                                        }}
-                                        title="Remove row"
-                                        style={{ background: "none", border: "none", cursor: "pointer", color: "#9CA3AF", fontSize: "10px", padding: "1px 3px", lineHeight: 1 }}
-                                      >✕</button>
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                            <button
-                              data-testid={`btn-add-credit-row-${mi}`}
-                              onClick={() => {
-                                const currentCount = parseInt(edits[`credit_${mi}_newrow_count`] ?? "0", 10);
-                                onEdit(`credit_${mi}_newrow_${currentCount}_credits`, "1 Credit");
-                                onEdit(`credit_${mi}_newrow_${currentCount}_activity`, "");
-                                onEdit(`credit_${mi}_newrow_count`, String(currentCount + 1));
-                              }}
-                              style={{ marginTop: 4, background: "none", border: "1px dashed #D1D5DB", borderRadius: 3, color: "#6B7280", fontSize: "10px", cursor: "pointer", padding: "2px 8px" }}
-                            >+ Add row</button>
-                          </div>
-                        );
-                      })}
-                    </>
-                  );
-                }
-                // Legacy fallback: old text-based creditUsage from saved reports
-                if (amInputs?.creditUsage?.trim()) {
-                  const creditMonths = parseCreditUsage(amInputs.creditUsage);
-                  return (
-                    <>
-                      <SectionHeading num={sectionNums["section_credits"]} title="Possible Credit Usage Each Month" onHide={hideSecBtn("section_credits")} />
-                      {creditMonths.length > 0 ? creditMonths.map((cm, mi) => (
-                        <div key={mi} style={{ marginBottom: 14 }}>
-                          <div style={{ fontSize: "11px", fontWeight: 700, color: "#374151", marginBottom: 4 }}>
-                            <EditableCell editKey={`credit_${mi}_month`} value={cm.month} edits={edits} onEdit={onEdit} />
-                          </div>
-                          {cm.rows.length > 0 && (
-                            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px" }}>
-                              <thead><tr style={{ backgroundColor: "#F3F4F6" }}>
-                                <th style={{ textAlign: "left", padding: "4px 8px", fontWeight: 600, color: "#6B7280", width: "22%", borderBottom: "1px solid #E5E7EB" }}>Credits</th>
-                                <th style={{ textAlign: "left", padding: "4px 8px", fontWeight: 600, color: "#6B7280", borderBottom: "1px solid #E5E7EB" }}>Activity</th>
-                              </tr></thead>
-                              <tbody>{cm.rows.map((row, ri) => (
-                                <tr key={ri} style={{ borderBottom: "1px solid #F3F4F6" }}>
-                                  <td style={{ padding: "5px 8px", color: "#1B3A6B", fontWeight: 600 }}>
-                                    <EditableCell editKey={`credit_${mi}_${ri}_credits`} value={row.credits} edits={edits} onEdit={onEdit} />
-                                  </td>
-                                  <td style={{ padding: "5px 8px", color: "#374151" }}>
-                                    <EditableCell editKey={`credit_${mi}_${ri}_activity`} value={row.activity} edits={edits} onEdit={onEdit} />
-                                  </td>
-                                </tr>
-                              ))}</tbody>
-                            </table>
-                          )}
-                          {cm.unparsed.map((u, ui) => (
-                            <div key={ui} style={{ fontSize: "11px", color: "#6B7280", padding: "2px 8px" }}>{u}</div>
+            {hasKeywords && (
+              hiddenSections["section_keywords"] ? (
+                <HiddenSectionBar secKey="section_keywords" title="Suggested Keywords for Next Quarter" onShow={() => onToggleSection?.("section_keywords")} />
+              ) : sectionNums["section_keywords"] !== undefined ? (
+                <>
+                  <SectionHeading num={sectionNums["section_keywords"]} title="Suggested Keywords for Next Quarter" onHide={hideSecBtn("section_keywords")} />
+                  {sectionSuggestedKeywords && (
+                    <div style={{ fontSize: "9px", color: "#6B7280", marginBottom: 8, fontStyle: "italic" }}>
+                      Showing up to {sectionSuggestedKeywords.quarterlyCreditCap} keyword opportunities (2× quarterly credit cap of {sectionSuggestedKeywords.monthlyCredits * 3}). Grounded in GSC query data, site crawl inventory, and page performance.
+                    </div>
+                  )}
+                  <div style={{ border: `1px solid ${ACCENT}28`, borderRadius: 6, overflow: "hidden", marginBottom: 12, backgroundColor: "#FFFDFB" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px", tableLayout: "fixed" }}>
+                      <colgroup>
+                        <col style={{ width: "20%" }} />
+                        <col style={{ width: "16%" }} />
+                        <col style={{ width: "20%" }} />
+                        <col style={{ width: "32%" }} />
+                        <col style={{ width: "12%" }} />
+                      </colgroup>
+                      <thead>
+                        <tr style={{ backgroundColor: `${ACCENT}0D` }}>
+                          {["Keyword", "Recommendation Type", "Target Page / Asset", "Why It's Recommended", "Source"].map(h => (
+                            <th key={h} style={{ padding: "5px 8px", textAlign: "left", fontWeight: 600, fontSize: "9px", color: ACCENT, textTransform: "uppercase" as const, letterSpacing: "0.06em", borderBottom: `1px solid ${ACCENT}20`, wordBreak: "break-word" }}>{h}</th>
                           ))}
-                        </div>
-                      )) : (
-                        <div style={{ fontSize: "11px", color: "#374151", whiteSpace: "pre-wrap", marginBottom: 14 }}>{amInputs.creditUsage}</div>
-                      )}
-                    </>
-                  );
-                }
-                return null;
-              })() : null
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sectionSuggestedKeywords?.rows.map((row, ri) => {
+                          const recTypeColors: Record<string, { bg: string; color: string }> = {
+                            "optimize-existing": { bg: "#D1FAE5", color: "#065F46" },
+                            "refresh-existing":  { bg: "#FEF3C7", color: "#92400E" },
+                            "create-new":        { bg: "#DBEAFE", color: "#1E40AF" },
+                            "cro-update":        { bg: "#F3E8FF", color: "#6B21A8" },
+                            "internal-linking":  { bg: "#F0FDF4", color: "#14532D" },
+                          };
+                          const recTypeLabels: Record<string, string> = {
+                            "optimize-existing": "Optimize existing page",
+                            "refresh-existing":  "Refresh existing page",
+                            "create-new":        "Create new content",
+                            "cro-update":        "CRO / supporting update",
+                            "internal-linking":  "Internal linking support",
+                          };
+                          const colors = recTypeColors[row.recommendationType] ?? { bg: "#F3F4F6", color: "#374151" };
+                          const label = recTypeLabels[row.recommendationType] ?? row.recommendationType;
+                          const isNewContent = row.targetPage === "Suggest new content for this keyword";
+                          return (
+                            <tr key={ri} style={{ backgroundColor: ri % 2 === 1 ? "#FBF8F7" : "white" }} data-testid={`row-keyword-${ri}`}>
+                              <td style={{ padding: "6px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", fontWeight: 600, wordBreak: "break-word", overflow: "hidden" }}>
+                                <EditableCell editKey={`kw_${ri}_keyword`} value={row.keyword} edits={edits} onEdit={onEdit} />
+                              </td>
+                              <td style={{ padding: "6px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", wordBreak: "break-word", overflow: "hidden" }}>
+                                <span style={{ display: "inline-block", padding: "2px 7px", borderRadius: 10, fontSize: "8px", fontWeight: 700, backgroundColor: colors.bg, color: colors.color, whiteSpace: "nowrap" }} data-testid={`badge-rec-type-${ri}`}>
+                                  {label}
+                                </span>
+                              </td>
+                              <td style={{ padding: "6px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", wordBreak: "break-word", overflow: "hidden" }}>
+                                {isNewContent ? (
+                                  <span style={{ color: "#9CA3AF", fontStyle: "italic", fontSize: "9px" }} data-testid={`text-target-page-${ri}`}>Suggest new content for this keyword</span>
+                                ) : (
+                                  <span style={{ display: "inline-block", padding: "1px 6px", borderRadius: 3, fontSize: "9px", fontWeight: 500, backgroundColor: `${ACCENT}10`, border: `1px solid ${ACCENT}25`, color: "#374151", wordBreak: "break-all" }} data-testid={`tag-target-page-${ri}`}>
+                                    <EditableCell editKey={`kw_${ri}_targetPage`} value={row.targetPage} edits={edits} onEdit={onEdit} />
+                                  </span>
+                                )}
+                              </td>
+                              <td style={{ padding: "6px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4, wordBreak: "break-word", overflow: "hidden", color: "#4B5563", fontSize: "9px" }}>
+                                <EditableCell editKey={`kw_${ri}_why`} value={row.whyRecommended} edits={edits} onEdit={onEdit} />
+                              </td>
+                              <td style={{ padding: "6px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top" }}>
+                                <span style={{ display: "inline-flex", flexWrap: "wrap", gap: 3 }}>
+                                  {row.sources.map((src, si) => (
+                                    <SourceBadge key={si} source={src} />
+                                  ))}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              ) : null
             )}
 
             {hiddenSections["section_tracking"] ? (
@@ -1082,8 +1045,8 @@ export function QbrPrepPreview({
                 {(additionalOpportunities?.length ?? 0) > 0 && (
                   <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
                     {additionalOpportunities!.map((opp, i) => (
-                      <div key={i} style={{ border: "1px solid #E5E7EB", borderRadius: 6, overflow: "hidden", fontSize: "11px" }} data-testid={`card-additional-opportunity-${i}`}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", backgroundColor: "#F9FAFB", borderBottom: "1px solid #E5E7EB" }}>
+                      <div key={i} style={{ border: `1px solid ${ACCENT}28`, borderRadius: 6, overflow: "hidden", fontSize: "11px" }} data-testid={`card-additional-opportunity-${i}`}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", backgroundColor: `${ACCENT}0A`, borderBottom: `1px solid ${ACCENT}28` }}>
                           <span style={{ display: "inline-block", padding: "1px 8px", borderRadius: 10, fontSize: "9px", fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.06em", backgroundColor: opp.type === "upsell" ? "#FEF3C7" : "#DBEAFE", color: opp.type === "upsell" ? "#92400E" : "#1E40AF" }} data-testid={`badge-opp-type-${i}`}>{opp.type === "upsell" ? "Upsell" : "Cross-sell"}</span>
                           <span style={{ fontWeight: 700, fontSize: "12px", color: "#111827" }} data-testid={`text-opp-title-${i}`}>
                             <EditableCell editKey={`opp_${i}_title`} value={opp.title} edits={edits} onEdit={onEdit} />

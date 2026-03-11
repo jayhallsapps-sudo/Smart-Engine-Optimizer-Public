@@ -200,6 +200,20 @@ export interface Section7Credits {
   months: CreditMonthBlock[];
 }
 
+export interface SuggestedKeywordRow {
+  keyword: string;
+  recommendationType: "optimize-existing" | "refresh-existing" | "create-new" | "cro-update" | "internal-linking";
+  targetPage: string;
+  whyRecommended: string;
+  sources: string[];
+}
+
+export interface SectionSuggestedKeywords {
+  rows: SuggestedKeywordRow[];
+  quarterlyCreditCap: number;
+  monthlyCredits: number;
+}
+
 export interface QbrPrepReportData {
   meta: QbrPrepMeta;
   section1Goals: Section1Goals;
@@ -210,6 +224,7 @@ export interface QbrPrepReportData {
   section6Priorities: Section6Priorities;
   section7Tracking: Section7Tracking;
   section7Credits?: Section7Credits;
+  sectionSuggestedKeywords?: SectionSuggestedKeywords;
   sectionQssb?: SectionQssb;
   additionalOpportunities?: AdditionalOpportunity[];
   gapContext?: GapContext;

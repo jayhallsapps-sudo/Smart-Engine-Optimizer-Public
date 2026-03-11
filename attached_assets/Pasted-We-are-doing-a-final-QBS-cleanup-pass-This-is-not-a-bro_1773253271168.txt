@@ -1,0 +1,372 @@
+We are doing a final QBS cleanup pass.
+
+This is not a broad redesign.
+This is a strict precision fix pass on the remaining defects.
+
+Do not rework unrelated sections.
+Do not reinterpret the request.
+Do not partially apply.
+Fix the exact issues below and nothing else unless required to support them.
+
+==================================================
+OBJECTIVE
+
+Fix the remaining QBS defects in these areas:
+
+Section 2 source-tag behavior
+
+Tag rendering / wrapping behavior
+
+URL / slug / path tag coverage
+
+Section 6 tag coverage
+
+Suggested Keywords for Next Quarter keyword quality and cap logic
+
+“Suggest new content for this keyword” display treatment
+
+==================================================
+PART 1 — SECTION 2 SOURCE-TAG FIXES
+
+Current problem:
+Section 2 still has wrong or missing source behavior.
+
+Examples:
+
+Top Converting Pages has no heading-level source tag
+
+there is still a “Conversion Source” column showing “Site Structure”
+
+“Site Structure” is not an acceptable source label
+
+Top Conversion Patterns also lacks clear source-tag treatment
+
+A. TOP CONVERTING PAGES
+
+Fix this exactly:
+
+Remove the “Conversion Source” column if the table is using a single source or a unified inference source at the table level.
+
+Do not use “Site Structure” as a source label.
+
+Add heading-level source tag(s) beside “Top Converting Pages” that truthfully reflect where the data came from.
+
+If the table is based on inference from multiple integrated inputs, use a truthful heading-level tag such as:
+
+Multi-source
+and/or the specific source tags that actually fed it
+
+If it is truly based on one source, use that exact source tag.
+
+Hard rule:
+The source label must reflect an actual integration or real input origin.
+“Site Structure” by itself is not an acceptable source label unless it is represented as a real integrated source like:
+
+Screaming Frog
+
+Sitemap
+
+Crawl
+or similar approved tag language
+
+B. TOP CONVERSION PATTERNS
+
+Add heading-level source tag(s) beside “Top Conversion Patterns.”
+
+Same rule:
+
+use truthful actual source tags
+
+no unattributed subsection
+
+no vague fake source labels
+
+C. SECTION 2 SOURCE RULE
+
+For every subsection in Section 2:
+
+if the whole subsection is driven by one source or one combined multi-source logic layer, use heading-level tag(s)
+
+only use row-level tags if rows genuinely differ by source
+
+Do not leave source handling inconsistent inside Section 2.
+
+==================================================
+PART 2 — TAG RENDERING / WRAPPING FIXES
+
+Current problem:
+Tags are getting truncated or cut off.
+That is unacceptable.
+
+This affects:
+
+example query tags
+
+recommendation type tags
+
+slug/path tags
+
+keyword/action tags
+
+any tag set where text is longer than one short line
+
+A. HARD TAG WRAP RULE
+
+All tags must be able to wrap to two lines or more if needed.
+
+Do not truncate.
+Do not clip.
+Do not cut off with overflow hidden.
+Do not force single-line pills/tags when the content is longer.
+
+Required behavior:
+
+tag height can grow
+
+text can wrap
+
+tag stays visually intact
+
+alignment remains clean
+
+multi-line tags still look deliberate and readable
+
+This applies everywhere in QBS.
+
+==================================================
+PART 3 — URL / SLUG / PATH TAG COVERAGE
+
+Current problem:
+The system did not fully follow instructions to render URLs, slugs, paths, and similar structured values as tags.
+
+Examples where tags are missing:
+
+Top Traffic Pages
+
+Service Pages / service-related rows
+
+other page/path-based outputs
+
+A. REQUIRED BEHAVIOR
+
+Whenever a row contains a page/path/slug/URL/domain/subdomain-style value, render that value as a tag.
+
+Examples:
+
+/meet-the-team/
+
+/verify-insurance/
+
+/outpatient-program/
+
+/womens-rehab/
+
+subdomain references
+
+brand/location path references
+
+Do not leave these as plain inline text if they are structured path-like values.
+
+B. TOP TRAFFIC PAGES
+
+Every page in Top Traffic Pages should render its slug/path as a tag.
+
+Allow tags to wrap to multiple lines.
+
+C. SERVICE PAGES / OTHER PAGE-BASED TABLES
+
+Apply the same behavior wherever page/path data exists.
+
+Do not stop after Top Traffic Pages.
+Audit the whole QBS and make path-like values render as tags consistently.
+
+==================================================
+PART 4 — SECTION 6 TAG COVERAGE
+
+Current problem:
+What We Need to Do Next is missing tags where they should exist.
+
+Fix this.
+
+Any structured values in Section 6 that should be represented as tags must render as tags, including where relevant:
+
+source/system tags
+
+page/path tags
+
+recommendation-type tags
+
+related platform tags
+
+Do not leave Section 6 as plain text if QBS design rules call for tag treatment.
+
+==================================================
+PART 5 — SUGGESTED KEYWORDS FOR NEXT QUARTER FIXES
+
+Current problem:
+The new keyword section is directionally good, but the keyword quality is too general and the recommendation count is too high.
+
+Examples of bad/general keyword behavior:
+
+generic terms like “high tolerance”
+
+keywords not tied tightly enough to service / location / brand / care-intent structures
+
+A. KEYWORD QUALITY RULE
+
+Suggested keywords must be meaningfully tied to one or more of the following strategic buckets:
+
+service pages
+
+location pages
+
+brand-led terms
+
+what-we-treat / conditions treated
+
+care pages / program pages / modality pages
+
+other high-intent treatment-relevant structures already present in the site architecture
+
+Do not fill the section with generic broad terms that are weakly actionable.
+
+Hard rule:
+Keyword recommendations must skew toward terms that are realistically mappable to:
+
+current service architecture
+
+care-intent search demand
+
+location intent
+
+brand/service combinations
+
+pages that can actually be built or optimized within the quarter
+
+B. RECOMMENDATION COUNT RULE
+
+Do not exceed double the monthly credit count.
+
+The count rule is:
+
+max keyword suggestions = monthly credits × 2
+
+Examples:
+
+3 monthly credits → 6 suggestions
+
+4 monthly credits → 8 suggestions
+
+8 monthly credits → 16 suggestions
+
+Do not use quarterly credits × 2.
+That produced too many suggestions.
+
+Use monthly credits × 2 only.
+
+C. TARGET PAGE / NEW CONTENT DISPLAY FIX
+
+Current problem:
+“Suggest new content for this keyword” is just grayed-out text.
+
+Replace that with:
+
+New content needed
+
+And render it in the same tag style family as the other target-page/output treatments in that column.
+
+Do not leave it as plain muted text.
+
+If no suitable existing page exists:
+
+display “New content needed” as a tag/badge
+
+keep it visually consistent with the rest of the section
+
+==================================================
+PART 6 — QA ACCEPTANCE CRITERIA
+
+Do not mark complete until every item below passes.
+
+SECTION 2
+
+Top Converting Pages has heading-level source tag(s)
+
+“Conversion Source” column is removed if redundant
+
+“Site Structure” no longer appears as a vague source label
+
+Top Conversion Patterns has heading-level source tag(s)
+
+Section 2 source treatment is internally consistent
+
+TAG RENDERING
+6. tags no longer truncate
+7. long tags wrap cleanly to multiple lines
+8. multi-line tags remain visually readable
+
+PATH / SLUG TAGS
+9. Top Traffic Pages path/slug values render as tags
+10. service/page/path values elsewhere in QBS render as tags where appropriate
+11. no obvious path-like values remain as plain comma text when they should be tags
+
+SECTION 6
+12. What We Need to Do Next now includes the missing tag treatment where appropriate
+
+SUGGESTED KEYWORDS
+13. keyword suggestions are more strategic and less generic
+14. keyword suggestions are tied to service/location/brand/care-intent structures
+15. total suggestion count equals monthly credits × 2
+16. no over-generated keyword list remains
+17. “New content needed” replaces “Suggest new content for this keyword”
+18. “New content needed” renders as a tag/badge, not gray plain text
+
+==================================================
+PART 7 — REQUIRED OUTPUT
+
+Return a formal proof report with these exact sections:
+
+Files changed
+
+Section 2 source-tag fixes
+
+what was removed
+
+what heading-level tags were added
+
+what source labels were corrected
+
+Tag rendering fixes
+
+exact CSS/rendering changes that allow multi-line tags
+
+where this was applied
+
+Path/slug tag coverage
+
+which tables/sections now render paths/slugs as tags
+
+Suggested Keywords fixes
+
+exact new count logic
+
+exact strategic filtering logic for keyword quality
+
+exact display change from old “suggest new content...” text to “New content needed”
+
+QA scenarios tested
+
+one line per scenario
+
+pass/fail
+
+observed result
+
+Final status
+
+explicitly state whether this final cleanup pass is fully complete
+
+==================================================
+FINAL HARD RULE
+
+If Section 2 still has vague or missing source tags, if tags still truncate, if path/slug values are still not rendered as tags where appropriate, if Section 6 still lacks tag treatment, or if Suggested Keywords still over-generates generic terms, the task is not complete.

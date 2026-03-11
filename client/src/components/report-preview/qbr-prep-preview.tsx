@@ -270,7 +270,8 @@ function QueryChipsCell({
             fontSize: "9px",
             color: "#374151",
             fontWeight: 500,
-            whiteSpace: "nowrap",
+            whiteSpace: "normal",
+            wordBreak: "break-word",
           }}
           data-testid={`chip-query-${editKey}-${ci}`}
         >
@@ -318,6 +319,34 @@ function EditableCell({
   );
 }
 
+
+function isPathLike(v: string): boolean {
+  const t = v.trim();
+  return /^\/[a-z0-9\-._~:/?#[\]@!$&'()*+,;=%]*/i.test(t) || /^https?:\/\//i.test(t);
+}
+
+function PathTag({ value }: { value: string }) {
+  return (
+    <span style={{ display: "inline-block", padding: "1px 6px", borderRadius: 3, fontSize: "9px", fontWeight: 500, backgroundColor: `${ACCENT}10`, border: `1px solid ${ACCENT}25`, color: "#374151", wordBreak: "break-all" }}>
+      {value}
+    </span>
+  );
+}
+
+const TIER_COLORS: Record<string, { bg: string; color: string }> = {
+  "1": { bg: "#FEE2E2", color: "#991B1B" },
+  "2": { bg: "#FEF3C7", color: "#92400E" },
+  "3": { bg: "#DBEAFE", color: "#1E40AF" },
+};
+function TierBadge({ tier }: { tier: string }) {
+  const t = tier.replace(/[^0-9]/g, "");
+  const colors = TIER_COLORS[t] ?? { bg: "#F3F4F6", color: "#6B7280" };
+  return (
+    <span style={{ display: "inline-block", padding: "1px 8px", borderRadius: 10, fontSize: "8px", fontWeight: 700, backgroundColor: colors.bg, color: colors.color, whiteSpace: "nowrap" }}>
+      {tier || "—"}
+    </span>
+  );
+}
 
 function HiddenSectionBar({ secKey, num, title, onShow }: { secKey: string; num?: number; title: string; onShow: () => void }) {
   return (
@@ -472,8 +501,14 @@ export function QbrPrepPreview({
 
   const s2aSourceRows: React.ReactNode[][] = section2Conversions.topConvertingPages.map((r, ri) => [
     <BadgeCell key="t" editKey={`s2a_${ri}_0`} value={r.type} dataSource={r.dataSource} edits={edits} onEdit={onEdit} />,
-    <EditableCell key="p" editKey={`s2a_${ri}_1`} value={r.page} edits={edits} onEdit={onEdit} />,
-    <EditableCell key="cs" editKey={`s2a_${ri}_3`} value={(r as any).conversionSource ?? r.dataSource ?? "—"} edits={edits} onEdit={onEdit} />,
+    <span key="p" style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+      {(() => {
+        const pageVal = edits[`s2a_${ri}_1`] ?? r.page;
+        return isPathLike(pageVal)
+          ? <PathTag value={pageVal} />
+          : <EditableCell editKey={`s2a_${ri}_1`} value={r.page} edits={edits} onEdit={onEdit} />;
+      })()}
+    </span>,
     <EditableCell key="n" editKey={`s2a_${ri}_2`} value={r.notes} edits={edits} onEdit={onEdit} />,
   ]);
 
@@ -497,13 +532,20 @@ export function QbrPrepPreview({
 
   const s4SourceRows: React.ReactNode[][] = section4Services.services.map((r, ri) => [
     <EditableCell key="s" editKey={`s4_${ri}_0`} value={r.service} edits={edits} onEdit={onEdit} />,
-    <EditableCell key="e" editKey={`s4_${ri}_1`} value={r.examplePage} edits={edits} onEdit={onEdit} />,
+    <span key="e" style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+      {(() => {
+        const epVal = edits[`s4_${ri}_1`] ?? r.examplePage;
+        return isPathLike(epVal)
+          ? <PathTag value={epVal} />
+          : <EditableCell editKey={`s4_${ri}_1`} value={r.examplePage} edits={edits} onEdit={onEdit} />;
+      })()}
+    </span>,
   ]);
 
   const s6SourceRows: React.ReactNode[][] = section6Priorities.priorities.map((r, ri) => [
     <EditableCell key="n" editKey={`s6_${ri}_0`} value={String(r.priority)} edits={edits} onEdit={onEdit} />,
     <BadgeCell key="i" editKey={`s6_${ri}_1`} value={r.initiative} dataSource={r.source} edits={edits} onEdit={onEdit} />,
-    <EditableCell key="t" editKey={`s6_${ri}_2`} value={r.tier} edits={edits} onEdit={onEdit} />,
+    <TierBadge key="t" tier={edits[`s6_${ri}_2`] ?? r.tier} />,
     <EditableCell key="a" editKey={`s6_${ri}_3`} value={r.action} edits={edits} onEdit={onEdit} />,
     <EditableCell key="r" editKey={`s6_${ri}_4`} value={r.reason} edits={edits} onEdit={onEdit} />,
   ]);
@@ -637,15 +679,15 @@ export function QbrPrepPreview({
             ) : !isSectionAutoHidden("section_conversions", hiddenTables) && sectionNums["section_conversions"] !== undefined ? (
               <>
                 <SectionHeading num={sectionNums["section_conversions"]} title="Where Conversions Actually Happen" onHide={hideSecBtn("section_conversions")} />
-                {tblSubLabel("table_s2_pages", "Top Converting Pages", !!hiddenTables["table_s2_pages"])}
+                {tblSubLabel("table_s2_pages", "Top Converting Pages", !!hiddenTables["table_s2_pages"], ["Multi-source"])}
                 {hiddenTables["table_s2_pages"] ? tblHiddenBar("table_s2_pages", "Top Converting Pages") : (
-                  <AddableReportTable tableId="s2a" headers={["Type", "Page / Pattern", "Conversion Source", "Notes / What We're Learning"]} sourceRows={s2aSourceRows} edits={edits} onEdit={onEdit} />
+                  <AddableReportTable tableId="s2a" headers={["Type", "Page / Pattern", "Notes / What We're Learning"]} sourceRows={s2aSourceRows} edits={edits} onEdit={onEdit} />
                 )}
-                {tblSubLabel("table_s2_patterns", "Top Conversion Patterns", !!hiddenTables["table_s2_patterns"])}
+                {tblSubLabel("table_s2_patterns", "Top Conversion Patterns", !!hiddenTables["table_s2_patterns"], ["Multi-source"])}
                 {hiddenTables["table_s2_patterns"] ? tblHiddenBar("table_s2_patterns", "Top Conversion Patterns") : (
                   <AddableReportTable tableId="s2c" headers={["Pattern", "Why It Matters", "Evidence"]} sourceRows={s2cSourceRows} edits={edits} onEdit={onEdit} />
                 )}
-                {tblSubLabel("table_s2_sources", "Top Converting Sources", !!hiddenTables["table_s2_sources"])}
+                {tblSubLabel("table_s2_sources", "Top Converting Sources", !!hiddenTables["table_s2_sources"], ["Multi-source"])}
                 {hiddenTables["table_s2_sources"] ? tblHiddenBar("table_s2_sources", "Top Converting Sources") : (
                   <AddableReportTable tableId="s2b" headers={["Source", "What's Converting", "Notes / What We're Learning"]} sourceRows={s2bSourceRows} edits={edits} onEdit={onEdit} />
                 )}
@@ -768,7 +810,9 @@ export function QbrPrepPreview({
                   {section3Traffic.topTrafficPages.map((r, ri) => (
                     <React.Fragment key={`page-${ri}`}>
                       <tr style={{ backgroundColor: ri % 2 === 1 ? "#FBF8F7" : "white" }}>
-                        <td style={{ padding: "6px 8px", borderBottom: (edits[`s3b_${ri}_4`] ?? r.insight) ? "none" : "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4, wordBreak: "break-word", overflow: "hidden" }}><EditableCell editKey={`s3b_${ri}_0`} value={r.page} edits={edits} onEdit={onEdit} /></td>
+                        <td style={{ padding: "6px 8px", borderBottom: (edits[`s3b_${ri}_4`] ?? r.insight) ? "none" : "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4, wordBreak: "break-word" }}>
+                          {(() => { const v = edits[`s3b_${ri}_0`] ?? r.page; return isPathLike(v) ? <PathTag value={v} /> : <EditableCell editKey={`s3b_${ri}_0`} value={r.page} edits={edits} onEdit={onEdit} />; })()}
+                        </td>
                         <td style={{ padding: "6px 8px", borderBottom: (edits[`s3b_${ri}_4`] ?? r.insight) ? "none" : "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4, wordBreak: "break-word", overflow: "hidden" }}><EditableCell editKey={`s3b_${ri}_1`} value={r.clicks} edits={edits} onEdit={onEdit} /></td>
                         {hasPageDeltas && <>
                           <td style={{ padding: "6px 8px", borderBottom: (edits[`s3b_${ri}_4`] ?? r.insight) ? "none" : "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4, wordBreak: "break-word", overflow: "hidden", color: r.clicksDelta?.startsWith("-") ? "#DC2626" : "#16A34A" }}>{r.clicksDelta ?? "—"}</td>
@@ -923,7 +967,7 @@ export function QbrPrepPreview({
                   <SectionHeading num={sectionNums["section_keywords"]} title="Suggested Keywords for Next Quarter" onHide={hideSecBtn("section_keywords")} />
                   {sectionSuggestedKeywords && (
                     <div style={{ fontSize: "9px", color: "#6B7280", marginBottom: 8, fontStyle: "italic" }}>
-                      Showing up to {sectionSuggestedKeywords.quarterlyCreditCap} keyword opportunities (2× quarterly credit cap of {sectionSuggestedKeywords.monthlyCredits * 3}). Grounded in GSC query data, site crawl inventory, and page performance.
+                      Showing up to {sectionSuggestedKeywords.quarterlyCreditCap} keyword opportunities (2× monthly credit capacity of {sectionSuggestedKeywords.monthlyCredits}). Grounded in GSC query data, site crawl inventory, and page performance. Filtered to strategic service, program, condition, and location-intent terms.
                     </div>
                   )}
                   <div style={{ border: `1px solid ${ACCENT}28`, borderRadius: 6, overflow: "hidden", marginBottom: 12, backgroundColor: "#FFFDFB" }}>
@@ -960,27 +1004,27 @@ export function QbrPrepPreview({
                           };
                           const colors = recTypeColors[row.recommendationType] ?? { bg: "#F3F4F6", color: "#374151" };
                           const label = recTypeLabels[row.recommendationType] ?? row.recommendationType;
-                          const isNewContent = row.targetPage === "Suggest new content for this keyword";
+                          const isNewContent = row.targetPage === "New content needed" || row.targetPage === "Suggest new content for this keyword";
                           return (
                             <tr key={ri} style={{ backgroundColor: ri % 2 === 1 ? "#FBF8F7" : "white" }} data-testid={`row-keyword-${ri}`}>
-                              <td style={{ padding: "6px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", fontWeight: 600, wordBreak: "break-word", overflow: "hidden" }}>
+                              <td style={{ padding: "6px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", fontWeight: 600, wordBreak: "break-word" }}>
                                 <EditableCell editKey={`kw_${ri}_keyword`} value={row.keyword} edits={edits} onEdit={onEdit} />
                               </td>
-                              <td style={{ padding: "6px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", wordBreak: "break-word", overflow: "hidden" }}>
-                                <span style={{ display: "inline-block", padding: "2px 7px", borderRadius: 10, fontSize: "8px", fontWeight: 700, backgroundColor: colors.bg, color: colors.color, whiteSpace: "nowrap" }} data-testid={`badge-rec-type-${ri}`}>
+                              <td style={{ padding: "6px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", wordBreak: "break-word" }}>
+                                <span style={{ display: "inline-block", padding: "2px 7px", borderRadius: 10, fontSize: "8px", fontWeight: 700, backgroundColor: colors.bg, color: colors.color, whiteSpace: "normal", wordBreak: "break-word" }} data-testid={`badge-rec-type-${ri}`}>
                                   {label}
                                 </span>
                               </td>
-                              <td style={{ padding: "6px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", wordBreak: "break-word", overflow: "hidden" }}>
+                              <td style={{ padding: "6px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", wordBreak: "break-word" }}>
                                 {isNewContent ? (
-                                  <span style={{ color: "#9CA3AF", fontStyle: "italic", fontSize: "9px" }} data-testid={`text-target-page-${ri}`}>Suggest new content for this keyword</span>
+                                  <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 10, fontSize: "8px", fontWeight: 700, backgroundColor: "#FEF3C7", color: "#92400E", whiteSpace: "normal", wordBreak: "break-word" }} data-testid={`badge-new-content-${ri}`}>New content needed</span>
                                 ) : (
                                   <span style={{ display: "inline-block", padding: "1px 6px", borderRadius: 3, fontSize: "9px", fontWeight: 500, backgroundColor: `${ACCENT}10`, border: `1px solid ${ACCENT}25`, color: "#374151", wordBreak: "break-all" }} data-testid={`tag-target-page-${ri}`}>
                                     <EditableCell editKey={`kw_${ri}_targetPage`} value={row.targetPage} edits={edits} onEdit={onEdit} />
                                   </span>
                                 )}
                               </td>
-                              <td style={{ padding: "6px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4, wordBreak: "break-word", overflow: "hidden", color: "#4B5563", fontSize: "9px" }}>
+                              <td style={{ padding: "6px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4, wordBreak: "break-word", color: "#4B5563", fontSize: "9px" }}>
                                 <EditableCell editKey={`kw_${ri}_why`} value={row.whyRecommended} edits={edits} onEdit={onEdit} />
                               </td>
                               <td style={{ padding: "6px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top" }}>

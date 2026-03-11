@@ -53,11 +53,11 @@ export function SourceBadge({ source }: { source: string }) {
         padding: "1px 5px",
         borderRadius: "4px",
         fontWeight: 600,
-        lineHeight: 1.5,
-        whiteSpace: "nowrap",
+        lineHeight: 1.4,
+        whiteSpace: "normal",
+        wordBreak: "break-word",
         display: "inline-block",
         letterSpacing: "0.02em",
-        flexShrink: 0,
       }}
     >
       {source}
@@ -204,7 +204,6 @@ export function ReportTable({
                     verticalAlign: "top",
                     lineHeight: 1.4,
                     wordBreak: "break-word",
-                    overflow: "hidden",
                   }}
                 >
                   {cell}

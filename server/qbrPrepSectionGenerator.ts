@@ -3110,6 +3110,17 @@ function isNonBranded(query: string): boolean {
   return !BRANDED_SIGNALS.test(query.toLowerCase());
 }
 
+/**
+ * Strategic keyword filter — requires treatment / care-intent / location signal.
+ * Filters out generic informational queries that cannot be mapped to actionable
+ * service, program, condition, or location pages within the quarter.
+ */
+const STRATEGIC_KW_RE = /\b(detox|detoxification|residential|inpatient|outpatient|php|partial hospitalization|iop|intensive outpatient|rehab|rehabilitation|treatment|recovery|sober|sobriety|addiction|substance use|alcohol|drug|opioid|heroin|meth(?:amphetamine)?|cocaine|fentanyl|benzo|benzodiazepine|mental health|depression|anxiety|trauma|ptsd|dual diagnosis|co.occurring|eating disorder|behavioral health|withdrawal|relapse|medication.assisted|mat|suboxone|methadone|vivitrol|emdr|cbt|dbt|therapy|counseling|program|center|facility|clinic|near me|in \w{3,}|near \w{3,})\b/i;
+
+function isStrategicKeyword(q: string): boolean {
+  return STRATEGIC_KW_RE.test(q);
+}
+
 function normalizePath(url: string): string {
   try {
     return new URL(url).pathname.replace(/\/$/, "") || "/";
@@ -3215,8 +3226,7 @@ export function generateSuggestedKeywords(
   section2: Section2Conversions,
   monthlyCredits: number,
 ): SectionSuggestedKeywords {
-  const quarterlyCredits = monthlyCredits * 3;
-  const maxRecommendations = Math.min(quarterlyCredits * 2, 48);
+  const maxRecommendations = Math.min(monthlyCredits * 2, 48);
 
   // Build SF page inventory
   const sfPaths = extractSfPaths(sfData, sfHeaders);
@@ -3235,11 +3245,11 @@ export function generateSuggestedKeywords(
     if (p.page && p.page.startsWith("/")) sfPaths.add(p.page.replace(/\/$/, "") || p.page);
   }
 
-  // Get non-branded queries sorted by impressions desc
+  // Get non-branded, strategically relevant queries sorted by impressions desc
   const candidateQueries = gscQueryRows
     .filter((r: any) => {
       const q = r.keys?.[0] ?? "";
-      return q.length > 2 && isNonBranded(q);
+      return q.length > 2 && isNonBranded(q) && isStrategicKeyword(q);
     })
     .sort((a: any, b: any) => (b.impressions ?? 0) - (a.impressions ?? 0));
 
@@ -3268,8 +3278,8 @@ export function generateSuggestedKeywords(
     if (targetPath && recType !== "create-new") usedPaths.add(targetPath);
 
     const targetPageDisplay = recType === "create-new"
-      ? "Suggest new content for this keyword"
-      : (targetPath ?? "Suggest new content for this keyword");
+      ? "New content needed"
+      : (targetPath ?? "New content needed");
 
     const whyRecommended = buildKeywordReason(query, impressions, clicks, targetPath, recType, sfPaths);
 
@@ -3296,7 +3306,7 @@ export function generateSuggestedKeywords(
       );
       const targetPage = matchingPage
         ? normalizePath(matchingPage.page)
-        : "Suggest new content for this keyword";
+        : "New content needed";
       const recType: SuggestedKeywordRow["recommendationType"] =
         matchingPage ? "optimize-existing" : "create-new";
 

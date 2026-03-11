@@ -148,6 +148,7 @@ function makeTable(headers: string[], rows: string[][], colWidthsDxa: number[]) 
   return new Table({
     width: { size: PAGE_WIDTH, type: WidthType.DXA },
     layout: TableLayoutType.FIXED,
+    columnWidths: colWidthsDxa,
     rows: [headerRow, ...dataRows],
   });
 }
@@ -186,6 +187,7 @@ function metaTable(fields: [string, string][]): Table {
   return new Table({
     width: { size: PAGE_WIDTH, type: WidthType.DXA },
     layout: TableLayoutType.FIXED,
+    columnWidths: [META_LABEL, META_VALUE],
     rows: fields.map(([label, val]) =>
       new TableRow({
         children: [
@@ -302,6 +304,7 @@ function amContextBlock(manualInputs: any): Table | null {
   return new Table({
     width: { size: PAGE_WIDTH, type: WidthType.DXA },
     layout: TableLayoutType.FIXED,
+    columnWidths: [AM_LABEL_W, AM_VALUE_W],
     rows,
   });
 }
@@ -323,6 +326,7 @@ function goalBlock(row: any, ri: number, edits?: Record<string, string>): Table 
   return new Table({
     width: { size: PAGE_WIDTH, type: WidthType.DXA },
     layout: TableLayoutType.FIXED,
+    columnWidths: [GOAL_LABEL_W, GOAL_VALUE_W],
     rows: [
       // Header: full-width goal type
       new TableRow({
@@ -419,6 +423,7 @@ function priorityBlock(r: any, ri: number, edits?: Record<string, string>): Tabl
   return new Table({
     width: { size: PAGE_WIDTH, type: WidthType.DXA },
     layout: TableLayoutType.FIXED,
+    columnWidths: [PRI_NUM_W, PRI_CONTENT_W],
     rows: [
       // Header row: red num + dark initiative + tier
       new TableRow({
@@ -612,6 +617,7 @@ function opportunityBlock(o: any, i: number, edits?: Record<string, string>): Ta
   return new Table({
     width: { size: PAGE_WIDTH, type: WidthType.DXA },
     layout: TableLayoutType.FIXED,
+    columnWidths: [OPP_LABEL_W, OPP_CONTENT_W],
     rows,
   });
 }
@@ -621,6 +627,7 @@ function tierDiagnosisBlock(tier: number, tierName: string, diagnosis: string): 
   return new Table({
     width: { size: PAGE_WIDTH, type: WidthType.DXA },
     layout: TableLayoutType.FIXED,
+    columnWidths: [PAGE_WIDTH],
     rows: [
       new TableRow({
         children: [

@@ -2049,30 +2049,23 @@ export async function registerRoutes(
   });
 
   app.post("/api/reports/mid-strategy/generate", async (req, res) => {
-    const { clientId, currentCrawlAssetId, comparisonCrawlAssetId, amInputs, gapAnswers, gapSessionId } = req.body;
+    const { clientId, currentCrawlAssetId, comparisonCrawlAssetId, clientInsights, includeDomainStrategy, domainStrategy } = req.body;
     if (!clientId) return res.status(400).json({ message: "clientId is required" });
-
-    const rawAmInputs = req.body.amInputs ?? {};
-    const amValidation = validateAmInputs(req.body);
-    if ("error" in amValidation) return res.status(400).json({ message: amValidation.error });
 
     try {
       const client = await storage.getClient(Number(clientId));
       if (!client) return res.status(404).json({ message: "Client not found" });
       const { generateMidStrategy } = await import("./midStrategyGenerator");
-      const mergedAmInputs = ("error" in amValidation) ? {} : { ...rawAmInputs, ...amValidation.amInputs };
       const output = await generateMidStrategy({
         clientId: Number(clientId),
-        currentCrawlAssetId: currentCrawlAssetId ?? null,
-        comparisonCrawlAssetId: comparisonCrawlAssetId ?? null,
-        amInputs: mergedAmInputs,
-        gapContext: gapAnswers ? buildGapContext(gapAnswers) : undefined,
+        currentCrawlAssetId: currentCrawlAssetId ? Number(currentCrawlAssetId) : null,
+        comparisonCrawlAssetId: comparisonCrawlAssetId ? Number(comparisonCrawlAssetId) : null,
+        clientInsights: clientInsights ?? undefined,
+        includeDomainStrategy: includeDomainStrategy ?? false,
+        domainStrategy: domainStrategy ?? undefined,
       });
-      if (gapAnswers?.length && gapSessionId) {
-        storage.updateGapSession(Number(gapSessionId), { answerUsage: getAnswerUsageMap(gapAnswers) }).catch(() => {});
-      }
       if (!output || !Array.isArray(output.slides) || output.slides.length < 1) {
-        return res.status(500).json({ message: "Mid-Strategy generator produced no slides. Ensure at least one data source or manual input is provided." });
+        return res.status(500).json({ message: "Mid-Strategy generator produced no slides." });
       }
       res.json(output);
     } catch (err: any) {
@@ -2095,7 +2088,8 @@ export async function registerRoutes(
           if (comm) items.push({ manualText: comm });
           if (s.table) { const resolvedRows = (s.table.rows as any[][]).map((row: any[], ri: number) => row.map((cell: any, ci: number) => edits?.[`${s.id}_cell_${ri}_${ci}`] ?? String(cell))); const tableKey = s.type === "scorecard" ? `${s.id}_scorecard` : `${s.id}_table`; const crRows = parseCustomRowsFromEdits(edits, tableKey); items.push({ tables: [{ title: edits?.[`${s.id}_subtitle`] ?? s.subtitle ?? "", headers: s.table.headers, rows: [...resolvedRows, ...crRows] }] }); }
           if (s.bullets) items.push({ manualText: (s.bullets as string[]).map((b: string, bi: number) => edits?.[`${s.id}_bullet_${bi}`] ?? b).join("\n") });
-          if (s.leftContent?.bullets) items.push({ manualText: (s.leftContent.bullets as string[]).join("\n") });
+          if (s.leftContent?.bullets) items.push({ manualText: (s.leftContent.bullets as string[]).map((b: string) => `• ${b}`).join("\n") });
+          if (s.rightContent?.bullets) items.push({ manualText: (s.rightContent.bullets as string[]).map((b: string) => `• ${b}`).join("\n") });
           if (s.rightContent?.metrics) items.push({ summary: s.rightContent.metrics.map((m: any) => ({ label: m.label, current: m.current, isPositive: m.isPositive ?? true })) });
           if (s.type === "decision-card" && s.decisionOptions?.length) {
             const optText = (s.decisionOptions as any[]).map((opt: any, oi: number) => {

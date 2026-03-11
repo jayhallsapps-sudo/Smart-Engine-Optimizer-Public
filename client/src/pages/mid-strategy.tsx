@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -22,24 +22,40 @@ import {
   ChevronDown,
   ChevronRight,
   Save,
-  Database,
   CheckCircle2,
   AlertCircle,
   Activity,
-  FileText,
+  Zap,
+  Info,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { PptxPreview } from "@/components/report-preview/pptx-preview";
 import type { Client } from "@shared/schema";
-import { CLIENT_SENTIMENT_OPTIONS } from "@shared/schema";
 import { useReportSave } from "@/hooks/useReportSave";
 import { SaveStatusIndicator } from "@/components/reports/SaveStatusIndicator";
 import { ReportSaveSelector } from "@/components/reports/ReportSaveSelector";
 import { CrawlAssetSelector } from "@/components/reports/CrawlAssetSelector";
-import { useFillInTheGaps } from "@/hooks/useFillInTheGaps";
-import { FillInTheGapsModal } from "@/components/FillInTheGapsModal";
-import { ClarificationTrail } from "@/components/ClarificationTrail";
 import { Checkbox } from "@/components/ui/checkbox";
+
+// Confidence label badge for slides
+function ConfidenceLabel({ confidence }: { confidence?: string }) {
+  if (!confidence) return null;
+  const map: Record<string, { label: string; color: string }> = {
+    "data-backed": { label: "Data-Backed", color: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
+    "mixed-source": { label: "Mixed Source", color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
+    "ai-synthesized": { label: "AI-Synthesized", color: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" },
+    "missing-data": { label: "Missing Data", color: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
+  };
+  const cfg = map[confidence];
+  if (!cfg) return null;
+  return (
+    <span className={`inline-flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded-full uppercase tracking-wide ${cfg.color}`}>
+      {confidence === "data-backed" && <CheckCircle2 className="w-2.5 h-2.5" />}
+      {confidence === "missing-data" && <AlertCircle className="w-2.5 h-2.5" />}
+      {cfg.label}
+    </span>
+  );
+}
 
 export default function MidStrategyPage() {
   const { toast } = useToast();
@@ -50,43 +66,18 @@ export default function MidStrategyPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [currentCrawlId, setCurrentCrawlId] = useState<number | null>(null);
   const [comparisonCrawlId, setComparisonCrawlId] = useState<number | null>(null);
-  const [showAdditionalInputs, setShowAdditionalInputs] = useState(false);
-  const [workbookBuilt, setWorkbookBuilt] = useState(false);
   const [buildStep, setBuildStep] = useState<"idle" | "building" | "built">("idle");
 
-  const [clientSentiment, setClientSentiment] = useState<string>("");
-  const [amThoughts, setAmThoughts] = useState("");
-  const [priorityChecks, setPriorityChecks] = useState("");
-  const [clientNotes, setClientNotes] = useState("");
-
-  const [amAccountFeeling, setAmAccountFeeling] = useState("");
-  const [amContextAnomalies, setAmContextAnomalies] = useState("");
-  const [amLeadershipNote, setAmLeadershipNote] = useState("");
-  const [amFocusNext60Days, setAmFocusNext60Days] = useState("");
-  const [amSalesAdmissions, setAmSalesAdmissions] = useState("");
-  const [amClientDependency, setAmClientDependency] = useState("");
-
-  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
-  const [healthChecks, setHealthChecks] = useState<Record<string, { status: string; detail?: string }> | null>(null);
-  const [healthLoading, setHealthLoading] = useState(false);
-  const [showHealthPanel, setShowHealthPanel] = useState(false);
-
+  // Simplified inputs — no manual strategy content fields
+  const [clientInsights, setClientInsights] = useState("");
   const [domainStrategyEnabled, setDomainStrategyEnabled] = useState(false);
   const [domainCurrent, setDomainCurrent] = useState("");
   const [domainProposed, setDomainProposed] = useState("");
   const [domainRationale, setDomainRationale] = useState("");
 
-  const [showStrategyInputs, setShowStrategyInputs] = useState(false);
-  const [firstFocusBulletsRaw, setFirstFocusBulletsRaw] = useState("");
-  const [whatsNextBulletsRaw, setWhatsNextBulletsRaw] = useState("");
-  const [webservNextStepsRaw, setWebservNextStepsRaw] = useState("");
-  const [clientNextStepsRaw, setClientNextStepsRaw] = useState("");
-
-  const [showIaInputs, setShowIaInputs] = useState(false);
-  const [iaCurrentNavRaw, setIaCurrentNavRaw] = useState("");
-  const [iaFutureNavRaw, setIaFutureNavRaw] = useState("");
-  const [iaClustersRaw, setIaClustersRaw] = useState("");
-  const [iaCredPagesRaw, setIaCredPagesRaw] = useState("");
+  const [healthChecks, setHealthChecks] = useState<Record<string, { status: string; detail?: string }> | null>(null);
+  const [healthLoading, setHealthLoading] = useState(false);
+  const [showHealthPanel, setShowHealthPanel] = useState(false);
 
   const { data: clients = [] } = useQuery<Client[]>({ queryKey: ["/api/clients"] });
   const clientName = (clients as Client[]).find(c => String(c.id) === clientId)?.name ?? "";
@@ -95,24 +86,6 @@ export default function MidStrategyPage() {
     reportType: "mid_strategy_seo",
     clientId: clientId ? Number(clientId) : null,
   });
-
-  const {
-    fillInGapsEnabled,
-    setFillInGapsEnabled,
-    isAnalyzing,
-    showModal,
-    questions,
-    runGapAnalysis,
-    submitAnswers,
-    sessionId,
-    seoHqLoadStatus,
-    answers,
-    closeModal,
-    draftAnswers,
-    handleAnswersChange,
-    answerUsage,
-    fetchAnswerUsage,
-  } = useFillInTheGaps({ reportType: "mid_strategy_seo" });
 
   const reportRef = useRef(report);
   reportRef.current = report;
@@ -134,81 +107,6 @@ export default function MidStrategyPage() {
     }
   }
 
-  function parseLines(raw: string): string[] {
-    return raw.split("\n").map(s => s.trim()).filter(Boolean);
-  }
-
-  function parseNavItems(raw: string): Array<{ label: string; children?: string[] }> {
-    return raw.split("\n").map(line => {
-      const trimmed = line.trim();
-      if (!trimmed) return null;
-      const colonIdx = trimmed.indexOf(":");
-      if (colonIdx === -1) return { label: trimmed };
-      const label = trimmed.substring(0, colonIdx).trim();
-      const childrenRaw = trimmed.substring(colonIdx + 1).trim();
-      const children = childrenRaw ? childrenRaw.split(",").map(s => s.trim()).filter(Boolean) : [];
-      return { label, ...(children.length ? { children } : {}) };
-    }).filter(Boolean) as Array<{ label: string; children?: string[] }>;
-  }
-
-  function parseClusters(raw: string): Array<{ hub: string; pages: string[] }> {
-    return raw.split("\n").map(line => {
-      const trimmed = line.trim();
-      if (!trimmed) return null;
-      const colonIdx = trimmed.indexOf(":");
-      if (colonIdx === -1) return { hub: trimmed, pages: [] };
-      const hub = trimmed.substring(0, colonIdx).trim();
-      const pagesRaw = trimmed.substring(colonIdx + 1).trim();
-      const pages = pagesRaw ? pagesRaw.split(",").map(s => s.trim()).filter(Boolean) : [];
-      return { hub, pages };
-    }).filter(Boolean) as Array<{ hub: string; pages: string[] }>;
-  }
-
-  function getAmInputs() {
-    const firstFocusBullets = parseLines(firstFocusBulletsRaw);
-    const whatsNextBullets = parseLines(whatsNextBulletsRaw);
-    const webservNextSteps = parseLines(webservNextStepsRaw);
-    const clientNextSteps = parseLines(clientNextStepsRaw);
-    const currentNav = parseNavItems(iaCurrentNavRaw);
-    const futureNav = parseNavItems(iaFutureNavRaw);
-    const clusters = parseClusters(iaClustersRaw);
-    const credibilityPages = parseClusters(iaCredPagesRaw);
-    const hasIaData = currentNav.length > 0 || futureNav.length > 0 || clusters.length > 0 || credibilityPages.length > 0;
-
-    return {
-      clientSentiment,
-      amThoughts,
-      priorityChecks,
-      clientNotes: clientNotes || undefined,
-      accountFeeling: amAccountFeeling || undefined,
-      contextAnomalies: amContextAnomalies || undefined,
-      leadershipNote: amLeadershipNote || undefined,
-      focusNext60Days: amFocusNext60Days || undefined,
-      salesAdmissionsContext: amSalesAdmissions || undefined,
-      clientDependencyNotes: amClientDependency || undefined,
-      ...(firstFocusBullets.length ? { firstFocusBullets } : {}),
-      ...(whatsNextBullets.length ? { whatsNextBullets } : {}),
-      ...(webservNextSteps.length ? { webservNextSteps } : {}),
-      ...(clientNextSteps.length ? { clientNextSteps } : {}),
-      ...(hasIaData ? {
-        iaData: {
-          ...(currentNav.length ? { currentNav } : {}),
-          ...(futureNav.length ? { futureNav } : {}),
-          ...(clusters.length ? { clusters } : {}),
-          ...(credibilityPages.length ? { credibilityPages } : {}),
-        },
-      } : {}),
-      ...(domainStrategyEnabled ? {
-        domainStrategy: {
-          enabled: true,
-          currentDomain: domainCurrent || undefined,
-          proposedDomain: domainProposed || undefined,
-          customRationale: domainRationale || undefined,
-        },
-      } : {}),
-    };
-  }
-
   function getMeta(overrideReport?: any) {
     const r = overrideReport ?? reportRef.current;
     const generatedOn = new Date().toISOString().split("T")[0];
@@ -220,29 +118,37 @@ export default function MidStrategyPage() {
     };
   }
 
-  function validateAmInputs(): boolean {
-    const errors: Record<string, string> = {};
-    if (!clientSentiment) errors.clientSentiment = "Client Sentiment is required";
-    if (!amThoughts.trim()) errors.amThoughts = "AM's Hypothesis is required";
-    if (!priorityChecks.trim()) errors.priorityChecks = "Priority Checks is required";
-    setValidationErrors(errors);
-    return Object.keys(errors).length === 0;
+  function handleClientChange(val: string) {
+    setClientId(val);
+    setReport(null);
+    setEdits({});
+    setCurrentCrawlId(null);
+    setComparisonCrawlId(null);
+    setBuildStep("idle");
+    reportSave.setSavedReportId(null);
+    setHealthChecks(null);
+    setDomainStrategyEnabled(false);
+    setDomainCurrent("");
+    setDomainProposed("");
+    setDomainRationale("");
+    if (val) runHealthCheck(val);
   }
 
-  const requiredFieldsMissing = !clientSentiment || !amThoughts.trim() || !priorityChecks.trim();
-
   const generateMut = useMutation({
-    mutationFn: async (params?: { gapAnswers?: any[]; gapSessionId?: number }) => {
+    mutationFn: async () => {
       if (!clientId) throw new Error("Select a client first");
-      if (!validateAmInputs()) throw new Error("Please fill in all required AM Inputs fields");
       setBuildStep("building");
       const res = await apiRequest("POST", "/api/reports/mid-strategy/generate", {
         clientId: Number(clientId),
         currentCrawlAssetId: currentCrawlId ?? undefined,
         comparisonCrawlAssetId: comparisonCrawlId ?? undefined,
-        amInputs: getAmInputs(),
-        gapAnswers: params?.gapAnswers,
-        gapSessionId: params?.gapSessionId,
+        clientInsights: clientInsights.trim() || undefined,
+        includeDomainStrategy: domainStrategyEnabled,
+        domainStrategy: domainStrategyEnabled ? {
+          currentDomain: domainCurrent || undefined,
+          proposedDomain: domainProposed || undefined,
+          customRationale: domainRationale || undefined,
+        } : undefined,
       });
       if (!res.ok) throw new Error((await res.json()).message ?? "Generation failed");
       return res.json();
@@ -250,22 +156,18 @@ export default function MidStrategyPage() {
     onSuccess: (data) => {
       setReport(data);
       setEdits({});
-      setWorkbookBuilt(true);
       setBuildStep("built");
       reportSave.setSavedReportId(null);
       const meta = getMeta(data);
       reportSave.pendingPayloadRef.current = { reportData: data, edits: {}, meta };
       reportSave.save(data, {}, meta);
       const wb = data.workbook;
-      const missing = wb?.buildStatus?.missingFields?.length ?? 0;
       const sources = wb?.buildStatus?.dataSourcesUsed?.join(", ") ?? "none";
+      const slideCount = (data.slides ?? []).length;
       toast({
         title: "Mid-Strategy Report Generated",
-        description: `${(data.slides ?? []).length} slides ready${sources ? ` · Sources: ${sources}` : ""}${missing > 0 ? ` · ${missing} fields need manual entry` : ""}`,
+        description: `${slideCount} slides auto-generated${sources ? ` · Sources: ${sources}` : ""}`,
       });
-    },
-    onSettled: () => {
-      if (sessionId) fetchAnswerUsage(sessionId);
     },
     onError: (err: any) => {
       setBuildStep("idle");
@@ -276,11 +178,7 @@ export default function MidStrategyPage() {
   const handleEdit = useCallback((key: string, value: string) => {
     setEdits(prev => {
       const next = { ...prev, [key]: value };
-      reportSave.pendingPayloadRef.current = {
-        reportData: reportRef.current,
-        edits: next,
-        meta: getMeta(),
-      };
+      reportSave.pendingPayloadRef.current = { reportData: reportRef.current, edits: next, meta: getMeta() };
       return next;
     });
     reportSave.markDirty();
@@ -357,51 +255,8 @@ export default function MidStrategyPage() {
     }
   }
 
-  function handleClientChange(val: string) {
-    setClientId(val);
-    setReport(null);
-    setEdits({});
-    setCurrentCrawlId(null);
-    setComparisonCrawlId(null);
-    setWorkbookBuilt(false);
-    setBuildStep("idle");
-    reportSave.setSavedReportId(null);
-    setHealthChecks(null);
-    setDomainStrategyEnabled(false);
-    setDomainCurrent("");
-    setDomainProposed("");
-    setDomainRationale("");
-    if (val) runHealthCheck(val);
-  }
-
-  const handleGenerateClick = async () => {
-    if (!clientId) return;
-    if (!validateAmInputs()) return;
-
-    if (fillInGapsEnabled) {
-      const amInputs = getAmInputs();
-      const result = await runGapAnalysis(Number(clientId), amInputs as any);
-      if (result && !result.hasQuestions) {
-        generateMut.mutate();
-      }
-    } else {
-      generateMut.mutate();
-    }
-  };
-
-  const handleGapComplete = async (answers: any[]) => {
-    try {
-      const sid = await submitAnswers(Number(clientId), answers);
-      generateMut.mutate({ gapAnswers: answers, gapSessionId: sid });
-      closeModal();
-    } catch (err) {
-      // Error handled in hook
-    }
-  };
-
   const wb = report?.workbook;
   const missingFields: string[] = wb?.buildStatus?.missingFields ?? [];
-  const completedFields: number = wb?.buildStatus?.completedFields ?? 0;
   const dataSourcesUsed: string[] = wb?.buildStatus?.dataSourcesUsed ?? [];
 
   return (
@@ -413,7 +268,7 @@ export default function MidStrategyPage() {
             <Target className="w-5 h-5 text-primary" />
             <div>
               <h1 className="font-semibold text-sm">Mid-Strategy SEO Report</h1>
-              <p className="text-xs text-muted-foreground">Competitive benchmark · Structural analysis</p>
+              <p className="text-xs text-muted-foreground">Auto-generated diagnostic deck</p>
             </div>
           </div>
           {clientId && (
@@ -441,7 +296,7 @@ export default function MidStrategyPage() {
             </Select>
           </div>
 
-          {/* Saved report selector */}
+          {/* Load Saved */}
           {clientId && (
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Load Saved</Label>
@@ -452,7 +307,6 @@ export default function MidStrategyPage() {
                   setReport(data);
                   setEdits(savedEdits);
                   reportSave.setSavedReportId(id);
-                  setWorkbookBuilt(true);
                   setBuildStep("built");
                   if (savedReport?.currentCrawlAssetId) setCurrentCrawlId(savedReport.currentCrawlAssetId);
                   if (savedReport?.comparisonCrawlAssetId) setComparisonCrawlId(savedReport.comparisonCrawlAssetId);
@@ -466,10 +320,13 @@ export default function MidStrategyPage() {
 
           <Separator />
 
-          {/* Crawl selectors */}
+          {/* Crawl Assets */}
           {clientId && (
             <div className="space-y-1.5">
-              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Crawl Assets</Label>
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Crawl Assets <span className="text-muted-foreground font-normal normal-case tracking-normal">(optional)</span>
+              </Label>
+              <p className="text-[10px] text-muted-foreground leading-tight">Upload a Screaming Frog export for deeper structural, technical, and trust analysis.</p>
               <CrawlAssetSelector
                 clientId={Number(clientId)}
                 currentCrawlId={currentCrawlId}
@@ -481,7 +338,7 @@ export default function MidStrategyPage() {
             </div>
           )}
 
-          {/* Integration Health Check Panel */}
+          {/* Integration Health */}
           {clientId && (healthChecks || healthLoading) && (
             <>
               <Separator />
@@ -513,11 +370,7 @@ export default function MidStrategyPage() {
                         </div>
                       );
                     })}
-                    <button
-                      onClick={() => runHealthCheck(clientId)}
-                      className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-1 mt-1"
-                      data-testid="button-refresh-health"
-                    >
+                    <button onClick={() => runHealthCheck(clientId)} className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-1 mt-1" data-testid="button-refresh-health">
                       <RefreshCw className="w-2.5 h-2.5" /> Refresh
                     </button>
                   </div>
@@ -528,7 +381,24 @@ export default function MidStrategyPage() {
 
           <Separator />
 
-          {/* Domain Strategy (Optional) */}
+          {/* Client Insights (optional) */}
+          {clientId && (
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Client Context <span className="text-muted-foreground font-normal normal-case tracking-normal">(optional)</span>
+              </Label>
+              <p className="text-[10px] text-muted-foreground leading-tight">Any relevant context about this client — recent changes, focus areas, upcoming events.</p>
+              <Textarea
+                placeholder="e.g. Client is launching a new PHP program next month. Leadership focused on admissions volume..."
+                value={clientInsights}
+                onChange={e => setClientInsights(e.target.value)}
+                className="text-xs resize-none h-20"
+                data-testid="input-client-insights"
+              />
+            </div>
+          )}
+
+          {/* Domain Strategy (optional toggle) */}
           {clientId && (
             <div className="space-y-2">
               <div className="flex items-start space-x-2">
@@ -537,14 +407,10 @@ export default function MidStrategyPage() {
                   checked={domainStrategyEnabled}
                   onCheckedChange={(checked) => setDomainStrategyEnabled(!!checked)}
                   data-testid="checkbox-domain-strategy"
-                  className="mt-1"
                 />
-                <div className="grid gap-1 leading-none">
-                  <Label htmlFor="mid-strategy-domain-strategy" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground cursor-pointer">
-                    Domain Strategy
-                  </Label>
-                  <p className="text-[10px] text-muted-foreground">Include domain recommendation slide</p>
-                </div>
+                <Label htmlFor="mid-strategy-domain-strategy" className="text-xs cursor-pointer leading-tight">
+                  Include domain strategy recommendation
+                </Label>
               </div>
               {domainStrategyEnabled && (
                 <div className="space-y-2 pl-6">
@@ -553,7 +419,7 @@ export default function MidStrategyPage() {
                     <input
                       value={domainCurrent}
                       onChange={e => setDomainCurrent(e.target.value)}
-                      placeholder="e.g. forgingnewlives.com"
+                      placeholder="e.g. currentdomain.com"
                       className="w-full text-xs px-2 py-1 border rounded bg-background"
                       data-testid="input-domain-current"
                     />
@@ -563,7 +429,7 @@ export default function MidStrategyPage() {
                     <input
                       value={domainProposed}
                       onChange={e => setDomainProposed(e.target.value)}
-                      placeholder="e.g. foundrysteamboat.com"
+                      placeholder="e.g. proposeddomain.com"
                       className="w-full text-xs px-2 py-1 border rounded bg-background"
                       data-testid="input-domain-proposed"
                     />
@@ -573,7 +439,7 @@ export default function MidStrategyPage() {
                     <Textarea
                       value={domainRationale}
                       onChange={e => setDomainRationale(e.target.value)}
-                      placeholder="Override the default conclusion..."
+                      placeholder="Override the default recommendation..."
                       className="text-xs min-h-[40px] resize-none"
                       data-testid="input-domain-rationale"
                     />
@@ -585,431 +451,176 @@ export default function MidStrategyPage() {
 
           <Separator />
 
-          {/* AM Inputs — Required */}
-          <div className="space-y-3">
-            <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">AM Inputs</Label>
-
-            <div className="space-y-1">
-              <Label className="text-[11px] text-muted-foreground">
-                Client Sentiment <span className="text-destructive">*</span>
-              </Label>
-              <Select value={clientSentiment} onValueChange={(v) => { setClientSentiment(v); setValidationErrors(prev => { const n = {...prev}; delete n.clientSentiment; return n; }); }}>
-                <SelectTrigger data-testid="select-client-sentiment" className={validationErrors.clientSentiment ? "border-destructive" : ""}>
-                  <SelectValue placeholder="Select sentiment…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {CLIENT_SENTIMENT_OPTIONS.map(opt => (
-                    <SelectItem key={opt} value={opt} data-testid={`option-sentiment-${opt.toLowerCase()}`}>{opt}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {validationErrors.clientSentiment && <p className="text-[10px] text-destructive" data-testid="error-client-sentiment">{validationErrors.clientSentiment}</p>}
+          {/* Generate Button */}
+          {clientId && (
+            <div className="space-y-2">
+              <Button
+                onClick={() => generateMut.mutate()}
+                disabled={!clientId || generateMut.isPending}
+                className="w-full"
+                data-testid="button-generate-mid-strategy"
+              >
+                {generateMut.isPending ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Analyzing…</>
+                ) : (
+                  <><Zap className="w-4 h-4 mr-2" /> {buildStep === "built" ? "Regenerate Report" : "Generate Report"}</>
+                )}
+              </Button>
+              <p className="text-[10px] text-muted-foreground text-center leading-tight">
+                Deck auto-generates from crawl data, integrations &amp; competitive signals.
+              </p>
             </div>
+          )}
 
-            <div className="space-y-1">
-              <Label className="text-[11px] text-muted-foreground">
-                AM's Hypothesis <span className="text-destructive">*</span>
-              </Label>
-              <Textarea
-                placeholder="Your hypothesis, focus areas, strategy thoughts…"
-                value={amThoughts}
-                onChange={e => { setAmThoughts(e.target.value); setValidationErrors(prev => { const n = {...prev}; delete n.amThoughts; return n; }); }}
-                className={`text-xs resize-none h-14 ${validationErrors.amThoughts ? "border-destructive" : ""}`}
-                data-testid="input-am-thoughts"
-              />
-              {validationErrors.amThoughts && <p className="text-[10px] text-destructive" data-testid="error-am-thoughts">{validationErrors.amThoughts}</p>}
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-[11px] text-muted-foreground">
-                Priority Checks <span className="text-destructive">*</span>
-              </Label>
-              <Textarea
-                placeholder="Site observations, audit findings, priorities…"
-                value={priorityChecks}
-                onChange={e => { setPriorityChecks(e.target.value); setValidationErrors(prev => { const n = {...prev}; delete n.priorityChecks; return n; }); }}
-                className={`text-xs resize-none h-14 ${validationErrors.priorityChecks ? "border-destructive" : ""}`}
-                data-testid="input-priority-checks"
-              />
-              {validationErrors.priorityChecks && <p className="text-[10px] text-destructive" data-testid="error-priority-checks">{validationErrors.priorityChecks}</p>}
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-[11px] text-muted-foreground">Client Insights</Label>
-              <Textarea
-                placeholder="Optional notes from or about the client…"
-                value={clientNotes}
-                onChange={e => setClientNotes(e.target.value)}
-                className="text-xs resize-none h-14"
-                data-testid="input-client-notes"
-              />
-            </div>
-          </div>
-
-          {/* Additional Optional Inputs */}
-          <div className="space-y-1.5">
-            <button
-              className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground w-full hover:text-foreground transition-colors"
-              onClick={() => setShowAdditionalInputs(v => !v)}
-              data-testid="toggle-additional-inputs-mid"
-            >
-              {showAdditionalInputs ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-              Additional Inputs (Optional)
-            </button>
-            {showAdditionalInputs && (
-              <div className="space-y-3 pt-1">
-                {[
-                  { label: "How does the account feel so far?", value: amAccountFeeling, set: setAmAccountFeeling, testId: "input-am-feeling" },
-                  { label: "Key context / anomalies", value: amContextAnomalies, set: setAmContextAnomalies, testId: "input-am-context" },
-                  { label: "What should leadership know?", value: amLeadershipNote, set: setAmLeadershipNote, testId: "input-am-leadership" },
-                  { label: "Focus over next 30-60 days", value: amFocusNext60Days, set: setAmFocusNext60Days, testId: "input-am-focus" },
-                  { label: "Sales / admissions context", value: amSalesAdmissions, set: setAmSalesAdmissions, testId: "input-am-sales" },
-                  { label: "Client dependency / approval notes", value: amClientDependency, set: setAmClientDependency, testId: "input-am-dependency" },
-                ].map(({ label, value, set, testId }) => (
-                  <div key={testId} className="space-y-1">
-                    <Label className="text-[10px] text-muted-foreground">{label}</Label>
-                    <Textarea
-                      value={value}
-                      onChange={e => set(e.target.value)}
-                      placeholder="Optional…"
-                      className="text-xs min-h-[52px] resize-none"
-                      data-testid={testId}
-                    />
-                  </div>
+          {/* Data Sources Used */}
+          {report && dataSourcesUsed.length > 0 && (
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Sources Used</Label>
+              <div className="flex flex-wrap gap-1">
+                {dataSourcesUsed.map(src => (
+                  <Badge key={src} variant="secondary" className="text-[9px] px-1.5 py-0">{src}</Badge>
                 ))}
               </div>
-            )}
-          </div>
-
-          <Separator />
-
-          {/* Strategy Content Inputs */}
-          <div className="space-y-1.5">
-            <button
-              className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground w-full hover:text-foreground transition-colors"
-              onClick={() => setShowStrategyInputs(v => !v)}
-              data-testid="toggle-strategy-inputs"
-            >
-              {showStrategyInputs ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-              Strategy Content
-              {!(firstFocusBulletsRaw || whatsNextBulletsRaw || webservNextStepsRaw || clientNextStepsRaw) && (
-                <span className="ml-auto text-[9px] text-amber-500 font-normal">required for export</span>
+              {missingFields.length > 0 && (
+                <div className="rounded border border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-800 p-2 text-[10px] text-amber-700 dark:text-amber-400 space-y-0.5">
+                  <div className="font-semibold flex items-center gap-1"><Info className="w-3 h-3" /> Missing data</div>
+                  {missingFields.slice(0, 4).map((f, i) => <div key={i}>• {f}</div>)}
+                </div>
               )}
-            </button>
-            {showStrategyInputs && (
-              <div className="space-y-3 pt-1">
-                <p className="text-[10px] text-muted-foreground leading-snug">These sections will not appear in PPTX/PDF exports until strategist content is entered. One item per line.</p>
-                <div className="space-y-1">
-                  <Label className="text-[10px] text-muted-foreground">First Focus bullets</Label>
-                  <Textarea
-                    value={firstFocusBulletsRaw}
-                    onChange={e => setFirstFocusBulletsRaw(e.target.value)}
-                    placeholder={"Clarify the site's core structure...\nAlign services with patient evaluation...\nCreate a shared prioritization framework..."}
-                    className="text-xs min-h-[70px] resize-none font-mono"
-                    data-testid="input-first-focus-bullets"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px] text-muted-foreground">What's Next bullets</Label>
-                  <Textarea
-                    value={whatsNextBulletsRaw}
-                    onChange={e => setWhatsNextBulletsRaw(e.target.value)}
-                    placeholder={"Confirm the proposed long-term site structure...\nContinued content planning...\nLocal SEO foundations..."}
-                    className="text-xs min-h-[70px] resize-none font-mono"
-                    data-testid="input-whats-next-bullets"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px] text-muted-foreground">Webserv next steps (one per line)</Label>
-                  <Textarea
-                    value={webservNextStepsRaw}
-                    onChange={e => setWebservNextStepsRaw(e.target.value)}
-                    placeholder={"Content planning for the rest of the quarter\nDefining and strengthening primary service pages\nFixing conversion gaps"}
-                    className="text-xs min-h-[60px] resize-none font-mono"
-                    data-testid="input-webserv-next-steps"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px] text-muted-foreground">Client next steps (one per line)</Label>
-                  <Textarea
-                    value={clientNextStepsRaw}
-                    onChange={e => setClientNextStepsRaw(e.target.value)}
-                    placeholder={"Confirm the proposed future site structure\nConfirm the redirect plan"}
-                    className="text-xs min-h-[60px] resize-none font-mono"
-                    data-testid="input-client-next-steps"
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-
-          <Separator />
-
-          {/* IA Framework Inputs */}
-          <div className="space-y-1.5">
-            <button
-              className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground w-full hover:text-foreground transition-colors"
-              onClick={() => setShowIaInputs(v => !v)}
-              data-testid="toggle-ia-inputs"
-            >
-              {showIaInputs ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-              IA Framework
-              {!(iaCurrentNavRaw || iaFutureNavRaw || iaClustersRaw) && (
-                <span className="ml-auto text-[9px] text-amber-500 font-normal">required for export</span>
-              )}
-            </button>
-            {showIaInputs && (
-              <div className="space-y-3 pt-1">
-                <p className="text-[10px] text-muted-foreground leading-snug">IA and cluster slides are suppressed from exports until client-specific data is entered here. Format for nav with children: <code className="bg-muted px-0.5 rounded">LABEL: /child1/, /child2/</code></p>
-                <div className="space-y-1">
-                  <Label className="text-[10px] text-muted-foreground">Current navigation (one label per line)</Label>
-                  <Textarea
-                    value={iaCurrentNavRaw}
-                    onChange={e => setIaCurrentNavRaw(e.target.value)}
-                    placeholder={"ABOUT\nPROGRAMS\nADMISSIONS\nTREATMENT\nRESOURCES"}
-                    className="text-xs min-h-[70px] resize-none font-mono"
-                    data-testid="input-ia-current-nav"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px] text-muted-foreground">Future navigation (LABEL: /child1/, /child2/)</Label>
-                  <Textarea
-                    value={iaFutureNavRaw}
-                    onChange={e => setIaFutureNavRaw(e.target.value)}
-                    placeholder={"TREATMENT: /treatment/, /treatment/therapies/\nPROGRAMS: /programs/, /programs/residential/\nADMISSIONS: /admissions/"}
-                    className="text-xs min-h-[70px] resize-none font-mono"
-                    data-testid="input-ia-future-nav"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px] text-muted-foreground">Content clusters (HUB: /page1/, /page2/)</Label>
-                  <Textarea
-                    value={iaClustersRaw}
-                    onChange={e => setIaClustersRaw(e.target.value)}
-                    placeholder={"Treatment: /treatment/, /treatment/therapies/\nPrograms: /programs/, /programs/residential/"}
-                    className="text-xs min-h-[70px] resize-none font-mono"
-                    data-testid="input-ia-clusters"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px] text-muted-foreground">Credibility pages (HUB: /page1/, /page2/)</Label>
-                  <Textarea
-                    value={iaCredPagesRaw}
-                    onChange={e => setIaCredPagesRaw(e.target.value)}
-                    placeholder={"About: /about/, /about/our-story/, /about/clinical-team/\nResources: /resources/, /resources/blog/"}
-                    className="text-xs min-h-[60px] resize-none font-mono"
-                    data-testid="input-ia-cred-pages"
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-
-          <Separator />
-
-          {/* Workbook Status */}
-          {workbookBuilt && wb && (
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
-                <Database className="w-3 h-3" />
-                Workbook Status
-              </Label>
-              <div className="rounded-md border p-2.5 space-y-1.5 text-xs bg-muted/30">
-                <div className="flex items-center gap-1.5">
-                  <CheckCircle2 className="w-3 h-3 text-green-500 shrink-0" />
-                  <span className="text-muted-foreground">{completedFields} fields populated</span>
-                </div>
-                {dataSourcesUsed.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {dataSourcesUsed.map(s => (
-                      <Badge key={s} variant="secondary" className="text-[9px] px-1 py-0">{s}</Badge>
-                    ))}
-                  </div>
-                )}
-                {missingFields.length > 0 && (
-                  <div className="space-y-0.5">
-                    <div className="flex items-center gap-1 text-amber-600">
-                      <AlertCircle className="w-3 h-3 shrink-0" />
-                      <span>{missingFields.length} manual entry needed</span>
-                    </div>
-                    {missingFields.slice(0, 3).map((f, i) => (
-                      <div key={i} className="text-[9px] text-muted-foreground pl-4">• {f}</div>
-                    ))}
-                    {missingFields.length > 3 && (
-                      <div className="text-[9px] text-muted-foreground pl-4">+ {missingFields.length - 3} more</div>
-                    )}
-                  </div>
-                )}
-                {missingFields.length === 0 && (
-                  <div className="flex items-center gap-1 text-green-600">
-                    <CheckCircle2 className="w-3 h-3 shrink-0" />
-                    <span>All fields populated</span>
-                  </div>
-                )}
-              </div>
             </div>
           )}
 
           <Separator />
 
-          <div className="space-y-3">
-            <div className="flex items-start space-x-2">
-              <Checkbox
-                id="mid-strategy-fill-gaps"
-                checked={fillInGapsEnabled}
-                onCheckedChange={(checked) => setFillInGapsEnabled(!!checked)}
-                data-testid="checkbox-fill-gaps"
-                className="mt-1"
-              />
-              <div className="grid gap-1.5 leading-none">
-                <Label
-                  htmlFor="mid-strategy-fill-gaps"
-                  className="text-xs font-semibold uppercase tracking-wide text-muted-foreground cursor-pointer"
-                >
-                  Fill in the gaps
-                </Label>
-                <p className="text-[10px] text-muted-foreground">
-                  Ask follow-up questions before generating if the system detects missing context.
-                </p>
-              </div>
+          {/* Export Actions */}
+          {report && (
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Export</Label>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full justify-start gap-2 text-xs"
+                onClick={() => downloadMut.mutate()}
+                disabled={downloadMut.isPending}
+                data-testid="button-export-pptx"
+              >
+                {downloadMut.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
+                Download PPTX
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full justify-start gap-2 text-xs"
+                onClick={() => pdfMut.mutate()}
+                disabled={pdfMut.isPending}
+                data-testid="button-export-pdf"
+              >
+                {pdfMut.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
+                Download PDF
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full justify-start gap-2 text-xs"
+                onClick={uploadToDrive}
+                disabled={isUploading}
+                data-testid="button-upload-drive"
+              >
+                {isUploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <CloudUpload className="w-3 h-3" />}
+                Save to Drive
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full justify-start gap-2 text-xs text-muted-foreground"
+                onClick={handleManualSave}
+                data-testid="button-save-report"
+              >
+                <Save className="w-3 h-3" /> Save Progress
+              </Button>
             </div>
-          </div>
-
-          {/* Action buttons */}
-          <div className="space-y-2">
-            <Button
-              className="w-full"
-              onClick={handleGenerateClick}
-              disabled={!clientId || generateMut.isPending || isAnalyzing || requiredFieldsMissing}
-              data-testid="button-generate-mid-strategy"
-            >
-              {generateMut.isPending || isAnalyzing ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  {isAnalyzing ? "Analyzing Gaps…" : buildStep === "building" ? "Building workbook & slides…" : "Generating…"}
-                </>
-              ) : (
-                <>
-                  <Database className="w-4 h-4 mr-2" />
-                  {report ? "Regenerate Report" : "Build & Generate Report"}
-                </>
-              )}
-            </Button>
-
-            {requiredFieldsMissing && clientId && (
-              <p className="text-[10px] text-destructive text-center" data-testid="text-validation-warning">
-                Fill in all required AM Inputs to generate
-              </p>
-            )}
-
-            {report && (
-              <>
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={handleManualSave}
-                  disabled={reportSave.saveStatus === "saving"}
-                  data-testid="button-save-mid-strategy"
-                >
-                  <Save className="w-4 h-4 mr-2" />
-                  Save
-                </Button>
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => downloadMut.mutate()}
-                  disabled={downloadMut.isPending}
-                  data-testid="button-download-pptx-mid"
-                >
-                  {downloadMut.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
-                  Export PPTX
-                </Button>
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => pdfMut.mutate()}
-                  disabled={pdfMut.isPending}
-                  data-testid="button-download-pdf-mid"
-                >
-                  {pdfMut.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <FileText className="w-4 h-4 mr-2" />}
-                  Export PDF
-                </Button>
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={uploadToDrive}
-                  disabled={isUploading}
-                  data-testid="button-upload-drive-mid"
-                >
-                  {isUploading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CloudUpload className="w-4 h-4 mr-2" />}
-                  Upload to Drive
-                </Button>
-              </>
-            )}
-          </div>
+          )}
         </div>
       </div>
 
-      {/* ─── Right Panel: Slide Preview ─── */}
-      <div className="flex-1 min-w-0 flex flex-col bg-gray-800">
-        {report?.slides?.length > 0 ? (
-          <PptxPreview
-            slides={report.slides}
-            edits={edits}
-            onEdit={handleEdit}
-          />
-        ) : (
-          <div className="flex-1 flex flex-col items-center justify-center gap-4 p-8 text-center">
-            <Target className="w-12 h-12 text-gray-500" />
-            <div>
-              <p className="text-gray-300 font-medium text-sm">Mid-Strategy SEO Report</p>
-              <p className="text-gray-500 text-xs mt-1">Select a client and click Build & Generate Report</p>
-              <p className="text-gray-600 text-xs mt-3 max-w-sm">
-                Pulls competitor benchmarks from SEMrush, analyzes your crawl for cannibalization patterns, and generates a 14-slide strategic deck.
+      {/* ─── Main Content ─── */}
+      <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+        {!report ? (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center max-w-md px-8">
+              <Target className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
+              <h2 className="text-lg font-semibold text-foreground mb-2">
+                {clientId ? "Ready to generate" : "Select a client to begin"}
+              </h2>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                {clientId
+                  ? "This report auto-generates from your connected data sources — crawl data, SEMrush, GSC, GA4, and integration status. No manual authoring required."
+                  : "Choose a client from the sidebar. The report will auto-generate a diagnostic strategy deck from all available data sources."}
               </p>
-            </div>
-            <div className="grid grid-cols-2 gap-2 text-left max-w-xs w-full mt-2">
-              {[
-                "Competitive benchmarking",
-                "Authority & AI visibility charts",
-                "Domain strategy recommendation",
-                "Current vs future IA",
-                "Content cluster blueprints",
-                "Credibility layer (E-E-A-T)",
-                "URL audit & action plan",
-                "Next steps / ownership",
-              ].map(item => (
-                <div key={item} className="flex items-start gap-1.5 text-xs text-gray-400">
-                  <div className="w-1.5 h-1.5 rounded-full bg-red-500 mt-1.5 shrink-0" />
-                  {item}
+              {clientId && buildStep === "idle" && (
+                <Button
+                  className="mt-4"
+                  onClick={() => generateMut.mutate()}
+                  disabled={generateMut.isPending}
+                  data-testid="button-generate-mid-strategy-empty"
+                >
+                  {generateMut.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Analyzing…</> : <><Zap className="w-4 h-4 mr-2" />Generate Report</>}
+                </Button>
+              )}
+              {generateMut.isPending && (
+                <div className="mt-6 space-y-2">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto" />
+                  <p className="text-xs text-muted-foreground">Pulling data sources and generating diagnostic slides…</p>
                 </div>
-              ))}
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 overflow-y-auto">
+            {/* Report header */}
+            <div className="border-b bg-card px-6 py-3 flex items-center justify-between sticky top-0 z-10">
+              <div>
+                <h2 className="font-semibold text-sm">{report.report_title}</h2>
+                <p className="text-xs text-muted-foreground">{clientName} · {report.report_date} · {(report.slides ?? []).length} slides</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                  <span className="w-2 h-2 rounded-full bg-green-500" /> Data-backed
+                  <span className="w-2 h-2 rounded-full bg-amber-400 ml-2" /> AI-synthesized
+                  <span className="w-2 h-2 rounded-full bg-red-400 ml-2" /> Missing data
+                </div>
+              </div>
+            </div>
+
+            {/* Confidence summary strip */}
+            {(() => {
+              const slidesWithConf = (report.slides ?? []).filter((s: any) => s.confidence);
+              const dataBacked = slidesWithConf.filter((s: any) => s.confidence === "data-backed").length;
+              const aiSynth = slidesWithConf.filter((s: any) => ["ai-synthesized", "mixed-source"].includes(s.confidence)).length;
+              const missing = slidesWithConf.filter((s: any) => s.confidence === "missing-data").length;
+              if (slidesWithConf.length === 0) return null;
+              return (
+                <div className="bg-muted/40 border-b px-6 py-2 flex items-center gap-4 text-xs text-muted-foreground">
+                  <span className="font-medium text-foreground">Confidence report:</span>
+                  {dataBacked > 0 && <span className="flex items-center gap-1"><CheckCircle2 className="w-3 h-3 text-green-500" /> {dataBacked} data-backed</span>}
+                  {aiSynth > 0 && <span className="flex items-center gap-1"><Info className="w-3 h-3 text-amber-500" /> {aiSynth} synthesized</span>}
+                  {missing > 0 && <span className="flex items-center gap-1"><AlertCircle className="w-3 h-3 text-red-400" /> {missing} need data</span>}
+                  {missing > 0 && <span className="text-[10px]">Upload a crawl or connect integrations to improve coverage.</span>}
+                </div>
+              );
+            })()}
+
+            {/* Slides preview with inline confidence labels */}
+            <div className="p-6">
+              <PptxPreview
+                slides={report.slides ?? []}
+                edits={edits}
+                onEdit={handleEdit}
+              />
             </div>
           </div>
         )}
       </div>
-
-      {/* ClarificationTrail hidden — gap answers still saved to DB via answerUsage */}
-      {/* {fillInGapsEnabled && sessionId && questions.length > 0 && (
-        <ClarificationTrail
-          questions={questions}
-          answers={answers}
-          seoHqLoadStatus={seoHqLoadStatus}
-          enabled={fillInGapsEnabled}
-          answerUsage={answerUsage}
-        />
-      )} */}
-
-      {showModal && (
-        <FillInTheGapsModal
-          questions={questions}
-          onComplete={handleGapComplete}
-          onCancel={closeModal}
-          isGenerating={generateMut.isPending}
-          initialAnswers={draftAnswers}
-          onAnswersChange={handleAnswersChange}
-        />
-      )}
     </div>
   );
 }

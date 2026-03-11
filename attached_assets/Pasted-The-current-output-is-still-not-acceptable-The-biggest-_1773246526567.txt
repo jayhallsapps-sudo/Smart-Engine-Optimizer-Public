@@ -1,0 +1,165 @@
+The current output is still not acceptable. The biggest issue is now clear: the report content is being flattened into images, which makes it non-editable. That is a hard failure.
+
+Core requirement:
+This must be a true editable DOCX, not a visual mockup embedded as images. The user must be able to click into the document and edit text, tables, and content directly in Word and Google Docs. Decorative assets may be images if absolutely necessary, but the actual report content must be native DOCX content.
+
+Non-negotiable requirement
+
+Do not render full pages as images.
+
+Do not render report sections as screenshots/images.
+
+Do not flatten text into images.
+
+All body content must be editable native DOCX elements:
+
+paragraphs
+
+headings
+
+tables
+
+cells
+
+bullets if used
+
+section labels
+
+content cards built from editable table/layout structures
+
+If any part of the current implementation uses screenshots or rasterized page captures for report content, remove that implementation and replace it with native DOCX layout.
+
+Remaining issues to fix
+
+Editability failure
+
+The current report appears to be image-based rather than truly editable.
+
+Fix this first.
+
+After the fix, the user must be able to click into the report and edit the text directly.
+
+Header still needs refinement
+
+The header is now repeating, which is progress.
+
+It still feels low-res.
+
+It is slightly cut off.
+
+Move/size it correctly so it sits cleanly at the top.
+
+Make sure left/right positioning feels balanced and intentional.
+
+It should be crisp and stable, not soft.
+
+Footer is functionally improved, but visually still not matched
+
+The footer now repeats more reliably.
+
+Keep that behavior.
+
+Improve its visual resemblance to the PDF footer if possible without sacrificing stability.
+
+It must stay locked to the bottom of every page.
+
+Width balance still needs tuning
+
+Width usage is improved.
+
+However, left/right content balance may still be uneven.
+
+Ensure margins and usable content area are symmetrical.
+
+Tables and content blocks should feel evenly centered within the page layout.
+
+Bottom spacing is still wrong in some sections
+
+Top Organic Traffic Drivers is still too close to the bottom/footer area.
+
+Prevent content from crowding the bottom edge.
+
+Maintain clean bottom spacing and proper page-break behavior.
+
+SEO Tier Diagnosis design is still wrong
+
+Colour treatment is off.
+
+Overall visual design does not match the PDF.
+
+Rebuild this section using editable DOCX structures that visually track closer to the PDF.
+
+What We Need to Do Next design is still wrong
+
+Colour treatment and overall styling are off.
+
+Rebuild this section to better match the PDF using editable native DOCX layout.
+
+What We Track is comparatively good
+
+Preserve what is working there.
+
+Do not regress it while rebuilding the rest natively.
+
+Additional Opportunities is close
+
+Keep the general direction.
+
+Improve spacing and page usage.
+
+Implementation instructions
+
+Build the layout using native DOCX structures only.
+
+Use tables, cell shading, borders, padding, paragraph spacing, and section containers to simulate the PDF design.
+
+Only use images for small decorative elements if necessary, such as the swoosh or footer art, and only if they do not interfere with editability.
+
+No image-based body sections.
+
+No screenshot-based exports embedded in DOCX.
+
+Google Docs requirement
+
+The output must remain editable after opening in Google Docs.
+
+Do not optimize only for Word desktop.
+
+Validate that the document opens with editable text and tables in Google Docs.
+
+Deliverables required in your response
+
+Exact files changed
+
+Clear statement confirming whether any page or section is still image-based
+
+Root cause of why the document became non-editable
+
+Exact changes made to restore editability
+
+Verification that:
+
+text is editable
+
+tables are editable
+
+sections are editable
+
+header repeats
+
+footer repeats
+
+header is no longer cut off
+
+left/right layout is balanced
+
+Top Organic Traffic Drivers no longer crowds the bottom
+
+SEO Tier Diagnosis styling is revised
+
+What We Need to Do Next styling is revised
+
+no report body pages are flattened into images
+
+Important:
+Do not give me a vague answer. Explicitly state whether the final DOCX is truly editable in both Word and Google Docs.

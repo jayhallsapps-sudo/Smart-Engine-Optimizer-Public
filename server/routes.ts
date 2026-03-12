@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import * as fs from "fs";
 import * as path from "path";
 import { randomUUID } from "crypto";
+import { buildSectionCommandsAutoMap, getReportFamily } from "@shared/reportRegistry";
 import rateLimit from "express-rate-limit";
 import { storage } from "./storage";
 import { insertClientSchema } from "@shared/schema";
@@ -58,21 +59,13 @@ import { resolveClientMonthlyCredits, CLIENT_MONTHLY_CREDIT_MAP } from "./client
 import { validateQbrPrepExportReadiness } from "./qbrPrepExportValidator";
 
 
+// Section → data-commands map is now derived from the report registry.
+// To add or change a report's data dependencies, update shared/reportRegistry.ts.
 const SECTION_COMMANDS_AUTO: Record<string, Record<string, string[]>> = {
-  biweekly: {
-    bw_pulse: ["gsc_qoq_queries", "ga4_qoq_organic_funnel", "callrail_qoq_organic_calls", "ga4_session_movers"],
-    bw_progress: ["airtable_work_log"],
-  },
-  monthly: {
-    mo_qtd: ["ga4_qtd_totals"],
-    mo_conversion: ["ga4_landing_pages_by_conversions", "callrail_qoq_top_landing_pages"],
-    mo_gsc: ["gsc_qoq_queries", "gsc_top_queries"],
-    mo_keywords: ["semrush_keyword_distribution", "semrush_keyword_rankings"],
-    mo_initiatives: ["airtable_work_log"],
-    mo_audit: ["technical_health_summary"],
-    mo_content: ["content_output_summary", "new_pages_tracker"],
-  },
-  qbr: {
+  // Registry-driven entries (Phase 1 reports with non-empty manifests)
+  ...buildSectionCommandsAutoMap(),
+  // Legacy alias: routes.ts uses "qbr" as the key for qbr_full sections
+  qbr: buildSectionCommandsAutoMap()["qbr_full"] ?? {
     qbr_performance: ["gsc_qoq_queries", "ga4_qoq_organic_funnel", "callrail_qoq_organic_calls", "semrush_organic_overview"],
     qbr_strategy: ["ga4_qoq_organic_landing_pages", "gsc_qoq_pages", "semrush_keyword_distribution"],
   },

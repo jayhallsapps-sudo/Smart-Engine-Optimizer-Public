@@ -81,6 +81,32 @@ The NSM (North Star Metric) Tracker is a Google Sheets-based goal tracking syste
 - **Bi-weekly generator**: Performance Pulse section — NSM metrics displayed alongside GA4/GSC/CallRail data
 - **Dashboard**: Client Info tab — NSM quarter, goals, actuals, and on-track status
 
+## Phase 2 Architecture Foundation
+
+SmartEO Phase 2 builds on the existing Phase 1 infrastructure without rebuilding it. The following systems were added in Phase 2 to create a clean extension point for new report types.
+
+### Report Registry (`shared/reportRegistry.ts`)
+Single source of truth for all report types. Defines `ReportFamily` (`"slideshow" | "document"`), `ReportTypeDefinition`, and exports helpers: `getReportDefinition()`, `getReportFamily()`, `listReportTypes()`, `buildSectionCommandsAutoMap()`. All five Phase 1 report types are registered. Four Phase 2 stubs (Annual Review, Competitive Landscape, Onboarding Report, Content Audit) are pre-registered with `implemented: false`.
+
+`SECTION_COMMANDS_AUTO` in `routes.ts` is now derived from the registry via `buildSectionCommandsAutoMap()` instead of being hardcoded inline.
+
+### Phase 2 Infrastructure (`server/phase2/`)
+- `baseTypes.ts` — `Phase2Slide`, `Phase2DocxSection`, `Phase2GeneratorInput`, `Phase2SlideshowReportJson`, `Phase2DocumentReportJson`, `Phase2ReportMeta`
+- `generatorBase.ts` — `Phase2Generator<T>` interface, runtime generator registry (`registerPhase2Generator`, `getPhase2Generator`, `runPhase2Generator`)
+- `index.ts` — barrel export; import Phase 2 generator files here to trigger their self-registration
+
+### Frontend Utilities (`client/src/lib/reportFamilyUtils.ts`)
+Re-exports all registry helpers for React components. Adds `getReportDisplayName()`, `getReportRoute()`, `familyBadgeClass()`, `familyLabel()`, `navigableReportTypes()`.
+
+### Two Report Families
+| Family | Data Shape | Preview | Export | Phase 1 Members |
+|--------|-----------|---------|--------|-----------------|
+| slideshow | `Slide[]` | `PptxPreview` | `generatePptx()` | Monthly, QBR Full, Mid-Strategy |
+| document | `DocxSection[]` | `DocxPreview` | `generateBiweeklyDocx()` | Bi-Weekly, QBR Prep/QBS |
+
+### Architecture Reference
+Full reuse inventory, extension guide, and brittle-area catalogue: `docs/phase2-architecture.md`
+
 ## Mid-Strategy Report
 The Mid-Strategy SEO report is a slide-based PowerPoint-aligned report with 14+ sections. Key architecture:
 - **Generator**: `server/midStrategyGenerator.ts` — produces structured slides (Cover, Agenda, Checkpoint, Domain Strategy, Migration, Competitive DR, AI Visibility, Efficiency Scorecard, First Focus, IA Comparison, Cluster Blueprint, Credibility Layer, URL Audit, What's Next, Next Steps)

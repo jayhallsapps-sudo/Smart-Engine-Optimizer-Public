@@ -268,6 +268,7 @@ export function CrawlAssetSelector({
     const failCount = results.length - successCount;
 
     await queryClient.invalidateQueries({ queryKey: [`/api/clients/${clientId}/crawl-sessions`] });
+    await queryClient.invalidateQueries({ queryKey: [`/api/crawl-assets?clientId=${clientId}`] });
 
     if (successCount > 0) {
       const refreshed = await queryClient.fetchQuery<CrawlSession[]>({

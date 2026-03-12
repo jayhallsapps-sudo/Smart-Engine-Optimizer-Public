@@ -494,6 +494,14 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
 
   const domain = client.gscSiteUrl?.replace(/^sc-domain:/, "").replace(/^https?:\/\//, "").replace(/\/$/, "") ?? ME;
 
+  const section1 = generateSection1(nsmData, ga4FunnelCurr, quarter, client, callTrackingSources, prevNsmData, input.prevQtrAssessment, input.hypothesis, (input as any).clientNotes, input.sentiment);
+
+  // ── Await the live website crawl (started in parallel above) ─────────────────
+  // The live inventory is the PRIMARY source of truth for site structure and page
+  // existence. SF remains a technical supporting source only (status codes, redirects,
+  // indexability) — not the dominant source for what pages exist.
+  const liveInventory = await liveCrawlPromise;
+
   const meta: QbrPrepMeta = {
     site: client.name,
     domain,
@@ -506,14 +514,6 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
     planningYear: quarter.planningYear,
     generatedOn: input.generationDate,
   };
-
-  const section1 = generateSection1(nsmData, ga4FunnelCurr, quarter, client, callTrackingSources, prevNsmData, input.prevQtrAssessment, input.hypothesis, (input as any).clientNotes, input.sentiment);
-
-  // ── Await the live website crawl (started in parallel above) ─────────────────
-  // The live inventory is the PRIMARY source of truth for site structure and page
-  // existence. SF remains a technical supporting source only (status codes, redirects,
-  // indexability) — not the dominant source for what pages exist.
-  const liveInventory = await liveCrawlPromise;
   console.log(`[LiveCrawler] Awaited. crawlComplete=${liveInventory.crawlComplete}, pages=${liveInventory.pages.length}, pathSet=${liveInventory.pathSet.size}`);
 
   // ── Filter money pages: keep only those confirmed live by the crawl ───────────

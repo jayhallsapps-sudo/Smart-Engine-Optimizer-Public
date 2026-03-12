@@ -275,7 +275,7 @@ export function diagnoseTier(input: TierDiagnosisInput): TierDiagnosis {
 
   const tier1Issues: string[] = [];
   if (!input.hasDetoxPage && !input.hasResidentialPage) {
-    tier1Issues.push("Core service pages (detox, residential) are not conversion-ready — either missing entirely or not clearly accessible from the main navigation");
+    tier1Issues.push("Core Levels of Care pages (detox, residential) are not conversion-ready — either missing entirely or not clearly accessible from the main navigation");
   }
   if (!input.hasVobPage) {
     const hasInsuranceMention = input.sfData.some(r => {
@@ -310,14 +310,14 @@ export function diagnoseTier(input: TierDiagnosisInput): TierDiagnosis {
     return {
       tier: 1,
       tierName: TIER_NAMES[1],
-      diagnosis: `Site is currently blocked at Tier 1 — Trust & Eligibility. ${tier1Issues.join(". ")}. Until core service pages are strong, clear, and properly indexed, higher-tier work will not produce meaningful results.`,
+      diagnosis: `Site is currently blocked at Tier 1 — Trust & Eligibility. ${tier1Issues.join(". ")}. Until core Levels of Care pages are strong, clear, and properly indexed, higher-tier work will not produce meaningful results.`,
       evidence: tier1Issues,
     };
   }
 
   const tier2Issues: string[] = [];
   if (!input.hasConditionsHub) {
-    tier2Issues.push("No conditions hub structure to support authority flow into service pages");
+    tier2Issues.push("No conditions hub structure to support authority flow into Levels of Care pages");
   }
   if (!input.hasTherapiesHub) {
     tier2Issues.push("No therapies hub structure to organize treatment modalities");
@@ -330,14 +330,14 @@ export function diagnoseTier(input: TierDiagnosisInput): TierDiagnosis {
     return {
       tier: 2,
       tierName: TIER_NAMES[2],
-      diagnosis: `Site is blocked at Tier 2 — Structural Authority. Core service pages exist, but ${tier2Issues.join(". ")}. Building hub structures and organizing internal architecture will unlock authority flow.`,
+      diagnosis: `Site is blocked at Tier 2 — Structural Authority. Core Levels of Care pages exist, but ${tier2Issues.join(". ")}. Building hub structures and organizing internal architecture will unlock authority flow.`,
       evidence: tier2Issues,
     };
   }
 
   const tier3Issues: string[] = [];
   if (input.duplicateServicePages > 3) {
-    tier3Issues.push(`${input.duplicateServicePages} duplicate or overlapping service pages creating cannibalization risk`);
+    tier3Issues.push(`${input.duplicateServicePages} duplicate or overlapping Levels of Care pages creating cannibalization risk`);
   }
   if (input.thinPages > 15) {
     tier3Issues.push(`${input.thinPages} thin pages that may suppress crawl efficiency`);
@@ -356,7 +356,7 @@ export function diagnoseTier(input: TierDiagnosisInput): TierDiagnosis {
     return {
       tier: 3,
       tierName: TIER_NAMES[3],
-      diagnosis: `Site is at Tier 3 — Consolidation & Cleanup. Core service pages and hub structure are mostly sound, but ${tier3Issues.join(". ")}. Cleanup and consolidation will remove drag on growth.`,
+      diagnosis: `Site is at Tier 3 — Consolidation & Cleanup. Core Levels of Care pages and hub structure are mostly sound, but ${tier3Issues.join(". ")}. Cleanup and consolidation will remove drag on growth.`,
       evidence: tier3Issues,
     };
   }
@@ -381,7 +381,7 @@ export function diagnoseTier(input: TierDiagnosisInput): TierDiagnosis {
   return {
     tier: 5,
     tierName: TIER_NAMES[5],
-    diagnosis: "Site is at Tier 5 — Expansion & Demand Capture. Core service pages, hub structure, cleanup, and differentiation layers are mostly healthy. Primary opportunity is informational expansion through blogs, FAQs, and demand capture content.",
+    diagnosis: "Site is at Tier 5 — Expansion & Demand Capture. Core Levels of Care pages, hub structure, cleanup, and differentiation layers are mostly healthy. Primary opportunity is informational expansion through blogs, FAQs, and demand capture content.",
     evidence: ["Tiers 1-4 are largely addressed", "Main growth lever is content expansion"],
   };
 }

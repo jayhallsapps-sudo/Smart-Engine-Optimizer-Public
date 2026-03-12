@@ -1097,10 +1097,10 @@ export function QbrPrepPreview({
               ) : sectionNums["section_keywords"] !== undefined ? (
                 <>
                   <SectionHeading num={sectionNums["section_keywords"]} title="Suggested Keywords for Next Quarter" onHide={hideSecBtn("section_keywords")} />
-                  {sectionSuggestedKeywords && (
+                  {sectionSuggestedKeywords?.rows?.length > 0 && (
                     <div style={{ padding: "8px 12px", backgroundColor: "#FFF5F5", borderRadius: 4, border: `1.5px solid ${ACCENT}40`, marginBottom: 10, fontSize: "9.5px", color: "#374151", lineHeight: 1.6 }}>
                       <span style={{ fontWeight: 700, color: ACCENT, textTransform: "uppercase" as const, letterSpacing: "0.05em", fontSize: "9px", marginRight: 6 }}>About This List:</span>
-                      Showing up to {sectionSuggestedKeywords.quarterlyCreditCap} keyword opportunities (2× monthly credit capacity of {sectionSuggestedKeywords.monthlyCredits}). Grounded in GSC query data, site crawl inventory, and page performance. Filtered to strategic Level of Care, program, condition, and location-intent terms.
+                      Showing {sectionSuggestedKeywords.rows.length} keyword opportunities (2× monthly credit capacity of {sectionSuggestedKeywords.monthlyCredits}). Grounded in GSC query data, site crawl inventory, and page performance. Filtered to strategic Level of Care, program, condition, and location-intent terms.
                     </div>
                   )}
                   <div style={{ border: `1px solid ${ACCENT}28`, borderRadius: 6, overflow: "hidden", marginBottom: 12, backgroundColor: "#FFFDFB" }}>

@@ -641,6 +641,27 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
   if (detoxPath) s4LivePageOverrides["Detox"] = detoxPath;
   if (residentialPath) s4LivePageOverrides["Residential / Inpatient"] = residentialPath;
 
+  // Also scan verifiedMoneyPages for any LOC URLs not captured by PAGE_CHECK_GROUPS
+  // (e.g. non-standard paths like /womens-addiction-treatment-center/womens-intensive-outpatient-orange-county/)
+  const s4UrlPatternMap: Array<{ service: string; pattern: RegExp }> = [
+    { service: "Contact / Admissions", pattern: /\/contact|\/admissions/i },
+    { service: "Verify Insurance", pattern: /\/verify.?insur|\/vob\b|\/insurance/i },
+    { service: "Detox", pattern: /detox/i },
+    { service: "Residential / Inpatient", pattern: /residential|inpatient|long.?term/i },
+    { service: "PHP / IOP", pattern: /\/php(?!p)|\/iop|partial.?hosp|intensive.?outpatient/i },
+    { service: "Outpatient", pattern: /\/outpatient(?!.*intensive)/i },
+    { service: "Dual Diagnosis", pattern: /dual.?diagnosis|co.?occurring/i },
+  ];
+  for (const mp of verifiedMoneyPages) {
+    const mpPath = mp.replace(/^https?:\/\/[^/]+/, "") || "/";
+    for (const { service, pattern } of s4UrlPatternMap) {
+      if (!s4LivePageOverrides[service] && pattern.test(mpPath)) {
+        s4LivePageOverrides[service] = mpPath.replace(/\/$/, "") || mpPath;
+        break;
+      }
+    }
+  }
+
   // Detect whether SF data is a real URL crawl (has Address/URL column) vs Issues format
   const sfIsUrlCrawl = sfHeaders.some(h => /^address$/i.test(h) || /^url$/i.test(h));
 
@@ -2364,7 +2385,7 @@ function buildTierScorecard(tierInput: TierDiagnosisInput): TierScorecardEntry[]
   const t1Findings = [
     `Verify Insurance / VOB page: ${vobAccessLabel()}`,
     `Contact / Admissions page: ${contactAccessLabel()}`,
-    `Detox service page: ${tierInput.hasDetoxPage ? "Confirmed present" : "Not confirmed — no dedicated detox page found at standard paths; verify with AM and provide URL"}`,
+    `Detox Levels of Care page: ${tierInput.hasDetoxPage ? "Confirmed present" : "Not confirmed — no dedicated detox page found at standard paths; verify with AM and provide URL"}`,
     `Residential page: ${tierInput.hasResidentialPage ? "Confirmed present" : "Not confirmed — no dedicated residential page found at standard paths; verify with AM and provide URL"}`,
   ].join(". ");
 
@@ -2394,7 +2415,7 @@ function buildTierScorecard(tierInput: TierDiagnosisInput): TierScorecardEntry[]
   const t3Findings = [
     tierInput.errors4xx5xx > 0 ? `${tierInput.errors4xx5xx} error pages (4xx/5xx) detected` : "No significant error pages detected",
     tierInput.thinPages > 0 ? `${tierInput.thinPages} thin pages flagged in crawl` : "Thin page count within acceptable range",
-    tierInput.duplicateServicePages > 0 ? `${tierInput.duplicateServicePages} duplicate or overlapping service pages detected` : "No significant service page duplication",
+    tierInput.duplicateServicePages > 0 ? `${tierInput.duplicateServicePages} duplicate or overlapping Levels of Care pages detected` : "No significant Levels of Care page duplication",
     tierInput.redirects > 0 ? `${tierInput.redirects} redirects detected` : null,
   ].filter(Boolean).join(". ");
 
@@ -2844,10 +2865,10 @@ function generateSection6(
       initiative: "Internal Linking — High-Traffic to Conversion",
       tier: `Tier ${Math.min(section5.tier, 3)}`,
       action: unclearTrafficPages.length > 0
-        ? `Add internal links from high-traffic pages with low admit connection to primary service and VOB pages${internalLinkExamples}`
-        : "Add internal links from high-traffic informational pages to primary service and VOB pages",
+        ? `Add internal links from high-traffic pages with low admit connection to primary Levels of Care and VOB pages${internalLinkExamples}`
+        : "Add internal links from high-traffic informational pages to primary Levels of Care and VOB pages",
       reason: topUnclearPage
-        ? `${unclearTrafficPages.length} page${unclearTrafficPages.length > 1 ? "s" : ""} (led by ${topUnclearPage.page}, ${topUnclearPage.clicks} clicks) carry organic traffic with limited path to admissions — targeted internal links to service and VOB pages are the lowest-cost lever to convert that existing traffic`
+        ? `${unclearTrafficPages.length} page${unclearTrafficPages.length > 1 ? "s" : ""} (led by ${topUnclearPage.page}, ${topUnclearPage.clicks} clicks) carry organic traffic with limited path to admissions — targeted internal links to Levels of Care and VOB pages are the lowest-cost lever to convert that existing traffic`
         : "Traffic data shows high-volume informational pages with weak admit connection — internal linking is the lowest-cost conversion lever",
       condition: unclearTrafficPages.length > 0 && !priorities.find(p => p.initiative.includes("Internal Link")),
       source: "GSC",
@@ -3136,7 +3157,7 @@ function generateSection7(section6: Section6Priorities, section5: Section5Diagno
     },
     "Internal Linking — High-Traffic to Conversion": {
       focusArea: "Internal Link Effectiveness",
-      metric: "Click-through from informational pages to service/VOB pages",
+      metric: "Click-through from informational pages to Levels of Care and VOB pages",
       source: "GA4",
       status: ga4Active ? "Inferred Only" : "Missing Setup",
       whyItMatters: "Measures whether internal linking strategy converts existing traffic to admissions pages",
@@ -3601,6 +3622,50 @@ function findBestGscPage(query: string, gscQueryPageRows: any[]): string | null 
   return url ? normalizePath(url) : null;
 }
 
+/**
+ * Semantic SF-path fallback: when GSC has no page link for a query, search
+ * the SF crawl inventory for a path whose slug tokens overlap with the query.
+ * Returns the best-matching path or null.
+ */
+function findSemanticSfMatch(query: string, sfPaths: Set<string>): string | null {
+  const ABBREV: Record<string, string[]> = {
+    iop: ["intensive-outpatient", "iop"],
+    php: ["partial-hospitalization", "php"],
+    mat: ["medication-assisted", "mat"],
+    dbt: ["dialectical", "dbt"],
+    cbt: ["cognitive", "cbt"],
+    emdr: ["emdr"],
+    "dual diagnosis": ["dual-diagnosis", "co-occurring"],
+    detox: ["detoxification", "detox"],
+    residential: ["residential", "inpatient"],
+    outpatient: ["outpatient"],
+    rehab: ["rehab", "rehabilitation"],
+    trauma: ["trauma"],
+    "mental health": ["mental-health"],
+  };
+
+  const qLower = query.toLowerCase();
+  // Collect slug tokens that the query implies
+  const wantedTokens: string[] = [];
+  for (const [abbrev, expansions] of Object.entries(ABBREV)) {
+    if (qLower.includes(abbrev)) wantedTokens.push(...expansions);
+  }
+  // Also add raw query words ≥4 chars (minus stopwords)
+  const stopwords = new Set(["orange","county","near","what","does","long","take","system","from","stay","the","and","for"]);
+  const queryWords = qLower.replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(w => w.length >= 4 && !stopwords.has(w));
+  wantedTokens.push(...queryWords);
+
+  if (wantedTokens.length === 0) return null;
+
+  let bestPath: string | null = null;
+  let bestScore = 0;
+  for (const p of sfPaths) {
+    const score = wantedTokens.filter(t => p.includes(t)).length;
+    if (score > bestScore) { bestScore = score; bestPath = p; }
+  }
+  return bestScore >= 1 ? bestPath : null;
+}
+
 /** Map recommendation type to a human-readable label */
 function recTypeLabel(type: SuggestedKeywordRow["recommendationType"]): string {
   switch (type) {
@@ -3770,6 +3835,15 @@ export function generateSuggestedKeywords(
   for (const p of section2.topConvertingPages) {
     if (p.page && p.page.startsWith("/")) sfPaths.add(p.page.replace(/\/$/, "") || p.page);
   }
+  // Supplement with all unique pages from GSC query+page data — these are confirmed
+  // to exist (they received impressions) even when the SF crawl is issues-format only.
+  for (const row of gscQueryPageRows) {
+    const pageUrl = row.keys?.[1];
+    if (pageUrl) {
+      const path = normalizePath(pageUrl);
+      if (path && path !== "/") sfPaths.add(path);
+    }
+  }
 
   // Get non-branded, strategically relevant queries sorted by impressions desc
   const rawCandidates: QueryCandidate[] = gscQueryRows
@@ -3802,8 +3876,10 @@ export function generateSuggestedKeywords(
       ? `${query} / ${variants.join(" / ")}`
       : query;
 
-    // Find best associated page from GSC query+page data
-    const bestPage = findBestGscPage(query, gscQueryPageRows);
+    // Find best associated page from GSC query+page data; fall back to SF semantic match
+    const gscPage = findBestGscPage(query, gscQueryPageRows);
+    const sfFallback = (!gscPage || !sfPaths.has(gscPage)) ? findSemanticSfMatch(query, sfPaths) : null;
+    const bestPage = (gscPage && sfPaths.has(gscPage)) ? gscPage : (sfFallback ?? gscPage ?? null);
     const inSf = bestPage ? sfPaths.has(bestPage) : false;
     const targetPath = inSf ? bestPage! : (bestPage ?? null);
 

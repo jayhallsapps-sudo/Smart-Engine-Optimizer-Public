@@ -6,3 +6,9 @@ id = "a8KN_s8tHB5ORxXff41uB"
 uri = "file://client/public/reports/anchored-tides-qbs-q2-2026.pdf"
 type = "pdf"
 title = "Anchored Tides QBS Q2 2026 — Final Two-Item Cleanup Pass"
+
+[[outputs]]
+id = "8TnW8uwqXhTiAuN5KWOpP"
+uri = "file://bliss_recovery_qbr_q2_2026.pdf"
+type = "pdf"
+title = "Bliss Recovery — QBR Prep Q2 2026"

@@ -1,0 +1,215 @@
+Build the Phase 2 report-type architecture split for SmartEO so the system properly supports two distinct report families while preserving current working report infrastructure.
+
+IMPORTANT CONTEXT
+
+Phase 2 foundation and the Command Center are already in place.
+
+This work must extend the existing SmartEO product, not rebuild it from scratch.
+
+Use as much of the existing infrastructure, report-generation logic, preview/edit systems, styling, and app shell as possible. Reuse first. Refactor only where necessary. Replace only with a clear reason.
+
+Before replacing any existing feature, document whether it can be:
+- reused
+- wrapped
+- extended
+- lightly refactored
+
+Only replace when those options are not viable.
+
+CANONICAL REPORT NAMES, ORDER, FORMAT, AUDIENCE, AND PURPOSE
+
+Lock the following as canonical across SmartEO. Use these exact names everywhere in:
+- UI labels
+- report selectors
+- internal registry logic
+- report family logic
+- future template/admin systems
+- navigation labels where relevant
+
+1. Kickoff Deck
+- family: slideshow-style
+- audience: client-facing
+- purpose: kickoff with a new client and establish initial direction
+
+2. Mid-Strategy Deck
+- family: slideshow-style
+- audience: client-facing
+- purpose: highlight the work completed during the discovery phase, keep the client engaged, and ask questions before the final strategy presentation
+
+3. Launch Deck
+- family: slideshow-style
+- audience: client-facing
+- purpose: present the full strategy and plan
+
+4. Bi-Weekly Report
+- family: document-style
+- audience: client-facing
+- purpose: high-level summary of what is happening on the account
+
+5. Monthly Report
+- family: document-style
+- audience: client-facing
+- purpose: high-level monthly report with slightly more depth, covering what happened in the prior month and what is happening in the coming/current month
+
+6. QBS (Quarterly Business Snapshot)
+- family: document-style
+- audience: internal only
+- purpose: internal quarterly planning document covering what happened in the previous quarter and what will happen in the next quarter
+
+7. QBR (Quarterly Business Report)
+- family: slideshow-style
+- audience: client-facing
+- purpose: quarterly client presentation built from QBS content plus any ADR or Director of SEO adjustments, covering previous quarter and next quarter in detail
+
+CRITICAL REPORT RULES
+
+- QBS is internal only
+- QBR is client-facing
+- QBR is downstream from QBS
+- use this order as the canonical lifecycle/order of report types
+- do not invent alternate names
+- do not relabel QBR as “QBR Full”
+- preserve these definitions in the report registry, selector UI, report-family logic, and any future admin/template systems
+
+CORE OBJECTIVE
+
+The system must understand that SmartEO supports two distinct report families with different rendering, editing, preview, presentation, and commenting needs.
+
+Report family A: slideshow-style reports
+- Kickoff Deck
+- Mid-Strategy Deck
+- Launch Deck
+- QBR
+
+Report family B: document-style reports
+- Bi-Weekly Report
+- Monthly Report
+- QBS
+
+Build a clean architectural split between these two families while preserving current working behavior and report infrastructure.
+
+REQUIREMENTS
+
+1. REPORT FAMILY ARCHITECTURE
+
+Create a clean architectural split between slideshow-style and document-style reports.
+
+Requirements:
+- preserve shared generation logic where reasonable
+- do not force both report families into one awkward editor model
+- preserve compatibility with current working report-generation and preview infrastructure
+- build on top of the existing report registry/foundation work
+- ensure future comments, presentation mode, and templates can behave differently by family
+
+For slideshow-style reports, the architecture should support:
+- slide-based preview model
+- slide-based editing model
+- slide ordering
+- slide-level comments later
+- in-app presentation mode later
+
+For document-style reports, the architecture should support:
+- document/section-based preview model
+- section/block editing model
+- block-level comments later
+- strong reading mode
+- preservation of QBS design language
+
+2. REPORT REGISTRY / SELECTOR ALIGNMENT
+
+Update the report registry, report selectors, and any report-family helpers so they use the exact canonical names and definitions above.
+
+Requirements:
+- ensure the correct family badge appears for each report
+- ensure the correct audience/internal logic can be inferred
+- ensure QBS and QBR are clearly distinguished
+- ensure the selector uses the correct report order
+- remove or replace any accidental alternate naming such as “QBR Full”
+
+3. QBS → QBR DEPENDENCY AWARENESS
+
+Even if the full QBS-to-QBR workflow is not built in this prompt, the architecture must reflect that:
+- QBS is an internal planning/snapshot document
+- QBR is client-facing
+- QBR is derived from QBS thinking/content plus ADR/Director adjustments
+
+Do not treat QBR as just another unrelated deck type at the architectural level.
+
+4. LEFT SIDEBAR / APP SHELL DIRECTION
+
+The Command Center is now the primary center-of-screen navigation experience.
+
+The left sidebar should no longer function as the main primary navigation system for the app.
+
+Instead, repurpose the left sidebar into a lightweight user/account/admin context panel.
+
+Requirements for the left sidebar:
+- keep it in the app shell
+- make it collapsed by default
+- do not let it visually compete with the Command Center
+- use it primarily for user and account context, not core module navigation
+
+Sidebar content should support:
+- user profile/photo area
+- logged-in user name
+- assigned role
+  - Account Manager
+  - ADR
+  - Director of SEO
+  - Owner
+- account/settings entry
+- sign out
+- admin access entry if the logged-in user has admin permissions
+- list of that user’s clients
+
+Client list behavior:
+- show the user’s clients in the sidebar
+- clicking a client name should open the client’s website in a new tab
+
+Admin behavior:
+- do not create a separate external admin dashboard concept
+- admin access should live inside the app for users with the right role/capabilities
+- mirror the product principle used in We Are WPG where admin capability is accessible within the application itself
+
+Important:
+- keep the sidebar clean and secondary
+- do not turn it back into a cluttered main nav
+- preserve or lightly refactor the existing sidebar where practical instead of replacing it unnecessarily
+
+5. DESIGN / UX RULES
+
+- preserve the current QBS design language as the baseline for report-related styling
+- keep the Command Center as the dominant navigation experience
+- avoid creating visual conflict between center-screen module navigation and the sidebar
+- maintain a modern, calm, professional, desktop-first SaaS feel
+- keep architecture future-friendly for comments, preview modes, presentation modes, and admin features
+- do not overbuild inactive modules in this prompt
+
+IMPLEMENTATION RULES
+
+- reuse existing preview/edit/report infrastructure wherever practical
+- do not rebuild existing report pages from scratch unless necessary
+- document what was reused versus newly added
+- avoid unnecessary rewrites
+- do not overbuild the full template system yet
+- do create the rendering/family foundations so later phases can layer on comments, presentation, admin controls, and template controls cleanly
+
+DELIVERABLES
+
+- report family architecture split
+- updated report registry / selector / helper logic using the canonical names and definitions
+- correct report ordering and family classification
+- removal of any incorrect report naming
+- architectural support for QBS/QBR relationship
+- repurposed left sidebar behavior and content direction
+- any needed shared family helpers/models
+- short implementation report including:
+  - files changed
+  - what was reused
+  - what was newly added
+  - what was deferred
+  - any risks or compromises
+
+SUCCESS CONDITION
+
+SmartEO can cleanly distinguish between deck-style and document-style reports at the architectural level without breaking existing report behavior, uses the exact canonical report names/order/purpose, reflects the QBS → QBR relationship properly, and shifts the left sidebar into a secondary user/account/admin context role while keeping the Command Center as the main navigation experience.

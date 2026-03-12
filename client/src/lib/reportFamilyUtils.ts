@@ -2,8 +2,8 @@
  * Frontend Report Registry Utilities
  * ─────────────────────────────────────────────────────────────────────────────
  * Thin wrappers around the shared reportRegistry that are safe to import in
- * React components.  All heavy logic stays in the registry; this file just
- * re-exports the helpers that the frontend needs most.
+ * React components. All heavy logic stays in the registry; this file re-exports
+ * the helpers that the frontend needs most.
  *
  * Usage:
  *   import { getReportFamily, getReportDefinition, listReportTypes } from "@/lib/reportFamilyUtils";
@@ -13,14 +13,18 @@
 export {
   getReportDefinition,
   getReportFamily,
+  getReportAudience,
+  isInternalReport,
   listReportTypes,
   isPhase2Report,
   isSlideshowReport,
   isDocumentReport,
+  getDerivedFrom,
 } from "@shared/reportRegistry";
 
 export type {
   ReportFamily,
+  ReportAudience,
   ReportPhase,
   ExportFormat,
   ReportTypeDefinition,
@@ -29,8 +33,8 @@ export type {
 
 // ─── UI helpers ───────────────────────────────────────────────────────────────
 
-import { getReportDefinition, listReportTypes } from "@shared/reportRegistry";
-import type { ReportFamily } from "@shared/reportRegistry";
+import { getReportDefinition, listReportTypes, isInternalReport } from "@shared/reportRegistry";
+import type { ReportFamily, ReportAudience } from "@shared/reportRegistry";
 
 /**
  * Returns the display name for a report type ID.
@@ -62,7 +66,21 @@ export function familyBadgeClass(family: ReportFamily): string {
  * Returns a short human-readable label for a report family.
  */
 export function familyLabel(family: ReportFamily): string {
-  return family === "slideshow" ? "Slideshow" : "Document";
+  return family === "slideshow" ? "Deck" : "Document";
+}
+
+/**
+ * Returns the hex accent color for a report family.
+ */
+export function familyColor(family: ReportFamily): string {
+  return family === "slideshow" ? "#1B3A6B" : "#C0392B";
+}
+
+/**
+ * Returns a short label for the audience.
+ */
+export function audienceLabel(audience: ReportAudience): string {
+  return audience === "internal" ? "Internal" : "Client-Facing";
 }
 
 /**
@@ -71,4 +89,22 @@ export function familyLabel(family: ReportFamily): string {
  */
 export function navigableReportTypes(family?: ReportFamily) {
   return listReportTypes({ implementedOnly: true, family }).filter(r => r.route !== null);
+}
+
+// ─── Role helpers ─────────────────────────────────────────────────────────────
+
+export type UserRole = "Account Manager" | "ADR" | "Director of SEO" | "Owner";
+
+export const ALL_ROLES: UserRole[] = [
+  "Account Manager",
+  "ADR",
+  "Director of SEO",
+  "Owner",
+];
+
+/** Roles that have access to admin features. */
+const ADMIN_ROLES: UserRole[] = ["Director of SEO", "Owner"];
+
+export function isAdminRole(role: UserRole | string): boolean {
+  return ADMIN_ROLES.includes(role as UserRole);
 }

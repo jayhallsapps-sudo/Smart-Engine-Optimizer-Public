@@ -1,14 +1,9 @@
-import { CalendarDays, BarChart3, TrendingUp, Sparkles, Users, Settings, Zap, LayoutDashboard, FlaskConical, PenSquare, Target, ShieldCheck, Command } from "lucide-react";
-import { useLocation, Link } from "wouter";
+import { useState, useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Zap, ExternalLink, Settings, LogOut, Shield, User, ChevronDown, Check } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
   SidebarHeader,
   SidebarFooter,
   SidebarRail,
@@ -16,138 +11,355 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { ALL_ROLES, isAdminRole, type UserRole } from "@/lib/reportFamilyUtils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Link } from "wouter";
 
-const commandCenterItem = { title: "Command Center", url: "/command-center", icon: Command };
+// ─── User profile (localStorage) ─────────────────────────────────────────────
 
-const reportItems = [
-  { title: "Client Signals", url: "/dashboard", icon: LayoutDashboard },
-  { title: "Mid-Strategy", url: "/mid-strategy", icon: Target },
-  { title: "Bi-Weekly", url: "/biweekly", icon: CalendarDays },
-  { title: "Monthly", url: "/monthly", icon: BarChart3 },
-  { title: "QBS", url: "/qbr-prep", icon: Sparkles },
-  { title: "QBR", url: "/qbr", icon: TrendingUp },
-];
+interface UserProfile {
+  name: string;
+  role: UserRole;
+}
 
-const utilItems = [
-  { title: "Clients", url: "/clients", icon: Users },
-  { title: "Sample Exports", url: "/sample-reports", icon: FlaskConical },
-  { title: "Template Builder", url: "/template-builder", icon: PenSquare },
-  { title: "Integrations", url: "/integrations", icon: Settings },
-  { title: "Security", url: "/security", icon: ShieldCheck },
-];
+const PROFILE_KEY = "smarteo_user_profile";
+const DEFAULT_PROFILE: UserProfile = { name: "Your Name", role: "Account Manager" };
 
-function SidebarLogo() {
+function loadProfile(): UserProfile {
+  try {
+    const raw = localStorage.getItem(PROFILE_KEY);
+    if (raw) return JSON.parse(raw) as UserProfile;
+  } catch {}
+  return DEFAULT_PROFILE;
+}
+
+function saveProfile(p: UserProfile) {
+  try { localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); } catch {}
+}
+
+// ─── Role badge color ─────────────────────────────────────────────────────────
+
+function roleBadgeStyle(role: UserRole): string {
+  const map: Record<UserRole, string> = {
+    "Account Manager": "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+    "ADR": "bg-violet-500/10 text-violet-600 dark:text-violet-400",
+    "Director of SEO": "bg-[#1B3A6B]/10 text-[#1B3A6B] dark:text-blue-300",
+    "Owner": "bg-[#C0392B]/10 text-[#C0392B] dark:text-red-400",
+  };
+  return map[role] ?? "bg-muted text-muted-foreground";
+}
+
+// ─── Client URL helper ────────────────────────────────────────────────────────
+
+function clientWebsiteUrl(gscSiteUrl: string | null | undefined): string | null {
+  if (!gscSiteUrl) return null;
+  if (gscSiteUrl.startsWith("sc-domain:")) {
+    return "https://" + gscSiteUrl.replace("sc-domain:", "");
+  }
+  return gscSiteUrl;
+}
+
+// ─── User profile area ────────────────────────────────────────────────────────
+
+function UserProfileBlock({ profile, onUpdate }: { profile: UserProfile; onUpdate: (p: UserProfile) => void }) {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
 
+  if (collapsed) {
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            className="flex items-center justify-center w-8 h-8 rounded-lg bg-muted hover:bg-muted/80 transition-colors mx-auto"
+            title={profile.name}
+            data-testid="button-user-profile-collapsed"
+          >
+            <User className="w-4 h-4 text-muted-foreground" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent side="right" align="start" className="w-48">
+          <div className="px-2 py-1.5">
+            <p className="text-xs font-semibold text-foreground truncate">{profile.name}</p>
+            <p className="text-[10px] text-muted-foreground">{profile.role}</p>
+          </div>
+          <DropdownMenuSeparator />
+          {ALL_ROLES.map(role => (
+            <DropdownMenuItem
+              key={role}
+              className="text-xs gap-2"
+              onClick={() => onUpdate({ ...profile, role })}
+            >
+              {role === profile.role && <Check className="w-3 h-3 shrink-0" />}
+              <span className={role === profile.role ? "ml-0" : "ml-5"}>{role}</span>
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  }
+
   return (
-    <Link
-      href="/command-center"
-      className="flex items-center gap-2 px-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
-    >
-      <div className="flex items-center justify-center w-8 h-8 rounded-md bg-primary shrink-0">
-        <Zap className="w-4 h-4 text-primary-foreground" />
-      </div>
-      {!collapsed && (
-        <div>
-          <h1 className="text-sm font-semibold tracking-tight" data-testid="text-app-name">SmartEO</h1>
-          <p className="text-[10px] text-muted-foreground leading-none">Smart Engine Optimization</p>
+    <div className="px-2 py-2">
+      <div className="flex items-center gap-2.5">
+        <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-muted shrink-0">
+          <User className="w-4 h-4 text-muted-foreground" />
         </div>
-      )}
-    </Link>
+        <div className="flex-1 min-w-0">
+          <EditableText
+            value={profile.name}
+            onChange={name => onUpdate({ ...profile, name })}
+            className="text-sm font-semibold text-foreground truncate block leading-tight"
+            data-testid="text-user-name"
+          />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                className={`flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded mt-0.5 ${roleBadgeStyle(profile.role)}`}
+                data-testid="button-user-role"
+              >
+                {profile.role}
+                <ChevronDown className="w-2.5 h-2.5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-48">
+              {ALL_ROLES.map(role => (
+                <DropdownMenuItem
+                  key={role}
+                  className="text-xs gap-2"
+                  onClick={() => onUpdate({ ...profile, role })}
+                >
+                  {role === profile.role && <Check className="w-3 h-3 shrink-0" />}
+                  <span className={role === profile.role ? "ml-0" : "ml-5"}>{role}</span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+    </div>
   );
 }
 
+// ─── Editable text (click to edit) ───────────────────────────────────────────
+
+function EditableText({
+  value,
+  onChange,
+  className,
+  "data-testid": testId,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  className?: string;
+  "data-testid"?: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={() => { onChange(draft); setEditing(false); }}
+        onKeyDown={e => { if (e.key === "Enter") { onChange(draft); setEditing(false); } if (e.key === "Escape") setEditing(false); }}
+        className="text-sm font-semibold text-foreground bg-transparent border-b border-border outline-none w-full leading-tight"
+        data-testid="input-user-name"
+      />
+    );
+  }
+
+  return (
+    <span
+      className={`${className} cursor-text hover:underline underline-offset-2 decoration-dotted`}
+      onClick={() => { setDraft(value); setEditing(true); }}
+      title="Click to edit"
+      data-testid={testId}
+    >
+      {value}
+    </span>
+  );
+}
+
+// ─── Client list ──────────────────────────────────────────────────────────────
+
+interface Client {
+  id: number;
+  name: string;
+  gscSiteUrl?: string | null;
+}
+
+function ClientList() {
+  const { state } = useSidebar();
+  const collapsed = state === "collapsed";
+
+  const { data: clients = [] } = useQuery<Client[]>({
+    queryKey: ["/api/clients"],
+  });
+
+  if (collapsed) return null;
+
+  if (clients.length === 0) {
+    return (
+      <div className="px-2 py-2">
+        <p className="text-[10px] text-muted-foreground">No clients configured.</p>
+      </div>
+    );
+  }
+
+  return (
+    <ScrollArea className="max-h-52">
+      <div className="flex flex-col gap-0.5 px-1 py-1">
+        {clients.map(client => {
+          const url = clientWebsiteUrl(client.gscSiteUrl);
+          return url ? (
+            <a
+              key={client.id}
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition-colors group"
+              data-testid={`link-client-${client.id}`}
+            >
+              <span className="text-xs text-foreground truncate">{client.name}</span>
+              <ExternalLink className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+            </a>
+          ) : (
+            <div
+              key={client.id}
+              className="flex items-center px-2 py-1.5"
+              data-testid={`item-client-${client.id}`}
+            >
+              <span className="text-xs text-muted-foreground truncate">{client.name}</span>
+            </div>
+          );
+        })}
+      </div>
+    </ScrollArea>
+  );
+}
+
+// ─── Sidebar section label ────────────────────────────────────────────────────
+
+function SidebarSectionLabel({ label }: { label: string }) {
+  const { state } = useSidebar();
+  if (state === "collapsed") return null;
+  return (
+    <p className="px-3 pt-3 pb-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
+      {label}
+    </p>
+  );
+}
+
+// ─── Divider ─────────────────────────────────────────────────────────────────
+
+function SidebarDivider() {
+  return <div className="mx-3 my-1 h-px bg-border" />;
+}
+
+// ─── App sidebar ─────────────────────────────────────────────────────────────
+
 export function AppSidebar() {
-  const [location] = useLocation();
+  const { state } = useSidebar();
+  const collapsed = state === "collapsed";
+
+  const [profile, setProfile] = useState<UserProfile>(loadProfile);
+
+  const handleProfileUpdate = useCallback((updated: UserProfile) => {
+    setProfile(updated);
+    saveProfile(updated);
+  }, []);
+
+  const showAdmin = isAdminRole(profile.role);
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader className="p-4 pb-2 group-data-[collapsible=icon]:p-2 group-data-[collapsible=icon]:pb-2">
-        <SidebarLogo />
+      <SidebarHeader className="p-3 pb-2">
+        <Link
+          href="/command-center"
+          className="flex items-center gap-2 group-data-[collapsible=icon]:justify-center"
+          data-testid="link-sidebar-logo"
+        >
+          <div className="flex items-center justify-center w-8 h-8 rounded-md bg-primary shrink-0">
+            <Zap className="w-4 h-4 text-primary-foreground" />
+          </div>
+          {!collapsed && (
+            <div>
+              <h1 className="text-sm font-semibold tracking-tight" data-testid="text-app-name">SmartEO</h1>
+              <p className="text-[10px] text-muted-foreground leading-none">by Webserv</p>
+            </div>
+          )}
+        </Link>
       </SidebarHeader>
-      <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {[commandCenterItem].map(item => {
-                const isActive = location === item.url;
-                return (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton asChild tooltip={item.title} isActive={isActive}>
-                      <Link href={item.url} data-testid="link-nav-command-center">
-                        <item.icon className="w-4 h-4 shrink-0" />
-                        <span>{item.title}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
 
-        <SidebarGroup>
-          <SidebarGroupLabel>Reports</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {reportItems.map(item => {
-                const isActive = location === item.url;
-                return (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton
-                      asChild
-                      tooltip={item.title}
-                      isActive={isActive}
-                    >
-                      <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase().replace(/\s/g, "-")}`}>
-                        <item.icon className="w-4 h-4 shrink-0" />
-                        <span>{item.title}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+      <SidebarContent className="overflow-hidden">
+        <SidebarDivider />
 
-        <SidebarGroup>
-          <SidebarGroupLabel>Tools</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {utilItems.map(item => {
-                const isActive = location === item.url;
-                return (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton
-                      asChild
-                      tooltip={item.title}
-                      isActive={isActive}
-                    >
-                      <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase()}`}>
-                        <item.icon className="w-4 h-4 shrink-0" />
-                        <span>{item.title}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        <SidebarSectionLabel label="Profile" />
+        <UserProfileBlock profile={profile} onUpdate={handleProfileUpdate} />
+
+        <SidebarDivider />
+
+        <SidebarSectionLabel label="My Clients" />
+        <ClientList />
+
+        {showAdmin && (
+          <>
+            <SidebarDivider />
+            <SidebarSectionLabel label="Admin" />
+            {!collapsed && (
+              <div className="px-1 py-1">
+                <Link
+                  href="/clients"
+                  className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition-colors"
+                  data-testid="link-admin-clients"
+                >
+                  <Shield className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                  <span className="text-xs text-foreground">Manage Clients</span>
+                </Link>
+                <Link
+                  href="/integrations"
+                  className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition-colors"
+                  data-testid="link-admin-integrations"
+                >
+                  <Settings className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                  <span className="text-xs text-foreground">Integrations</span>
+                </Link>
+              </div>
+            )}
+            {collapsed && (
+              <div className="flex flex-col items-center gap-1 py-1">
+                <Link href="/clients" title="Manage Clients">
+                  <button className="p-1.5 rounded hover:bg-muted transition-colors" data-testid="link-admin-clients-collapsed">
+                    <Shield className="w-4 h-4 text-muted-foreground" />
+                  </button>
+                </Link>
+              </div>
+            )}
+          </>
+        )}
       </SidebarContent>
+
       <SidebarFooter className="p-2">
         <div className="flex items-center justify-between gap-1 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:justify-center">
-          <div className="text-[10px] text-muted-foreground group-data-[collapsible=icon]:hidden">
-            SmartEO v2.0
-          </div>
+          {!collapsed && (
+            <div className="text-[10px] text-muted-foreground">SmartEO v2.0</div>
+          )}
           <div className="flex items-center gap-1 group-data-[collapsible=icon]:flex-col">
             <ThemeToggle />
             <SidebarTrigger data-testid="button-sidebar-toggle" />
           </div>
         </div>
       </SidebarFooter>
+
       <SidebarRail />
     </Sidebar>
   );

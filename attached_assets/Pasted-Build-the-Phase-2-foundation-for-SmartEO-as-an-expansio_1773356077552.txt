@@ -1,0 +1,43 @@
+Build the Phase 2 foundation for SmartEO as an expansion of the existing product, not as a rebuild from scratch.
+
+Critical rule:
+Use as much of the existing SmartEO infrastructure, report-generation logic, components, preview/edit systems, client architecture, integrations, and styling as possible. Reuse first. Refactor only where needed. Replace only as a last resort.
+
+Before replacing any existing feature, document whether it can be:
+- reused
+- wrapped
+- extended
+- lightly refactored
+
+If a feature must be replaced, explicitly document:
+- what the existing feature is
+- why it cannot reasonably be reused
+- why extension or light refactor is insufficient
+- what the replacement solves that the current version cannot
+
+Core objective of this prompt:
+Create the architectural foundation for Phase 2 so later modules can be added cleanly without breaking MVP 1.0 functionality.
+
+Deliverables for this prompt:
+- audit current report infrastructure and identify reusable systems
+- identify current reusable components, layouts, report rendering logic, data models, and preview/edit systems
+- identify any brittle areas that truly need refactor for Phase 2
+- establish a clean internal architecture for supporting two report families:
+  - slideshow-style reports
+  - document-style reports
+- preserve compatibility with existing QBS and bi-weekly infrastructure wherever practical
+- create a clear plan for how Phase 2 modules will extend the existing system instead of replacing it
+
+Important design continuity rule:
+The existing QBS design language is the baseline for report styling. Protect it and reuse it as much as possible.
+
+Output requirements:
+- implement any needed architectural scaffolding
+- document reuse opportunities
+- document any necessary refactors
+- do not begin broad visual redesign
+- do not rebuild existing reports unnecessarily
+- do not create duplicate systems if current ones can be extended
+
+Success condition:
+After this step, the codebase should be structurally ready for the rest of Phase 2, with maximum preservation of prior work.

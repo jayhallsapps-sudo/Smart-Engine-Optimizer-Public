@@ -408,17 +408,15 @@ function buildSection2(reportData: any, secNum: number, edits: Record<string, st
   const pages = (s2.topConvertingPages ?? []).map((r: any, ri: number) => [
     safeText(edits[`s2a_${ri}_0`] ?? r.type ?? ""),
     safeText(edits[`s2a_${ri}_1`] ?? r.page ?? ""),
-    safeText(edits[`s2a_${ri}_2`] ?? r.conversionSource ?? ""),
-    safeText(edits[`s2a_${ri}_3`] ?? r.notes ?? ""),
+    safeText(edits[`s2a_${ri}_2`] ?? r.notes ?? ""),
   ]);
   if (pages.length) {
     items.push(subLabel("Top Converting Pages"));
     items.push(dataTable([
-      { label: "Type",              dxa: 1050 },
-      { label: "Page / Pattern",    dxa: 3020 },
-      { label: "Conversion Source", dxa: 1940 },
-      { label: "Notes",             dxa: 4790 },
-    ], pages)); // 1050+3020+1940+4790=10800 ✓
+      { label: "Type",                         dxa: 1050 },
+      { label: "Page / Pattern",               dxa: 4050 },
+      { label: "Notes / What We're Learning",  dxa: 5700 },
+    ], pages)); // 1050+4050+5700=10800 ✓
   }
 
   const patterns = (s2.topConversionPatterns ?? []).map((r: any, ri: number) => [
@@ -840,6 +838,52 @@ function buildSection8(reportData: any, secNum: number, edits: Record<string, st
   return items;
 }
 
+// ── Section Keywords: Suggested Keywords for Next Quarter ─────────────────────
+const KW_REC_LABELS: Record<string, string> = {
+  "optimize-existing": "Optimize existing page",
+  "refresh-existing":  "Refresh existing page",
+  "create-new":        "Create new content",
+  "cro-update":        "CRO / supporting update",
+  "internal-linking":  "Internal linking support",
+};
+
+function buildSectionKeywords(reportData: any, secNum: number, edits: Record<string, string>): (Paragraph | Table)[] {
+  const sk = reportData.sectionSuggestedKeywords;
+  const rows = (sk?.rows ?? []).map((r: any, ri: number) => {
+    const keyword  = safeText(edits[`kw_${ri}_keyword`]    ?? r.keyword ?? "");
+    const recType  = KW_REC_LABELS[r.recommendationType] ?? r.recommendationType ?? "";
+    const rawPage  = edits[`kw_${ri}_targetPage`] ?? r.targetPage ?? "";
+    const isNew    = rawPage === "New content needed" || rawPage === "Suggest new content for this keyword";
+    const pageTxt  = isNew ? "New content needed" : rawPage;
+    const why      = safeText(edits[`kw_${ri}_why`] ?? r.whyRecommended ?? "");
+    const srcs     = (r.sources ?? []).join(", ");
+    return [keyword, recType, pageTxt, why, srcs];
+  });
+
+  if (!rows.length) return [];
+
+  const items: (Paragraph | Table)[] = [sectionHeading(secNum, "Suggested Keywords for Next Quarter")];
+  if (sk?.quarterlyCreditCap) {
+    items.push(new Paragraph({
+      spacing: { before: 0, after: 120 },
+      children: [run(
+        `Showing up to ${sk.quarterlyCreditCap} keyword opportunities (2× monthly credit capacity of ${sk.monthlyCredits ?? ""}). ` +
+        "Grounded in GSC query data, site crawl inventory, and page performance. " +
+        "Filtered to strategic service, program, condition, and location-intent terms.",
+        { size: 16, color: MID, italics: true }
+      )],
+    }));
+  }
+  items.push(dataTable([
+    { label: "Keyword",                  dxa: 2160 },
+    { label: "Recommendation Type",      dxa: 1700 },
+    { label: "Target Page / Asset",      dxa: 2160 },
+    { label: "Why It's Recommended",     dxa: 3480 },
+    { label: "Source",                   dxa: 1300 },
+  ], rows)); // 2160+1700+2160+3480+1300=10800 ✓
+  return items;
+}
+
 // ── Visibility helpers ────────────────────────────────────────────────────────
 const SECTION_TABLE_MAP: Record<string, string[]> = {
   section_conversions: ["table_s2_pages", "table_s2_patterns", "table_s2_sources"],
@@ -858,16 +902,18 @@ function computeSecNums(
   hs: Record<string, boolean>,
   ht: Record<string, boolean>,
   hasOpps: boolean,
+  hasKeywords: boolean,
 ): Record<string, number> {
   const KEYS = [
     "section_goals", "section_conversions", "section_traffic",
     "section_services", "section_diagnosis", "section_priorities",
-    "section_tracking", "section_opportunities",
+    "section_keywords", "section_tracking", "section_opportunities",
   ];
   const out: Record<string, number> = {};
   let n = 1;
   for (const k of KEYS) {
     if (k === "section_opportunities" && !hasOpps) continue;
+    if (k === "section_keywords" && !hasKeywords) continue;
     if (hs[k] || isSectionAutoHidden(k, ht)) continue;
     out[k] = n++;
   }
@@ -882,8 +928,9 @@ export async function generateQbrPrepV2Docx(
   hiddenTables:   Record<string, boolean> = {},
 ): Promise<Buffer> {
 
-  const hasOpps = (reportData.additionalOpportunities?.length ?? 0) > 0;
-  const secNums = computeSecNums(hiddenSections, hiddenTables, hasOpps);
+  const hasOpps     = (reportData.additionalOpportunities?.length ?? 0) > 0;
+  const hasKeywords = (reportData.sectionSuggestedKeywords?.rows?.length ?? 0) > 0;
+  const secNums     = computeSecNums(hiddenSections, hiddenTables, hasOpps, hasKeywords);
   const vis = (k: string) => secNums[k] !== undefined;
 
   const children: (Paragraph | Table)[] = [];
@@ -914,6 +961,10 @@ export async function generateQbrPrepV2Docx(
   if (vis("section_priorities")) {
     children.push(pageBreakPara());
     children.push(...buildSection6(reportData, secNums["section_priorities"], edits));
+  }
+  if (vis("section_keywords")) {
+    children.push(pageBreakPara());
+    children.push(...buildSectionKeywords(reportData, secNums["section_keywords"], edits));
   }
   if (vis("section_tracking")) {
     children.push(pageBreakPara());

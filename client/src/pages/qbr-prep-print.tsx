@@ -9,7 +9,7 @@ const FOOTER_TEXT = "Webserv  |  32 Discovery Suite 130, Irvine, CA 92618  |  we
 const PRINT_SECTION_DEFS = [
   { key: "section_goals" }, { key: "section_conversions" }, { key: "section_traffic" },
   { key: "section_services" }, { key: "section_diagnosis" }, { key: "section_priorities" },
-  { key: "section_tracking" }, { key: "section_opportunities" },
+  { key: "section_keywords" }, { key: "section_tracking" }, { key: "section_opportunities" },
 ];
 const PRINT_SECTION_TABLES: Record<string, string[]> = {
   section_conversions: ["table_s2_pages", "table_s2_patterns", "table_s2_sources"],
@@ -22,11 +22,12 @@ function printSecAutoHidden(k: string, ht: Record<string, boolean>) {
   const tbls = PRINT_SECTION_TABLES[k];
   return !!(tbls && tbls.length > 0 && tbls.every(t => ht[t]));
 }
-function computePrintSecNums(hs: Record<string, boolean>, ht: Record<string, boolean>, hasOpps: boolean) {
+function computePrintSecNums(hs: Record<string, boolean>, ht: Record<string, boolean>, hasOpps: boolean, hasKeywords: boolean) {
   const out: Record<string, number> = {};
   let n = 1;
   for (const { key } of PRINT_SECTION_DEFS) {
     if (key === "section_opportunities" && !hasOpps) continue;
+    if (key === "section_keywords" && !hasKeywords) continue;
     if (hs[key] || printSecAutoHidden(key, ht)) continue;
     out[key] = n++;
   }
@@ -130,7 +131,9 @@ export default function QbrPrepPrint() {
 
   const _autoOpps: any[] = reportData.additionalOpportunities ?? [];
   const _hasOpps = _autoOpps.length > 0;
-  const secNums = computePrintSecNums(hiddenSections, hiddenTables, _hasOpps);
+  const sectionSuggestedKeywords = reportData.sectionSuggestedKeywords;
+  const _hasKeywords = (sectionSuggestedKeywords?.rows?.length ?? 0) > 0;
+  const secNums = computePrintSecNums(hiddenSections, hiddenTables, _hasOpps, _hasKeywords);
   const secVis = (k: string) => secNums[k] !== undefined;
   const tblVis = (k: string) => !hiddenTables[k];
 
@@ -154,7 +157,6 @@ export default function QbrPrepPrint() {
     ...s2.topConvertingPages.map((r: any, ri: number) => [
       badgeCell(e(`s2a_${ri}_0`, r.type), r.dataSource),
       cell(e(`s2a_${ri}_1`, r.page)),
-      cell(e(`s2a_${ri}_3`, r.conversionSource ?? r.dataSource ?? "—")),
       cell(e(`s2a_${ri}_2`, r.notes)),
     ]),
     ...customRowsAsNodes(edits, "s2a"),
@@ -284,7 +286,7 @@ export default function QbrPrepPrint() {
               {tblVis("table_s2_pages") && (
                 <>
                   <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Converting Pages</div>
-                  <ReportTable headers={["Type", "Page / Pattern", "Conversion Source", "Notes / What We're Learning"]} rows={s2aRows} />
+                  <ReportTable headers={["Type", "Page / Pattern", "Notes / What We're Learning"]} rows={s2aRows} />
                 </>
               )}
               {tblVis("table_s2_patterns") && (
@@ -512,6 +514,79 @@ export default function QbrPrepPrint() {
               </div>
             );
               })()}
+            </>
+          )}
+
+          {secVis("section_keywords") && _hasKeywords && (
+            <>
+              <SectionHeading num={secNums["section_keywords"]!} title="Suggested Keywords for Next Quarter" />
+              {sectionSuggestedKeywords?.quarterlyCreditCap && (
+                <div style={{ fontSize: "9px", color: "#6B7280", marginBottom: 8, fontStyle: "italic" }}>
+                  Showing up to {sectionSuggestedKeywords.quarterlyCreditCap} keyword opportunities (2× monthly credit capacity of {sectionSuggestedKeywords.monthlyCredits}). Grounded in GSC query data, site crawl inventory, and page performance. Filtered to strategic service, program, condition, and location-intent terms.
+                </div>
+              )}
+              <div style={{ border: `1px solid ${ACCENT}28`, borderRadius: 4, overflow: "hidden", marginBottom: 12 }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px", tableLayout: "fixed" }}>
+                  <colgroup>
+                    <col style={{ width: "20%" }} />
+                    <col style={{ width: "16%" }} />
+                    <col style={{ width: "20%" }} />
+                    <col style={{ width: "32%" }} />
+                    <col style={{ width: "12%" }} />
+                  </colgroup>
+                  <thead>
+                    <tr style={{ backgroundColor: `${ACCENT}0D` }}>
+                      {["Keyword", "Recommendation Type", "Target Page / Asset", "Why It's Recommended", "Source"].map((h: string) => (
+                        <th key={h} style={{ padding: "5px 8px", textAlign: "left", fontWeight: 600, fontSize: "9px", color: ACCENT, textTransform: "uppercase" as const, letterSpacing: "0.06em", borderBottom: `1px solid ${ACCENT}20`, wordBreak: "break-word" }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(sectionSuggestedKeywords?.rows ?? []).map((row: any, ri: number) => {
+                      const recTypeLabels: Record<string, string> = {
+                        "optimize-existing": "Optimize existing page",
+                        "refresh-existing":  "Refresh existing page",
+                        "create-new":        "Create new content",
+                        "cro-update":        "CRO / supporting update",
+                        "internal-linking":  "Internal linking support",
+                      };
+                      const recTypeColors: Record<string, { bg: string; color: string }> = {
+                        "optimize-existing": { bg: "#D1FAE5", color: "#065F46" },
+                        "refresh-existing":  { bg: "#FEF3C7", color: "#92400E" },
+                        "create-new":        { bg: "#DBEAFE", color: "#1E40AF" },
+                        "cro-update":        { bg: "#F3E8FF", color: "#6B21A8" },
+                        "internal-linking":  { bg: "#F0FDF4", color: "#14532D" },
+                      };
+                      const label  = recTypeLabels[row.recommendationType] ?? row.recommendationType;
+                      const colors = recTypeColors[row.recommendationType] ?? { bg: "#F3F4F6", color: "#374151" };
+                      const rawPage = edits[`kw_${ri}_targetPage`] ?? row.targetPage ?? "";
+                      const isNew = rawPage === "New content needed" || rawPage === "Suggest new content for this keyword";
+                      return (
+                        <tr key={ri} style={{ backgroundColor: ri % 2 === 1 ? "#FBF8F7" : "white" }}>
+                          <td style={{ padding: "5px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", fontWeight: 600, wordBreak: "break-word" }}>{edits[`kw_${ri}_keyword`] ?? row.keyword}</td>
+                          <td style={{ padding: "5px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", wordBreak: "break-word" }}>
+                            <span style={{ display: "inline-block", padding: "2px 7px", borderRadius: 10, fontSize: "8px", fontWeight: 700, backgroundColor: colors.bg, color: colors.color }}>{label}</span>
+                          </td>
+                          <td style={{ padding: "5px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", wordBreak: "break-word" }}>
+                            {isNew
+                              ? <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 10, fontSize: "8px", fontWeight: 700, backgroundColor: "#FEF3C7", color: "#92400E" }}>New content needed</span>
+                              : <span style={{ display: "inline-block", padding: "1px 6px", borderRadius: 3, fontSize: "9px", fontWeight: 500, backgroundColor: `${ACCENT}10`, border: `1px solid ${ACCENT}25`, color: "#374151", wordBreak: "break-all" }}>{rawPage}</span>
+                            }
+                          </td>
+                          <td style={{ padding: "5px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4, color: "#4B5563", fontSize: "9px", wordBreak: "break-word" }}>{edits[`kw_${ri}_why`] ?? row.whyRecommended}</td>
+                          <td style={{ padding: "5px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top" }}>
+                            <span style={{ display: "inline-flex", flexWrap: "wrap", gap: 3 }}>
+                              {(row.sources ?? []).map((src: string, si: number) => (
+                                <SourceBadge key={si} source={src} />
+                              ))}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </>
           )}
 

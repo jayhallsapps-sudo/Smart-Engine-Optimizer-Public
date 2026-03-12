@@ -56,8 +56,8 @@ export async function queryCtm(
         }),
       ]);
 
-      const currTotal = currData.total ?? 0;
-      const prevTotal = prevData.total ?? 0;
+      const currTotal = currData.total_entries ?? 0;
+      const prevTotal = prevData.total_entries ?? 0;
 
       return {
         command,

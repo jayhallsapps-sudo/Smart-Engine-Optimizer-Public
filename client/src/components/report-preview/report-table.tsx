@@ -54,8 +54,8 @@ export function SourceBadge({ source }: { source: string }) {
         borderRadius: "4px",
         fontWeight: 600,
         lineHeight: 1.4,
-        whiteSpace: "normal",
-        wordBreak: "break-word",
+        whiteSpace: "nowrap",
+        wordBreak: "normal",
         display: "inline-block",
         letterSpacing: "0.02em",
       }}

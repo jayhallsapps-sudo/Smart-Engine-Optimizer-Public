@@ -199,6 +199,55 @@ async function fetchNavAccessibility(siteUrl: string): Promise<NavAccessibility>
 }
 
 const ME = "Manual entry needed";
+const NOT_FOUND = "Not found on site";
+
+// ── Live page verification: HEAD-check key paths against the live site ─────────
+// Returns a map of path → { exists: boolean, resolvedPath: string | null }
+// A page is considered "exists" if it resolves to a non-root, non-homepage URL.
+async function verifyLivePages(
+  baseUrl: string,
+  paths: string[]
+): Promise<Map<string, { exists: boolean; resolvedPath: string | null }>> {
+  const results = new Map<string, { exists: boolean; resolvedPath: string | null }>();
+  const base = baseUrl.replace(/\/$/, "");
+  const rootPaths = new Set(["", "/", "/home", "/index.html", "/index.php"]);
+
+  async function checkPath(path: string): Promise<{ exists: boolean; resolvedPath: string | null }> {
+    try {
+      const resp = await fetch(`${base}${path}`, {
+        method: "HEAD",
+        redirect: "follow",
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; SmartEO-QBR/1.0)" },
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!resp.ok) return { exists: false, resolvedPath: null };
+      // Determine where it landed
+      const finalUrl = resp.url ?? `${base}${path}`;
+      let finalPath = "/";
+      try { finalPath = new URL(finalUrl).pathname; } catch {}
+      // If it landed on root/homepage, treat as non-existent
+      if (rootPaths.has(finalPath) || finalPath === "") return { exists: false, resolvedPath: null };
+      return { exists: true, resolvedPath: finalPath };
+    } catch {
+      return { exists: false, resolvedPath: null };
+    }
+  }
+
+  const checks = await Promise.allSettled(paths.map(p => checkPath(p)));
+  paths.forEach((p, i) => {
+    const r = checks[i];
+    results.set(p, r.status === "fulfilled" ? r.value : { exists: false, resolvedPath: null });
+  });
+  return results;
+}
+
+// ── Infer page verification groups for key service categories ─────────────────
+const PAGE_CHECK_GROUPS: Record<string, string[]> = {
+  contact:     ["/contact", "/contact-us", "/get-help", "/admissions", "/admissions-and-alcohol-rehab-insurance", "/reach-out", "/intake"],
+  vob:         ["/verify-insurance", "/insurance-verification", "/vob", "/verify-benefits", "/insurance"],
+  detox:       ["/detox", "/detox-program", "/detoxification", "/programs/detox", "/detox-center"],
+  residential: ["/residential", "/residential-treatment", "/inpatient", "/inpatient-rehab", "/programs/residential"],
+};
 
 function pctDeltaLocal(current: number, previous: number): string {
   if (previous === 0) return current > 0 ? "+∞%" : "—";
@@ -531,9 +580,68 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
   };
 
   const section1 = generateSection1(nsmData, ga4FunnelCurr, quarter, client, callTrackingSources, prevNsmData, input.prevQtrAssessment, input.hypothesis, (input as any).clientNotes, input.sentiment);
-  const section2 = generateSection2(ga4LandingRows, gscPageRows, client, callTrackingLandingPages, callTrackingSources);
+
+  // ── Live page verification — run early so S2, S4, S5 all benefit ─────────────
+  // Only runs when we have a real domain (not Issues-format SF or missing config).
+  let livePageVerification: Map<string, { exists: boolean; resolvedPath: string | null }> = new Map();
+  const siteBaseUrl = client.gscSiteUrl
+    ? client.gscSiteUrl.replace(/^sc-domain:/, "https://").replace(/\/$/, "")
+    : null;
+  if (siteBaseUrl && !siteBaseUrl.includes(ME)) {
+    const allPathsToCheck = [
+      ...PAGE_CHECK_GROUPS.contact,
+      ...PAGE_CHECK_GROUPS.vob,
+      ...PAGE_CHECK_GROUPS.detox,
+      ...PAGE_CHECK_GROUPS.residential,
+      // Also check configured money pages
+      ...(client.moneyPages ?? []).map((mp: string) => mp.replace(/^https?:\/\/[^/]+/, "") || "/"),
+    ];
+    const uniquePaths = Array.from(new Set(allPathsToCheck));
+    try {
+      livePageVerification = await verifyLivePages(siteBaseUrl, uniquePaths);
+      const foundCount = Array.from(livePageVerification.values()).filter(v => v.exists).length;
+      console.log(`[LiveVerify] Checked ${uniquePaths.length} paths → ${foundCount} found live`);
+    } catch (e: any) {
+      console.warn("[LiveVerify] Page verification failed:", e.message);
+    }
+  }
+
+  // Build a helper to find the first live path in a category
+  function firstLivePath(category: string): string | null {
+    for (const path of PAGE_CHECK_GROUPS[category] ?? []) {
+      const r = livePageVerification.get(path);
+      if (r?.exists) return r.resolvedPath ?? path;
+    }
+    return null;
+  }
+
+  // Filter money pages: keep only those that resolve to a non-homepage URL
+  const verifiedMoneyPages = (client.moneyPages ?? []).filter((mp: string) => {
+    const path = mp.replace(/^https?:\/\/[^/]+/, "") || "/";
+    const r = livePageVerification.get(path);
+    // If verification ran (map has this path) and page doesn't exist, exclude it
+    if (livePageVerification.size > 0 && livePageVerification.has(path)) return r?.exists ?? false;
+    // If no verification data, include as before
+    return true;
+  });
+
+  const clientWithVerifiedMoneyPages = { ...client, moneyPages: verifiedMoneyPages };
+
+  const section2 = generateSection2(ga4LandingRows, gscPageRows, clientWithVerifiedMoneyPages, callTrackingLandingPages, callTrackingSources);
   const section3 = generateSection3(gscQueryRows, gscPageRows, ga4LandingRows, client, gscPrevQueryRows, gscPrevPageRows, gscQueryPageRows, gscPrevQueryPageRows);
-  const section4 = generateSection4(sfData, sfHeaders, client);
+
+  // Build live page overrides for S4 (maps service name → real verified URL)
+  const s4LivePageOverrides: Record<string, string> = {};
+  const contactPath = firstLivePath("contact");
+  const vobPath = firstLivePath("vob");
+  const detoxPath = firstLivePath("detox");
+  const residentialPath = firstLivePath("residential");
+  if (contactPath) s4LivePageOverrides["Contact / Admissions"] = contactPath;
+  if (vobPath) s4LivePageOverrides["Verify Insurance"] = vobPath;
+  if (detoxPath) s4LivePageOverrides["Detox"] = detoxPath;
+  if (residentialPath) s4LivePageOverrides["Residential / Inpatient"] = residentialPath;
+
+  const section4 = generateSection4(sfData, sfHeaders, client, s4LivePageOverrides, livePageVerification.size > 0);
 
   // T003: Post-process tertiary goal reason with actual traffic data from section3
   const tertiaryIdx = section1.rows.findIndex(r => r.goalType === "Secondary Goal/NSM");
@@ -590,6 +698,13 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
     ? await fetchNavAccessibility(client.gscSiteUrl.replace(/^sc-domain:/, "https://"))
     : { vobInNav: false, vobInFooter: false, contactInNav: false, contactInFooter: false, dataAvailable: false };
 
+  // HTTP verification overrides for key page presence flags (S5 Tier Scorecard)
+  // If live verification ran, use it as the truth source for these flags.
+  const httpHasContact = livePageVerification.size > 0 ? contactPath !== null : null;
+  const httpHasVob = livePageVerification.size > 0 ? vobPath !== null : null;
+  const httpHasDetox = livePageVerification.size > 0 ? detoxPath !== null : null;
+  const httpHasResidential = livePageVerification.size > 0 ? residentialPath !== null : null;
+
   const tierInput: TierDiagnosisInput = {
     sfData,
     sfHeaders,
@@ -600,10 +715,11 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
     missingTitles: sfTierInput.missingTitles ?? 0,
     missingH1s: sfTierInput.missingH1s ?? 0,
     servicePageTypes: sfTierInput.servicePageTypes ?? [],
-    hasVobPage: sfTierInput.hasVobPage ?? false,
-    hasContactPage: sfTierInput.hasContactPage ?? false,
-    hasDetoxPage: sfTierInput.hasDetoxPage ?? false,
-    hasResidentialPage: sfTierInput.hasResidentialPage ?? false,
+    // Prefer HTTP verification result over SF analysis; fall back to SF if no HTTP data
+    hasVobPage: httpHasVob !== null ? httpHasVob : (sfTierInput.hasVobPage ?? false),
+    hasContactPage: httpHasContact !== null ? httpHasContact : (sfTierInput.hasContactPage ?? false),
+    hasDetoxPage: httpHasDetox !== null ? httpHasDetox : (sfTierInput.hasDetoxPage ?? false),
+    hasResidentialPage: httpHasResidential !== null ? httpHasResidential : (sfTierInput.hasResidentialPage ?? false),
     hasConditionsHub: sfTierInput.hasConditionsHub ?? false,
     hasTherapiesHub: sfTierInput.hasTherapiesHub ?? false,
     hasLocationPage: sfTierInput.hasLocationPage ?? false,
@@ -2042,7 +2158,9 @@ function scorePage4Url(url: string): number {
 function generateSection4(
   sfData: Record<string, any>[],
   sfHeaders: string[],
-  client: Client
+  client: Client,
+  livePageOverrides: Record<string, string> = {},
+  verificationRan: boolean = false
 ): Section4Services {
   const services: ServiceRow[] = [];
   const urlCol = sfHeaders.find(h => /^address$/i.test(h) || /^url$/i.test(h)) ?? sfHeaders[0] ?? "";
@@ -2107,11 +2225,33 @@ function generateSection4(
     }
   }
 
-  // Fill missing services with ME up to 8 rows
+  // Ensure Contact / Admissions is always added first (it has priority for Tier 1 scoring)
+  // before the generic serviceTargets fill loop consumes all 8 slots.
+  if (!services.find(s => s.service === "Contact / Admissions")) {
+    if (livePageOverrides["Contact / Admissions"]) {
+      services.push({ service: "Contact / Admissions", examplePage: livePageOverrides["Contact / Admissions"] });
+    } else {
+      services.push({ service: "Contact / Admissions", examplePage: verificationRan ? NOT_FOUND : ME });
+    }
+  } else if (livePageOverrides["Contact / Admissions"]) {
+    // SF found something but live verification found a cleaner resolved path — prefer live
+    const idx = services.findIndex(s => s.service === "Contact / Admissions");
+    if (idx >= 0 && (services[idx].examplePage === ME || services[idx].examplePage === NOT_FOUND)) {
+      services[idx] = { ...services[idx], examplePage: livePageOverrides["Contact / Admissions"] };
+    }
+  }
+
+  // Fill remaining missing services with live overrides or ME/NOT_FOUND up to 8 rows
   for (const target of serviceTargets) {
     if (services.length >= 8) break;
     if (!services.find(s => s.service === target.service)) {
-      services.push({ service: target.service, examplePage: ME });
+      // Check if HTTP verification confirmed this page exists at a live path
+      if (livePageOverrides[target.service]) {
+        services.push({ service: target.service, examplePage: livePageOverrides[target.service] });
+      } else {
+        // If verification ran, we actively confirmed page is missing → NOT_FOUND (more specific than ME)
+        services.push({ service: target.service, examplePage: verificationRan ? NOT_FOUND : ME });
+      }
     }
   }
 
@@ -2120,7 +2260,7 @@ function generateSection4(
     "Detox", "Residential / Inpatient", "Verify Insurance", "Contact / Admissions",
   ]);
   const scoredServices: ServiceRow[] = services.slice(0, 8).map(s => {
-    const notFound = s.examplePage === ME || /manual entry needed/i.test(s.examplePage);
+    const notFound = s.examplePage === ME || s.examplePage === NOT_FOUND || /manual entry needed/i.test(s.examplePage);
     const isCritical = tier1CriticalServices.has(s.service);
 
     if (notFound) {
@@ -2168,26 +2308,26 @@ function buildTierScorecard(tierInput: TierDiagnosisInput): TierScorecardEntry[]
   const nav = tierInput.navAccessibility;
 
   function vobAccessLabel(): string {
-    if (!tierInput.hasVobPage) return "Not confirmed in crawl";
-    if (!nav?.dataAvailable) return "Confirmed in crawl — nav/footer accessibility not verified (homepage fetch unavailable)";
-    if (nav.vobInNav) return "Confirmed in crawl — linked from main navigation (Fact)";
-    if (nav.vobInFooter) return "Confirmed in crawl — linked from footer, not main nav (Fact)";
-    return "Confirmed in crawl — not found in main navigation or footer (Inference: may be accessible only via internal links or direct URL)";
+    if (!tierInput.hasVobPage) return "Not found on live site — this is a critical Tier 1 gap";
+    if (!nav?.dataAvailable) return "Confirmed present — nav/footer accessibility not verified (homepage fetch unavailable)";
+    if (nav.vobInNav) return "Confirmed present — linked from main navigation (Fact)";
+    if (nav.vobInFooter) return "Confirmed present — linked from footer, not main nav (Fact)";
+    return "Confirmed present — not found in main navigation or footer (Inference: may be accessible only via internal links or direct URL)";
   }
 
   function contactAccessLabel(): string {
-    if (!tierInput.hasContactPage) return "Not confirmed in crawl";
-    if (!nav?.dataAvailable) return "Confirmed in crawl — nav/footer accessibility not verified (homepage fetch unavailable)";
-    if (nav.contactInNav) return "Confirmed in crawl — linked from main navigation (Fact)";
-    if (nav.contactInFooter) return "Confirmed in crawl — linked from footer, not main nav (Fact)";
-    return "Confirmed in crawl — not found in main navigation or footer (Inference: may be accessible only via internal links or direct URL)";
+    if (!tierInput.hasContactPage) return "Not found on live site — this is a critical Tier 1 gap";
+    if (!nav?.dataAvailable) return "Confirmed present — nav/footer accessibility not verified (homepage fetch unavailable)";
+    if (nav.contactInNav) return "Confirmed present — linked from main navigation (Fact)";
+    if (nav.contactInFooter) return "Confirmed present — linked from footer, not main nav (Fact)";
+    return "Confirmed present — not found in main navigation or footer (Inference: may be accessible only via internal links or direct URL)";
   }
 
   const t1Findings = [
     `Verify Insurance / VOB page: ${vobAccessLabel()}`,
     `Contact / Admissions page: ${contactAccessLabel()}`,
-    `Detox service page: ${tierInput.hasDetoxPage ? "Confirmed present in crawl" : "Not confirmed in crawl"}`,
-    `Residential page: ${tierInput.hasResidentialPage ? "Confirmed present in crawl" : "Not confirmed in crawl"}`,
+    `Detox service page: ${tierInput.hasDetoxPage ? "Confirmed present" : "Not found on live site — this is a critical Tier 1 gap"}`,
+    `Residential page: ${tierInput.hasResidentialPage ? "Confirmed present" : "Not found on live site — this is a critical Tier 1 gap"}`,
   ].join(". ");
 
   const t1Inferences = tierInput.highIntentTrafficLandsOnClearUrls

@@ -756,7 +756,20 @@ export default function QbrPrepPrint() {
                       const isNew = rawPage === "New content needed" || rawPage === "Suggest new content for this keyword";
                       return (
                         <tr key={ri} style={{ backgroundColor: ri % 2 === 1 ? "#FBF8F7" : "white" }}>
-                          <td style={{ padding: "5px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", fontWeight: 600, wordBreak: "break-word" }}>{edits[`kw_${ri}_keyword`] ?? row.keyword}</td>
+                          <td style={{ padding: "5px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", fontWeight: 600, wordBreak: "break-word" }}>
+                            {(() => {
+                              const kwText = edits[`kw_${ri}_keyword`] ?? row.keyword ?? "";
+                              const parts = kwText.split(" / ");
+                              const MAX = 5;
+                              if (parts.length <= MAX) return kwText;
+                              return (
+                                <>
+                                  {parts.slice(0, MAX).join(" / ")}
+                                  <span style={{ display: "block", marginTop: 2, fontSize: "8px", color: "#9CA3AF", fontWeight: 400 }}>+{parts.length - MAX} more variants</span>
+                                </>
+                              );
+                            })()}
+                          </td>
                           <td style={{ padding: "5px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", wordBreak: "break-word" }}>
                             <span style={{ display: "inline-block", padding: "2px 7px", borderRadius: 10, fontSize: "8px", fontWeight: 700, backgroundColor: colors.bg, color: colors.color }}>{label}</span>
                           </td>

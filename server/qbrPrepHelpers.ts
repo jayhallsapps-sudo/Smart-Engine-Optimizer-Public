@@ -300,7 +300,7 @@ export function diagnoseTier(input: TierDiagnosisInput): TierDiagnosis {
     }
   }
   if (!input.highIntentTrafficLandsOnClearUrls) {
-    tier1Issues.push("High-intent service traffic does not land on clear primary URLs");
+    tier1Issues.push("High-intent Levels of Care traffic does not land on clear primary Levels of Care page URLs");
   }
   if (input.missingTitles > input.totalUrls * 0.1) {
     tier1Issues.push(`${input.missingTitles} pages missing titles — core pages may lack proper SEO fundamentals`);

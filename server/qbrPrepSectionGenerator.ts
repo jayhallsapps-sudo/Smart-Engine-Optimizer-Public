@@ -2420,7 +2420,7 @@ function buildTierScorecard(tierInput: TierDiagnosisInput): TierScorecardEntry[]
 
   const t1Inferences = tierInput.highIntentTrafficLandsOnClearUrls
     ? "High-intent traffic appears to land on clear primary URLs — conversion path alignment is directionally sound (Inference from GSC data). Content depth, CTA clarity, and form functionality still require manual verification."
-    : "High-intent traffic may not be landing on clear primary service URLs (Inference from GSC data) — review which pages are capturing service-intent queries and whether they are conversion-optimized.";
+    : "High-intent traffic may not be landing on clear primary Levels of Care page URLs (Inference from GSC data) — review which pages are capturing Levels of Care intent queries and whether they are conversion-optimized.";
 
   const t2Pass = tierInput.hasConditionsHub && tierInput.hasTherapiesHub && tierInput.missingH1s <= 10;
   const t2Status: TierScorecardEntry["status"] = t2Pass ? "Pass"
@@ -3075,6 +3075,25 @@ function generateSection6(
     impact: p.impact ?? inferImpact(p),
   }));
 
+  // Truncate an action string to a clean, complete thought for summary bullets.
+  // Strips trailing URL lists ("...: /path1, /path2") and hard-caps at a word boundary.
+  function summarizeAction(action: string): string {
+    // Remove trailing URL list — anything after ": /" or ", /" patterns
+    let s = action.replace(/:\s*\/[^\s]+.*$/, "").trim();
+    // If still long, cut at first em-dash that introduces an example list (> 80 chars in)
+    if (s.length > 145) {
+      const dashIdx = s.indexOf(" — ");
+      if (dashIdx > 70) s = s.slice(0, dashIdx).trim();
+    }
+    // Hard cap at 155 chars at nearest word boundary
+    if (s.length > 155) {
+      s = s.slice(0, 155).replace(/\s+\S*$/, "").trim();
+    }
+    // Remove trailing punctuation that would create dangling fragments, then re-terminate
+    s = s.replace(/[—:,]+$/, "").trim();
+    return s.endsWith(".") ? s : s + ".";
+  }
+
   // Generate short summary bullets (3–5 bullets distilling the top actions)
   const shortSummary: string[] = [];
   if (finalPriorities.length > 0) {
@@ -3082,11 +3101,11 @@ function generateSection6(
   }
   const highPriorities = finalPriorities.filter(p => p.impact === "High").slice(0, 2);
   for (const p of highPriorities) {
-    shortSummary.push(`${p.initiative}: ${p.action.split(".")[0].slice(0, 110)}.`);
+    shortSummary.push(`${p.initiative}: ${summarizeAction(p.action)}`);
   }
   const medPriorities = finalPriorities.filter(p => p.impact === "Medium").slice(0, 2);
   for (const p of medPriorities) {
-    shortSummary.push(`${p.initiative}: ${p.action.split(".")[0].slice(0, 110)}.`);
+    shortSummary.push(`${p.initiative}: ${summarizeAction(p.action)}`);
   }
 
   return {

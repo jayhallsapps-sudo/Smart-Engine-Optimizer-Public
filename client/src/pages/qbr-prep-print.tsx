@@ -432,7 +432,7 @@ export default function QbrPrepPrint() {
           {secVis("section_goals") && (
             <>
               <SectionHeading num={secNums["section_goals"]} title="What Matters Most This Quarter" />
-              <ReportTable headers={["Goal Type", "Goal", "Goal Shift vs Last Quarter", "Reason"]} rows={s1Rows} />
+              <ReportTable headers={["Goal Type", "Goal", "Goal Shift vs Last Quarter", "Reason"]} rows={s1Rows} colWidths={["88px", undefined, "110px", undefined]} />
             </>
           )}
 

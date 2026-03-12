@@ -126,6 +126,7 @@ export function ReportTable({
   accent = ACCENT,
   fontSize = "10px",
   highlightRows,
+  colWidths,
 }: {
   title?: string;
   headers: string[];
@@ -133,6 +134,7 @@ export function ReportTable({
   accent?: string;
   fontSize?: string;
   highlightRows?: number[];
+  colWidths?: (string | undefined)[];
 }) {
   const highlightSet = new Set(highlightRows ?? []);
   return (
@@ -161,7 +163,14 @@ export function ReportTable({
           {title}
         </div>
       )}
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize, tableLayout: colWidths ? "fixed" : undefined }}>
+        {colWidths && (
+          <colgroup>
+            {colWidths.map((w, i) => (
+              <col key={i} style={w ? { width: w } : undefined} />
+            ))}
+          </colgroup>
+        )}
         <thead>
           <tr style={{ backgroundColor: `${accent}0D` }}>
             {headers.map((h, i) => (

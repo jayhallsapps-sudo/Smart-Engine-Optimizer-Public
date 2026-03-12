@@ -471,15 +471,23 @@ export function renderSection6Html(reportData: any, secNum: number, edits: Recor
 
 export function renderSection7Html(reportData: any, secNum: number, edits: Record<string,string> = {}): string {
   const s7 = reportData.section7Tracking ?? {};
-  const rows = (s7.tracking ?? []).map((r: any, ri: number) => [
+  const tracking = s7.tracking ?? [];
+  const s7SharedSource = computeSharedSource(tracking.map((r: any) => r.source as string | undefined));
+
+  const rows = tracking.map((r: any, ri: number) => [
     edits[`s7_${ri}_0`] ?? r.focusArea ?? "",
     edits[`s7_${ri}_1`] ?? r.metric ?? "",
-    edits[`s7_${ri}_2`] ?? r.source ?? "",
+    s7SharedSource ? "—" : (edits[`s7_${ri}_2`] ?? r.source ?? ""),
     edits[`s7_${ri}_4`] ?? r.whyItMatters ?? "",
   ]);
 
+  const sharedSrcNote = s7SharedSource
+    ? `<div style="font-size:8.5px;color:${MID};font-style:italic;margin-bottom:8px;">Source: ${escHtml(s7SharedSource)}</div>`
+    : "";
+
   const inner = `
     ${secHeading(secNum, "What We Track")}
+    ${sharedSrcNote}
     ${rows.length ? table(["Focus Area", "Metric", "Source", "Why It Matters"], rows, ["20%","25%","20%","35%"]) : ""}`;
   return wrap(inner);
 }

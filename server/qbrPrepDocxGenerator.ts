@@ -833,21 +833,34 @@ function buildSection6(reportData: any, secNum: number, edits: Record<string, st
 // ── Section 7: Tracking ───────────────────────────────────────────────────────
 function buildSection7(reportData: any, secNum: number, edits: Record<string, string>): (Paragraph | Table)[] {
   const s7 = reportData.section7Tracking ?? {};
-  const rows = (s7.tracking ?? []).map((r: any, ri: number) => [
+  const tracking = s7.tracking ?? [];
+  const s7SharedSource = computeSharedSource(tracking.map((r: any) => r.source));
+
+  const rows = tracking.map((r: any, ri: number) => [
     safeText(edits[`s7_${ri}_0`] ?? r.focusArea ?? ""),
     safeText(edits[`s7_${ri}_1`] ?? r.metric ?? ""),
-    safeText(edits[`s7_${ri}_2`] ?? r.source ?? ""),
+    // When shared source: show "—" in source column; per-row value otherwise
+    s7SharedSource ? "—" : safeText(edits[`s7_${ri}_2`] ?? r.source ?? ""),
     safeText(edits[`s7_${ri}_4`] ?? r.whyItMatters ?? ""),
   ]);
-  return [
-    sectionHeading(secNum, "What We Track"),
-    dataTable([
-      { label: "Focus Area",    dxa: 2160 },
-      { label: "Metric",        dxa: 2700 },
-      { label: "Source",        dxa: 2160 },
-      { label: "Why It Matters",dxa: 3780 },
-    ], rows), // 2160+2700+2160+3780=10800 ✓
-  ];
+
+  const items: (Paragraph | Table)[] = [sectionHeading(secNum, "What We Track")];
+
+  if (s7SharedSource) {
+    items.push(new Paragraph({
+      spacing: { before: 0, after: 120 },
+      children: [run(`Source: ${s7SharedSource}`, { size: 16, color: MID, italics: true })],
+    }));
+  }
+
+  items.push(dataTable([
+    { label: "Focus Area",    dxa: 2160 },
+    { label: "Metric",        dxa: 2700 },
+    { label: "Source",        dxa: 2160 },
+    { label: "Why It Matters",dxa: 3780 },
+  ], rows)); // 2160+2700+2160+3780=10800 ✓
+
+  return items;
 }
 
 // ── Section 8: Opportunities — native cards ───────────────────────────────────

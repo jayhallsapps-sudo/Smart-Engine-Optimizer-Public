@@ -36,6 +36,6 @@ Full rules are in `rules.md` in this directory. Always read that file before act
 | Sol Women's Treatment | 5 |
 | Williamsburg House | 3 |
 | Horseshoe Ridge | 4 |
-| Iris Healing | 5 |
+| Iris Healing | 8 (Q2 2026) / 5 (other quarters) |
 
 See `rules.md` for full credit assignment rules and all report-specific priorities.

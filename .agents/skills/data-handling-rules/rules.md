@@ -218,9 +218,9 @@ Williamsburg House: 3 credits/month
 
 Horseshoe Ridge: 4 credits/month
 
-Iris Healing: 5 credits/month
+Iris Healing: 8 credits/month (Q2 2026); 5 credits/month otherwise
 
-Iris Healing should generally plan for 2 new pieces of content per month.
+Iris Healing should generally plan for 2–3 new pieces of content per month in Q2 2026, 2 new pieces per month in other quarters.
 
 Most other clients should generally plan for 1 new piece of content per month, with remaining credits allocated to refreshes / optimizations.
 
@@ -668,7 +668,7 @@ Content planning rule:
 
 one new piece of content per month for most clients unless credits support more
 
-Iris can support two new pieces per month
+Iris can support two to three new pieces per month in Q2 2026, two new pieces per month in other quarters
 
 new topic selection should come from high-impression / low-click non-brand opportunities and service-supporting topical gaps
 

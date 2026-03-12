@@ -1,4 +1,4 @@
-import { CalendarDays, BarChart3, TrendingUp, Sparkles, Users, Settings, Zap, LayoutDashboard, FlaskConical, PenSquare, Target, ShieldCheck } from "lucide-react";
+import { CalendarDays, BarChart3, TrendingUp, Sparkles, Users, Settings, Zap, LayoutDashboard, FlaskConical, PenSquare, Target, ShieldCheck, Command } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import {
   Sidebar,
@@ -17,9 +17,10 @@ import {
 } from "@/components/ui/sidebar";
 import { ThemeToggle } from "@/components/theme-toggle";
 
-const dashboardItem = { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard };
+const commandCenterItem = { title: "Command Center", url: "/command-center", icon: Command };
 
 const reportItems = [
+  { title: "Client Signals", url: "/dashboard", icon: LayoutDashboard },
   { title: "Mid-Strategy", url: "/mid-strategy", icon: Target },
   { title: "Bi-Weekly", url: "/biweekly", icon: CalendarDays },
   { title: "Monthly", url: "/monthly", icon: BarChart3 },
@@ -41,7 +42,7 @@ function SidebarLogo() {
 
   return (
     <Link
-      href="/dashboard"
+      href="/command-center"
       className="flex items-center gap-2 px-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
     >
       <div className="flex items-center justify-center w-8 h-8 rounded-md bg-primary shrink-0">
@@ -69,12 +70,12 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {[dashboardItem].map(item => {
+              {[commandCenterItem].map(item => {
                 const isActive = location === item.url;
                 return (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton asChild tooltip={item.title} isActive={isActive}>
-                      <Link href={item.url} data-testid="link-nav-dashboard">
+                      <Link href={item.url} data-testid="link-nav-command-center">
                         <item.icon className="w-4 h-4 shrink-0" />
                         <span>{item.title}</span>
                       </Link>
@@ -139,7 +140,7 @@ export function AppSidebar() {
       <SidebarFooter className="p-2">
         <div className="flex items-center justify-between gap-1 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:justify-center">
           <div className="text-[10px] text-muted-foreground group-data-[collapsible=icon]:hidden">
-            SmartEO v1.2
+            SmartEO v2.0
           </div>
           <div className="flex items-center gap-1 group-data-[collapsible=icon]:flex-col">
             <ThemeToggle />

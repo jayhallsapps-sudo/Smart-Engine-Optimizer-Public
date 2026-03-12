@@ -24,10 +24,12 @@ import DashboardPage from "@/pages/dashboard";
 import SampleReportsPage from "@/pages/sample-reports";
 import TemplateBuilderPage from "@/pages/template-builder";
 import SecurityPage from "@/pages/security";
+import CommandCenterPage from "@/pages/command-center";
+import PrepareReportPage from "@/pages/prepare-report";
 
 function RootRedirect() {
   const [, setLocation] = useLocation();
-  setLocation("/dashboard");
+  setLocation("/command-center");
   return null;
 }
 
@@ -37,6 +39,8 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={RootRedirect} />
+      <Route path="/command-center" component={CommandCenterPage} />
+      <Route path="/prepare" component={PrepareReportPage} />
       <Route path="/dashboard" component={DashboardPage} />
       <Route path="/biweekly" component={BiweeklyPage} />
       <Route path="/monthly" component={MonthlyPage} />

@@ -1,0 +1,61 @@
+Build the SmartEO Command Center as the main post-login dashboard for Phase 2.
+
+Important context:
+Phase 2 foundation and report registry architecture are now in place. Extend that work. Do not redesign or replace working app infrastructure unless necessary. Reuse the existing shell, components, styling patterns, and navigation structure wherever practical.
+
+Primary goal:
+Create a bold, obvious, command-center-style dashboard that acts as the main entry point into SmartEO.
+
+Critical UX requirements:
+- The dashboard must feel like a command center, not a cramped admin panel.
+- Use large, prominent central module buttons/cards.
+- Navigation should be immediately obvious.
+- Keep the layout calm, clean, and low clutter.
+- Optimize for desktop first.
+- Maintain strong visual hierarchy.
+- Avoid tiny links and dense dashboard spam.
+
+Design continuity rules:
+- Respect the existing SmartEO and QBS design language where appropriate.
+- Do not introduce a random new visual style.
+- Extend the current visual system rather than replacing it.
+
+Build these main module entry points:
+- Prepare a Report
+- Past Reports
+- Client Dashboards
+- Current Client Signals
+- Integration Search
+- Tasks
+- Knowledge
+- Forecasting
+- Research Updates
+
+Requirements:
+- large central module cards/buttons
+- strong labels and visual affordance
+- clear grouping and spacing
+- role-based visibility should be architecturally possible, even if not fully enforced yet
+- preserve compatibility with the current app shell/navigation where possible
+- make this the obvious landing experience after login
+
+Implementation rules:
+- reuse existing layout and UI primitives where possible
+- do not overbuild inactive modules; placeholders are acceptable if they are clean and intentional
+- avoid deep functionality for each module in this prompt; focus on the dashboard and navigation experience
+- do not create long-scroll clutter
+- keep the primary command-center content visible and obvious within the screen
+
+Deliverables:
+- the new Command Center dashboard
+- routing/navigation into the major modules
+- clean placeholder states where full modules are not built yet
+- short implementation report including:
+  - files changed
+  - what was reused
+  - what was newly built
+  - what was intentionally deferred
+  - any visual or architectural risks
+
+Success condition:
+A user logs in and lands on a strong, bold, clear SmartEO Command Center with large module cards and obvious navigation into the rest of the platform.

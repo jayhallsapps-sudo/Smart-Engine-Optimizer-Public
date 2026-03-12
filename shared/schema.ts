@@ -27,6 +27,8 @@ export const clients = pgTable("clients", {
   gbpLocationName: text("gbp_location_name"),
   gbpProfileUrl: text("gbp_profile_url"),
   asanaProjectId: text("asana_project_id"),
+  primaryGoal: text("primary_goal"),
+  aboutPageUrl: text("about_page_url"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -362,6 +364,7 @@ export const COMMANDS = [
   "callrail_summary",
   "ctm_qoq_organic_calls",
   "ctm_qoq_top_landing_pages",
+  "ctm_qoq_sources",
   "ahrefs_backlink_overview",
   "ahrefs_keyword_rankings",
   "ahrefs_competitor_visibility",

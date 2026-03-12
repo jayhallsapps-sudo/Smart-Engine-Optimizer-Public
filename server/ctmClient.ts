@@ -20,7 +20,11 @@ async function ctmGet(apiKey: string, apiSecret: string, path: string, params: R
     headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/json" },
   });
   const data = await resp.json() as any;
-  if (!resp.ok) throw new Error(data.message || `CTM API error ${resp.status}`);
+  if (!resp.ok) {
+    const msg = data.message ?? data.error ?? data.errors?.join(", ") ?? `CTM API error ${resp.status}`;
+    console.error(`[CTM] ${resp.status} from ${path}?${qs.substring(0, 120)}:`, msg);
+    throw new Error(msg);
+  }
   return data;
 }
 
@@ -70,34 +74,51 @@ export async function queryCtm(
       };
     }
 
-    if (command === "ctm_qoq_top_landing_pages") {
+    if (command === "ctm_qoq_top_landing_pages" || command === "ctm_qoq_sources") {
       const data = await ctmGet(creds.apiKey, creds.apiSecret, `accounts/${accountId}/calls`, {
         start_date: startDate,
         end_date: endDate,
-        per_page: "250",
+        per_page: "100",
       });
 
       const calls = data.calls ?? [];
-      const byPage: Record<string, number> = {};
-      for (const call of calls) {
-        const page = call.referrer_url ?? call.landing_page_url ?? "unknown";
-        const src = (call.traffic_source ?? "").toLowerCase();
-        const isOrganic = organicSources.length === 0 || organicSources.some(s => src.includes(s.toLowerCase()));
-        if (isOrganic) byPage[page] = (byPage[page] ?? 0) + 1;
+
+      if (command === "ctm_qoq_top_landing_pages") {
+        const byPage: Record<string, number> = {};
+        for (const call of calls) {
+          const page = call.referrer_url ?? call.landing_page_url ?? "unknown";
+          byPage[page] = (byPage[page] ?? 0) + 1;
+        }
+        const tableRows = Object.entries(byPage)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 15)
+          .map(([page, cnt]) => [page.replace(/^https?:\/\/[^/]+/, "") || "/", fmtN(cnt)]);
+        return {
+          command,
+          clientName: client.name,
+          dateRange,
+          summary: [],
+          tables: [{ title: "Top Landing Pages by CTM Calls", headers: ["Landing Page", "Calls"], rows: tableRows }],
+        };
       }
 
-      const tableRows = Object.entries(byPage)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 15)
-        .map(([page, cnt]) => [page.replace(/^https?:\/\/[^/]+/, "") || "/", fmtN(cnt)]);
-
-      return {
-        command,
-        clientName: client.name,
-        dateRange,
-        summary: [],
-        tables: [{ title: "Top Landing Pages by CTM Calls", headers: ["Landing Page", "Calls"], rows: tableRows }],
-      };
+      if (command === "ctm_qoq_sources") {
+        const bySource: Record<string, number> = {};
+        for (const call of calls) {
+          const src = call.traffic_source ?? call.source ?? "Unknown";
+          bySource[src] = (bySource[src] ?? 0) + 1;
+        }
+        const tableRows = Object.entries(bySource)
+          .sort((a, b) => b[1] - a[1])
+          .map(([src, cnt]) => [src, fmtN(cnt)]);
+        return {
+          command,
+          clientName: client.name,
+          dateRange,
+          summary: [{ label: "Total CTM Calls", current: fmtN(calls.length), previous: "—", delta: "—", deltaPercent: "—", isPositive: true }],
+          tables: [{ title: "CTM Calls by Source", headers: ["Source", "Calls"], rows: tableRows }],
+        };
+      }
     }
 
     return null;
@@ -108,5 +129,5 @@ export async function queryCtm(
 }
 
 export function handlesCtmCommand(command: Command): boolean {
-  return ["ctm_qoq_organic_calls", "ctm_qoq_top_landing_pages"].includes(command);
+  return ["ctm_qoq_organic_calls", "ctm_qoq_top_landing_pages", "ctm_qoq_sources"].includes(command);
 }

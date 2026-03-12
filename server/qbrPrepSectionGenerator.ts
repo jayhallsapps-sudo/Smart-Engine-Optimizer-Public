@@ -6,6 +6,7 @@ import { fetchNsmGoals, fetchNsmGoalsForSpecificQuarter } from "./sheetsClient";
 import { fetchAirtableWorkLog } from "./airtable";
 import { fetchAsanaWorkLog } from "./asanaClient";
 import { queryCallRail } from "./callrailClient";
+import { queryCtm } from "./ctmClient";
 import { fetchQssbData } from "./qssbClient";
 import { fetchStrategyBank } from "./notionClient";
 import type { Client } from "@shared/schema";
@@ -443,11 +444,11 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
   let callTrackingLandingPages: Array<{ page: string; calls: number }> = [];
   let callTrackingSources: Array<{ source: string; calls: number }> = [];
   try {
+    const ctDateRange = `custom:${quarter.analysisStart}:${quarter.analysisEnd}`;
     if (client.callrailCompanyId) {
-      const dateRange = `custom:${quarter.analysisStart}:${quarter.analysisEnd}`;
       const [landingResult, sourceResult] = await Promise.allSettled([
-        queryCallRail("callrail_qoq_top_landing_pages", client, dateRange),
-        queryCallRail("callrail_qoq_organic_calls", client, dateRange),
+        queryCallRail("callrail_qoq_top_landing_pages", client, ctDateRange),
+        queryCallRail("callrail_qoq_organic_calls", client, ctDateRange),
       ]);
       if (landingResult.status === "fulfilled" && landingResult.value) {
         const rows = landingResult.value.tables?.[0]?.rows ?? [];
@@ -467,6 +468,45 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
         dataSources.push("CallRail");
       }
       callTrackingData = { landingPages: callTrackingLandingPages, sources: callTrackingSources };
+    }
+    // CTM — used when CallRail is absent or returned no data
+    if (client.ctmAccountId && callTrackingSources.length === 0) {
+      // Try detailed source/landing breakdown first; fall back to organic total count
+      const [ctmSourceResult, ctmLandingResult, ctmTotalResult] = await Promise.allSettled([
+        queryCtm("ctm_qoq_sources", client, ctDateRange),
+        queryCtm("ctm_qoq_top_landing_pages", client, ctDateRange),
+        queryCtm("ctm_qoq_organic_calls", client, ctDateRange),
+      ]);
+      let ctmGotData = false;
+      if (ctmSourceResult.status === "fulfilled" && ctmSourceResult.value) {
+        const rows = ctmSourceResult.value.tables?.[0]?.rows ?? [];
+        const ctmSources: Array<{ source: string; calls: number }> = rows.map((r: string[]) => ({
+          source: r[0] ?? "Unknown",
+          calls: parseInt((r[1] ?? "0").replace(/,/g, ""), 10) || 0,
+        })).filter((r: { source: string; calls: number }) => r.calls > 0);
+        if (ctmSources.length > 0) { callTrackingSources = ctmSources; ctmGotData = true; }
+      }
+      if (ctmLandingResult.status === "fulfilled" && ctmLandingResult.value) {
+        const rows = ctmLandingResult.value.tables?.[0]?.rows ?? [];
+        const ctmLanding: Array<{ page: string; calls: number }> = rows.map((r: string[]) => ({
+          page: r[0] ?? "/",
+          calls: parseInt((r[1] ?? "0").replace(/,/g, ""), 10) || 0,
+        })).filter((r: { page: string; calls: number }) => r.calls > 0);
+        if (ctmLanding.length > 0) { callTrackingLandingPages = ctmLanding; ctmGotData = true; }
+      }
+      // Fallback: if detailed records failed, use total count from ctm_qoq_organic_calls
+      if (!ctmGotData && ctmTotalResult.status === "fulfilled" && ctmTotalResult.value) {
+        const totalSummary = ctmTotalResult.value.summary?.[0];
+        const currTotal = totalSummary ? parseInt((totalSummary.current ?? "0").replace(/,/g, ""), 10) : 0;
+        if (currTotal > 0) {
+          callTrackingSources = [{ source: "CTM (all sources)", calls: currTotal }];
+          ctmGotData = true;
+        }
+      }
+      if (ctmGotData) {
+        dataSources.push("CTM");
+        callTrackingData = { landingPages: callTrackingLandingPages, sources: callTrackingSources };
+      }
     }
   } catch (err: any) {
     console.warn("[QBR Prep] Call tracking fetch failed:", err.message);
@@ -673,7 +713,7 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
     duplicateServicePages: sfTierInput.duplicateServicePages ?? 0,
     thinPages: sfTierInput.thinPages ?? 0,
     overlapGeoPages: sfTierInput.overlapGeoPages ?? 0,
-    hasAboutPage:  liveHasPage("about")  ?? (sfTierInput.hasAboutPage ?? false),
+    hasAboutPage:  (client.aboutPageUrl ? true : null) ?? liveHasPage("about") ?? (sfTierInput.hasAboutPage ?? false),
     hasTeamPage:   liveHasPage("team")   ?? (sfTierInput.hasTeamPage ?? false),
     hasAlumniPage: liveHasPage("alumni") ?? (sfTierInput.hasAlumniPage ?? false),
     navAccessibility,
@@ -752,7 +792,7 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
 
     // 1. Primary goal performance question
     const primaryRow = section1.rows.find(r => r.goalType === "Primary Goal/MVP NSM");
-    const primaryKpi = nsmData?.mvpType ? normalizeKpiLabel(nsmData.mvpType) : "admits";
+    const primaryKpi = client.primaryGoal ? normalizeKpiLabel(client.primaryGoal) : (nsmData?.mvpType ? normalizeKpiLabel(nsmData.mvpType) : "admits");
     const callProvider = detectCallTrackingProvider(client);
     if (primaryRow && primaryRow.goal && primaryRow.goal !== ME) {
       if (callProvider) {
@@ -1294,7 +1334,7 @@ function generateSection1(nsmData: any, _ga4Funnel: any, _quarter: QuarterInfo, 
   console.log(`[Section1] callTrackingProvider=${callTrackingProvider ?? "none"}`);
   console.log(`[Section1] nsmData present=${!!nsmData}, prevNsmData present=${!!prevNsmData}`);
 
-  const primaryKpiLabel = nsmData ? normalizeKpiLabel(nsmData.mvpType) : "Admits";
+  const primaryKpiLabel = client.primaryGoal ? normalizeKpiLabel(client.primaryGoal) : (nsmData ? normalizeKpiLabel(nsmData.mvpType) : "Admits");
   const kpiLower = primaryKpiLabel.toLowerCase();
   console.log(`[Section1] Primary KPI label: "${primaryKpiLabel}" (raw mvpType: "${nsmData?.mvpType ?? "—"}")`);
 

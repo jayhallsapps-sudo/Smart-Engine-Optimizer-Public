@@ -376,23 +376,24 @@ function buildCover(reportData: any): (Paragraph | Table)[] {
 // ── Section 1: Goals ──────────────────────────────────────────────────────────
 function buildSection1(reportData: any, secNum: number, edits: Record<string, string>): (Paragraph | Table)[] {
   const rows = (reportData.section1Goals?.rows ?? []).map((r: any, ri: number) => {
-    const shift = safeText(edits[`s1_${ri}_3`] ?? r.goalShift ?? "");
+    const goalType = safeText(edits[`s1_${ri}_0`] ?? r.goalType ?? "");
+    const source   = safeText(edits[`s1_${ri}_2`] ?? r.measurementSource ?? "");
+    const sourceSuffix = source && source !== "—" ? ` [${source}]` : "";
+    const shift    = safeText(edits[`s1_${ri}_3`] ?? r.goalShift ?? "");
     return [
-      safeText(edits[`s1_${ri}_0`] ?? r.goalType ?? ""),
+      goalType + sourceSuffix,
       safeText(edits[`s1_${ri}_1`] ?? r.goal ?? ""),
-      safeText(edits[`s1_${ri}_2`] ?? r.measurementSource ?? ""),
-      shift,
+      shift === "0%" ? "Par" : shift,
       safeText(edits[`s1_${ri}_4`] ?? r.reason ?? ""),
     ];
   });
 
   const cols: ColSpec[] = [
-    { label: "Goal Type",             dxa: 1900 },
-    { label: "Goal / NSM",            dxa: 2400 },
-    { label: "Source",                dxa: 1800 },
-    { label: "Goal Shift vs Last Qtr",dxa: 1500, align: AlignmentType.CENTER },
+    { label: "Goal Type",             dxa: 2200 },
+    { label: "Goal / NSM",            dxa: 4100 },
+    { label: "Goal Shift vs Last Qtr",dxa: 1300, align: AlignmentType.CENTER },
     { label: "Reason",                dxa: 3200 },
-  ]; // 1900+2400+1800+1500+3200 = 10800 ✓
+  ]; // 2200+4100+1300+3200 = 10800 ✓
 
   return [
     sectionHeading(secNum, "What Matters Most This Quarter"),

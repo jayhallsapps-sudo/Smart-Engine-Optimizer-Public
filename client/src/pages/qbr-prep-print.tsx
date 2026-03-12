@@ -185,17 +185,38 @@ export default function QbrPrepPrint() {
     }
   }
 
-  const s1Rows = [
-    ...s1.rows.map((r: any, ri: number) => { const gs = e(`s1_${ri}_3`, r.goalShift); return [e(`s1_${ri}_0`, r.goalType), e(`s1_${ri}_1`, r.goal), e(`s1_${ri}_2`, r.measurementSource), gs === "0%" ? "Par" : gs, e(`s1_${ri}_4`, r.reason)]; }),
-    ...getCustomRows(edits, "s1"),
+  const s1Rows: ReactNode[][] = [
+    ...s1.rows.map((r: any, ri: number) => {
+      const gs = e(`s1_${ri}_3`, r.goalShift);
+      const src = edits[`s1_${ri}_2`] ?? r.measurementSource;
+      return [
+        <span style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+          {cell(e(`s1_${ri}_0`, r.goalType))}
+          {src && src !== "—" && (
+            <span style={{ display: "inline-flex", flexWrap: "wrap", gap: 3 }}>
+              {src.split(/[,+]/).map((s: string, si: number) => (
+                <SourceBadge key={si} source={s.trim()} />
+              ))}
+            </span>
+          )}
+        </span>,
+        cell(e(`s1_${ri}_1`, r.goal)),
+        gs === "0%" ? "Par" : gs,
+        cell(e(`s1_${ri}_4`, r.reason)),
+      ];
+    }),
+    ...customRowsAsNodes(edits, "s1"),
   ];
 
   const s2aRows: ReactNode[][] = [
-    ...s2.topConvertingPages.map((r: any, ri: number) => [
-      badgeCell(e(`s2a_${ri}_0`, r.type), r.dataSource),
-      cell(e(`s2a_${ri}_1`, r.page)),
-      cell(e(`s2a_${ri}_2`, r.notes)),
-    ]),
+    ...s2.topConvertingPages.map((r: any, ri: number) => {
+      const pageVal = e(`s2a_${ri}_1`, r.page);
+      return [
+        badgeCell(e(`s2a_${ri}_0`, r.type), r.dataSource),
+        printIsPathLike(pageVal) ? <PrintPathTag value={pageVal} /> : cell(pageVal),
+        cell(e(`s2a_${ri}_2`, r.notes)),
+      ];
+    }),
     ...customRowsAsNodes(edits, "s2a"),
   ];
 
@@ -223,16 +244,22 @@ export default function QbrPrepPrint() {
   const hasPageDeltas = s3.topTrafficPages.some((r: any) => r.clicksDelta || r.impressions || r.queries);
   const pageColCount = hasPageDeltas ? 9 : 4;
 
-  const s4Rows = [
-    ...s4.services.map((r: any, ri: number) => [e(`s4_${ri}_0`, r.service), e(`s4_${ri}_1`, r.examplePage)]),
-    ...getCustomRows(edits, "s4"),
+  const s4Rows: ReactNode[][] = [
+    ...s4.services.map((r: any, ri: number) => {
+      const epVal = e(`s4_${ri}_1`, r.examplePage);
+      return [
+        cell(e(`s4_${ri}_0`, r.service)),
+        printIsPathLike(epVal) ? <PrintPathTag value={epVal} /> : cell(epVal),
+      ];
+    }),
+    ...customRowsAsNodes(edits, "s4"),
   ];
 
   const s6Rows: ReactNode[][] = [
     ...s6.priorities.map((r: any, ri: number) => [
       cell(e(`s6_${ri}_0`, String(r.priority))),
       badgeCell(e(`s6_${ri}_1`, r.initiative), r.source),
-      cell(e(`s6_${ri}_2`, r.tier)),
+      <PrintTierBadge tier={e(`s6_${ri}_2`, r.tier)} />,
       cell(e(`s6_${ri}_3`, r.action)),
       cell(e(`s6_${ri}_4`, r.reason)),
     ]),
@@ -313,7 +340,7 @@ export default function QbrPrepPrint() {
           {secVis("section_goals") && (
             <>
               <SectionHeading num={secNums["section_goals"]} title="What Matters Most This Quarter" />
-              <DataTable headers={["Goal Type", "Goal", "Source", "Goal Shift vs Last Quarter", "Reason"]} rows={s1Rows} />
+              <ReportTable headers={["Goal Type", "Goal", "Goal Shift vs Last Quarter", "Reason"]} rows={s1Rows} />
             </>
           )}
 
@@ -322,19 +349,19 @@ export default function QbrPrepPrint() {
               <SectionHeading num={secNums["section_conversions"]} title="Where Conversions Actually Happen" />
               {tblVis("table_s2_pages") && (
                 <>
-                  <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Converting Pages</div>
+                  <SubLabel text="Top Converting Pages" />
                   <ReportTable headers={["Type", "Page / Pattern", "Notes / What We're Learning"]} rows={s2aRows} />
                 </>
               )}
               {tblVis("table_s2_patterns") && (
                 <>
-                  <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Conversion Patterns</div>
+                  <SubLabel text="Top Conversion Patterns" />
                   <ReportTable headers={["Pattern", "Why It Matters", "Evidence"]} rows={s2cRows} />
                 </>
               )}
               {tblVis("table_s2_sources") && (
                 <>
-                  <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Converting Sources</div>
+                  <SubLabel text="Top Converting Sources" />
                   <ReportTable headers={["Source", "What's Converting", "Notes / What We're Learning"]} rows={s2bRows} />
                 </>
               )}
@@ -346,7 +373,7 @@ export default function QbrPrepPrint() {
 
           {secVis("section_traffic") && !printSecAutoHidden("section_traffic", hiddenTables) && (<>
           <SectionHeading num={secNums["section_traffic"]!} title="Top Organic Traffic Drivers" />
-          {tblVis("table_s3_topics") && <><div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Traffic Topics</div>
+          {tblVis("table_s3_topics") && <><SubLabel text="Top Traffic Topics" sources={["GSC"]} />
           <div style={{ border: `1px solid ${ACCENT}28`, borderRadius: 4, overflow: "hidden", marginBottom: 12 }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px", tableLayout: "fixed" }}>
               <colgroup>
@@ -420,7 +447,7 @@ export default function QbrPrepPrint() {
             </table>
           </div></>}
 
-          {tblVis("table_s3_pages") && <><div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6 }}>Top Traffic Pages</div>
+          {tblVis("table_s3_pages") && <><SubLabel text="Top Traffic Pages" sources={["GSC"]} />
           <div style={{ border: `1px solid ${ACCENT}28`, borderRadius: 4, overflow: "hidden", marginBottom: 12 }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px", tableLayout: "fixed" }}>
               <colgroup>
@@ -461,7 +488,7 @@ export default function QbrPrepPrint() {
                   return (
                     <React.Fragment key={`page-${ri}`}>
                       <tr style={{ backgroundColor: bg }}>
-                        <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4, wordBreak: "break-word", overflow: "hidden" }}>{cell(e(`s3b_${ri}_0`, r.page))}</td>
+                        <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4, wordBreak: "break-word", overflow: "hidden" }}>{(() => { const v = e(`s3b_${ri}_0`, r.page); return printIsPathLike(v) ? <PrintPathTag value={v} /> : cell(v); })()}</td>
                         <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4, wordBreak: "break-word", overflow: "hidden" }}>{cell(e(`s3b_${ri}_1`, r.clicks))}</td>
                         {hasPageDeltas && <>
                           <td style={{ padding: "6px 8px", borderBottom: cellBorder, verticalAlign: "top", lineHeight: 1.4, wordBreak: "break-word", overflow: "hidden", color: r.clicksDelta?.startsWith("-") ? "#DC2626" : "#16A34A" }}>{r.clicksDelta ?? "—"}</td>
@@ -497,7 +524,12 @@ export default function QbrPrepPrint() {
           {secVis("section_services") && !printSecAutoHidden("section_services", hiddenTables) && (
             <>
               <SectionHeading num={secNums["section_services"]!} title="Site Service Overview" />
-              {tblVis("table_s4_services") && <DataTable headers={["Service", "Example Page"]} rows={s4Rows} />}
+              {tblVis("table_s4_services") && (
+                <>
+                  <SubLabel text="Service Pages" sources={["Screaming Frog"]} />
+                  <ReportTable headers={["Service", "Example Page"]} rows={s4Rows} />
+                </>
+              )}
             </>
           )}
 

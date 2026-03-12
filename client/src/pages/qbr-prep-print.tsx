@@ -710,7 +710,7 @@ export default function QbrPrepPrint() {
               {sectionSuggestedKeywords?.rows?.length > 0 && (
                 <div style={{ padding: "9px 12px", backgroundColor: "#FFF5F5", borderRadius: 4, border: `1.5px solid ${ACCENT}40`, marginBottom: 12, fontSize: "9px", color: "#374151", lineHeight: 1.65 }}>
                   <span style={{ fontWeight: 700, color: ACCENT, textTransform: "uppercase" as const, letterSpacing: "0.05em", fontSize: "8.5px", marginRight: 5 }}>About This List:</span>
-                  Showing {sectionSuggestedKeywords.rows.length} keyword opportunities (2× monthly credit capacity of {sectionSuggestedKeywords.monthlyCredits}). Grounded in GSC query data, site crawl inventory, and page performance. Filtered to strategic Level of Care, program, condition, and location-intent terms.
+                  Showing {sectionSuggestedKeywords.rows.length} keyword opportunities (2× monthly credit capacity of {sectionSuggestedKeywords.monthlyCredits}). Grounded in GSC query data, SF site crawl inventory, and page performance. Filtered to strategic Levels of Care, condition, and location-intent terms.
                 </div>
               )}
               <div style={{ border: `1px solid ${ACCENT}28`, borderRadius: 4, overflow: "hidden", marginBottom: 16 }}>

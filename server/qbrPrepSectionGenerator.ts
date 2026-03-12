@@ -61,7 +61,7 @@ function sanitizeString(s: string): string {
   out = out.replace(/\s+via\s+\w{1,8}\.?\s*$/gi, ".");
   out = out.replace(/\s+via\s*\.?\s*$/gi, ".");
   out = out.replace(/\bnot\s*\.\s*$/gi, "");
-  out = out.replace(/\balready\s+\w{1,5}\.?\s*$/gi, "");
+  out = out.replace(/\b(?:is|are|was|been|not)\s+already\s+\w{1,5}\.?\s*$/gi, "");
   out = out.replace(/\bunde\w{0,6}\.?\s*$/gi, "");
 
   // F) Whitespace/punctuation normalization
@@ -78,7 +78,7 @@ const SOURCE_NORMALIZE_MAP: [RegExp, string][] = [
   [/\bgoogle search console\b|\bgsc\b/i, "GSC"],
   [/\bcallrail\b|\bcall rail\b/i, "CallRail"],
   [/\bcall tracking metrics\b|\bctm\b/i, "CTM"],
-  [/\bscreaming frog\b/i, "Screaming Frog"],
+  [/\bscreaming frog\b/i, "SF"],
   [/\bmulti.?source\b/i, "Multi-source"],
   [/\bgbp\b|\bgoogle business profile\b/i, "GBP"],
   [/\bairtable\b/i, "Airtable"],
@@ -2415,7 +2415,7 @@ function buildTierScorecard(tierInput: TierDiagnosisInput): TierScorecardEntry[]
     `Verify Insurance / VOB page: ${vobAccessLabel()}`,
     `Contact / Admissions page: ${contactAccessLabel()}`,
     `Detox Levels of Care page: ${tierInput.hasDetoxPage ? "Confirmed present" : "Not confirmed — no dedicated detox page found at standard paths; verify with AM and provide URL"}`,
-    `Residential page: ${tierInput.hasResidentialPage ? "Confirmed present" : "Not confirmed — no dedicated residential page found at standard paths; verify with AM and provide URL"}`,
+    `Residential / Inpatient Level of Care page: ${tierInput.hasResidentialPage ? "Confirmed present" : "Not confirmed — no dedicated Residential / Inpatient page found at standard paths; verify with AM and provide URL"}`,
   ].join(". ");
 
   const t1Inferences = tierInput.highIntentTrafficLandsOnClearUrls
@@ -2477,7 +2477,7 @@ function buildTierScorecard(tierInput: TierDiagnosisInput): TierScorecardEntry[]
       findings: t1Findings,
       inferences: t1Inferences,
       whyItMatters: "Tier 1 pages are the foundation of organic admissions conversion. Without a clear VOB page, contact path, and primary Levels of Care pages, all higher-tier work cannot compound.",
-      source: "Screaming Frog",
+      source: "SF",
     },
     {
       tierNumber: 2,
@@ -2486,7 +2486,7 @@ function buildTierScorecard(tierInput: TierDiagnosisInput): TierScorecardEntry[]
       findings: t2Findings,
       inferences: t2Inferences,
       whyItMatters: "Site architecture determines how authority flows between pages. Hub structures allow Google to map topical expertise and consolidate ranking power into Levels of Care pages.",
-      source: "Screaming Frog",
+      source: "SF",
     },
     {
       tierNumber: 3,
@@ -2495,7 +2495,7 @@ function buildTierScorecard(tierInput: TierDiagnosisInput): TierScorecardEntry[]
       findings: t3Findings,
       inferences: t3Inferences,
       whyItMatters: "Technical drag (errors, thin content, duplication) reduces crawl efficiency and can suppress rankings across all pages — including core conversion pages.",
-      source: "Screaming Frog + GSC",
+      source: "SF + GSC",
     },
     {
       tierNumber: 4,
@@ -2504,7 +2504,7 @@ function buildTierScorecard(tierInput: TierDiagnosisInput): TierScorecardEntry[]
       findings: t4Findings,
       inferences: t4Inferences,
       whyItMatters: "Authority depth signals real expertise and community trust — factors that increasingly influence Google rankings for health-related (YMYL) content.",
-      source: "Screaming Frog",
+      source: "SF",
     },
   ];
 }
@@ -2574,30 +2574,42 @@ function parseAmContext(sentiment?: string, hypothesis?: string, auditNotes?: st
 }
 
 function enrichWithAmContext(priorities: PriorityRow[], amCtx: AmContext): void {
+  // Truncate at word boundary, never mid-word, remove trailing incomplete sentence fragments
+  function amSnippet(text: string, maxChars: number): string {
+    if (text.length <= maxChars) return text.replace(/\.+$/, "");
+    // Try to find last sentence boundary within limit
+    const within = text.slice(0, maxChars);
+    const lastPeriod = within.lastIndexOf(".");
+    if (lastPeriod > maxChars * 0.5) return within.slice(0, lastPeriod).trim();
+    // Fall back to word boundary
+    return within.replace(/\s+\S*$/, "").trim().replace(/[,—]+$/, "").trim();
+  }
+
   for (const p of priorities) {
     const initLower = p.initiative.toLowerCase();
+    const snippet = amCtx.hypothesisSummary ? amSnippet(amCtx.hypothesisSummary, 120) : null;
+    if (!snippet) continue;
 
     if (amCtx.hypothesisSignals.includes("admissions_path") &&
-      /admissions|conversion path|vob/.test(initLower) && amCtx.hypothesisSummary) {
-      p.reason += ` AM focus area aligns: ${amCtx.hypothesisSummary.slice(0, 90).replace(/\.$/, "")}.`;
+      /admissions|conversion path|vob/.test(initLower)) {
+      p.reason += ` AM focus area aligns: ${snippet}.`;
     }
     if (amCtx.hypothesisSignals.includes("service_page") &&
-      /service page|service foundation/.test(initLower) && amCtx.hypothesisSummary) {
-      p.reason += ` AM focus area aligns: ${amCtx.hypothesisSummary.slice(0, 90).replace(/\.$/, "")}.`;
+      /service page|service foundation/.test(initLower)) {
+      p.reason += ` AM focus area aligns: ${snippet}.`;
     }
     if (amCtx.hypothesisSignals.includes("internal_linking") &&
-      /internal link/.test(initLower) && amCtx.hypothesisSummary) {
-      p.reason += ` AM context: ${amCtx.hypothesisSummary.slice(0, 80).replace(/\.$/, "")}.`;
+      /internal link/.test(initLower)) {
+      p.reason += ` AM context: ${snippet}.`;
     }
     if (amCtx.hypothesisSignals.includes("content") &&
-      /content refresh/.test(initLower) && amCtx.hypothesisSummary) {
-      p.reason += ` AM context: ${amCtx.hypothesisSummary.slice(0, 80).replace(/\.$/, "")}.`;
+      /content refresh/.test(initLower)) {
+      p.reason += ` AM context: ${snippet}.`;
     }
     if (amCtx.hypothesisSignals.includes("technical") &&
-      /technical cleanup/.test(initLower) && amCtx.hypothesisSummary) {
-      p.reason += ` AM focus area aligns: ${amCtx.hypothesisSummary.slice(0, 80).replace(/\.$/, "")}.`;
+      /technical cleanup/.test(initLower)) {
+      p.reason += ` AM focus area aligns: ${snippet}.`;
     }
-
   }
 }
 
@@ -2838,7 +2850,7 @@ function generateSection6(
         tier: "Tier 3",
         action: `Audit ${tierInput.nonIndexable} non-indexable pages — identify any service, location, or content pages accidentally excluded from Google's index and remove incorrect noindex tags`,
         reason: "Non-indexable pages cannot rank regardless of content quality. A single service page accidentally noindexed represents zero organic traffic potential",
-        source: "Screaming Frog",
+        source: "SF",
       });
     }
     if (tierInput.overlapGeoPages > 5 && !isAlreadyDone("geo") && !isAlreadyDone("location")) {
@@ -2867,7 +2879,7 @@ function generateSection6(
   function examplePageList(pages: typeof unclearTrafficPages, max = 5): string {
     const slugs = pages.slice(0, max).map(p => p.page.replace(/^https?:\/\/[^/]+/, "").replace(/\/$/, "") || p.page);
     if (slugs.length === 0) return "";
-    return `: ${slugs.join(", ")}`;
+    return `: ${slugs.join(", ")}.`;
   }
 
   // Cluster notation helper: "Topic Name (N queries) (X% of clicks)"
@@ -2894,11 +2906,11 @@ function generateSection6(
       initiative: "Internal Linking — High-Traffic to Conversion",
       tier: `Tier ${Math.min(section5.tier, 3)}`,
       action: unclearTrafficPages.length > 0
-        ? `Add internal links from high-traffic pages with low admit connection to primary Levels of Care and VOB pages${internalLinkExamples}`
-        : "Add internal links from high-traffic informational pages to primary Levels of Care and VOB pages",
+        ? `Add internal links from high-traffic pages with low admit connection to primary Levels of Care and VOB pages${internalLinkExamples || "."}`
+        : "Add internal links from high-traffic informational pages to primary Levels of Care and VOB pages.",
       reason: topUnclearPage
-        ? `${unclearTrafficPages.length} page${unclearTrafficPages.length > 1 ? "s" : ""} (led by ${topUnclearPage.page}, ${topUnclearPage.clicks} clicks) carry organic traffic with limited path to admissions — targeted internal links to Levels of Care and VOB pages are the lowest-cost lever to convert that existing traffic`
-        : "Traffic data shows high-volume informational pages with weak admit connection — internal linking is the lowest-cost conversion lever",
+        ? `${unclearTrafficPages.length} page${unclearTrafficPages.length > 1 ? "s" : ""} (led by ${topUnclearPage.page}, ${topUnclearPage.clicks} clicks) carry organic traffic with limited path to admissions — targeted internal links to Levels of Care and VOB pages are the lowest-cost lever to convert that existing traffic.`
+        : "Traffic data shows high-volume informational pages with weak admit connection — internal linking is the lowest-cost conversion lever.",
       condition: unclearTrafficPages.length > 0 && !priorities.find(p => p.initiative.includes("Internal Link")),
       source: "GSC",
     },
@@ -2906,11 +2918,11 @@ function generateSection6(
       initiative: "Conversion Path Audit",
       tier: `Tier ${Math.min(section5.tier, 4)}`,
       action: goalBehind
-        ? `Audit and repair the organic-to-VOB path — goal is behind pace and conversion leakage is the most likely cause`
-        : "Audit internal-link paths from top organic landing pages to Verify Insurance and Contact pages — confirm those links exist above the fold or in body copy, and validate that GA4 event tracking is firing on the destination actions",
+        ? "Audit and repair the organic-to-VOB path — goal is behind pace and conversion leakage is the most likely cause."
+        : "Audit internal-link paths from top organic landing pages to Verify Insurance and Contact pages — confirm those links exist above the fold or in body copy, and validate that GA4 event tracking is firing on the destination actions.",
       reason: goalBehind
-        ? `Organic sessions are behind Q pace — improving conversion rate on existing traffic is higher ROI than acquiring new traffic`
-        : "Conversion path gaps compound slowly; fixing them now avoids a larger gap by end of quarter (lower confidence without GA4 data)",
+        ? "Organic sessions are behind Q pace — improving conversion rate on existing traffic is higher ROI than acquiring new traffic."
+        : "Conversion path gaps compound slowly; fixing them now avoids a larger gap by end of quarter (lower confidence without GA4 data).",
       condition: !priorities.find(p => p.initiative.includes("Conversion")),
       source: "GA4",
     },
@@ -2918,11 +2930,11 @@ function generateSection6(
       initiative: "Content Refresh — Highest-Traffic Assisted Pages",
       tier: `Tier ${Math.min(section5.tier + 1, 5)}`,
       action: topTrafficTopic
-        ? `Refresh content in the ${clusterRef(topTrafficTopic)} to improve engagement and strengthen links to Levels of Care pages${refreshExamples}`
-        : `Refresh highest-traffic assisted-conversion pages${thinPagesNote}${refreshExamples}`,
+        ? `Refresh content in the ${clusterRef(topTrafficTopic)} to improve engagement and strengthen links to Levels of Care pages${refreshExamples || "."}`
+        : `Refresh highest-traffic assisted-conversion pages${thinPagesNote}${refreshExamples || "."}`,
       reason: topTrafficTopic
-        ? `The ${clusterRef(topTrafficTopic)} drives meaningful traffic but shows ${topTrafficTopic.connectionToAdmits.toLowerCase()} admit connection — refreshed content with stronger CTAs and internal links captures more value from existing impressions`
-        : `Existing high-traffic pages${hasThinPages ? ` and ${tierInput.thinPages} detected thin pages` : ""} are the fastest path to improving organic conversion without new content investment`,
+        ? `The ${clusterRef(topTrafficTopic)} drives meaningful traffic but shows ${topTrafficTopic.connectionToAdmits.toLowerCase()} admit connection — refreshed content with stronger CTAs and internal links captures more value from existing impressions.`
+        : `Existing high-traffic pages${hasThinPages ? ` and ${tierInput.thinPages} detected thin pages` : ""} are the fastest path to improving organic conversion without new content investment.`,
       condition: !priorities.find(p => p.initiative.includes("Content Refresh")) && !isAlreadyDone("content refresh"),
       source: "GSC",
     },
@@ -2933,8 +2945,8 @@ function generateSection6(
         ? `Fix ${tierInput.missingH1s} pages with missing H1 tags and audit meta descriptions on top-traffic pages to improve CTR${examplePageList(section3.topTrafficPages.slice(0, 4), 4)}`
         : `Audit title tags and meta descriptions on highest-impression pages to improve organic CTR${examplePageList(section3.topTrafficPages.slice(0, 4), 4)}`,
       reason: hasMissingH1s
-        ? `Crawl shows ${tierInput.missingH1s} pages without H1 tags — these pages are structurally weak and likely suppressed in rankings; fixing them requires low effort for potentially high impact`
-        : "CTR improvements on existing impression volume require no new traffic — they are free growth on what the site already earns",
+        ? `Crawl shows ${tierInput.missingH1s} pages without H1 tags — these pages are structurally weak and likely suppressed in rankings; fixing them requires low effort for potentially high impact.`
+        : "CTR improvements on existing impression volume require no new traffic — they are free growth on what the site already earns.",
       condition: !priorities.find(p => p.initiative.includes("Title") || p.initiative.includes("Meta")),
       source: "Multi-source",
     },

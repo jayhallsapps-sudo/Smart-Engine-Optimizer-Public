@@ -1,0 +1,124 @@
+You are doing the final artifact-consistency pass on the QBS generator and output. This is not a rebuild. This is not a logic refactor. This is not a design change. Fix only the remaining artifact-level consistency and copy issues visible in the latest Anchored Tides PDF, regenerate the PDF, and verify that no solved behavior regressed.
+
+Do not reopen solved logic.
+Do not redesign the report.
+Do not change the red QBS design language.
+Do not change the table design system.
+Do not alter working live-page resolution, Tier logic, Section 4 page mapping, Section 7 clustering, Section 8 terminology, Section 9 framing, or source-badge behavior except where required to fix the exact issues below.
+
+PRIMARY OBJECTIVE
+
+Polish the latest Anchored Tides QBS so the artifact is internally consistent, fully readable, and free of remaining copy / labeling drift.
+
+REMAINING ISSUES TO FIX
+
+1) USE “SF” EVERYWHERE APPROPRIATE
+Current requirement:
+Screaming Frog should be labeled as “SF” anywhere the report is using a compact source label, header label, source badge, or column label.
+
+Required fix:
+- use “SF” instead of “Screaming Frog” anywhere the compact report label is appropriate
+- preserve existing color mapping so SF uses the same badge treatment already assigned
+- do not create mixed labeling like “GSC + SF” in one place and “GSC + Screaming Frog” in another if both are functioning as source labels
+
+Acceptance requirement:
+- compact source references use “SF” consistently in the final PDF where appropriate
+
+2) SECTION 6 — REMOVE REMAINING TRUNCATED / CLIPPED COPY
+Current problem:
+Section 6 still contains copy that reads clipped or incomplete in places, especially in action/why-it-matters cells and summary-style text.
+
+Required fix:
+- make sure every sentence in Critical Observations and Priority rows renders as a complete thought
+- do not slice AM-context text mid-sentence
+- do not leave clipped endings such as trailing fragments, dangling punctuation, or obviously cut-off phrases
+- preserve concise writing, but it must read intentional and complete
+
+Acceptance requirement:
+- no clipped or obviously truncated prose remains in Section 6 in the final PDF
+
+3) SECTION 5 / SECTION 7 — TERMINOLOGY CONSISTENCY
+Current problem:
+There is still mild terminology drift in a few places where “program” or softer phrasing appears where “Levels of Care” is the better Webserv framing.
+
+Required fix:
+- where the report is clearly referring to treatment-structure pages, use “Levels of Care” language consistently
+- examples to review:
+  - Section 5 Tier 1 findings and narrative
+  - Section 7 “About This List” box
+- do not do blind global replacement; only change wording where context clearly calls for Levels of Care phrasing
+
+Acceptance requirement:
+- the final PDF does not use weaker “program” phrasing where “Levels of Care” is the correct concept
+
+4) SECTION 5 / SECTION 6 — RESIDENTIAL COPY CONSISTENCY
+Current problem:
+Residential is still treated as unresolved, which may be correct, but the wording must stay precise and consistent across diagnosis and actions.
+
+Required fix:
+- ensure Residential is referred to consistently as a Residential / Inpatient Level of Care page where appropriate
+- if it remains unconfirmed, say so consistently without drifting into generic “page” language
+- make sure Section 5 findings and Section 6 recommended action use the same framing and do not contradict each other
+
+Acceptance requirement:
+- Residential handling is consistent across Sections 4, 5, and 6 in the final PDF
+
+NON-NEGOTIABLE PRESERVATION RULES
+
+Do not break any of the following already-solved behaviors:
+- Section 2 using real live pages instead of fabricated generic paths
+- Section 2 classifying /admissions-and-alcohol-rehab-insurance/ correctly
+- Section 4 resolving actual live Levels of Care and support pages
+- Section 4 Residential remaining unresolved only if it is truly absent
+- Section 5 Tier 1 narrative and scorecard staying aligned at Partial
+- Section 6 Critical Observations bullets staying complete and not clipped
+- Section 7 clean intent clustering for molly / tramadol / alcohol terms
+- Section 7 row-count summary matching actual rendered row count
+- IOP row staying mapped to the confirmed live IOP page
+- corrected “Levels of Care and VOB pages” terminology in Section 8
+- corrected Tier framing in Section 9
+- red QBS design language
+- source-badge no-wrap behavior in Section 1
+- compact Screaming Frog label using “SF” where appropriate
+
+REGRESSION FAILURES TO CHECK
+
+Do not declare completion if any of these reappear:
+- /programs/detox or /programs/residential fabricated paths
+- “Manual entry needed” returning for pages already resolved live
+- Tier 1 contradiction returning
+- service-page terminology leaking back in
+- IOP row reverting to create-new
+- Section 7 summary count mismatch returning
+- source badges wrapping badly again
+- “Screaming Frog” reappearing in compact source labels where “SF” should be used
+
+FINAL VALIDATION REQUIREMENT
+
+Use Anchored Tides again as the validation account.
+
+Required steps:
+1. Generate a fresh Anchored Tides QBS using the live connected data and the same AM inputs already provided.
+2. Export the actual PDF.
+3. Provide a direct link/path to the generated PDF.
+4. Provide a short QA note that covers only:
+   - SF labeling consistency
+   - Section 6 clipped-copy cleanup
+   - Section 5 / Section 7 terminology tightening
+   - Residential copy consistency across Sections 4, 5, and 6
+   - confirmation that no previously solved issue regressed
+
+FAILURE RULE
+
+If the generated Anchored Tides PDF still contains any of the issues above, do not declare completion.
+
+Instead, list:
+- the exact section
+- the exact remaining issue
+- the exact fix still required
+
+FINAL INSTRUCTION
+
+This is the final artifact-consistency pass.
+Fix only the remaining copy / labeling / consistency issues listed above, regenerate the Anchored Tides PDF, and prove those exact issues are gone without breaking solved behavior.
+Do not send a summary-only reassurance without the PDF artifact link.

@@ -956,7 +956,7 @@ export function QbrPrepPreview({
             ) : !isSectionAutoHidden("section_services", hiddenTables) && sectionNums["section_services"] !== undefined ? (
               <>
                 <SectionHeading num={sectionNums["section_services"]} title="Levels of Care Overview" onHide={hideSecBtn("section_services")} />
-                {tblSubLabel("table_s4_services", "Levels of Care", !!hiddenTables["table_s4_services"], ["Screaming Frog"])}
+                {tblSubLabel("table_s4_services", "Levels of Care", !!hiddenTables["table_s4_services"], ["SF"])}
                 {hiddenTables["table_s4_services"] ? tblHiddenBar("table_s4_services", "Levels of Care") : (
                   <AddableReportTable tableId="s4" headers={["Level of Care", "Page", "SEO Score", "Notes"]} sourceRows={s4SourceRows} edits={edits} onEdit={onEdit} />
                 )}

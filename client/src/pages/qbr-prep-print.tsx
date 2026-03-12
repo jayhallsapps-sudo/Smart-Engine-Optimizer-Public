@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import swoopHeaderFallback from "@assets/HEADER_IMAGE_1773063127856.png";
-import { ReportTable, SourceBadge, getCustomRows } from "../components/report-preview/report-table";
+import { ReportTable, SourceBadge, getCustomRows, getDeletedSourceRows } from "../components/report-preview/report-table";
 import { computeSharedSource, computeSharedSourceList } from "@/lib/reportUtils";
 
 const ACCENT = "#C0392B";
@@ -251,26 +251,37 @@ export default function QbrPrepPrint() {
     }
   }
 
+  const delS1 = getDeletedSourceRows(edits, "s1");
+  const delS2a = getDeletedSourceRows(edits, "s2a");
+  const delS2c = getDeletedSourceRows(edits, "s2c");
+  const delS2b = getDeletedSourceRows(edits, "s2b");
+  const delS4 = getDeletedSourceRows(edits, "s4");
+  const delS6 = getDeletedSourceRows(edits, "s6");
+  const delS7 = getDeletedSourceRows(edits, "s7");
+  const delKw = getDeletedSourceRows(edits, "kw");
+
   const s1Rows: ReactNode[][] = [
-    ...s1.rows.map((r: any, ri: number) => {
-      const gs = e(`s1_${ri}_3`, r.goalShift);
-      const src = edits[`s1_${ri}_2`] ?? r.measurementSource;
-      return [
-        <span style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-          {cell(e(`s1_${ri}_0`, r.goalType))}
-          {src && src !== "—" && (
-            <span style={{ display: "inline-flex", flexWrap: "wrap", gap: 3 }}>
-              {src.split(/[,+]/).map((s: string, si: number) => (
-                <SourceBadge key={si} source={s.trim()} />
-              ))}
-            </span>
-          )}
-        </span>,
-        cell(e(`s1_${ri}_1`, r.goal)),
-        gs === "0%" ? "Par" : gs,
-        cell(e(`s1_${ri}_4`, r.reason)),
-      ];
-    }),
+    ...s1.rows
+      .filter((_: any, ri: number) => !delS1.has(ri))
+      .map((r: any, ri: number) => {
+        const gs = e(`s1_${ri}_3`, r.goalShift);
+        const src = edits[`s1_${ri}_2`] ?? r.measurementSource;
+        return [
+          <span style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+            {cell(e(`s1_${ri}_0`, r.goalType))}
+            {src && src !== "—" && (
+              <span style={{ display: "inline-flex", flexWrap: "wrap", gap: 3 }}>
+                {src.split(/[,+]/).map((s: string, si: number) => (
+                  <SourceBadge key={si} source={s.trim()} />
+                ))}
+              </span>
+            )}
+          </span>,
+          cell(e(`s1_${ri}_1`, r.goal)),
+          gs === "0%" ? "Par" : gs,
+          cell(e(`s1_${ri}_4`, r.reason)),
+        ];
+      }),
     ...customRowsAsNodes(edits, "s1"),
   ];
 
@@ -281,32 +292,38 @@ export default function QbrPrepPrint() {
   const kwSharedSource  = computeSharedSourceList((sectionSuggestedKeywords?.rows ?? []).map((r: any) => r.sources ?? []));
 
   const s2aRows: ReactNode[][] = [
-    ...s2.topConvertingPages.map((r: any, ri: number) => {
-      const pageVal = e(`s2a_${ri}_1`, r.page);
-      return [
-        badgeCell(e(`s2a_${ri}_0`, r.type), s2aSharedSource ? undefined : r.dataSource),
-        printIsPathLike(pageVal) ? <PrintPathTag value={pageVal} /> : cell(pageVal),
-        cell(e(`s2a_${ri}_2`, r.notes)),
-      ];
-    }),
+    ...s2.topConvertingPages
+      .filter((_: any, ri: number) => !delS2a.has(ri))
+      .map((r: any, ri: number) => {
+        const pageVal = e(`s2a_${ri}_1`, r.page);
+        return [
+          badgeCell(e(`s2a_${ri}_0`, r.type), s2aSharedSource ? undefined : r.dataSource),
+          printIsPathLike(pageVal) ? <PrintPathTag value={pageVal} /> : cell(pageVal),
+          cell(e(`s2a_${ri}_2`, r.notes)),
+        ];
+      }),
     ...customRowsAsNodes(edits, "s2a"),
   ];
 
   const s2cRows: ReactNode[][] = [
-    ...(s2.topConversionPatterns ?? []).map((r: any, ri: number) => [
-      cell(e(`s2c_${ri}_0`, r.pattern)),
-      cell(e(`s2c_${ri}_1`, r.whyItMatters)),
-      cell(e(`s2c_${ri}_2`, r.evidence)),
-    ]),
+    ...(s2.topConversionPatterns ?? [])
+      .filter((_: any, ri: number) => !delS2c.has(ri))
+      .map((r: any, ri: number) => [
+        cell(e(`s2c_${ri}_0`, r.pattern)),
+        cell(e(`s2c_${ri}_1`, r.whyItMatters)),
+        cell(e(`s2c_${ri}_2`, r.evidence)),
+      ]),
     ...customRowsAsNodes(edits, "s2c"),
   ];
 
   const s2bRows: ReactNode[][] = [
-    ...s2.topConvertingSources.map((r: any, ri: number) => [
-      badgeCell(e(`s2b_${ri}_0`, r.source), r.dataSource),
-      cell(e(`s2b_${ri}_1`, r.whatsConverting)),
-      cell(e(`s2b_${ri}_2`, r.notes)),
-    ]),
+    ...s2.topConvertingSources
+      .filter((_: any, ri: number) => !delS2b.has(ri))
+      .map((r: any, ri: number) => [
+        badgeCell(e(`s2b_${ri}_0`, r.source), r.dataSource),
+        cell(e(`s2b_${ri}_1`, r.whatsConverting)),
+        cell(e(`s2b_${ri}_2`, r.notes)),
+      ]),
     ...customRowsAsNodes(edits, "s2b"),
   ];
 
@@ -317,43 +334,49 @@ export default function QbrPrepPrint() {
   const pageColCount = hasPageDeltas ? 9 : 4;
 
   const s4Rows: ReactNode[][] = [
-    ...s4.services.map((r: any, ri: number) => {
-      const epVal = e(`s4_${ri}_1`, r.examplePage);
-      return [
-        cell(e(`s4_${ri}_0`, r.service)),
-        printIsPathLike(epVal) ? <PrintPathTag value={epVal} /> : cell(epVal),
-        r.seoScore != null ? <PrintSeoScoreBadge score={r.seoScore} /> : cell("—"),
-        <span style={{ fontSize: "9px", color: "#6B7280", lineHeight: 1.4 }}>{r.notes ?? ""}</span>,
-      ];
-    }),
+    ...s4.services
+      .filter((_: any, ri: number) => !delS4.has(ri))
+      .map((r: any, ri: number) => {
+        const epVal = e(`s4_${ri}_1`, r.examplePage);
+        return [
+          cell(e(`s4_${ri}_0`, r.service)),
+          printIsPathLike(epVal) ? <PrintPathTag value={epVal} /> : cell(epVal),
+          r.seoScore != null ? <PrintSeoScoreBadge score={r.seoScore} /> : cell("—"),
+          <span style={{ fontSize: "9px", color: "#6B7280", lineHeight: 1.4 }}>{r.notes ?? ""}</span>,
+        ];
+      }),
     ...customRowsAsNodes(edits, "s4"),
   ];
 
   const s6Rows: ReactNode[][] = [
-    ...s6.priorities.map((r: any, ri: number) => [
-      cell(e(`s6_${ri}_0`, String(r.priority))),
-      badgeCell(e(`s6_${ri}_1`, r.initiative), s6SharedSource ? undefined : r.source),
-      <PrintTierBadge tier={e(`s6_${ri}_2`, r.tier)} />,
-      <PrintActionTypeBadge value={edits[`s6_${ri}_5`] ?? (r.actionType ?? "")} />,
-      cell(e(`s6_${ri}_3`, r.action)),
-      cell(e(`s6_${ri}_4`, r.reason)),
-    ]),
+    ...s6.priorities
+      .filter((_: any, ri: number) => !delS6.has(ri))
+      .map((r: any, ri: number) => [
+        cell(e(`s6_${ri}_0`, String(r.priority))),
+        badgeCell(e(`s6_${ri}_1`, r.initiative), s6SharedSource ? undefined : r.source),
+        <PrintTierBadge tier={e(`s6_${ri}_2`, r.tier)} />,
+        <PrintActionTypeBadge value={edits[`s6_${ri}_5`] ?? (r.actionType ?? "")} />,
+        cell(e(`s6_${ri}_3`, r.action)),
+        cell(e(`s6_${ri}_4`, r.reason)),
+      ]),
     ...customRowsAsNodes(edits, "s6"),
   ];
 
   const s7Rows: ReactNode[][] = [
-    ...s7.tracking.map((r: any, ri: number) => [
-      cell(e(`s7_${ri}_0`, r.focusArea)),
-      cell(e(`s7_${ri}_1`, r.metric)),
-      s7TrackingSharedSource
-        ? <span style={{ color: "#9CA3AF", fontSize: "9px" }}>—</span>
-        : <span style={{ display: "inline-flex", alignItems: "center", gap: 3, flexWrap: "wrap" }}>
-            {parseS7Sources(e(`s7_${ri}_2`, r.source)).map((src: string, si: number) => (
-              <SourceBadge key={si} source={src} />
-            ))}
-          </span>,
-      cell(e(`s7_${ri}_4`, r.whyItMatters)),
-    ]),
+    ...s7.tracking
+      .filter((_: any, ri: number) => !delS7.has(ri))
+      .map((r: any, ri: number) => [
+        cell(e(`s7_${ri}_0`, r.focusArea)),
+        cell(e(`s7_${ri}_1`, r.metric)),
+        s7TrackingSharedSource
+          ? <span style={{ color: "#9CA3AF", fontSize: "9px" }}>—</span>
+          : <span style={{ display: "inline-flex", alignItems: "center", gap: 3, flexWrap: "wrap" }}>
+              {parseS7Sources(e(`s7_${ri}_2`, r.source)).map((src: string, si: number) => (
+                <SourceBadge key={si} source={src} />
+              ))}
+            </span>,
+        cell(e(`s7_${ri}_4`, r.whyItMatters)),
+      ]),
     ...customRowsAsNodes(edits, "s7"),
   ];
 
@@ -692,35 +715,41 @@ export default function QbrPrepPrint() {
           {secVis("section_keywords") && _hasKeywords && (
             <>
               <SectionHeading num={secNums["section_keywords"]!} title="Suggested Keywords for Next Quarter" />
-              {sectionSuggestedKeywords?.rows?.length > 0 && (
-                <div style={{ padding: "9px 12px", backgroundColor: "#FFF5F5", borderRadius: 4, border: `1.5px solid ${ACCENT}40`, marginBottom: 12, fontSize: "9px", color: "#374151", lineHeight: 1.65 }}>
-                  <span style={{ fontWeight: 700, color: ACCENT, textTransform: "uppercase" as const, letterSpacing: "0.05em", fontSize: "8.5px", marginRight: 5 }}>About This List:</span>
-                  Showing {sectionSuggestedKeywords.rows.length} keyword opportunities (2× monthly credit capacity of {sectionSuggestedKeywords.monthlyCredits}). Grounded in GSC query data, SF site crawl inventory, and page performance. Filtered to strategic Levels of Care, condition, and location-intent terms.
-                </div>
-              )}
-              <div style={{ border: `1px solid ${ACCENT}28`, borderRadius: 4, overflow: "hidden", marginBottom: 16 }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px", tableLayout: "fixed" }}>
-                  <colgroup>
-                    <col style={{ width: "20%" }} />
-                    <col style={{ width: "16%" }} />
-                    <col style={{ width: "20%" }} />
-                    <col style={{ width: "32%" }} />
-                    <col style={{ width: "12%" }} />
-                  </colgroup>
-                  <thead>
-                    <tr style={{ backgroundColor: `${ACCENT}0D` }}>
-                      {(kwSharedSource ? ["Keyword", "Suggested Type", "Target", "Why It's Suggested"] : ["Keyword", "Suggested Type", "Target", "Why It's Suggested", "Source"]).map((h: string) => (
-                        <th key={h} style={{ padding: "5px 8px", textAlign: "left", fontWeight: 600, fontSize: "9px", color: ACCENT, textTransform: "uppercase" as const, letterSpacing: "0.06em", borderBottom: `1px solid ${ACCENT}20`, wordBreak: "break-word" }}>{h}</th>
-                      ))}
-                      {kwSharedSource && (
-                        <th style={{ padding: "5px 8px", textAlign: "left", fontWeight: 600, fontSize: "9px", color: ACCENT, textTransform: "uppercase" as const, letterSpacing: "0.06em", borderBottom: `1px solid ${ACCENT}20` }}>
-                          <SourceBadge source={kwSharedSource} />
-                        </th>
-                      )}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(sectionSuggestedKeywords?.rows ?? []).map((row: any, ri: number) => {
+              {(() => {
+                const visibleKwRows = (sectionSuggestedKeywords?.rows ?? [])
+                  .filter((_: any, ri: number) => !delKw.has(ri));
+                return (
+                  <>
+                    {visibleKwRows.length > 0 && (
+                      <div style={{ padding: "9px 12px", backgroundColor: "#FFF5F5", borderRadius: 4, border: `1.5px solid ${ACCENT}40`, marginBottom: 12, fontSize: "9px", color: "#374151", lineHeight: 1.65 }}>
+                        <span style={{ fontWeight: 700, color: ACCENT, textTransform: "uppercase" as const, letterSpacing: "0.05em", fontSize: "8.5px", marginRight: 5 }}>About This List:</span>
+                        Showing {visibleKwRows.length} keyword opportunities, grounded in GSC query data.
+                      </div>
+                    )}
+                    <div style={{ border: `1px solid ${ACCENT}28`, borderRadius: 4, overflow: "hidden", marginBottom: 16 }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px", tableLayout: "fixed" }}>
+                        <colgroup>
+                          <col style={{ width: "20%" }} />
+                          <col style={{ width: "16%" }} />
+                          <col style={{ width: "20%" }} />
+                          <col style={{ width: "32%" }} />
+                          <col style={{ width: "12%" }} />
+                        </colgroup>
+                        <thead>
+                          <tr style={{ backgroundColor: `${ACCENT}0D` }}>
+                            {(kwSharedSource ? ["Keyword", "Suggested Type", "Target", "Why It's Suggested"] : ["Keyword", "Suggested Type", "Target", "Why It's Suggested", "Source"]).map((h: string) => (
+                              <th key={h} style={{ padding: "5px 8px", textAlign: "left", fontWeight: 600, fontSize: "9px", color: ACCENT, textTransform: "uppercase" as const, letterSpacing: "0.06em", borderBottom: `1px solid ${ACCENT}20`, wordBreak: "break-word" }}>{h}</th>
+                            ))}
+                            {kwSharedSource && (
+                              <th style={{ padding: "5px 8px", textAlign: "left", fontWeight: 600, fontSize: "9px", color: ACCENT, textTransform: "uppercase" as const, letterSpacing: "0.06em", borderBottom: `1px solid ${ACCENT}20` }}>
+                                <SourceBadge source={kwSharedSource} />
+                              </th>
+                            )}
+                          </tr>
+                        </thead>
+                        <tbody>
+                    {visibleKwRows.map((row: any, vi: number) => {
+                      const ri = (sectionSuggestedKeywords?.rows ?? []).indexOf(row);
                       const recTypeLabels: Record<string, string> = {
                         "optimize-existing": "Optimize existing page",
                         "refresh-existing":  "Refresh existing page",
@@ -766,9 +795,12 @@ export default function QbrPrepPrint() {
                         </tr>
                       );
                     })}
-                  </tbody>
-                </table>
-              </div>
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                );
+              })()}
             </>
           )}
 

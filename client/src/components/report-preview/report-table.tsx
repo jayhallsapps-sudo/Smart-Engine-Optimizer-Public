@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 const ACCENT = "#C0392B";
 
 export const CR_PREFIX = "__cr__";
+export const DR_PREFIX = "__dr__";
 
 export function getCustomRows(edits: Record<string, string>, tableId: string): string[][] {
   try {
@@ -23,6 +24,26 @@ export function setCustomRows(
   onEdit: (k: string, v: string) => void,
 ) {
   onEdit(CR_PREFIX + tableId, JSON.stringify(rows));
+}
+
+export function getDeletedSourceRows(edits: Record<string, string>, tableId: string): Set<number> {
+  try {
+    const raw = edits[DR_PREFIX + tableId];
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed as number[]);
+  } catch {
+    return new Set();
+  }
+}
+
+export function setDeletedSourceRows(
+  tableId: string,
+  indices: Set<number>,
+  onEdit: (k: string, v: string) => void,
+) {
+  onEdit(DR_PREFIX + tableId, JSON.stringify(Array.from(indices)));
 }
 
 export const SOURCE_COLORS: Record<string, { bg: string; text: string }> = {
@@ -118,6 +139,32 @@ function CustomRowCell({
     >
       {value || "Click to edit…"}
     </span>
+  );
+}
+
+function DeleteRowBtn({ onClick, testId }: { onClick: () => void; testId: string }) {
+  return (
+    <button
+      onClick={onClick}
+      title="Delete row"
+      data-testid={testId}
+      style={{
+        flexShrink: 0,
+        color: "#EF4444",
+        background: "none",
+        border: "none",
+        cursor: "pointer",
+        fontSize: 14,
+        lineHeight: 1,
+        padding: "0 2px",
+        borderRadius: 3,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      ×
+    </button>
   );
 }
 
@@ -250,6 +297,7 @@ export function AddableReportTable({
   title?: string;
 }) {
   const customRows = getCustomRows(edits, tableId);
+  const deletedSourceIndices = getDeletedSourceRows(edits, tableId);
   const colCount = headers.length;
 
   function addRow() {
@@ -264,10 +312,34 @@ export function AddableReportTable({
     setCustomRows(tableId, next, onEdit);
   }
 
-  function deleteRow(ri: number) {
+  function deleteCustomRow(ri: number) {
     const next = customRows.filter((_, r_i) => r_i !== ri);
     setCustomRows(tableId, next, onEdit);
   }
+
+  function deleteSourceRow(originalIndex: number) {
+    const next = new Set(deletedSourceIndices);
+    next.add(originalIndex);
+    setDeletedSourceRows(tableId, next, onEdit);
+  }
+
+  const deleteColHeader = exportMode ? [] : [""];
+
+  const visibleSourceRows: { node: ReactNode[]; originalIndex: number }[] = sourceRows
+    .map((row, i) => ({ node: row, originalIndex: i }))
+    .filter(({ originalIndex }) => !deletedSourceIndices.has(originalIndex));
+
+  const sourceNodeRows: ReactNode[][] = visibleSourceRows.map(({ node, originalIndex }) => {
+    if (exportMode) return node;
+    const deleteBtn = (
+      <DeleteRowBtn
+        key="del"
+        onClick={() => deleteSourceRow(originalIndex)}
+        testId={`button-delete-row-${tableId}-${originalIndex}`}
+      />
+    );
+    return [...node, deleteBtn];
+  });
 
   const customNodeRows: ReactNode[][] = customRows.map((row, ri) =>
     row.map((cell, ci) => {
@@ -288,38 +360,26 @@ export function AddableReportTable({
             <CustomRowCell value={cell} onChange={v => updateCell(ri, ci, v)} />
           </span>
           {isLast && (
-            <button
-              onClick={() => deleteRow(ri)}
-              title="Delete row"
-              data-testid={`button-delete-customrow-${tableId}-${ri}`}
-              style={{
-                flexShrink: 0,
-                color: "#EF4444",
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                fontSize: 14,
-                lineHeight: 1,
-                padding: "0 2px",
-                borderRadius: 3,
-              }}
-            >
-              ×
-            </button>
+            <DeleteRowBtn
+              onClick={() => deleteCustomRow(ri)}
+              testId={`button-delete-customrow-${tableId}-${ri}`}
+            />
           )}
         </span>
       );
-    }),
+    }).concat(exportMode ? [] : [<span key="del-placeholder" />]),
   );
 
-  const allRows = [...sourceRows, ...customNodeRows];
-  const highlightRows = customRows.map((_, i) => sourceRows.length + i);
+  const allRows = [...sourceNodeRows, ...customNodeRows];
+  const highlightRows = customRows.map((_, i) => visibleSourceRows.length + i);
+
+  const displayHeaders = exportMode ? headers : [...headers, ...deleteColHeader];
 
   return (
     <div>
       <ReportTable
         title={title}
-        headers={headers}
+        headers={displayHeaders}
         rows={allRows}
         accent={accent}
         fontSize={fontSize}

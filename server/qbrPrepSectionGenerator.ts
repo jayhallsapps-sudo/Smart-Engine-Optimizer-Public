@@ -497,7 +497,7 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
   const meta: QbrPrepMeta = {
     site: client.name,
     domain,
-    primaryLocation: inferLocation(sfData, sfHeaders, client),
+    primaryLocation: inferLocation(sfData, sfHeaders, client, liveInventory),
     programPositioning: inferProgram(sfData, sfHeaders),
     analysisWindow: quarter.analysisWindowLabel,
     analysisWindowStart: quarter.analysisStart,
@@ -971,7 +971,7 @@ function isInsuranceTerm(text: string): boolean {
   return INSURANCE_BLACKLIST.some(term => lower.includes(term));
 }
 
-function inferLocation(sfData: Record<string, any>[], sfHeaders: string[], client: Client): string {
+function inferLocation(sfData: Record<string, any>[], sfHeaders: string[], client: Client, liveInventory?: import("./liveCrawler").LivePageInventory | null): string {
   const candidates: Array<{ location: string; source: string }> = [];
   const rejected: Array<{ candidate: string; reason: string }> = [];
 
@@ -1050,6 +1050,50 @@ function inferLocation(sfData: Record<string, any>[], sfHeaders: string[], clien
   if (candidates.length > 0) {
     console.log(`[Location] Selected: ${candidates[0].location} from ${candidates[0].source}`);
     return candidates[0].location;
+  }
+
+  // Priority 3: Live crawl pathSet — run the same city-extraction logic over confirmed live URLs.
+  // Live crawl pathSet provides additional paths not always in the SF export (nav links, sitemap, etc.).
+  if (liveInventory?.pathSet && liveInventory.pathSet.size > 0) {
+    const livePaths = Array.from(liveInventory.pathSet);
+    for (const path of livePaths) {
+      const url = path.toLowerCase();
+      const exact = url.match(exactCityPattern);
+      if (exact) {
+        const raw = exact[1];
+        if (!isInsuranceTerm(raw)) {
+          const location = raw.split("-").map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ") + ", CA";
+          console.log(`[Location] Derived from live crawl path: ${location} (${path})`);
+          return location;
+        }
+      }
+    }
+    for (const path of livePaths) {
+      const url = path.toLowerCase();
+      for (const p of generalPatterns) {
+        const m = url.match(p);
+        if (m) {
+          const raw = m[1];
+          if (!isInsuranceTerm(raw) && raw.length <= 40 && raw.split("-").length <= 4) {
+            const words = raw.split("-").filter((w: string) => w.length >= 2);
+            if (words.length > 0) {
+              const location = words.map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ") + ", CA";
+              console.log(`[Location] Derived from live crawl general pattern: ${location} (${path})`);
+              return location;
+            }
+          }
+        }
+      }
+    }
+    // Priority 3b: If the live crawl confirmed a location/campus page but no city was extractable,
+    // return a resolved fallback rather than "Manual entry needed".
+    const locationPage = liveInventory.bestByCategory?.["primary-location"];
+    if (locationPage?.path) {
+      const slug = locationPage.path.replace(/^\//, "").replace(/\//g, " › ").replace(/-/g, " ");
+      const resolved = slug.charAt(0).toUpperCase() + slug.slice(1);
+      console.log(`[Location] Using location page slug as display fallback: ${resolved}`);
+      return resolved;
+    }
   }
 
   console.log(`[Location] No URL match found — returning Manual entry needed`);
@@ -2365,6 +2409,24 @@ function buildTierScorecard(tierInput: TierDiagnosisInput): TierScorecardEntry[]
     ? "Alumni and aftercare content is a differentiator in competitive treatment markets — its absence limits E-E-A-T signals in comparison-stage searches where multiple facilities are evaluated side-by-side."
     : "Authority-stage pages are present. External credibility signals (reviews, accreditation mentions, directory listings) determine the ceiling beyond this point.";
 
+  const t1WhyItMatters = t1Status === "Pass"
+    ? "Tier 1 pages are confirmed present. Higher-tier work can now compound on this foundation — focus moves to architecture quality and conversion optimization."
+    : t1Status === "Partial"
+    ? "Some Tier 1 pages are confirmed, but gaps remain. Closing these will unlock the full leverage of higher-tier investment and prevent conversion leakage at the page level."
+    : "Core Tier 1 pages — VOB, contact, and primary Levels of Care — are not confirmed on this site. These must be in place before higher-tier work can deliver meaningful organic results.";
+
+  const t2WhyItMatters = t2Status === "Pass"
+    ? "Site architecture is structurally sound. Authority appears to be flowing toward Levels of Care pages as intended — internal linking quality determines the ceiling from here."
+    : t2Status === "Partial"
+    ? "Hub structures are partially in place. Completing them will improve topical authority consolidation into Levels of Care pages and strengthen rankings for high-intent queries."
+    : "Without conditions and therapies hub structures, authority is fragmenting rather than consolidating into Levels of Care targets. This limits ranking potential for treatment-intent searches.";
+
+  const t4WhyItMatters = t4Status === "Pass"
+    ? "Authority-stage signals are in place. External credibility — reviews, accreditation mentions, and directory presence — determines the organic ceiling from here."
+    : t4Status === "Partial"
+    ? "Authority-stage content is partially developed. Alumni and aftercare content are particularly high-value for closing E-E-A-T gaps that affect comparison-stage searchers."
+    : "Authority-stage page coverage cannot be confirmed from available data. Manual verification of About, Team, and Alumni pages is recommended before investing in external credibility work.";
+
   return [
     {
       tierNumber: 1,
@@ -2372,7 +2434,7 @@ function buildTierScorecard(tierInput: TierDiagnosisInput): TierScorecardEntry[]
       status: t1Status,
       findings: t1Findings,
       inferences: t1Inferences,
-      whyItMatters: "Tier 1 pages are the foundation of organic admissions conversion. Without a clear VOB page, contact path, and primary Levels of Care pages, all higher-tier work cannot compound.",
+      whyItMatters: t1WhyItMatters,
       source: "SF",
     },
     {
@@ -2381,7 +2443,7 @@ function buildTierScorecard(tierInput: TierDiagnosisInput): TierScorecardEntry[]
       status: t2Status,
       findings: t2Findings,
       inferences: t2Inferences,
-      whyItMatters: "Site architecture determines how authority flows between pages. Hub structures allow Google to map topical expertise and consolidate ranking power into Levels of Care pages.",
+      whyItMatters: t2WhyItMatters,
       source: "SF",
     },
     {
@@ -2390,7 +2452,7 @@ function buildTierScorecard(tierInput: TierDiagnosisInput): TierScorecardEntry[]
       status: t3Status,
       findings: t3Findings,
       inferences: t3Inferences,
-      whyItMatters: "Technical drag (errors, thin content, duplication) reduces crawl efficiency and can suppress rankings across all pages — including core conversion pages.",
+      whyItMatters: "Technical drag — errors, thin content, redirect chains — reduces crawl efficiency and can suppress rankings across all pages, including core conversion pages. Addressing these creates immediate headroom.",
       source: "SF + GSC",
     },
     {
@@ -2399,7 +2461,7 @@ function buildTierScorecard(tierInput: TierDiagnosisInput): TierScorecardEntry[]
       status: t4Status,
       findings: t4Findings,
       inferences: t4Inferences,
-      whyItMatters: "Authority depth signals real expertise and community trust — factors that increasingly influence Google rankings for health-related (YMYL) content.",
+      whyItMatters: t4WhyItMatters,
       source: "SF",
     },
   ];
@@ -3878,8 +3940,8 @@ export function generateSuggestedKeywords(
     const impressions = rep.impressions;
     const clicks = rep.clicks;
 
-    // Build variant label (exclude representative) — show ALL variants in the cluster
-    const variants = cluster.slice(1).map(c => c.query);
+    // Build variant label (exclude representative) — cap at 10 variants max for readability
+    const variants = cluster.slice(1, 11).map(c => c.query);
     const keywordDisplay = variants.length > 0
       ? `${query} / ${variants.join(" / ")}`
       : query;
@@ -3923,6 +3985,42 @@ export function generateSuggestedKeywords(
       whyRecommended,
       sources,
     });
+  }
+
+  // Enforce minimum 3 create-new recommendations per quarterly output.
+  // This ensures the mix always includes genuine content gap opportunities,
+  // even when strong existing pages dominate the high-impression candidates.
+  const createNewCount = () => rows.filter(r => r.recommendationType === "create-new").length;
+  if (createNewCount() < 3) {
+    const alreadyRepresented = new Set(rows.map(r => r.keyword.split(" / ")[0]));
+    for (const cluster of clusters) {
+      if (createNewCount() >= 3) break;
+      const q = cluster[0].query;
+      if (alreadyRepresented.has(q)) continue;
+      // Only add as create-new if there is genuinely no strong existing page for this intent
+      const gscPageRaw2 = findBestGscPage(q, gscQueryPageRows);
+      const gscPage2 = gscPageRaw2 && !isMediaAssetPath(gscPageRaw2) ? gscPageRaw2 : null;
+      const sfMatch2 = findSemanticSfMatch(q, sfPaths);
+      const hasStrongExisting = (gscPage2 && sfPaths.has(gscPage2)) || !!sfMatch2;
+      if (hasStrongExisting) continue;
+      const proposedSlug2 = "/blog/" + q
+        .toLowerCase()
+        .replace(/[^a-z0-9\s-]/g, "")
+        .trim()
+        .replace(/\s+/g, "-")
+        .replace(/-{2,}/g, "-")
+        .replace(/^-|-$/g, "");
+      const variants2 = cluster.slice(1, 11).map(c => c.query);
+      const kwDisplay2 = variants2.length > 0 ? `${q} / ${variants2.join(" / ")}` : q;
+      rows.push({
+        keyword: kwDisplay2,
+        recommendationType: "create-new",
+        targetPage: proposedSlug2,
+        whyRecommended: buildKeywordReason(q, cluster[0].impressions, cluster[0].clicks, null, "create-new", sfPaths),
+        sources: ["GSC"],
+      });
+      alreadyRepresented.add(q);
+    }
   }
 
   // If GSC had no data, fall back to Section 3 traffic topics as keyword proxies

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { EyeOff, Eye } from "lucide-react";
 import { EditableSection } from "./editable-section";
-import { AddableReportTable, SourceBadge } from "./report-table";
+import { AddableReportTable, SourceBadge, DR_PREFIX, getDeletedSourceRows, setDeletedSourceRows } from "./report-table";
 import swoopHeaderFallback from "@assets/HEADER_IMAGE_1773063127856.png";
 import { computeSharedSource, computeSharedSourceList } from "@/lib/reportUtils";
 
@@ -1082,89 +1082,109 @@ export function QbrPrepPreview({
               ) : sectionNums["section_keywords"] !== undefined ? (
                 <>
                   <SectionHeading num={sectionNums["section_keywords"]} title="Suggested Keywords for Next Quarter" onHide={hideSecBtn("section_keywords")} />
-                  {sectionSuggestedKeywords?.rows?.length > 0 && (
-                    <div style={{ padding: "8px 12px", backgroundColor: "#FFF5F5", borderRadius: 4, border: `1.5px solid ${ACCENT}40`, marginBottom: 10, fontSize: "9.5px", color: "#374151", lineHeight: 1.6 }}>
-                      <span style={{ fontWeight: 700, color: ACCENT, textTransform: "uppercase" as const, letterSpacing: "0.05em", fontSize: "9px", marginRight: 6 }}>About This List:</span>
-                      Showing {sectionSuggestedKeywords.rows.length} of up to {sectionSuggestedKeywords.quarterlyCreditCap} keyword opportunities (capped at 2× monthly credit capacity of {sectionSuggestedKeywords.monthlyCredits} = {sectionSuggestedKeywords.quarterlyCreditCap}). Grounded in GSC query data, site crawl inventory, and page performance. Filtered to strategic Level of Care, program, condition, and location-intent terms.
-                    </div>
-                  )}
-                  <div style={{ border: `1px solid ${ACCENT}28`, borderRadius: 6, overflow: "hidden", marginBottom: 12, backgroundColor: "#FFFDFB" }}>
-                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px", tableLayout: "fixed" }}>
-                      <colgroup>
-                        <col style={{ width: "20%" }} />
-                        <col style={{ width: "16%" }} />
-                        <col style={{ width: "20%" }} />
-                        <col style={{ width: "32%" }} />
-                        <col style={{ width: "12%" }} />
-                      </colgroup>
-                      <thead>
-                        <tr style={{ backgroundColor: `${ACCENT}0D` }}>
-                          {(kwSharedSource ? ["Keyword", "Suggested Type", "Target", "Why It's Suggested"] : ["Keyword", "Suggested Type", "Target", "Why It's Suggested", "Source"]).map(h => (
-                            <th key={h} style={{ padding: "5px 8px", textAlign: "left", fontWeight: 600, fontSize: "9px", color: ACCENT, textTransform: "uppercase" as const, letterSpacing: "0.06em", borderBottom: `1px solid ${ACCENT}20`, wordBreak: "break-word" }}>{h}</th>
-                          ))}
-                          {kwSharedSource && (
-                            <th style={{ padding: "5px 8px", textAlign: "left", fontWeight: 600, fontSize: "9px", color: ACCENT, textTransform: "uppercase" as const, letterSpacing: "0.06em", borderBottom: `1px solid ${ACCENT}20` }}>
-                              <SourceBadge source={kwSharedSource} />
-                            </th>
-                          )}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {sectionSuggestedKeywords?.rows.map((row, ri) => {
-                          const recTypeColors: Record<string, { bg: string; color: string }> = {
-                            "optimize-existing": { bg: "#D1FAE5", color: "#065F46" },
-                            "refresh-existing":  { bg: "#FEF3C7", color: "#92400E" },
-                            "create-new":        { bg: "#DBEAFE", color: "#1E40AF" },
-                            "cro-update":        { bg: "#F3E8FF", color: "#6B21A8" },
-                            "internal-linking":  { bg: "#F0FDF4", color: "#14532D" },
-                          };
-                          const recTypeLabels: Record<string, string> = {
-                            "optimize-existing": "Optimize existing page",
-                            "refresh-existing":  "Refresh existing page",
-                            "create-new":        "Create new content",
-                            "cro-update":        "CRO / supporting update",
-                            "internal-linking":  "Internal linking support",
-                          };
-                          const colors = recTypeColors[row.recommendationType] ?? { bg: "#F3F4F6", color: "#374151" };
-                          const label = recTypeLabels[row.recommendationType] ?? row.recommendationType;
-                          const isNewContent = row.targetPage === "New content needed" || row.targetPage === "Suggest new content for this keyword";
-                          return (
-                            <tr key={ri} style={{ backgroundColor: ri % 2 === 1 ? "#FBF8F7" : "white" }} data-testid={`row-keyword-${ri}`}>
-                              <td style={{ padding: "6px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", fontWeight: 600, wordBreak: "break-word" }}>
-                                <EditableCell editKey={`kw_${ri}_keyword`} value={row.keyword} edits={edits} onEdit={onEdit} />
-                              </td>
-                              <td style={{ padding: "6px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", wordBreak: "break-word" }}>
-                                <span style={{ display: "inline-block", padding: "2px 7px", borderRadius: 10, fontSize: "8px", fontWeight: 700, backgroundColor: colors.bg, color: colors.color, whiteSpace: "normal", wordBreak: "break-word" }} data-testid={`badge-rec-type-${ri}`}>
-                                  {label}
-                                </span>
-                              </td>
-                              <td style={{ padding: "6px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", wordBreak: "break-word" }}>
-                                {isNewContent ? (
-                                  <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 10, fontSize: "8px", fontWeight: 700, backgroundColor: "#FEF3C7", color: "#92400E", whiteSpace: "normal", wordBreak: "break-word" }} data-testid={`badge-new-content-${ri}`}>New content needed</span>
-                                ) : (
-                                  <span style={{ display: "inline-block", padding: "1px 6px", borderRadius: 3, fontSize: "9px", fontWeight: 500, backgroundColor: `${ACCENT}10`, border: `1px solid ${ACCENT}25`, color: "#374151", wordBreak: "break-all" }} data-testid={`tag-target-page-${ri}`}>
-                                    <EditableCell editKey={`kw_${ri}_targetPage`} value={row.targetPage} edits={edits} onEdit={onEdit} />
-                                  </span>
+                  {(() => {
+                    const deletedKwIndices = getDeletedSourceRows(edits, "kw");
+                    const visibleKwRows = (sectionSuggestedKeywords?.rows ?? [])
+                      .map((row: SuggestedKeywordRow, ri: number) => ({ row, ri }))
+                      .filter(({ ri }) => !deletedKwIndices.has(ri));
+                    return (
+                      <>
+                        {visibleKwRows.length > 0 && (
+                          <div style={{ padding: "8px 12px", backgroundColor: "#FFF5F5", borderRadius: 4, border: `1.5px solid ${ACCENT}40`, marginBottom: 10, fontSize: "9.5px", color: "#374151", lineHeight: 1.6 }}>
+                            <span style={{ fontWeight: 700, color: ACCENT, textTransform: "uppercase" as const, letterSpacing: "0.05em", fontSize: "9px", marginRight: 6 }}>About This List:</span>
+                            Showing {visibleKwRows.length} keyword opportunities, grounded in GSC query data.
+                          </div>
+                        )}
+                        <div style={{ border: `1px solid ${ACCENT}28`, borderRadius: 6, overflow: "hidden", marginBottom: 12, backgroundColor: "#FFFDFB" }}>
+                          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px", tableLayout: "fixed" }}>
+                            <colgroup>
+                              <col style={{ width: "19%" }} />
+                              <col style={{ width: "15%" }} />
+                              <col style={{ width: "19%" }} />
+                              <col style={{ width: "30%" }} />
+                              {!kwSharedSource && <col style={{ width: "10%" }} />}
+                              <col style={{ width: "7%" }} />
+                            </colgroup>
+                            <thead>
+                              <tr style={{ backgroundColor: `${ACCENT}0D` }}>
+                                {(kwSharedSource ? ["Keyword", "Suggested Type", "Target", "Why It's Suggested"] : ["Keyword", "Suggested Type", "Target", "Why It's Suggested", "Source"]).map(h => (
+                                  <th key={h} style={{ padding: "5px 8px", textAlign: "left", fontWeight: 600, fontSize: "9px", color: ACCENT, textTransform: "uppercase" as const, letterSpacing: "0.06em", borderBottom: `1px solid ${ACCENT}20`, wordBreak: "break-word" }}>{h}</th>
+                                ))}
+                                {kwSharedSource && (
+                                  <th style={{ padding: "5px 8px", textAlign: "left", fontWeight: 600, fontSize: "9px", color: ACCENT, textTransform: "uppercase" as const, letterSpacing: "0.06em", borderBottom: `1px solid ${ACCENT}20` }}>
+                                    <SourceBadge source={kwSharedSource} />
+                                  </th>
                                 )}
-                              </td>
-                              <td style={{ padding: "6px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4, wordBreak: "break-word", color: "#4B5563", fontSize: "9px" }}>
-                                <EditableCell editKey={`kw_${ri}_why`} value={row.whyRecommended} edits={edits} onEdit={onEdit} />
-                              </td>
-                              {!kwSharedSource && (
-                                <td style={{ padding: "6px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top" }}>
-                                  <span style={{ display: "inline-flex", flexWrap: "wrap", gap: 3 }}>
-                                    {row.sources.map((src, si) => (
-                                      <SourceBadge key={si} source={src} />
-                                    ))}
-                                  </span>
-                                </td>
-                              )}
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
+                                <th style={{ padding: "5px 8px", borderBottom: `1px solid ${ACCENT}20` }} />
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {visibleKwRows.map(({ row, ri }, vi) => {
+                                const recTypeColors: Record<string, { bg: string; color: string }> = {
+                                  "optimize-existing": { bg: "#D1FAE5", color: "#065F46" },
+                                  "refresh-existing":  { bg: "#FEF3C7", color: "#92400E" },
+                                  "create-new":        { bg: "#DBEAFE", color: "#1E40AF" },
+                                  "cro-update":        { bg: "#F3E8FF", color: "#6B21A8" },
+                                  "internal-linking":  { bg: "#F0FDF4", color: "#14532D" },
+                                };
+                                const recTypeLabels: Record<string, string> = {
+                                  "optimize-existing": "Optimize existing page",
+                                  "refresh-existing":  "Refresh existing page",
+                                  "create-new":        "Create new content",
+                                  "cro-update":        "CRO / supporting update",
+                                  "internal-linking":  "Internal linking support",
+                                };
+                                const colors = recTypeColors[row.recommendationType] ?? { bg: "#F3F4F6", color: "#374151" };
+                                const label = recTypeLabels[row.recommendationType] ?? row.recommendationType;
+                                const isNewContent = row.targetPage === "New content needed" || row.targetPage === "Suggest new content for this keyword";
+                                return (
+                                  <tr key={ri} style={{ backgroundColor: vi % 2 === 1 ? "#FBF8F7" : "white" }} data-testid={`row-keyword-${ri}`}>
+                                    <td style={{ padding: "6px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", fontWeight: 600, wordBreak: "break-word" }}>
+                                      <EditableCell editKey={`kw_${ri}_keyword`} value={row.keyword} edits={edits} onEdit={onEdit} />
+                                    </td>
+                                    <td style={{ padding: "6px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", wordBreak: "break-word" }}>
+                                      <span style={{ display: "inline-block", padding: "2px 7px", borderRadius: 10, fontSize: "8px", fontWeight: 700, backgroundColor: colors.bg, color: colors.color, whiteSpace: "normal", wordBreak: "break-word" }} data-testid={`badge-rec-type-${ri}`}>
+                                        {label}
+                                      </span>
+                                    </td>
+                                    <td style={{ padding: "6px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", wordBreak: "break-word" }}>
+                                      {isNewContent ? (
+                                        <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 10, fontSize: "8px", fontWeight: 700, backgroundColor: "#FEF3C7", color: "#92400E", whiteSpace: "normal", wordBreak: "break-word" }} data-testid={`badge-new-content-${ri}`}>New content needed</span>
+                                      ) : (
+                                        <span style={{ display: "inline-block", padding: "1px 6px", borderRadius: 3, fontSize: "9px", fontWeight: 500, backgroundColor: `${ACCENT}10`, border: `1px solid ${ACCENT}25`, color: "#374151", wordBreak: "break-all" }} data-testid={`tag-target-page-${ri}`}>
+                                          <EditableCell editKey={`kw_${ri}_targetPage`} value={row.targetPage} edits={edits} onEdit={onEdit} />
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td style={{ padding: "6px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4, wordBreak: "break-word", color: "#4B5563", fontSize: "9px" }}>
+                                      <EditableCell editKey={`kw_${ri}_why`} value={row.whyRecommended} edits={edits} onEdit={onEdit} />
+                                    </td>
+                                    {!kwSharedSource && (
+                                      <td style={{ padding: "6px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top" }}>
+                                        <span style={{ display: "inline-flex", flexWrap: "wrap", gap: 3 }}>
+                                          {row.sources.map((src, si) => (
+                                            <SourceBadge key={si} source={src} />
+                                          ))}
+                                        </span>
+                                      </td>
+                                    )}
+                                    <td style={{ padding: "6px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", textAlign: "center" }}>
+                                      <button
+                                        onClick={() => setDeletedSourceRows("kw", new Set([...deletedKwIndices, ri]), onEdit)}
+                                        title="Delete row"
+                                        data-testid={`button-delete-kw-${ri}`}
+                                        style={{ color: "#EF4444", background: "none", border: "none", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "0 2px" }}
+                                      >×</button>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </>
               ) : null
             )}

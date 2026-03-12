@@ -618,7 +618,7 @@ export default function QbrPrepPrint() {
               <SectionHeading num={secNums["section_services"]!} title="Levels of Care Overview" />
               {tblVis("table_s4_services") && (
                 <>
-                  <SubLabel text="Levels of Care" sources={["Screaming Frog"]} />
+                  <SubLabel text="Levels of Care" sources={["SF"]} />
                   <ReportTable headers={["Level of Care", "Page", "SEO Score", "Notes"]} rows={s4Rows} />
                 </>
               )}

@@ -3971,7 +3971,7 @@ export function generateSuggestedKeywords(
 
     // Determine sources used
     const sources: string[] = ["GSC"];
-    if (inSf) sources.push("Screaming Frog");
+    if (inSf) sources.push("SF");
 
     rows.push({
       keyword: keywordDisplay,
@@ -3984,7 +3984,7 @@ export function generateSuggestedKeywords(
 
   // If GSC had no data, fall back to Section 3 traffic topics as keyword proxies
   if (rows.length === 0 && section3.topTrafficTopics.length > 0) {
-    const fallbackSources = sfData.length > 0 ? ["GSC", "Screaming Frog"] : ["GSC"];
+    const fallbackSources = sfData.length > 0 ? ["GSC", "SF"] : ["GSC"];
     for (const topic of section3.topTrafficTopics.slice(0, Math.min(maxRecommendations, 12))) {
       const exampleQuery = topic.exampleQueries.split(",")[0]?.trim() || topic.topic;
       const matchingPage = section3.topTrafficPages.find(p =>

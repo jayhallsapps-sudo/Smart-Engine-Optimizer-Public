@@ -39,6 +39,7 @@ export const SOURCE_COLORS: Record<string, { bg: string; text: string }> = {
   "Ahrefs":              { bg: "#F0FDF4", text: "#166534" },
   "NSM":                 { bg: "#EEF2FF", text: "#4338CA" },
   "Screaming Frog":      { bg: "#F0FDF4", text: "#065F46" },
+  "SF":                  { bg: "#F0FDF4", text: "#065F46" },
   "Manual entry needed": { bg: "#F9FAFB", text: "#9CA3AF" },
 };
 

@@ -1,0 +1,99 @@
+You are doing the final two-item cleanup pass on the QBS generator and output. This is not a rebuild. This is not a logic refactor. This is not a design change. Fix only the two remaining artifact issues below, regenerate the Anchored Tides PDF, and verify that no solved behavior regressed.
+
+Do not reopen solved logic.
+Do not redesign the report.
+Do not change the red QBS design language.
+Do not change the table design system.
+Do not alter working live-page resolution, Tier logic, Section 4 page mapping, Section 7 clustering, Section 8 terminology, Section 9 framing, or source-badge behavior except where required to fix the exact issues below.
+
+PRIMARY OBJECTIVE
+
+Fix the last two confirmed artifact issues in the Anchored Tides QBS PDF and provide the regenerated PDF artifact as proof.
+
+REMAINING ISSUES TO FIX
+
+1) SECTION 7 — FINAL COLUMN HEADER IS CLIPPED
+
+Current problem:
+The last column header renders as “GSC + SCREAMI” instead of the full intended label.
+
+Required fix:
+- make the final column header render fully in the PDF
+- label Screaming Frog as “SF” everywhere in the report where appropriate, including this header
+- either widen the column enough for the full revised header or use a shorter approved header that still communicates the same meaning clearly
+- preferred header format here should use “GSC + SF” rather than “GSC + Screaming Frog”
+- do not let the header clip, truncate awkwardly, or break the table visually
+- preserve the current red QBS design language and table structure
+
+Acceptance requirement:
+- the final column header in Section 7 renders fully and cleanly in the PDF
+- Screaming Frog is labeled “SF” in this header
+
+2) SECTION 2 — WRONG PAGE-TYPE CLASSIFICATION
+
+Current problem:
+The page `/admissions-and-alcohol-rehab-insurance/` is being classified under Type as “Blog / Resource,” which is incorrect for that page’s role in the site and elsewhere in the report.
+
+Required fix:
+- correct the page-type classification logic so `/admissions-and-alcohol-rehab-insurance/` is classified appropriately as an admissions / verify-insurance / conversion-support page rather than a blog/resource page
+- ensure this classification uses the live resolved page role and the report’s own page-type logic consistently
+- do not create a one-off hack for just one page if the classification logic can be corrected cleanly
+
+Acceptance requirement:
+- in the final PDF, `/admissions-and-alcohol-rehab-insurance/` is no longer labeled “Blog / Resource” in Section 2
+
+NON-NEGOTIABLE PRESERVATION RULES
+
+Do not break any of the following already-solved behaviors:
+- Section 2 using real live pages instead of fabricated generic paths
+- Section 4 resolving actual live Levels of Care and support pages
+- Section 4 Residential remaining unresolved only if it is truly absent
+- Section 5 Tier 1 narrative and scorecard staying aligned at Partial
+- Section 6 Critical Observations bullets staying complete and not clipped
+- Section 7 clean intent clustering for molly / tramadol / alcohol terms
+- Section 7 row-count summary matching actual rendered row count
+- IOP row staying mapped to the confirmed live IOP page
+- corrected “Levels of Care and VOB pages” terminology in Section 8
+- corrected Tier framing in Section 9
+- red QBS design language
+- source-badge no-wrap behavior in Section 1
+
+REGRESSION FAILURES TO CHECK
+
+Do not declare completion if any of these reappear:
+- /programs/detox or /programs/residential fabricated paths
+- “Manual entry needed” returning for pages already resolved live
+- Tier 1 contradiction returning
+- service-page terminology leaking back in
+- IOP row reverting to create-new
+- Section 7 summary count mismatch returning
+- source badges wrapping badly again
+
+FINAL VALIDATION REQUIREMENT
+
+Use Anchored Tides again as the validation account.
+
+Required steps:
+1. Generate a fresh Anchored Tides QBS using the live connected data and the same AM inputs already provided.
+2. Export the actual PDF.
+3. Provide a direct link/path to the generated PDF.
+4. Provide a short QA note that covers only:
+   - the Section 7 header fix
+   - the Section 2 page-type classification fix
+   - confirmation that Screaming Frog is labeled “SF” where appropriate
+   - confirmation that no previously solved issue regressed
+
+FAILURE RULE
+
+If the generated Anchored Tides PDF still contains either of the two issues above, do not declare completion.
+
+Instead, list:
+- the exact section
+- the exact remaining issue
+- the exact fix still required
+
+FINAL INSTRUCTION
+
+This is the final two-item cleanup pass.
+Fix only the two remaining artifact-level issues listed above, regenerate the Anchored Tides PDF, and prove those exact issues are gone without breaking solved behavior.
+Do not send a summary-only reassurance without the PDF artifact link.

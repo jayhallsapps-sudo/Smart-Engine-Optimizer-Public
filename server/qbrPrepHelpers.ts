@@ -104,6 +104,8 @@ const PAGE_TYPE_PATTERNS: Array<{ pattern: RegExp; type: string }> = [
   { pattern: /blog|article|resource|guide/i, type: "Blog / Resource" },
   { pattern: /therap|cbt|dbt|emdr|holistic/i, type: "Therapies" },
   { pattern: /depression|anxiety|ptsd|trauma|bipolar|mental.?health/i, type: "Conditions" },
+  // Combined admissions+insurance slugs must resolve as Verify Insurance before the alcohol/drug check
+  { pattern: /(?:admissions|rehab|treatment).*-insurance(?:\/|$)/i, type: "Verify Insurance" },
   { pattern: /alcohol|drug|heroin|opioid|cocaine|meth|benzo|fentanyl/i, type: "Substance-Specific" },
   { pattern: /women|men|gender|lgbtq|veteran/i, type: "Population-Specific" },
   { pattern: /location|campus|facility|tour/i, type: "Location" },

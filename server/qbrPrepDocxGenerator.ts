@@ -415,7 +415,7 @@ function buildSection2(reportData: any, secNum: number, edits: Record<string, st
     items.push(subLabel("Top Converting Pages"));
     items.push(dataTable([
       { label: "Type",                         dxa: 1050 },
-      { label: "Page / Pattern",               dxa: 4050 },
+      { label: "Page",                          dxa: 4050 },
       { label: "Notes / What We're Learning",  dxa: 5700 },
     ], pages)); // 1050+4050+5700=10800 ✓
   }
@@ -504,12 +504,16 @@ function buildSection4(reportData: any, secNum: number, edits: Record<string, st
   const rows = (reportData.section4Services?.services ?? []).map((r: any, ri: number) => [
     safeText(edits[`s4_${ri}_0`] ?? r.service ?? ""),
     safeText(edits[`s4_${ri}_1`] ?? r.examplePage ?? ""),
+    safeText(r.seoScore != null ? `${r.seoScore}/10` : "—"),
+    safeText(r.notes ?? ""),
   ]);
   return [
-    sectionHeading(secNum, "Site Service Overview"),
+    sectionHeading(secNum, "Levels of Care Overview"),
     dataTable([
-      { label: "Service / Program", dxa: 5400 },
-      { label: "Example Page",      dxa: 5400 },
+      { label: "Level of Care", dxa: 2160 },
+      { label: "Page",          dxa: 2160 },
+      { label: "SEO Score",     dxa: 900 },
+      { label: "Notes",         dxa: 5580 },
     ], rows),
   ];
 }
@@ -589,6 +593,60 @@ function buildSection5(reportData: any, secNum: number): (Paragraph | Table)[] {
     ],
   });
 
+  const scorecardItems: Table[] = [];
+  const scorecard: any[] = reportData.section5Diagnosis?.tierScorecard ?? [];
+  if (scorecard.length > 0) {
+    const STATUS_BG: Record<string, string> = { Pass: "D1FAE5", Partial: "FEF3C7", Blocked: "FEE2E2", Unknown: "F3F4F6" };
+    const STATUS_COLOR: Record<string, string> = { Pass: "065F46", Partial: "92400E", Blocked: "991B1B", Unknown: "374151" };
+    for (const entry of scorecard) {
+      const statusBg = STATUS_BG[entry.status] ?? "F3F4F6";
+      const statusColor = STATUS_COLOR[entry.status] ?? "374151";
+      scorecardItems.push(new Table({
+        width: { size: CONTENT_DXA, type: WidthType.DXA },
+        layout: TableLayoutType.FIXED,
+        borders: { top: border1(BORDER, 4), bottom: border1(BORDER, 4), left: border1(BORDER, 4), right: border1(BORDER, 4), insideH: border1(BORDER, 4), insideV: NB },
+        rows: [
+          new TableRow({
+            height: { value: 400, rule: "atLeast" as any },
+            children: [
+              new TableCell({
+                width: { size: 8200, type: WidthType.DXA },
+                shading: shade("F9FAFB"),
+                margins: { top: 80, bottom: 80, left: 180, right: 100 },
+                borders: { top: NB, bottom: NB, left: NB, right: border1(BORDER, 4) },
+                children: [new Paragraph({ spacing: { before: 0, after: 0 }, children: [boldRun(`Tier ${entry.tierNumber} — ${entry.tierName}`, { size: 20, color: "C0392B" })] })],
+              }),
+              new TableCell({
+                width: { size: 2600, type: WidthType.DXA },
+                shading: shade(statusBg),
+                margins: { top: 80, bottom: 80, left: 120, right: 100 },
+                borders: noCellBorders(),
+                children: [new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 0, after: 0 }, children: [boldRun(entry.status, { size: 18, color: statusColor })] })],
+              }),
+            ],
+          }),
+          new TableRow({
+            children: [
+              new TableCell({
+                columnSpan: 2,
+                width: { size: CONTENT_DXA, type: WidthType.DXA },
+                shading: shade("FFFFFF"),
+                margins: { top: 100, bottom: 100, left: 180, right: 120 },
+                borders: noCellBorders(),
+                children: [
+                  new Paragraph({ spacing: { before: 0, after: 40 }, children: [boldRun("Findings: ", { size: 18 }), run(safeText(entry.findings), { size: 18, color: GRAY })] }),
+                  new Paragraph({ spacing: { before: 0, after: 40 }, children: [boldRun("Inference: ", { size: 18 }), run(safeText(entry.inferences), { size: 18, color: GRAY })] }),
+                  new Paragraph({ spacing: { before: 0, after: 40 }, children: [boldRun("Why It Matters: ", { size: 18 }), run(safeText(entry.whyItMatters), { size: 18, color: GRAY })] }),
+                  new Paragraph({ spacing: { before: 0, after: 0 }, children: [run(`Source: ${safeText(entry.source)}`, { size: 16, color: "9CA3AF" })] }),
+                ],
+              }),
+            ],
+          }),
+        ],
+      }));
+    }
+  }
+
   return [
     sectionHeading(secNum, "SEO Tier Diagnosis"),
     new Table({
@@ -597,18 +655,46 @@ function buildSection5(reportData: any, secNum: number): (Paragraph | Table)[] {
       borders: { top: border1(NAVY, 4), bottom: border1(NAVY, 4), left: border1(NAVY, 4), right: border1(NAVY, 4), insideH: NB, insideV: NB },
       rows: [bannerRow, diagRow],
     }),
+    ...scorecardItems,
   ];
 }
 
 // ── Section 6: Priorities — native priority cards ────────────────────────────
 function buildSection6(reportData: any, secNum: number, edits: Record<string, string>): (Paragraph | Table)[] {
   const priorities = reportData.section6Priorities?.priorities ?? [];
+  const shortSummary: string[] = reportData.section6Priorities?.shortSummary ?? [];
   const items: (Paragraph | Table)[] = [sectionHeading(secNum, "What We Need to Do Next")];
+
+  // Summary box
+  if (shortSummary.length > 0) {
+    items.push(new Table({
+      width: { size: CONTENT_DXA, type: WidthType.DXA },
+      layout: TableLayoutType.FIXED,
+      borders: { top: border1(BORDER, 4), bottom: border1(BORDER, 4), left: border1(BORDER, 4), right: border1(BORDER, 4), insideH: NB, insideV: NB },
+      rows: [
+        new TableRow({
+          children: [
+            new TableCell({
+              width: { size: CONTENT_DXA, type: WidthType.DXA },
+              shading: shade("F9FAFB"),
+              margins: { top: 100, bottom: 100, left: 180, right: 120 },
+              borders: noCellBorders(),
+              children: [
+                new Paragraph({ spacing: { before: 0, after: 60 }, children: [boldRun("PRIORITY SUMMARY", { size: 16, color: "C0392B", characterSpacing: 60 })] }),
+                ...shortSummary.map(b => new Paragraph({ spacing: { before: 0, after: 40 }, bullet: { level: 0 }, children: [run(safeText(b), { size: 17, color: GRAY })] })),
+              ],
+            }),
+          ],
+        }),
+      ],
+    }));
+  }
 
   priorities.forEach((r: any, ri: number) => {
     const num        = safeText(edits[`s6_${ri}_0`] ?? r.priority ?? ri + 1);
     const initiative = safeText(edits[`s6_${ri}_1`] ?? r.initiative ?? "");
     const tier       = safeText(edits[`s6_${ri}_2`] ?? r.tier ?? "");
+    const actionType = safeText(edits[`s6_${ri}_5`] ?? r.actionType ?? "");
     const action     = safeText(edits[`s6_${ri}_3`] ?? r.action ?? "");
     const reason     = safeText(edits[`s6_${ri}_4`] ?? r.reason ?? "");
     const source     = safeText(r.source ?? "");
@@ -631,7 +717,7 @@ function buildSection6(reportData: any, secNum: number, edits: Record<string, st
             children: [boldRun(num, { size: 36, color: "FFFFFF" })],
           })],
         }),
-        // Initiative + tier (wide, dark/navy)
+        // Initiative + tier + actionType (wide, dark/navy)
         new TableCell({
           width: { size: 10000, type: WidthType.DXA },
           shading: shade(hdrBg),
@@ -640,12 +726,16 @@ function buildSection6(reportData: any, secNum: number, edits: Record<string, st
           borders: noCellBorders(),
           children: [
             new Paragraph({
-              spacing: { before: 0, after: tier ? 50 : 0 },
+              spacing: { before: 0, after: (tier || actionType) ? 50 : 0 },
               children: [boldRun(initiative, { size: 22, color: "FFFFFF" })],
             }),
-            ...(tier ? [new Paragraph({
+            ...((tier || actionType) ? [new Paragraph({
               spacing: { before: 0, after: 0 },
-              children: [run(tier, { size: 16, color: "9CA3AF" })],
+              children: [
+                ...(tier ? [run(tier, { size: 16, color: "9CA3AF" })] : []),
+                ...(tier && actionType ? [run("  ·  ", { size: 16, color: "6B7280" })] : []),
+                ...(actionType ? [run(actionType, { size: 16, color: "BBBBBB" })] : []),
+              ],
             })] : []),
           ],
         }),
@@ -876,11 +966,11 @@ function buildSectionKeywords(reportData: any, secNum: number, edits: Record<str
     }));
   }
   items.push(dataTable([
-    { label: "Keyword",                  dxa: 2160 },
-    { label: "Recommendation Type",      dxa: 1700 },
-    { label: "Target Page / Asset",      dxa: 2160 },
-    { label: "Why It's Recommended",     dxa: 3480 },
-    { label: "Source",                   dxa: 1300 },
+    { label: "Keyword",            dxa: 2160 },
+    { label: "Suggested Type",     dxa: 1700 },
+    { label: "Target",             dxa: 2160 },
+    { label: "Why It's Suggested", dxa: 3480 },
+    { label: "Source",             dxa: 1300 },
   ], rows)); // 2160+1700+2160+3480+1300=10800 ✓
   return items;
 }

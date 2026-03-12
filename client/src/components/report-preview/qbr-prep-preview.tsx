@@ -33,7 +33,7 @@ const SECTION_DEFS = [
   { key: "section_goals", title: "What Matters Most This Quarter" },
   { key: "section_conversions", title: "Where Conversions Actually Happen" },
   { key: "section_traffic", title: "Top Organic Traffic Drivers" },
-  { key: "section_services", title: "Site Service Overview" },
+  { key: "section_services", title: "Levels of Care Overview" },
   { key: "section_diagnosis", title: "SEO Tier Diagnosis" },
   { key: "section_priorities", title: "What We Need to Do Next" },
   { key: "section_keywords", title: "Suggested Keywords for Next Quarter" },
@@ -149,6 +149,18 @@ interface TrafficPageRow {
 interface ServiceRow {
   service: string;
   examplePage: string;
+  seoScore?: number;
+  notes?: string;
+}
+
+interface TierScorecardEntry {
+  tierNumber: number;
+  tierName: string;
+  status: "Pass" | "Partial" | "Blocked" | "Unknown";
+  findings: string;
+  inferences: string;
+  whyItMatters: string;
+  source: string;
 }
 
 interface PriorityRow {
@@ -158,6 +170,8 @@ interface PriorityRow {
   action: string;
   reason: string;
   source?: string;
+  actionType?: string;
+  impact?: string;
 }
 
 interface TrackingRow {
@@ -186,8 +200,8 @@ export interface QbrPrepPreviewProps {
   section2Conversions: { topConvertingPages: ConvertingPageRow[]; topConversionPatterns?: ConversionPatternRow[]; topConvertingSources: ConvertingSourceRow[]; trackingDisclaimer?: string };
   section3Traffic: { topTrafficTopics: TrafficTopicRow[]; topTrafficPages: TrafficPageRow[] };
   section4Services: { services: ServiceRow[] };
-  section5Diagnosis: { tier: number; tierName: string; diagnosis: string };
-  section6Priorities: { priorities: PriorityRow[] };
+  section5Diagnosis: { tier: number; tierName: string; diagnosis: string; tierScorecard?: TierScorecardEntry[] };
+  section6Priorities: { priorities: PriorityRow[]; shortSummary?: string[]; crossSellPreview?: any[]; auditMissing?: boolean; strategyBankFetchFailed?: boolean };
   section7Tracking: { tracking: TrackingRow[] };
   section7Credits?: { months: CreditMonthBlock[] };
   sectionSuggestedKeywords?: SectionSuggestedKeywords;
@@ -201,6 +215,60 @@ export interface QbrPrepPreviewProps {
   hiddenTables?: Record<string, boolean>;
   onToggleSection?: (key: string) => void;
   onToggleTable?: (key: string) => void;
+}
+
+function SeoScoreBadge({ score }: { score: number }) {
+  const color = score >= 8 ? "#065F46" : score >= 6 ? "#92400E" : score >= 4 ? "#B45309" : "#991B1B";
+  const bg = score >= 8 ? "#D1FAE5" : score >= 6 ? "#FEF3C7" : score >= 4 ? "#FEF3C7" : "#FEE2E2";
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 8px", borderRadius: 10, backgroundColor: bg, color, fontWeight: 700, fontSize: "11px" }}>
+      {score}/10
+    </span>
+  );
+}
+
+function ActionTypeBadge({ value }: { value: string }) {
+  const COLOR_MAP: Record<string, [string, string]> = {
+    "Technical SEO": ["#374151", "#F3F4F6"],
+    "Tracking / Analytics": ["#1E40AF", "#DBEAFE"],
+    "CRO": ["#9A3412", "#FFEDD5"],
+    "Content": ["#5B21B6", "#EDE9FE"],
+    "IA / Architecture": ["#1E3A5F", "#DBEAFE"],
+    "Local SEO": ["#065F46", "#D1FAE5"],
+    "Internal Linking": ["#0F766E", "#CCFBF1"],
+    "Link Building": ["#991B1B", "#FEE2E2"],
+  };
+  const [color, bg] = COLOR_MAP[value] ?? ["#374151", "#F3F4F6"];
+  if (!value) return null;
+  return (
+    <span style={{ display: "inline-block", padding: "2px 7px", borderRadius: 10, backgroundColor: bg, color, fontWeight: 600, fontSize: "10px", whiteSpace: "nowrap" }}>
+      {value}
+    </span>
+  );
+}
+
+function TierScorecardCard({ entry }: { entry: TierScorecardEntry }) {
+  const STATUS_MAP: Record<string, [string, string]> = {
+    "Pass": ["#065F46", "#D1FAE5"],
+    "Partial": ["#92400E", "#FEF3C7"],
+    "Blocked": ["#991B1B", "#FEE2E2"],
+    "Unknown": ["#374151", "#F3F4F6"],
+  };
+  const [sColor, sBg] = STATUS_MAP[entry.status] ?? ["#374151", "#F3F4F6"];
+  return (
+    <div style={{ border: "1px solid #E5E7EB", borderRadius: 4, marginBottom: 8, overflow: "hidden" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 12px", backgroundColor: "#F9FAFB", borderBottom: "1px solid #E5E7EB" }}>
+        <span style={{ fontWeight: 700, fontSize: "11px", color: ACCENT }}>Tier {entry.tierNumber} — {entry.tierName}</span>
+        <span style={{ marginLeft: "auto", padding: "2px 8px", borderRadius: 10, backgroundColor: sBg, color: sColor, fontWeight: 700, fontSize: "10px" }}>{entry.status}</span>
+      </div>
+      <div style={{ padding: "8px 12px", fontSize: "10.5px", lineHeight: 1.55 }}>
+        <div style={{ marginBottom: 5 }}><span style={{ fontWeight: 600, color: "#374151" }}>Findings: </span><span style={{ color: "#4B5563" }}>{entry.findings}</span></div>
+        <div style={{ marginBottom: 5 }}><span style={{ fontWeight: 600, color: "#374151" }}>Inference: </span><span style={{ color: "#4B5563" }}>{entry.inferences}</span></div>
+        <div style={{ marginBottom: 5 }}><span style={{ fontWeight: 600, color: "#374151" }}>Why It Matters: </span><span style={{ color: "#6B7280" }}>{entry.whyItMatters}</span></div>
+        <div style={{ color: "#9CA3AF", fontSize: "10px" }}>Source: {entry.source}</div>
+      </div>
+    </div>
+  );
 }
 
 function QueryChipsCell({
@@ -554,12 +622,15 @@ export function QbrPrepPreview({
           : <EditableCell editKey={`s4_${ri}_1`} value={r.examplePage} edits={edits} onEdit={onEdit} />;
       })()}
     </span>,
+    <span key="score">{r.seoScore != null ? <SeoScoreBadge score={r.seoScore} /> : <span style={{ color: "#9CA3AF", fontSize: "10px" }}>—</span>}</span>,
+    <span key="notes" style={{ fontSize: "10px", color: "#6B7280", lineHeight: 1.4 }}>{r.notes ?? ""}</span>,
   ]);
 
   const s6SourceRows: React.ReactNode[][] = section6Priorities.priorities.map((r, ri) => [
     <EditableCell key="n" editKey={`s6_${ri}_0`} value={String(r.priority)} edits={edits} onEdit={onEdit} />,
     <BadgeCell key="i" editKey={`s6_${ri}_1`} value={r.initiative} dataSource={r.source} edits={edits} onEdit={onEdit} />,
     <TierBadge key="t" tier={edits[`s6_${ri}_2`] ?? r.tier} />,
+    <ActionTypeBadge key="at" value={edits[`s6_${ri}_5`] ?? (r.actionType ?? "")} />,
     <EditableCell key="a" editKey={`s6_${ri}_3`} value={r.action} edits={edits} onEdit={onEdit} />,
     <EditableCell key="r" editKey={`s6_${ri}_4`} value={r.reason} edits={edits} onEdit={onEdit} />,
   ]);
@@ -695,7 +766,7 @@ export function QbrPrepPreview({
                 <SectionHeading num={sectionNums["section_conversions"]} title="Where Conversions Actually Happen" onHide={hideSecBtn("section_conversions")} />
                 {tblSubLabel("table_s2_pages", "Top Converting Pages", !!hiddenTables["table_s2_pages"])}
                 {hiddenTables["table_s2_pages"] ? tblHiddenBar("table_s2_pages", "Top Converting Pages") : (
-                  <AddableReportTable tableId="s2a" headers={["Type", "Page / Pattern", "Notes / What We're Learning"]} sourceRows={s2aSourceRows} edits={edits} onEdit={onEdit} />
+                  <AddableReportTable tableId="s2a" headers={["Type", "Page", "Notes / What We're Learning"]} sourceRows={s2aSourceRows} edits={edits} onEdit={onEdit} />
                 )}
                 {tblSubLabel("table_s2_patterns", "Top Conversion Patterns", !!hiddenTables["table_s2_patterns"], s2cActualSources.length > 0 ? s2cActualSources : undefined)}
                 {hiddenTables["table_s2_patterns"] ? tblHiddenBar("table_s2_patterns", "Top Conversion Patterns") : (
@@ -742,7 +813,7 @@ export function QbrPrepPreview({
                 </colgroup>
                 <thead>
                   <tr style={{ backgroundColor: `${ACCENT}0D` }}>
-                    {["Topic", ...(hasTopicDeltas ? ["# Queries", "QoQ Queries", "Impressions", "QoQ Impressions"] : []), "Example Queries", "🔗 Admits"].map(h => (
+                    {["Topic", ...(hasTopicDeltas ? ["# Queries", "QoQ Queries", "TOTAL IMP.", "QOQ IMP."] : []), "Example Queries", "🔗 Admits"].map(h => (
                       <th key={h} style={{ padding: "5px 8px", textAlign: h === "🔗 Admits" ? "center" : "left", fontWeight: 600, fontSize: "9px", color: ACCENT, textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: `1px solid ${ACCENT}20`, wordBreak: "break-word" }}>{h}</th>
                     ))}
                   </tr>
@@ -815,7 +886,7 @@ export function QbrPrepPreview({
                 </colgroup>
                 <thead>
                   <tr style={{ backgroundColor: `${ACCENT}0D` }}>
-                    {["Page", "Clicks", ...(hasPageDeltas ? ["QoQ Clicks", "Impressions", "QoQ Impressions", "# Queries", "QoQ Queries"] : []), "CTR", "🔗 Admits"].map(h => (
+                    {["Page", "Clicks", ...(hasPageDeltas ? ["QoQ Clicks", "TOTAL IMP.", "QOQ IMP.", "# Queries", "QoQ Queries"] : []), "CTR", "🔗 Admits"].map(h => (
                       <th key={h} style={{ padding: "5px 8px", textAlign: h === "🔗 Admits" ? "center" : "left", fontWeight: 600, fontSize: "9px", color: ACCENT, textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: `1px solid ${ACCENT}20`, wordBreak: "break-word" }}>{h}</th>
                     ))}
                   </tr>
@@ -855,13 +926,13 @@ export function QbrPrepPreview({
             </>) : null}
 
             {hiddenSections["section_services"] ? (
-              <HiddenSectionBar secKey="section_services" title="Site Service Overview" onShow={() => onToggleSection?.("section_services")} />
+              <HiddenSectionBar secKey="section_services" title="Levels of Care Overview" onShow={() => onToggleSection?.("section_services")} />
             ) : !isSectionAutoHidden("section_services", hiddenTables) && sectionNums["section_services"] !== undefined ? (
               <>
-                <SectionHeading num={sectionNums["section_services"]} title="Site Service Overview" onHide={hideSecBtn("section_services")} />
-                {tblSubLabel("table_s4_services", "Service Pages", !!hiddenTables["table_s4_services"], ["Screaming Frog"])}
-                {hiddenTables["table_s4_services"] ? tblHiddenBar("table_s4_services", "Service Pages") : (
-                  <AddableReportTable tableId="s4" headers={["Service", "Example Page"]} sourceRows={s4SourceRows} edits={edits} onEdit={onEdit} />
+                <SectionHeading num={sectionNums["section_services"]} title="Levels of Care Overview" onHide={hideSecBtn("section_services")} />
+                {tblSubLabel("table_s4_services", "Levels of Care", !!hiddenTables["table_s4_services"], ["Screaming Frog"])}
+                {hiddenTables["table_s4_services"] ? tblHiddenBar("table_s4_services", "Levels of Care") : (
+                  <AddableReportTable tableId="s4" headers={["Level of Care", "Page", "SEO Score", "Notes"]} sourceRows={s4SourceRows} edits={edits} onEdit={onEdit} />
                 )}
               </>
             ) : null}
@@ -871,10 +942,17 @@ export function QbrPrepPreview({
             ) : sectionNums["section_diagnosis"] !== undefined ? (
               <>
                 <SectionHeading num={sectionNums["section_diagnosis"]} title="SEO Tier Diagnosis" onHide={hideSecBtn("section_diagnosis")} />
-                <div style={{ padding: "12px 16px", backgroundColor: "#FDF2F0", borderRadius: 4, border: `1px solid ${ACCENT}33`, marginBottom: 12, fontSize: "11px" }}>
+                <div style={{ padding: "12px 16px", backgroundColor: "#FDF2F0", borderRadius: 4, border: `1px solid ${ACCENT}33`, marginBottom: 10, fontSize: "11px" }}>
                   <div style={{ fontWeight: 700, color: ACCENT, marginBottom: 6, fontSize: "12px" }}>Tier {section5Diagnosis.tier} — {section5Diagnosis.tierName}</div>
                   <EditableSection editKey="s5_diagnosis" value={section5Diagnosis.diagnosis} edits={edits} onEdit={onEdit} as="div" multiline className="text-gray-700 leading-relaxed" />
                 </div>
+                {section5Diagnosis.tierScorecard && section5Diagnosis.tierScorecard.length > 0 && (
+                  <div style={{ marginBottom: 12 }}>
+                    {section5Diagnosis.tierScorecard.map(entry => (
+                      <TierScorecardCard key={entry.tierNumber} entry={entry} />
+                    ))}
+                  </div>
+                )}
               </>
             ) : null}
 
@@ -882,11 +960,19 @@ export function QbrPrepPreview({
               <HiddenSectionBar secKey="section_priorities" title="What We Need to Do Next" onShow={() => onToggleSection?.("section_priorities")} />
             ) : !isSectionAutoHidden("section_priorities", hiddenTables) && sectionNums["section_priorities"] !== undefined ? (<>
             <SectionHeading num={sectionNums["section_priorities"]} title="What We Need to Do Next" onHide={hideSecBtn("section_priorities")} />
+            {section6Priorities.shortSummary && section6Priorities.shortSummary.length > 0 && (
+              <div style={{ padding: "10px 14px", backgroundColor: "#F9FAFB", borderRadius: 4, border: "1px solid #E5E7EB", marginBottom: 10, fontSize: "10.5px" }}>
+                <div style={{ fontWeight: 700, color: ACCENT, marginBottom: 6, fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Priority Summary</div>
+                <ul style={{ margin: 0, padding: "0 0 0 16px", lineHeight: 1.6, color: "#374151" }}>
+                  {section6Priorities.shortSummary.map((b, i) => <li key={i}>{b}</li>)}
+                </ul>
+              </div>
+            )}
             {tblSubLabel("table_s6", "Priority Actions", !!hiddenTables["table_s6"])}
             {hiddenTables["table_s6"] ? tblHiddenBar("table_s6", "Priority Actions") : (
             <AddableReportTable
               tableId="s6"
-              headers={["#", "Initiative", "Tier", "Action", "Reason"]}
+              headers={["#", "Initiative", "Tier", "Type", "Action", "Why It Matters"]}
               sourceRows={s6SourceRows}
               edits={edits}
               onEdit={onEdit}
@@ -995,7 +1081,7 @@ export function QbrPrepPreview({
                       </colgroup>
                       <thead>
                         <tr style={{ backgroundColor: `${ACCENT}0D` }}>
-                          {["Keyword", "Recommendation Type", "Target Page / Asset", "Why It's Recommended", "Source"].map(h => (
+                          {["Keyword", "Suggested Type", "Target", "Why It's Suggested", "Source"].map(h => (
                             <th key={h} style={{ padding: "5px 8px", textAlign: "left", fontWeight: 600, fontSize: "9px", color: ACCENT, textTransform: "uppercase" as const, letterSpacing: "0.06em", borderBottom: `1px solid ${ACCENT}20`, wordBreak: "break-word" }}>{h}</th>
                           ))}
                         </tr>

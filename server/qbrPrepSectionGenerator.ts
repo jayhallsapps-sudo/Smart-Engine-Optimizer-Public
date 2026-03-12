@@ -35,6 +35,7 @@ import type {
   PriorityRow,
   TrackingRow,
   AdditionalOpportunity,
+  TierScorecardEntry,
 } from "./qbrPrepTypes";
 
 const JUNK_UNICODE_RE = /[\uFFFD\uFFFE\uFFFF\uF8FF\u00AD\u2060]/g;
@@ -570,6 +571,7 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
     tier: tierDiagnosis.tier,
     tierName: tierDiagnosis.tierName,
     diagnosis: tierDiagnosis.diagnosis,
+    tierScorecard: buildTierScorecard(tierInput),
   };
 
   const completedWork = [...airtableItems.map(i => i.task), ...asanaTasks.filter((t: any) => t.completed).map((t: any) => t.name)];
@@ -2062,7 +2064,152 @@ function generateSection4(
     }
   }
 
-  return { services: services.slice(0, 8) };
+  // Compute SEO score and notes for each service row
+  const tier1CriticalServices = new Set([
+    "Detox", "Residential / Inpatient", "Verify Insurance", "Contact / Admissions",
+  ]);
+  const scoredServices: ServiceRow[] = services.slice(0, 8).map(s => {
+    const notFound = s.examplePage === ME || /manual entry needed/i.test(s.examplePage);
+    const isCritical = tier1CriticalServices.has(s.service);
+
+    if (notFound) {
+      return {
+        ...s,
+        seoScore: isCritical ? 1 : 2,
+        notes: isCritical
+          ? `No dedicated ${s.service} page was confirmed in the crawl — this is a Tier 1 conversion gap. A clear, dedicated page is needed before other optimization will compound.`
+          : `No dedicated ${s.service} page was found in the crawl. Adding a dedicated page would improve topical authority and user navigation.`,
+      };
+    }
+
+    const pathParts = s.examplePage.split("/").filter(Boolean);
+    const depth = pathParts.length;
+    let score = depth <= 1 ? 7 : depth === 2 ? 6 : 5;
+    if (isCritical) score = Math.min(score, 6);
+
+    const urlNote = depth >= 3
+      ? `Nested URL (${s.examplePage}) — a flatter path may improve authority flow and user clarity.`
+      : `URL structure is reasonable (${s.examplePage}).`;
+
+    const qualityNote = isCritical
+      ? `Inference: Content depth, CTA placement, and internal linking to this page should be verified before claiming full conversion readiness.`
+      : `Inference: Content quality and internal linking effectiveness need manual review to confirm above-baseline performance.`;
+
+    return {
+      ...s,
+      seoScore: score,
+      notes: `${urlNote} ${qualityNote}`,
+    };
+  });
+
+  return { services: scoredServices };
+}
+
+function buildTierScorecard(tierInput: TierDiagnosisInput): TierScorecardEntry[] {
+  const t1Pass = tierInput.hasVobPage && tierInput.hasContactPage
+    && tierInput.hasDetoxPage && tierInput.hasResidentialPage
+    && tierInput.highIntentTrafficLandsOnClearUrls;
+
+  const t1Status: TierScorecardEntry["status"] = t1Pass ? "Pass"
+    : (!tierInput.hasDetoxPage && !tierInput.hasResidentialPage) ? "Blocked"
+    : "Partial";
+
+  const t1Findings = [
+    `Verify Insurance / VOB page: ${tierInput.hasVobPage ? "Confirmed present" : "Not confirmed in crawl"}`,
+    `Contact / Admissions page: ${tierInput.hasContactPage ? "Confirmed present" : "Not confirmed in crawl"}`,
+    `Detox service page: ${tierInput.hasDetoxPage ? "Confirmed present" : "Not confirmed in crawl"}`,
+    `Residential page: ${tierInput.hasResidentialPage ? "Confirmed present" : "Not confirmed in crawl"}`,
+  ].join(". ");
+
+  const t1Inferences = tierInput.highIntentTrafficLandsOnClearUrls
+    ? "High-intent traffic appears to land on clear primary URLs — conversion path alignment is directionally sound. Content depth and CTA clarity still require manual verification."
+    : "High-intent traffic may not be landing on clear primary service URLs — review which pages are capturing service-intent queries and whether they are conversion-optimized.";
+
+  const t2Pass = tierInput.hasConditionsHub && tierInput.hasTherapiesHub && tierInput.missingH1s <= 10;
+  const t2Status: TierScorecardEntry["status"] = t2Pass ? "Pass"
+    : (!tierInput.hasConditionsHub && !tierInput.hasTherapiesHub) ? "Blocked"
+    : "Partial";
+
+  const t2Findings = [
+    `Conditions hub: ${tierInput.hasConditionsHub ? "Structure detected" : "Not detected in crawl"}`,
+    `Therapies hub: ${tierInput.hasTherapiesHub ? "Structure detected" : "Not detected in crawl"}`,
+    tierInput.missingH1s > 10 ? `${tierInput.missingH1s} pages with missing H1 tags detected` : "H1 coverage appears adequate",
+  ].join(". ");
+
+  const t2Inferences = !tierInput.hasConditionsHub || !tierInput.hasTherapiesHub
+    ? "Without hub structures, condition and therapy pages may be fragmenting authority rather than consolidating it into service pages. Hub pages create a topical map that Google uses to distribute ranking signals."
+    : "Hub structures appear present. Internal linking quality and depth within the hub require manual review to confirm authority flow is functioning.";
+
+  const hasT3Issues = tierInput.duplicateServicePages > 3 || tierInput.thinPages > 15
+    || tierInput.errors4xx5xx > 10 || tierInput.redirects > (tierInput.totalUrls * 0.15);
+  const t3Status: TierScorecardEntry["status"] = hasT3Issues ? "Partial" : "Pass";
+
+  const t3Findings = [
+    tierInput.errors4xx5xx > 0 ? `${tierInput.errors4xx5xx} error pages (4xx/5xx) detected` : "No significant error pages detected",
+    tierInput.thinPages > 0 ? `${tierInput.thinPages} thin pages flagged in crawl` : "Thin page count within acceptable range",
+    tierInput.duplicateServicePages > 0 ? `${tierInput.duplicateServicePages} duplicate or overlapping service pages detected` : "No significant service page duplication",
+    tierInput.redirects > 0 ? `${tierInput.redirects} redirects detected` : null,
+  ].filter(Boolean).join(". ");
+
+  const t3Inferences = tierInput.thinPages > 10
+    ? "Thin pages suppress crawl efficiency and dilute domain quality signals. Consolidate or strengthen pages with fewer than ~300 words of meaningful content."
+    : tierInput.errors4xx5xx > 10
+    ? "Error pages create structural drag on crawl budget — crawlers may be wasting capacity on dead URLs instead of priority service pages."
+    : "Technical indicators are within a manageable range. Spot-check error pages and redirect chains for any suppression on key conversion pages.";
+
+  const t4Present = tierInput.hasAboutPage && tierInput.hasTeamPage;
+  const t4Status: TierScorecardEntry["status"] = t4Present && tierInput.hasAlumniPage ? "Pass"
+    : t4Present ? "Partial"
+    : "Unknown";
+
+  const t4Findings = [
+    `About page: ${tierInput.hasAboutPage ? "Present" : "Not confirmed in crawl"}`,
+    `Team / leadership page: ${tierInput.hasTeamPage ? "Present" : "Not confirmed in crawl"}`,
+    `Alumni / aftercare page: ${tierInput.hasAlumniPage ? "Present" : "Not confirmed in crawl"}`,
+  ].join(". ");
+
+  const t4Inferences = !tierInput.hasAlumniPage
+    ? "Alumni and aftercare content is a differentiator in competitive treatment markets — its absence limits E-E-A-T signals in comparison-stage searches where multiple facilities are evaluated side-by-side."
+    : "Authority-stage pages are present. External credibility signals (reviews, accreditation mentions, directory listings) determine the ceiling beyond this point.";
+
+  return [
+    {
+      tierNumber: 1,
+      tierName: "Trust & Eligibility",
+      status: t1Status,
+      findings: t1Findings,
+      inferences: t1Inferences,
+      whyItMatters: "Tier 1 pages are the foundation of organic admissions conversion. Without a clear VOB page, contact path, and primary service pages, all higher-tier work cannot compound.",
+      source: "Screaming Frog",
+    },
+    {
+      tierNumber: 2,
+      tierName: "Structural Authority",
+      status: t2Status,
+      findings: t2Findings,
+      inferences: t2Inferences,
+      whyItMatters: "Service architecture determines how authority flows between pages. Hub structures allow Google to map topical expertise and pass ranking power into service pages.",
+      source: "Screaming Frog",
+    },
+    {
+      tierNumber: 3,
+      tierName: "Consolidation & Cleanup",
+      status: t3Status,
+      findings: t3Findings,
+      inferences: t3Inferences,
+      whyItMatters: "Technical drag (errors, thin content, duplication) reduces crawl efficiency and can suppress rankings across all pages — including core conversion pages.",
+      source: "Screaming Frog + GSC",
+    },
+    {
+      tierNumber: 4,
+      tierName: "Conversion & Differentiation",
+      status: t4Status,
+      findings: t4Findings,
+      inferences: t4Inferences,
+      whyItMatters: "Authority depth signals real expertise and community trust — factors that increasingly influence Google rankings for health-related (YMYL) content.",
+      source: "Screaming Frog",
+    },
+  ];
 }
 
 function checkHighIntentLanding(gscPages: any[], sfData: Record<string, any>[], sfHeaders: string[]): boolean {
@@ -2596,11 +2743,55 @@ function generateSection6(
     }
   }
 
+  // Assign actionType and impact to each priority row
+  function inferActionType(p: PriorityRow): string {
+    const init = p.initiative.toLowerCase();
+    if (/tracking|attribution|analytics|ga4|call track/.test(init)) return "Tracking / Analytics";
+    if (/technical|crawl|indexab|404|error|redirect|speed|noindex/.test(init)) return "Technical SEO";
+    if (/internal.?link/.test(init)) return "Internal Linking";
+    if (/admissions|vob|insurance|conversion path|cro|contact/.test(init)) return "CRO";
+    if (/local|gbp|location/.test(init)) return "Local SEO";
+    if (/service page|service foundation|detox|residential/.test(init)) return "Content";
+    if (/hub|conditions|therapies|architecture/.test(init)) return "IA / Architecture";
+    if (/content refresh|refresh|blog|article/.test(init)) return "Content";
+    if (/link.?build|backlink|pr|authority/.test(init)) return "Link Building";
+    return "Content";
+  }
+
+  function inferImpact(p: PriorityRow): string {
+    const t = p.tier?.toLowerCase() ?? "";
+    if (t.includes("1")) return "High";
+    if (t.includes("2")) return "High";
+    if (t.includes("3")) return "Medium";
+    return "Medium";
+  }
+
+  const finalPriorities = cappedPriorities.slice(0, 7).map(p => ({
+    ...p,
+    actionType: p.actionType ?? inferActionType(p),
+    impact: p.impact ?? inferImpact(p),
+  }));
+
+  // Generate short summary bullets (3–5 bullets distilling the top actions)
+  const shortSummary: string[] = [];
+  if (finalPriorities.length > 0) {
+    shortSummary.push(`Tier ${section5.tier} diagnosis: ${section5.tierName} — ${section5.tier <= 2 ? "foundational gaps must be resolved before content or authority work will compound" : section5.tier === 3 ? "consolidation and cleanup will remove structural drag on growth" : "differentiation and authority expansion are the next levers"}.`);
+  }
+  const highPriorities = finalPriorities.filter(p => p.impact === "High").slice(0, 2);
+  for (const p of highPriorities) {
+    shortSummary.push(`${p.initiative}: ${p.action.split(".")[0].slice(0, 110)}.`);
+  }
+  const medPriorities = finalPriorities.filter(p => p.impact === "Medium").slice(0, 2);
+  for (const p of medPriorities) {
+    shortSummary.push(`${p.initiative}: ${p.action.split(".")[0].slice(0, 110)}.`);
+  }
+
   return {
-    priorities: cappedPriorities.slice(0, 7),
+    priorities: finalPriorities,
     crossSellPreview: crossSellPreview.length > 0 ? crossSellPreview : undefined,
     auditMissing: auditMissing || undefined,
     strategyBankFetchFailed: strategyBankFetchFailed || undefined,
+    shortSummary: shortSummary.length > 0 ? shortSummary : undefined,
   };
 }
 

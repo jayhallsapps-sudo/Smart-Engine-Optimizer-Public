@@ -106,6 +106,70 @@ function SubLabel({ text, sources }: { text: string; sources?: string[] }) {
   );
 }
 
+function PrintSeoScoreBadge({ score }: { score: number }) {
+  const color = score >= 8 ? "#065F46" : score >= 6 ? "#92400E" : score >= 4 ? "#B45309" : "#991B1B";
+  const bg = score >= 8 ? "#D1FAE5" : score >= 6 ? "#FEF3C7" : score >= 4 ? "#FEF3C7" : "#FEE2E2";
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", padding: "1px 7px", borderRadius: 10, backgroundColor: bg, color, fontWeight: 700, fontSize: "10px" }}>
+      {score}/10
+    </span>
+  );
+}
+
+function PrintActionTypeBadge({ value }: { value: string }) {
+  const COLOR_MAP: Record<string, [string, string]> = {
+    "Technical SEO": ["#374151", "#F3F4F6"],
+    "Tracking / Analytics": ["#1E40AF", "#DBEAFE"],
+    "CRO": ["#9A3412", "#FFEDD5"],
+    "Content": ["#5B21B6", "#EDE9FE"],
+    "IA / Architecture": ["#1E3A5F", "#DBEAFE"],
+    "Local SEO": ["#065F46", "#D1FAE5"],
+    "Internal Linking": ["#0F766E", "#CCFBF1"],
+    "Link Building": ["#991B1B", "#FEE2E2"],
+  };
+  const [color, bg] = COLOR_MAP[value] ?? ["#374151", "#F3F4F6"];
+  if (!value) return null;
+  return (
+    <span style={{ display: "inline-block", padding: "1px 6px", borderRadius: 10, backgroundColor: bg, color, fontWeight: 600, fontSize: "9px", whiteSpace: "nowrap" }}>
+      {value}
+    </span>
+  );
+}
+
+interface PrintTierScorecardEntryProps {
+  tierNumber: number;
+  tierName: string;
+  status: string;
+  findings: string;
+  inferences: string;
+  whyItMatters: string;
+  source: string;
+}
+
+function PrintTierScorecardCard({ entry }: { entry: PrintTierScorecardEntryProps }) {
+  const STATUS_MAP: Record<string, [string, string]> = {
+    "Pass": ["#065F46", "#D1FAE5"],
+    "Partial": ["#92400E", "#FEF3C7"],
+    "Blocked": ["#991B1B", "#FEE2E2"],
+    "Unknown": ["#374151", "#F3F4F6"],
+  };
+  const [sColor, sBg] = STATUS_MAP[entry.status] ?? ["#374151", "#F3F4F6"];
+  return (
+    <div style={{ border: "1px solid #E5E7EB", borderRadius: 4, marginBottom: 6, overflow: "hidden", breakInside: "avoid" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", backgroundColor: "#F9FAFB", borderBottom: "1px solid #E5E7EB" }}>
+        <span style={{ fontWeight: 700, fontSize: "10px", color: ACCENT }}>Tier {entry.tierNumber} — {entry.tierName}</span>
+        <span style={{ marginLeft: "auto", padding: "1px 7px", borderRadius: 10, backgroundColor: sBg, color: sColor, fontWeight: 700, fontSize: "9px" }}>{entry.status}</span>
+      </div>
+      <div style={{ padding: "6px 10px", fontSize: "9.5px", lineHeight: 1.5 }}>
+        <div style={{ marginBottom: 4 }}><span style={{ fontWeight: 600, color: "#374151" }}>Findings: </span><span style={{ color: "#4B5563" }}>{entry.findings}</span></div>
+        <div style={{ marginBottom: 4 }}><span style={{ fontWeight: 600, color: "#374151" }}>Inference: </span><span style={{ color: "#4B5563" }}>{entry.inferences}</span></div>
+        <div style={{ marginBottom: 4 }}><span style={{ fontWeight: 600, color: "#374151" }}>Why It Matters: </span><span style={{ color: "#6B7280" }}>{entry.whyItMatters}</span></div>
+        <div style={{ color: "#9CA3AF", fontSize: "9px" }}>Source: {entry.source}</div>
+      </div>
+    </div>
+  );
+}
+
 function parseS7Sources(source: string): string[] {
   return source.split(" + ").map(s => {
     if (s === "Google Search Console") return "GSC";
@@ -250,6 +314,8 @@ export default function QbrPrepPrint() {
       return [
         cell(e(`s4_${ri}_0`, r.service)),
         printIsPathLike(epVal) ? <PrintPathTag value={epVal} /> : cell(epVal),
+        r.seoScore != null ? <PrintSeoScoreBadge score={r.seoScore} /> : cell("—"),
+        <span style={{ fontSize: "9px", color: "#6B7280", lineHeight: 1.4 }}>{r.notes ?? ""}</span>,
       ];
     }),
     ...customRowsAsNodes(edits, "s4"),
@@ -260,6 +326,7 @@ export default function QbrPrepPrint() {
       cell(e(`s6_${ri}_0`, String(r.priority))),
       badgeCell(e(`s6_${ri}_1`, r.initiative), r.source),
       <PrintTierBadge tier={e(`s6_${ri}_2`, r.tier)} />,
+      <PrintActionTypeBadge value={edits[`s6_${ri}_5`] ?? (r.actionType ?? "")} />,
       cell(e(`s6_${ri}_3`, r.action)),
       cell(e(`s6_${ri}_4`, r.reason)),
     ]),
@@ -350,7 +417,7 @@ export default function QbrPrepPrint() {
               {tblVis("table_s2_pages") && (
                 <>
                   <SubLabel text="Top Converting Pages" />
-                  <ReportTable headers={["Type", "Page / Pattern", "Notes / What We're Learning"]} rows={s2aRows} />
+                  <ReportTable headers={["Type", "Page", "Notes / What We're Learning"]} rows={s2aRows} />
                 </>
               )}
               {tblVis("table_s2_patterns") && (
@@ -397,7 +464,7 @@ export default function QbrPrepPrint() {
               </colgroup>
               <thead>
                 <tr style={{ backgroundColor: `${ACCENT}0D` }}>
-                  {["Topic", ...(hasTopicDeltas ? ["# Queries", "QoQ Queries", "Impressions", "QoQ Impressions"] : []), "Example Queries", "🔗 Admits"].map((h: string) => (
+                  {["Topic", ...(hasTopicDeltas ? ["# Queries", "QoQ Queries", "TOTAL IMP.", "QOQ IMP."] : []), "Example Queries", "🔗 Admits"].map((h: string) => (
                     <th key={h} style={{ padding: "5px 8px", textAlign: h === "🔗 Admits" ? "center" : "left", fontWeight: 600, fontSize: "9px", color: ACCENT, textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: `1px solid ${ACCENT}20`, wordBreak: "break-word" }}>{h}</th>
                   ))}
                 </tr>
@@ -474,7 +541,7 @@ export default function QbrPrepPrint() {
               </colgroup>
               <thead>
                 <tr style={{ backgroundColor: `${ACCENT}0D` }}>
-                  {["Page", "Clicks", ...(hasPageDeltas ? ["QoQ Clicks", "Impressions", "QoQ Impressions", "# Queries", "QoQ Queries"] : []), "CTR", "🔗 Admits"].map((h: string) => (
+                  {["Page", "Clicks", ...(hasPageDeltas ? ["QoQ Clicks", "TOTAL IMP.", "QOQ IMP.", "# Queries", "QoQ Queries"] : []), "CTR", "🔗 Admits"].map((h: string) => (
                     <th key={h} style={{ padding: "5px 8px", textAlign: h === "🔗 Admits" ? "center" : "left", fontWeight: 600, fontSize: "9px", color: ACCENT, textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: `1px solid ${ACCENT}20`, wordBreak: "break-word" }}>{h}</th>
                   ))}
                 </tr>
@@ -523,11 +590,11 @@ export default function QbrPrepPrint() {
 
           {secVis("section_services") && !printSecAutoHidden("section_services", hiddenTables) && (
             <>
-              <SectionHeading num={secNums["section_services"]!} title="Site Service Overview" />
+              <SectionHeading num={secNums["section_services"]!} title="Levels of Care Overview" />
               {tblVis("table_s4_services") && (
                 <>
-                  <SubLabel text="Service Pages" sources={["Screaming Frog"]} />
-                  <ReportTable headers={["Service", "Example Page"]} rows={s4Rows} />
+                  <SubLabel text="Levels of Care" sources={["Screaming Frog"]} />
+                  <ReportTable headers={["Level of Care", "Page", "SEO Score", "Notes"]} rows={s4Rows} />
                 </>
               )}
             </>
@@ -536,17 +603,32 @@ export default function QbrPrepPrint() {
           {secVis("section_diagnosis") && (
             <>
               <SectionHeading num={secNums["section_diagnosis"]!} title="SEO Tier Diagnosis" />
-              <div style={{ padding: "12px 16px", backgroundColor: "#FDF2F0", borderRadius: 4, border: `1px solid ${ACCENT}33`, marginBottom: 12, fontSize: "11px" }}>
+              <div style={{ padding: "12px 16px", backgroundColor: "#FDF2F0", borderRadius: 4, border: `1px solid ${ACCENT}33`, marginBottom: 10, fontSize: "11px" }}>
                 <div style={{ fontWeight: 700, color: ACCENT, marginBottom: 6, fontSize: "12px" }}>Tier {s5.tier} — {s5.tierName}</div>
                 <div style={{ color: "#374151", lineHeight: 1.6 }}>{e("s5_diagnosis", s5.diagnosis)}</div>
               </div>
+              {(s5 as any).tierScorecard && ((s5 as any).tierScorecard as any[]).length > 0 && (
+                <div style={{ marginBottom: 12 }}>
+                  {((s5 as any).tierScorecard as any[]).map((entry: any) => (
+                    <PrintTierScorecardCard key={entry.tierNumber} entry={entry} />
+                  ))}
+                </div>
+              )}
             </>
           )}
 
           {secVis("section_priorities") && !printSecAutoHidden("section_priorities", hiddenTables) && (
             <>
               <SectionHeading num={secNums["section_priorities"]!} title="What We Need to Do Next" />
-              {tblVis("table_s6") && <ReportTable headers={["#", "Initiative", "Tier", "Action", "Reason"]} rows={s6Rows} />}
+              {(s6 as any).shortSummary && ((s6 as any).shortSummary as string[]).length > 0 && (
+                <div style={{ padding: "8px 12px", backgroundColor: "#F9FAFB", borderRadius: 4, border: "1px solid #E5E7EB", marginBottom: 8, fontSize: "9.5px" }}>
+                  <div style={{ fontWeight: 700, color: ACCENT, marginBottom: 5, fontSize: "9px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Priority Summary</div>
+                  <ul style={{ margin: 0, padding: "0 0 0 14px", lineHeight: 1.6, color: "#374151" }}>
+                    {((s6 as any).shortSummary as string[]).map((b: string, i: number) => <li key={i}>{b}</li>)}
+                  </ul>
+                </div>
+              )}
+              {tblVis("table_s6") && <ReportTable headers={["#", "Initiative", "Tier", "Type", "Action", "Why It Matters"]} rows={s6Rows} />}
               {(() => {
             const raw = edits["s6_crossSells_confirmed"];
             if (!raw) return null;
@@ -605,7 +687,7 @@ export default function QbrPrepPrint() {
                   </colgroup>
                   <thead>
                     <tr style={{ backgroundColor: `${ACCENT}0D` }}>
-                      {["Keyword", "Recommendation Type", "Target Page / Asset", "Why It's Recommended", "Source"].map((h: string) => (
+                      {["Keyword", "Suggested Type", "Target", "Why It's Suggested", "Source"].map((h: string) => (
                         <th key={h} style={{ padding: "5px 8px", textAlign: "left", fontWeight: 600, fontSize: "9px", color: ACCENT, textTransform: "uppercase" as const, letterSpacing: "0.06em", borderBottom: `1px solid ${ACCENT}20`, wordBreak: "break-word" }}>{h}</th>
                       ))}
                     </tr>

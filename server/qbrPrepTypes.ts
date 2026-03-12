@@ -88,16 +88,29 @@ export interface Section3Traffic {
 export interface ServiceRow {
   service: string;
   examplePage: string;
+  seoScore?: number;
+  notes?: string;
 }
 
 export interface Section4Services {
   services: ServiceRow[];
 }
 
+export interface TierScorecardEntry {
+  tierNumber: number;
+  tierName: string;
+  status: "Pass" | "Partial" | "Blocked" | "Unknown";
+  findings: string;
+  inferences: string;
+  whyItMatters: string;
+  source: string;
+}
+
 export interface Section5Diagnosis {
   tier: number;
   tierName: string;
   diagnosis: string;
+  tierScorecard?: TierScorecardEntry[];
 }
 
 export interface PriorityRow {
@@ -107,6 +120,8 @@ export interface PriorityRow {
   action: string;
   reason: string;
   source?: string;
+  actionType?: string;
+  impact?: string;
 }
 
 export interface CrossSellPreviewItem {
@@ -120,6 +135,7 @@ export interface Section6Priorities {
   crossSellPreview?: CrossSellPreviewItem[];
   auditMissing?: boolean;
   strategyBankFetchFailed?: boolean;
+  shortSummary?: string[];
 }
 
 export interface TrackingRow {

@@ -319,10 +319,12 @@ export function renderSection4Html(reportData: any, secNum: number, edits: Recor
   const rows = (reportData.section4Services?.services ?? []).map((r: any, ri: number) => [
     edits[`s4_${ri}_0`] ?? r.service ?? "",
     edits[`s4_${ri}_1`] ?? r.examplePage ?? "",
+    r.seoScore != null ? `${r.seoScore}/10` : "—",
+    r.notes ?? "",
   ]);
   const inner = `
-    ${secHeading(secNum, "Site Service Overview")}
-    ${rows.length ? table(["Service / Program", "Example Page"], rows, ["50%", "50%"]) : ""}`;
+    ${secHeading(secNum, "Levels of Care Overview")}
+    ${rows.length ? table(["Level of Care", "Page", "SEO Score", "Notes"], rows, ["20%", "18%", "10%", "52%"]) : ""}`;
   return wrap(inner);
 }
 

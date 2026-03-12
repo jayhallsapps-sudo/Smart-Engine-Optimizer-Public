@@ -1,0 +1,533 @@
+You are fixing the QBS report generator and export. This is not a partial patch. This is a logic, structure, layout, and QA correction pass. Do not drift. Do not simplify this into “general UI cleanup.” Implement exactly what is described below.
+
+PRIMARY OBJECTIVE
+Make the QBS report behave like a strategic, evidence-based, human-quality deliverable. It must stop inventing unsupported claims, must clearly show where data came from, must improve table layout/export quality, and must restore section quality that has regressed.
+
+GLOBAL NON-NEGOTIABLE RULES
+
+1) TRUTHFULNESS RULE
+The system must stop making unsupported claims about the website.
+Do not say things like:
+- missing from navigation
+- not clearly accessible
+- absent from site structure
+- no hub exists
+unless the crawl and report evidence actually prove it.
+
+If something is present in the site menu, header, footer, page architecture, or page content, the report must not say it is missing.
+
+If the system cannot verify something, it must clearly mark it as an inference.
+
+2) FACT / INFERENCE / UNKNOWN RULE
+All diagnostic language must fall into one of three states:
+- Fact
+- Inference
+- Unknown
+
+Formatting rules:
+- Facts are stated plainly.
+- Inferences must be prefixed with: “Inference:”
+- Unknown states must be dismissed and not shown in the report.
+
+Do not convert uncertainty into false certainty. Data is king.
+
+3) SOURCE LABELING RULE
+No data may appear anywhere in the report without showing the source integration or source set (website crawl, sitemap, etc) that produced it.
+
+Use this exact logic:
+- If the entire table uses the same integration(s), show the source label beside the table header.
+- If rows within the table use different integrations, show the source on each row.
+- Never leave data unlabeled.
+- Never apply row-level labeling redundantly if the whole table is same-source.
+
+Examples:
+- If Top Converting Pages is all CallRail, show “CallRail” beside the table header.
+- If What Matters Most has mixed GA4 and CallRail rows, show source on each row.
+
+4) FRESH CRAWL RULE
+The system must perform a fresh crawl every generation and interpret it thoroughly.
+
+That crawl must inspect:
+- main nav / header
+- footer
+- primary templates
+- level of care pages
+- service pages
+- trust and eligibility pages
+- verify insurance / VOB pages
+- admissions/contact paths
+- internal linking
+- page layouts
+- major structural blocks
+- technical findings from crawl output
+
+The system must read the technical report carefully enough to avoid contradicting visible site structure.
+
+It must distinguish between:
+- not found
+- not indexed
+- not prominent
+- not verified
+
+5) PRIORITY ACTION TRACEABILITY RULE
+Every action in “What We Need to Do Next” must tie back to actual evidence from one or more of:
+- crawl findings
+- technical findings
+- GA4 findings
+- GSC findings
+- CallRail findings
+- page architecture findings
+- AM notes / priority checks
+
+No generic filler actions.
+No vague “improve content” language unless tied to specific findings.
+All issues found in other sections of the report must be addressed in “What We Need to Do Next”.
+
+6) KEYWORD CLUSTERING RULE
+Closely linked keyword variants with the same intent must be grouped into one row when appropriate.
+
+Example:
+- relapse definition
+- definition of relapse
+- relapse meaning
+
+These should be grouped into a single keyword cluster row, not shown as three separate recommendations.
+
+Important:
+The grouped row may still list all three terms inside the Keyword field, but it must be one strategic recommendation row.
+
+Additional hard rules:
+- Max 1 row for any tightly linked semantic cluster unless materially different intent is proven.
+- Remove low-fit intent recommendations that do not align with treatment-seeking behavior or stated strategy.
+- The output must include a mix of:
+  - New page needed
+  - Content refresh
+  - CRO update
+  - Technical (Screaming Frog findings)
+Unless AM Priority Checks explicitly say not to recommend new content this quarter.
+
+7) HUB LANGUAGE RULE
+If the system uses the term “hub,” it must explain it in plain language the first time it appears.
+
+Use something like:
+“A hub is a parent page that organizes related subtopics and helps users and search engines understand the relationship between those pages.”
+
+If recommending a hub, the system must also prove why it is needed.
+
+A hub recommendation may only appear if at least one of these is true:
+- no qualifying parent page exists
+- a parent page exists but is thin or non-strategic
+- related child pages exist without coherent parent structure
+- internal linking between related pages is weak or missing
+
+Do not recommend a hub casually.
+
+SECTION-BY-SECTION IMPLEMENTATION
+
+SECTION 1 — WHAT MATTERS MOST THIS QUARTER
+
+Problems to fix:
+- Goal Type is too narrow
+- Goal is too narrow
+- Goal Shift vs Last Quarter is too narrow
+- Reason can be compressed moderately
+- source labels are wrapping badly
+
+Implement:
+- widen Goal Type
+- widen Goal
+- widen Goal Shift vs Last Quarter
+- compress Reason enough to improve overall balance
+- make sure source labels do not break awkwardly
+- apply row-level source only if the rows are mixed-source
+- apply header-level source only if the table is same-source
+
+Acceptance requirements:
+- Goal Type is readable without crushed wrapping
+- Goal is readable without awkward vertical blow-up
+- Goal Shift vs Last Quarter is readable and not starved
+- source labels do not split into ugly fragments
+- Reason remains readable but no longer dominates width
+
+SECTION 2 — WHERE CONVERSIONS ACTUALLY HAPPEN
+
+A) Top Converting Pages
+
+Problems to fix:
+- missing source labeling
+- “Page / Pattern” header should just be “Page”
+
+Implement:
+- rename column header to “Page”
+- if all rows are from the same integration, show source beside the table header
+- if rows are mixed-source, show source per row
+- preserve page display as a page, not a vague pattern label
+
+Acceptance requirements:
+- header reads “Page”
+- source is clearly visible
+- no unlabeled data
+
+B) Top Converting Sources
+C) Top Converting Forms
+
+Implement:
+- if all rows are same-source, show source at the table header level
+- do not repeat same source on every row unless needed
+- preserve row-level labeling only when rows differ
+
+Acceptance requirements:
+- source labeling logic is consistent
+- no unlabeled table data
+- no redundant clutter
+
+SECTION 3 — TOP ORGANIC TRAFFIC DRIVERS
+
+A) Top Traffic Topics table
+
+Problems to fix:
+- Topic needs more flexibility
+- “# QUERIES” is breaking awkwardly
+- “IMPRESSIONS” is too wide and should be shortened
+- “QOQ IMPRESSIONS” is too wide and should be shortened
+
+Implement:
+- allow Topic to use more than one line naturally
+- adjust column widths so Topic has more useful room
+- widen “# QUERIES” enough so QUERIES does not split mid-word
+- rename “IMPRESSIONS” to “TOTAL IMP.”
+- rename “QOQ IMPRESSIONS” to “QOQ IMP.”
+
+Acceptance requirements:
+- QUERIES never breaks mid-word
+- TOTAL IMP. displays cleanly
+- QOQ IMP. displays cleanly
+- Topic wraps naturally without crushing adjacent columns
+
+B) Top Traffic Pages table
+
+Problems to fix:
+- Page column is too constrained
+- CLICKS is breaking
+- # QUERIES is breaking
+- IMPRESSIONS / QOQ IMPRESSIONS are too long
+
+Implement:
+- give Page more width and allow more than two lines where needed
+- keep CLICKS on one line
+- rename IMPRESSIONS to TOTAL IMP.
+- rename QOQ IMPRESSIONS to QOQ IMP.
+- widen # QUERIES enough so QUERIES does not split
+
+Acceptance requirements:
+- CLICKS stays on one line
+- QUERIES does not break mid-word
+- Page remains readable and useful
+- table looks intentional in export, not crushed
+
+SECTION 4 — LEVELS OF CARE OVERVIEW
+
+Current regression:
+The section has degraded into a weak placeholder-style table and should not remain that way.
+
+Implement:
+- change section title from “Site Service Overview” back to “Levels of Care Overview”
+- replace “Example Page” with “Page”
+- Page must link to the actual page about that level of care where such a page exists
+- add a new column: “SEO Score”
+- SEO Score must be 1 to 10
+- scoring must reflect how well the page aligns with:
+  - the relevant tier expectations from Webserv files
+  - SEO best practices
+  - page quality relative to its purpose
+
+Scoring logic:
+- 1 = poor page for the tier / weak SEO foundation
+- 10 = strong page for the tier / well built against those principles
+
+Recommended columns:
+- Level of Care
+- Page
+- SEO Score
+- Notes
+
+Notes requirements:
+- briefly explain why the page received that score
+- mention strengths and/or blockers
+- keep concise
+- stop using lazy placeholders like “manual entry needed” unless absolutely unavoidable
+
+If something truly cannot be populated, explain why.
+
+Acceptance requirements:
+- section title reads exactly “Levels of Care Overview”
+- rows point to real pages where available
+- each row includes SEO Score
+- Notes justify score meaningfully
+- section feels evaluative and useful, not unfinished
+
+SECTION 5 — SEO TIER DIAGNOSIS
+
+Current problem:
+Tier diagnosis is overstating claims, getting Tier 1 wrong, and failing to address the broader tier system clearly enough.
+
+Implement:
+Replace the loose paragraph-heavy approach with a structured multi-tier scorecard plus supporting commentary.
+
+Required tiers:
+- Tier 1 — Trust & Eligibility
+- Tier 2 — Core Service Architecture
+- Tier 3 — Supporting Intent / Search Capture
+- Tier 4 — Authority / Scale / Depth
+
+For each tier, output:
+- Status
+- Findings
+- Inferences
+- Why It Matters
+- Source
+
+Allowed status values:
+- Pass
+- Partial
+- Blocked
+- Unknown
+
+Rules for each tier:
+- Findings = confirmed facts only
+- Inferences = clearly labeled with “Inference:”
+- Why It Matters = plain-language consequence
+- Source = source integration(s) or crawl evidence
+
+Tier 1 must explicitly review items such as:
+- verify insurance / VOB accessibility
+- admissions / contact pathways
+- major trust and eligibility pages
+- whether these are actually accessible in navigation or site structure
+
+Do not say these items are missing if crawl evidence shows they exist.
+
+Tier 2 must explicitly review:
+- levels of care architecture
+- service architecture
+- conditions / therapies / program structure where relevant
+- whether hub structures exist, are weak, are missing, or are unverified
+
+If recommending a hub anywhere in this section:
+- explain what it is
+- explain why it is needed
+- prove the recommendation with evidence
+
+Acceptance requirements:
+- all four tiers are covered
+- every tier has a status
+- facts and inferences are clearly separated
+- source is visible
+- unsupported structural claims are removed
+- hub language is explained and justified when used
+
+SECTION 6 — WHAT WE NEED TO DO NEXT
+
+Current regression:
+This section used to be much better and is now messy, too generic, and underweighting confirmed technical issues.
+
+Important requirement:
+Page-level GA4 conversion verification being broken or incomplete is a major issue and should surface as Priority 1 unless something even more severe is confirmed.
+
+Implement:
+Split this section into two layers.
+
+Layer A — Short Action Summary
+At the top of the section, add a short summary box with 3–5 bullet actions in business language.
+
+Layer B — Detailed Priority Actions Table
+Each row must include:
+- Priority
+- Action
+- Type
+- Why This Matters
+- Evidence
+- Source
+- Impact
+
+Allowed Type values:
+- Technical SEO
+- Content
+- CRO
+- Tracking / Analytics
+- Internal Linking
+- IA / Architecture
+
+Rules:
+- technical and tracking issues should be over-represented when they are real blockers
+- actions must be specific
+- actions must be tied to evidence
+- if a hub is recommended, prove it and explain it
+- if internal linking is recommended, tie it to actual crawl or architecture findings
+- do not include broad filler language like “improve content quality” unless attached to specific pages, clusters, or deficiencies
+
+Examples of acceptable specificity:
+- verify and repair page-level GA4 conversion mapping for X and Y template groups
+- strengthen internal linking from tier-1 trust pages to conversion-focused service pages
+- create parent conditions page because existing condition pages are orphaned and lack a coherent parent structure
+
+Examples of unacceptable vagueness:
+- improve SEO
+- improve content quality
+- build out more pages
+- make site stronger
+
+Acceptance requirements:
+- Priority 1 reflects the highest confirmed blocker
+- page-level GA4 conversion verification appears when broken/incomplete
+- actions are evidence-linked
+- technical/tracking issues are properly represented
+- section reads like it was written from findings, not from a template
+
+SECTION 7 — SUGGESTED KEYWORDS FOR NEXT QUARTER
+
+Current problems:
+- too many duplicate variants
+- weak table structure
+- weak intent filtering
+- poor target handling for new content
+
+Implement:
+Change the table headers to exactly:
+- Keyword
+- Suggested Type
+- Target
+- Why It’s Suggested
+- Source
+
+Rules:
+- cluster close variants into one row when they share intent
+- it is okay to list multiple tightly linked terms inside the Keyword field
+- Suggested Type must include a mix of:
+  - New page needed
+  - Content refresh
+  - CRO update
+unless AM Priority Checks explicitly say not to recommend new content this quarter
+- when Suggested Type is “New page needed,” the Target field must include a proposed slug
+- do not use “New content needed” as a placeholder target
+- filter out low-fit intent terms that do not align with likely treatment-seeking behavior unless strongly justified
+- no sloppy triple-duplication of the same concept
+
+Example of correct handling:
+Keyword:
+“relapse definition / definition of relapse / relapse meaning”
+Suggested Type:
+Content refresh
+Target:
+existing relapse-related glossary or educational page
+Why It’s Suggested:
+clustered informational intent with overlapping meaning; can be handled in one asset
+Source:
+GSC + keyword source as applicable
+
+Acceptance requirements:
+- no repetitive near-identical keyword rows
+- all required Suggested Types appear unless AM guidance blocks one
+- new-page targets include proposed slug
+- low-fit intent terms are filtered out
+- Why It’s Suggested is evidence-based, not generic
+
+VISUAL / DESIGN / EXPORT IMPROVEMENTS
+
+1) REPORT RHYTHM
+Adopt stronger section pacing inspired by the gold-standard QBS, but do not abandon the current QBS design language.
+
+Implement:
+- improve spacing between sections
+- improve spacing between subsection groups
+- make table groups feel more intentional
+- alternate more clearly between data, interpretation, and action
+
+2) COMMENTARY BOXES
+The gold-standard report uses commentary boxes effectively. Adopt that idea, but match the current QBS styling family.
+
+Implement:
+- add deliberate commentary boxes beneath major tables where useful
+- commentary boxes should follow the current Replit QBS design language, but in red styling appropriate to this report
+- commentary boxes should summarize takeaways, not repeat raw data
+
+Acceptance requirements:
+- commentary boxes feel native to the current report design
+- red styling is consistent with QBS aesthetic
+- boxes improve scanability and interpretation
+
+3) TABLE GROUP INTENTIONALITY
+The gold-standard report makes table groups feel deliberate. QBS should do the same.
+
+Implement:
+- ensure each section has clear visual hierarchy
+- use consistent spacing, headings, and summary treatments
+- avoid the feeling of raw output stacked vertically
+
+SOURCE DISPLAY LOGIC — FINAL REQUIRED BEHAVIOR
+
+Apply this exact logic everywhere:
+- Single-source table = source beside the table header
+- Mixed-source table = source shown per row
+- No unlabeled data anywhere
+- No inconsistent source handling from one section to another
+
+QUALITY ASSURANCE CHECKLIST
+
+DATA TRUTHFULNESS QA
+- verify the report does not claim a nav item/page is missing if crawl shows it exists
+- verify Tier 1 findings align with actual site structure
+- verify inference language is labeled
+- verify unknown items are marked as unknown or unverified
+
+SOURCE LABELING QA
+- verify every table or row shows source
+- verify same-source tables use header-level source display
+- verify mixed-source tables use row-level source display
+- verify no unlabeled data remains
+
+TABLE LAYOUT QA
+- verify Goal Type / Goal / Goal Shift widths are improved
+- verify source labels do not break awkwardly
+- verify Topic and Page columns wrap intelligently
+- verify CLICKS stays on one line
+- verify QUERIES does not break mid-word
+- verify TOTAL IMP. and QOQ IMP. display cleanly
+
+LEVELS OF CARE OVERVIEW QA
+- verify title is restored exactly
+- verify Page column contains real links where possible
+- verify SEO Score exists and is 1–10
+- verify Notes justify scores
+
+TIER DIAGNOSIS QA
+- verify all four tiers are covered
+- verify each tier has status, findings, why it matters, and source
+- verify unsupported architecture claims are removed
+- verify hub language is explained and justified if used
+
+PRIORITY ACTIONS QA
+- verify Priority 1 reflects the biggest confirmed blocker
+- verify page-level GA4 conversion verification appears when broken/incomplete
+- verify actions are specific
+- verify actions are evidence-linked
+- verify technical/tracking actions are properly represented
+
+KEYWORD QA
+- verify tightly linked variants are clustered into one row when appropriate
+- verify no more than 2 rows per tight semantic cluster unless justified
+- verify New page needed / Content refresh / CRO update are represented unless AM guidance blocks one
+- verify new-page targets include suggested slug
+- verify low-fit intent terms are filtered out
+
+DESIGN QA
+- verify commentary boxes are added where useful
+- verify commentary boxes match current QBS design language in red
+- verify spacing and section rhythm feel strategic
+- verify the report reads like a strategist assembled it, not a template engine
+
+FINAL INSTRUCTION
+Implement exactly what is described above.
+Do not preserve broken legacy logic because it “mostly works.”
+Do not reduce this to generic design cleanup.
+Fix the truthfulness, source labeling, section structure, table layout, keyword clustering, tier diagnosis, and action logic together so the QBS is credible, readable, and defensible tonight.

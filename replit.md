@@ -44,6 +44,36 @@ SmartEO integrates with the following external services and APIs:
 -   **Notion** (for Strategy Bank via Replit connector)
 -   **Google Sheets** (NSM Tracker — via Google Drive Replit connector)
 
+## Webserv Operations Reference Library
+
+SmartEO is built for Webserv's SEO team. The `docs/webserv/` directory contains the full operational knowledge base that governs how all SEO work is done, how clients are served, and what industry-specific rules apply. **These documents must be referenced whenever generating reports, recommendations, or client-facing content.**
+
+### Key Files (`docs/webserv/`)
+
+| File | What It Covers |
+|------|---------------|
+| `README.md` | Index of all docs + quick-reference principles |
+| `how-we-operate.md` | Core SEO philosophy, decision hierarchy, quality standards — READ FIRST |
+| `behavioral-health-glossary.md` | Industry terms: VOB, PHI, YMYL, PPO/HMO/IOP/PHP/RTC, LegitScript, E-E-A-T, Admissions, Payer-Mix |
+| `local-seo-behavioral-health.md` | Location page rules: one page per real address, no city-variant pages, trusted advisor responses |
+| `sop-new-blog-content.md` | New blog content process (Airtable-generated) |
+| `sop-updated-blog-content.md` | Blog content refresh/update process |
+| `sop-new-service-page.md` | Net-new service page creation process |
+| `sop-primary-location-page.md` | Primary location page structure and eligibility rules |
+| `sop-verify-insurance-page.md` | Verify Insurance page structure (Tier 1 Care Access) |
+| `sop-monthly-technical-audits.md` | Monthly SEMrush audit → Google Sheet → Asana workflow |
+| `sop-biweekly-meetings.md` | Bi-weekly client meeting prep, agenda, email templates |
+| `sop-monthly-meetings.md` | Monthly strategy meeting prep, 6-step checklist, email templates |
+| `art-of-client-service.md` | Managing expectations, trusted advisor mindset, saying no gracefully |
+| `seo-am-job-description.md` | AM role scope, KPIs, competency framework, growth path |
+
+### Critical Industry Context
+- **Primary conversion goal**: VOBs (Verified Organic Benefits) and Admissions calls — not just traffic or rankings
+- **Content classification**: Behavioral health = YMYL — Google holds these to the highest quality standards
+- **Local SEO rule**: No physical address = no location page. Period.
+- **Compliance**: HIPAA applies; no retargeting for addiction treatment; LegitScript required for paid ads
+- **Decision hierarchy**: Client business goals → Search intent → Google quality → Data → Best practices
+
 ## NSM Tracker Integration
 The NSM (North Star Metric) Tracker is a Google Sheets-based goal tracking system. `fetchNsmGoals()` in `server/sheetsClient.ts` retrieves session goals, MVP goals (calls/admits), and on-track status for each client. NSM data is wired into:
 - **Monthly generator**: QTD KPI slide (Slide 4) — Goal, % to Goal, Status columns

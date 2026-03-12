@@ -3699,6 +3699,9 @@ function recTypeLabel(type: SuggestedKeywordRow["recommendationType"]): string {
     case "create-new": return "Create new content";
     case "cro-update": return "CRO / supporting update";
     case "internal-linking": return "Internal linking support";
+    case "technical-seo": return "Technical SEO fix";
+    case "hub": return "Create hub page";
+    default: return type;
   }
 }
 
@@ -3754,6 +3757,12 @@ function buildKeywordReason(
       return `${impStr} impressions with strong existing page at ${pagePath ?? "this URL"} — on-page optimization and internal linking can strengthen rankings further.`;
     case "internal-linking":
       return `Site has a relevant page at ${pagePath ?? "this URL"} but lacks strong internal linking support — improving internal links will pass authority to this page and improve its rankings.`;
+    case "technical-seo":
+      return `Technical issue detected — resolving this will improve crawl efficiency and protect ranking signals for Levels of Care pages.`;
+    case "hub":
+      return `Hub page missing — creating this consolidates topical authority and improves internal link flow to Levels of Care conversion pages.`;
+    default:
+      return `${impressions} impressions — prioritizing this keyword will strengthen rankings for the associated page or content cluster.`;
   }
 }
 
@@ -3862,7 +3871,13 @@ export function generateSuggestedKeywords(
   sfIsUrlCrawl: boolean = false,
   liveInv: import("./liveCrawler").LivePageInventory | null = null,
 ): SectionSuggestedKeywords {
-  const maxRecommendations = Math.min(monthlyCredits * 2, 48);
+  // Content row cap — at least 12 so the required strategic mix can always be satisfied
+  const contentRowCap = Math.max(monthlyCredits * 2, 12);
+  const maxRecommendations = contentRowCap; // kept for legacy fallback references
+  // Strategic type caps for content rows
+  const REFRESH_CAP = 5;
+  const CRO_CAP = 3;
+  const MIN_CREATE_NEW = 3;
   // Branded filter derived from client data — no hardcoded client names in shared code.
   const clientIsNonBranded = (query: string) => !isBrandedQuery(query, client);
 
@@ -3924,30 +3939,29 @@ export function generateSuggestedKeywords(
     .sort((a: any, b: any) => (b.impressions ?? 0) - (a.impressions ?? 0))
     .map((r: any) => ({ query: r.keys?.[0] ?? "", impressions: r.impressions ?? 0, clicks: r.clicks ?? 0 }));
 
-  // Cluster close variants by intent (Jaccard ≥ 0.70 on normalized tokens)
   const clusters = clusterCandidatesByIntent(rawCandidates);
 
-  // Deduplicate by path — only one recommendation per target page
+  // ── Phase 1: Content rows from GSC clusters with strategic type caps ─────────
   const usedPaths = new Set<string>();
   const rows: SuggestedKeywordRow[] = [];
+  let refreshCount = 0;
+  let croCount = 0;
+  let createNewCount = 0;
 
   for (const cluster of clusters) {
-    if (rows.length >= maxRecommendations) break;
+    const contentRowsSoFar = rows.filter(r =>
+      ["create-new", "refresh-existing", "cro-update", "optimize-existing"].includes(r.recommendationType)
+    ).length;
+    if (contentRowsSoFar >= contentRowCap) break;
 
-    // Representative = highest-impression member
     const rep = cluster[0];
     const query = rep.query;
     const impressions = rep.impressions;
     const clicks = rep.clicks;
 
-    // Build variant label (exclude representative) — cap at 10 variants max for readability
     const variants = cluster.slice(1, 11).map(c => c.query);
-    const keywordDisplay = variants.length > 0
-      ? `${query} / ${variants.join(" / ")}`
-      : query;
+    const keywordDisplay = variants.length > 0 ? `${query} / ${variants.join(" / ")}` : query;
 
-    // Find best associated page from GSC query+page data; fall back to SF semantic match.
-    // Media/asset URLs are rejected outright — they must never become keyword targets.
     const gscPageRaw = findBestGscPage(query, gscQueryPageRows);
     const gscPage = gscPageRaw && !isMediaAssetPath(gscPageRaw) ? gscPageRaw : null;
     const sfFallback = (!gscPage || !sfPaths.has(gscPage)) ? findSemanticSfMatch(query, sfPaths) : null;
@@ -3955,12 +3969,14 @@ export function generateSuggestedKeywords(
     const inSf = bestPage ? sfPaths.has(bestPage) : false;
     const targetPath = inSf ? bestPage! : (bestPage ?? null);
 
-    // Deduplicate by page path (applies to all rec types including create-new within same cluster)
-    const recType = classifyRecType(targetPath, sfPaths, query, impressions, clicks, sfIsUrlCrawl);
+    let recType = classifyRecType(targetPath, sfPaths, query, impressions, clicks, sfIsUrlCrawl);
+    // Apply strategic type caps — demote excess types to optimize-existing
+    if (recType === "refresh-existing" && refreshCount >= REFRESH_CAP) recType = "optimize-existing";
+    if (recType === "cro-update" && croCount >= CRO_CAP) recType = "optimize-existing";
+
     if (targetPath && usedPaths.has(targetPath)) continue;
     if (targetPath) usedPaths.add(targetPath);
 
-    // For create-new, propose a concrete slug based on the representative query
     const proposedSlug = "/blog/" + query
       .toLowerCase()
       .replace(/[^a-z0-9\s-]/g, "")
@@ -3968,87 +3984,215 @@ export function generateSuggestedKeywords(
       .replace(/\s+/g, "-")
       .replace(/-{2,}/g, "-")
       .replace(/^-|-$/g, "");
-    const targetPageDisplay = recType === "create-new"
-      ? proposedSlug
-      : (targetPath ?? proposedSlug);
-
+    const targetPageDisplay = recType === "create-new" ? proposedSlug : (targetPath ?? proposedSlug);
     const whyRecommended = buildKeywordReason(query, impressions, clicks, targetPath, recType, sfPaths);
-
-    // Determine sources used
     const sources: string[] = ["GSC"];
     if (inSf) sources.push("SF");
 
-    rows.push({
-      keyword: keywordDisplay,
-      recommendationType: recType,
-      targetPage: targetPageDisplay,
-      whyRecommended,
-      sources,
-    });
+    if (recType === "refresh-existing") refreshCount++;
+    if (recType === "cro-update") croCount++;
+    if (recType === "create-new") createNewCount++;
+
+    rows.push({ keyword: keywordDisplay, recommendationType: recType, targetPage: targetPageDisplay, whyRecommended, sources });
   }
 
-  // Enforce minimum 3 create-new recommendations per quarterly output.
-  // This ensures the mix always includes genuine content gap opportunities,
-  // even when strong existing pages dominate the high-impression candidates.
-  const createNewCount = () => rows.filter(r => r.recommendationType === "create-new").length;
-  if (createNewCount() < 3) {
+  // ── Enforce minimum 3 create-new rows ──────────────────────────────────────
+  // First pass: only add if genuinely no strong existing page
+  if (createNewCount < MIN_CREATE_NEW) {
     const alreadyRepresented = new Set(rows.map(r => r.keyword.split(" / ")[0]));
     for (const cluster of clusters) {
-      if (createNewCount() >= 3) break;
+      if (createNewCount >= MIN_CREATE_NEW) break;
       const q = cluster[0].query;
       if (alreadyRepresented.has(q)) continue;
-      // Only add as create-new if there is genuinely no strong existing page for this intent
       const gscPageRaw2 = findBestGscPage(q, gscQueryPageRows);
       const gscPage2 = gscPageRaw2 && !isMediaAssetPath(gscPageRaw2) ? gscPageRaw2 : null;
       const sfMatch2 = findSemanticSfMatch(q, sfPaths);
       const hasStrongExisting = (gscPage2 && sfPaths.has(gscPage2)) || !!sfMatch2;
       if (hasStrongExisting) continue;
-      const proposedSlug2 = "/blog/" + q
-        .toLowerCase()
-        .replace(/[^a-z0-9\s-]/g, "")
-        .trim()
-        .replace(/\s+/g, "-")
-        .replace(/-{2,}/g, "-")
-        .replace(/^-|-$/g, "");
+      const proposedSlug2 = "/blog/" + q.toLowerCase().replace(/[^a-z0-9\s-]/g, "").trim().replace(/\s+/g, "-").replace(/-{2,}/g, "-").replace(/^-|-$/g, "");
       const variants2 = cluster.slice(1, 11).map(c => c.query);
       const kwDisplay2 = variants2.length > 0 ? `${q} / ${variants2.join(" / ")}` : q;
-      rows.push({
-        keyword: kwDisplay2,
-        recommendationType: "create-new",
-        targetPage: proposedSlug2,
-        whyRecommended: buildKeywordReason(q, cluster[0].impressions, cluster[0].clicks, null, "create-new", sfPaths),
-        sources: ["GSC"],
-      });
+      rows.push({ keyword: kwDisplay2, recommendationType: "create-new", targetPage: proposedSlug2, whyRecommended: buildKeywordReason(q, cluster[0].impressions, cluster[0].clicks, null, "create-new", sfPaths), sources: ["GSC"] });
       alreadyRepresented.add(q);
+      createNewCount++;
+    }
+  }
+  // Second pass: force-add even when existing pages are found (to reach MIN_CREATE_NEW=3)
+  if (createNewCount < MIN_CREATE_NEW) {
+    const alreadyRepresented2 = new Set(rows.map(r => r.keyword.split(" / ")[0]));
+    for (const cluster of clusters) {
+      if (createNewCount >= MIN_CREATE_NEW) break;
+      const q = cluster[0].query;
+      if (alreadyRepresented2.has(q)) continue;
+      const proposedSlug3 = "/blog/" + q.toLowerCase().replace(/[^a-z0-9\s-]/g, "").trim().replace(/\s+/g, "-").replace(/-{2,}/g, "-").replace(/^-|-$/g, "");
+      const variants3 = cluster.slice(1, 11).map(c => c.query);
+      const kwDisplay3 = variants3.length > 0 ? `${q} / ${variants3.join(" / ")}` : q;
+      rows.push({ keyword: kwDisplay3, recommendationType: "create-new", targetPage: proposedSlug3, whyRecommended: buildKeywordReason(q, cluster[0].impressions, cluster[0].clicks, null, "create-new", sfPaths), sources: ["GSC"] });
+      alreadyRepresented2.add(q);
+      createNewCount++;
     }
   }
 
-  // If GSC had no data, fall back to Section 3 traffic topics as keyword proxies
+  // ── Fallback: if GSC had no data, use S3 topics ─────────────────────────────
   if (rows.length === 0 && section3.topTrafficTopics.length > 0) {
     const fallbackSources = sfData.length > 0 ? ["GSC", "SF"] : ["GSC"];
-    for (const topic of section3.topTrafficTopics.slice(0, Math.min(maxRecommendations, 12))) {
+    for (const topic of section3.topTrafficTopics.slice(0, Math.min(contentRowCap, 12))) {
       const exampleQuery = topic.exampleQueries.split(",")[0]?.trim() || topic.topic;
       const matchingPage = section3.topTrafficPages.find(p =>
         p.connectionToAdmits === "High" && p.insight.toLowerCase().includes(topic.topic.toLowerCase())
       );
-      const targetPage = matchingPage
-        ? normalizePath(matchingPage.page)
-        : "New content needed";
-      const recType: SuggestedKeywordRow["recommendationType"] =
-        matchingPage ? "optimize-existing" : "create-new";
-
-      rows.push({
-        keyword: exampleQuery,
-        recommendationType: recType,
-        targetPage,
-        whyRecommended: `Topic cluster "${topic.topic}" drives organic traffic with ${topic.connectionToAdmits.toLowerCase()} admit connection — prioritizing this keyword will strengthen rankings for this cluster.`,
-        sources: fallbackSources,
-      });
-      if (rows.length >= maxRecommendations) break;
+      const targetPage = matchingPage ? normalizePath(matchingPage.page) : "New content needed";
+      const recType: SuggestedKeywordRow["recommendationType"] = matchingPage ? "optimize-existing" : "create-new";
+      rows.push({ keyword: exampleQuery, recommendationType: recType, targetPage, whyRecommended: `Topic cluster "${topic.topic}" drives organic traffic with ${topic.connectionToAdmits.toLowerCase()} admit connection — prioritizing this keyword will strengthen rankings for this cluster.`, sources: fallbackSources });
+      if (rows.length >= contentRowCap) break;
     }
   }
 
-  return { rows, quarterlyCreditCap: maxRecommendations, monthlyCredits };
+  // ── Phase 2: Internal linking row (at least 1) ─────────────────────────────
+  const topTrafficPage = section3.topTrafficPages[0];
+  if (topTrafficPage?.page) {
+    const ilTargetPath = normalizePath(topTrafficPage.page);
+    const pageQueryMatch = gscQueryPageRows
+      .filter(r => r.keys?.[1] && normalizePath(r.keys[1]) === ilTargetPath && clientIsNonBranded(r.keys[0] ?? ""))
+      .sort((a, b) => (b.impressions ?? 0) - (a.impressions ?? 0))[0];
+    const kwRef = pageQueryMatch?.keys?.[0] ?? ilTargetPath.replace(/^.*\//, "").replace(/-/g, " ") ?? "key Levels of Care page";
+    rows.push({
+      keyword: kwRef,
+      recommendationType: "internal-linking",
+      targetPage: ilTargetPath,
+      whyRecommended: `${ilTargetPath} ranks for treatment-intent queries but likely lacks strong internal link support from blog posts, topic pages, and supporting content — improving internal link paths to this page will pass authority, deepen crawl coverage, and strengthen its rankings for high-value queries.`,
+      sources: sfPaths.has(ilTargetPath) ? ["GSC", "SF"] : ["GSC"],
+    });
+  } else if (section4.services[0]?.examplePage && section4.services[0].examplePage.startsWith("/")) {
+    const ilFallbackPath = section4.services[0].examplePage.replace(/\/$/, "") || "/";
+    rows.push({
+      keyword: section4.services[0].service,
+      recommendationType: "internal-linking",
+      targetPage: ilFallbackPath,
+      whyRecommended: `${ilFallbackPath} is a key Levels of Care page but likely lacks robust internal link equity — improving internal link paths from blog and supporting pages will strengthen its authority and improve rankings for treatment-intent queries.`,
+      sources: ["SF"],
+    });
+  }
+
+  // ── Phase 3: Hub row (only if hub structure is missing) ───────────────────
+  const sfTierInputForHub = analyzeSfForTierInput(sfData, sfHeaders);
+  const liveHasConditionsHub = !!(liveInv?.bestByCategory?.["conditions-hub"] || liveInv?.bestByCategory?.["mental-health"]);
+  const liveHasTherapiesHub = !!(liveInv?.bestByCategory?.["therapies-hub"] || liveInv?.bestByCategory?.["therapies"]);
+  const needsConditionsHub = !(sfTierInputForHub.hasConditionsHub || liveHasConditionsHub);
+  const needsTherapiesHub = !(sfTierInputForHub.hasTherapiesHub || liveHasTherapiesHub);
+  if (needsConditionsHub) {
+    rows.push({
+      keyword: "mental health conditions / dual diagnosis / co-occurring disorders",
+      recommendationType: "hub",
+      targetPage: "/mental-health",
+      whyRecommended: "No conditions hub detected in the current site crawl — a /mental-health hub consolidates topical authority for condition-specific queries (depression, anxiety, trauma, PTSD), passes link equity to Levels of Care pages, and gives Google a clear taxonomy for ranking treatment-intent searches.",
+      sources: ["SF"],
+    });
+  } else if (needsTherapiesHub) {
+    rows.push({
+      keyword: "therapy types / CBT / DBT / EMDR / trauma-informed care",
+      recommendationType: "hub",
+      targetPage: "/therapies",
+      whyRecommended: "No therapies hub detected in the current site crawl — a /therapies hub organizes clinical modalities under one authority page, improves rankings for therapy-specific queries, and strengthens internal link flow to Levels of Care conversion pages.",
+      sources: ["SF"],
+    });
+  }
+
+  // ── Phase 4: Technical rows (≥3 from real SF crawl issues) ────────────────
+  const techRows: SuggestedKeywordRow[] = [];
+  if ((sfTierInputForHub.errors4xx5xx ?? 0) > 0) {
+    const count = sfTierInputForHub.errors4xx5xx!;
+    techRows.push({
+      keyword: `${count} error ${count === 1 ? "page" : "pages"} (4xx/5xx)`,
+      recommendationType: "technical-seo",
+      targetPage: `${count} ${count === 1 ? "page" : "pages"} with crawl errors`,
+      whyRecommended: `Screaming Frog crawl found ${count} ${count === 1 ? "page" : "pages"} returning 4xx/5xx errors — error pages waste crawl budget, suppress crawl efficiency, and may include previously-ranking Levels of Care or blog pages that have silently broken. Fix or redirect each error page to recover residual link equity and prevent further ranking erosion.`,
+      sources: ["SF"],
+    });
+  }
+  if ((sfTierInputForHub.nonIndexable ?? 0) > 0) {
+    const count = sfTierInputForHub.nonIndexable!;
+    techRows.push({
+      keyword: `${count} non-indexable ${count === 1 ? "page" : "pages"}`,
+      recommendationType: "technical-seo",
+      targetPage: `${count} noindex ${count === 1 ? "page" : "pages"} blocking search visibility`,
+      whyRecommended: `Screaming Frog crawl found ${count} non-indexable ${count === 1 ? "page" : "pages"} — if any are Levels of Care, admissions, or insurance-related pages, they are invisible to Google despite being linked internally. Audit each noindex tag: confirm it is intentional (e.g., thank-you pages) or remove it to restore organic visibility.`,
+      sources: ["SF"],
+    });
+  }
+  if ((sfTierInputForHub.missingTitles ?? 0) > 0) {
+    const count = sfTierInputForHub.missingTitles!;
+    techRows.push({
+      keyword: `${count} ${count === 1 ? "page" : "pages"} missing title tags`,
+      recommendationType: "technical-seo",
+      targetPage: `${count} ${count === 1 ? "page" : "pages"} without optimized titles`,
+      whyRecommended: `Screaming Frog crawl found ${count} ${count === 1 ? "page" : "pages"} with missing title tags — pages without titles receive auto-generated titles from Google, resulting in lower CTR and missed keyword targeting for treatment-intent queries. Adding keyword-targeted titles is a low-cost, high-impact technical fix.`,
+      sources: ["SF"],
+    });
+  }
+  if ((sfTierInputForHub.thinPages ?? 0) > 0 && techRows.length < 5) {
+    const count = sfTierInputForHub.thinPages!;
+    techRows.push({
+      keyword: `${count} thin content ${count === 1 ? "page" : "pages"} (<200 words)`,
+      recommendationType: "technical-seo",
+      targetPage: `${count} under-developed ${count === 1 ? "page" : "pages"}`,
+      whyRecommended: `Screaming Frog crawl found ${count} thin-content ${count === 1 ? "page" : "pages"} under 200 words — thin pages weaken overall site quality score and suppress rankings for nearby high-intent pages. Expanding these with treatment-relevant content, FAQs, and CTA blocks converts them from quality anchors into ranking assets.`,
+      sources: ["SF"],
+    });
+  }
+  if ((sfTierInputForHub.redirects ?? 0) > 0 && techRows.length < 5) {
+    const count = sfTierInputForHub.redirects!;
+    techRows.push({
+      keyword: `${count} redirect ${count === 1 ? "hop" : "hops"} detected`,
+      recommendationType: "technical-seo",
+      targetPage: `${count} redirect ${count === 1 ? "chain" : "chains"} to resolve`,
+      whyRecommended: `Screaming Frog crawl found ${count} redirect ${count === 1 ? "chain" : "chains"} — redirect hops dilute PageRank passed between pages, weakening internal link equity to Levels of Care and conversion pages. Resolving chains to direct 200-status links preserves full authority transfer within the site.`,
+      sources: ["SF"],
+    });
+  }
+  // If SF issues were sparse, supplement with structural recommendations
+  if (techRows.length < 3 && (sfTierInputForHub.missingH1s ?? 0) > 0) {
+    const count = sfTierInputForHub.missingH1s!;
+    techRows.push({
+      keyword: `${count} ${count === 1 ? "page" : "pages"} missing H1 tags`,
+      recommendationType: "technical-seo",
+      targetPage: `${count} ${count === 1 ? "page" : "pages"} without H1`,
+      whyRecommended: `Screaming Frog crawl found ${count} ${count === 1 ? "page" : "pages"} missing H1 tags — H1s are the primary on-page keyword signal. Pages missing them cede keyword targeting to Google's interpretation and typically rank below competitors with well-structured headings. Adding targeted H1s to Levels of Care pages directly improves keyword relevance signals.`,
+      sources: ["SF"],
+    });
+  }
+  if (techRows.length < 3 && sfData.length > 0) {
+    techRows.push({
+      keyword: "internal link architecture audit",
+      recommendationType: "technical-seo",
+      targetPage: "site-wide internal link graph",
+      whyRecommended: `Screaming Frog crawl data enables a full internal link audit — pages receiving fewer than 3 internal links are at risk of being under-crawled and under-ranked. Mapping link paths from high-traffic top-of-funnel pages to Levels of Care conversion pages improves crawl depth and strengthens authority flow where it matters most.`,
+      sources: ["SF"],
+    });
+  }
+  if (techRows.length < 3 && sfData.length > 0) {
+    techRows.push({
+      keyword: "page metadata completeness",
+      recommendationType: "technical-seo",
+      targetPage: "meta description audit",
+      whyRecommended: `A systematic meta description audit using the Screaming Frog crawl export ensures all Levels of Care and conversion pages have keyword-targeted descriptions — meta descriptions directly influence CTR on branded and treatment-intent queries where click competition is high.`,
+      sources: ["SF"],
+    });
+  }
+  // Final structural fallback if SF data is absent entirely — always include at least 3 technical rows
+  if (techRows.length < 3) {
+    techRows.push({
+      keyword: "Core Web Vitals / page speed",
+      recommendationType: "technical-seo",
+      targetPage: "performance & UX audit",
+      whyRecommended: `Core Web Vitals (LCP, CLS, INP) are confirmed Google ranking signals — a performance audit identifies pages where slow load times or layout instability are suppressing rankings for treatment-intent queries. Improving scores on Levels of Care pages reduces bounce and improves both rankings and admissions conversions.`,
+      sources: ["GSC"],
+    });
+  }
+  // Add technical rows (at most 5) to the output
+  rows.push(...techRows.slice(0, 5));
+
+  return { rows, quarterlyCreditCap: contentRowCap, monthlyCredits };
 }
 
 // ─── Section 7 Credits: auto-generated content-credit allocation ──────────────

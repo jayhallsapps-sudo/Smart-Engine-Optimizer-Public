@@ -228,6 +228,36 @@ function SeoScoreBadge({ score }: { score: number }) {
   );
 }
 
+function EditableScore({ editKey, score, edits, onEdit }: { editKey: string; score: number | undefined; edits: Record<string, string>; onEdit: (k: string, v: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const override = edits[editKey];
+  const displayStr = override !== undefined ? override : (score != null ? String(score) : "");
+  const displayNum = parseFloat(displayStr);
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        defaultValue={displayStr}
+        onBlur={e => { onEdit(editKey, e.target.value); setEditing(false); }}
+        onKeyDown={e => {
+          if (e.key === "Enter") { onEdit(editKey, (e.target as HTMLInputElement).value); setEditing(false); }
+          if (e.key === "Escape") setEditing(false);
+        }}
+        style={{ width: 48, border: "1px solid #D1D5DB", borderRadius: 4, padding: "1px 4px", fontSize: "11px", outline: "none" }}
+        data-testid={`input-score-${editKey}`}
+      />
+    );
+  }
+  return (
+    <span onClick={() => setEditing(true)} title="Click to edit" style={{ cursor: "pointer", display: "inline-block" }} data-testid={`score-${editKey}`}>
+      {!isNaN(displayNum) && displayStr !== ""
+        ? <SeoScoreBadge score={displayNum} />
+        : <span style={{ color: "#9CA3AF", fontSize: "10px" }}>{displayStr || "—"}</span>
+      }
+    </span>
+  );
+}
+
 function ActionTypeBadge({ value }: { value: string }) {
   const COLOR_MAP: Record<string, [string, string]> = {
     "Technical SEO": ["#374151", "#F3F4F6"],
@@ -248,7 +278,7 @@ function ActionTypeBadge({ value }: { value: string }) {
   );
 }
 
-function TierScorecardCard({ entry }: { entry: TierScorecardEntry }) {
+function TierScorecardCard({ entry, cardIdx, edits, onEdit }: { entry: TierScorecardEntry; cardIdx: number; edits: Record<string, string>; onEdit: (k: string, v: string) => void }) {
   const STATUS_MAP: Record<string, [string, string]> = {
     "Pass": ["#065F46", "#D1FAE5"],
     "Partial": ["#92400E", "#FEF3C7"],
@@ -263,10 +293,10 @@ function TierScorecardCard({ entry }: { entry: TierScorecardEntry }) {
         <span style={{ marginLeft: "auto", padding: "2px 8px", borderRadius: 10, backgroundColor: sBg, color: sColor, fontWeight: 700, fontSize: "10px" }}>{entry.status}</span>
       </div>
       <div style={{ padding: "8px 12px", fontSize: "10.5px", lineHeight: 1.55 }}>
-        <div style={{ marginBottom: 5 }}><span style={{ fontWeight: 600, color: "#374151" }}>Findings: </span><span style={{ color: "#4B5563" }}>{entry.findings}</span></div>
-        <div style={{ marginBottom: 5 }}><span style={{ fontWeight: 600, color: "#374151" }}>Inference: </span><span style={{ color: "#4B5563" }}>{entry.inferences}</span></div>
-        <div style={{ marginBottom: 5 }}><span style={{ fontWeight: 600, color: "#374151" }}>Why It Matters: </span><span style={{ color: "#6B7280" }}>{entry.whyItMatters}</span></div>
-        <div style={{ color: "#9CA3AF", fontSize: "10px" }}>Source: {entry.source}</div>
+        <div style={{ marginBottom: 5 }}><span style={{ fontWeight: 600, color: "#374151" }}>Findings: </span><EditableCell editKey={`s5_card_${cardIdx}_findings`} value={entry.findings} edits={edits} onEdit={onEdit} style={{ color: "#4B5563" }} /></div>
+        <div style={{ marginBottom: 5 }}><span style={{ fontWeight: 600, color: "#374151" }}>Inference: </span><EditableCell editKey={`s5_card_${cardIdx}_inferences`} value={entry.inferences} edits={edits} onEdit={onEdit} style={{ color: "#4B5563" }} /></div>
+        <div style={{ marginBottom: 5 }}><span style={{ fontWeight: 600, color: "#374151" }}>Why It Matters: </span><EditableCell editKey={`s5_card_${cardIdx}_why`} value={entry.whyItMatters} edits={edits} onEdit={onEdit} style={{ color: "#6B7280" }} /></div>
+        <div style={{ color: "#9CA3AF", fontSize: "10px" }}>Source: <EditableCell editKey={`s5_card_${cardIdx}_source`} value={entry.source} edits={edits} onEdit={onEdit} style={{ color: "#9CA3AF", fontSize: "10px" }} /></div>
       </div>
     </div>
   );
@@ -623,23 +653,16 @@ export function QbrPrepPreview({
 
   const s4SourceRows: React.ReactNode[][] = section4Services.services.map((r, ri) => [
     <EditableCell key="s" editKey={`s4_${ri}_0`} value={r.service} edits={edits} onEdit={onEdit} />,
-    <span key="e" style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-      {(() => {
-        const epVal = edits[`s4_${ri}_1`] ?? r.examplePage;
-        return isPathLike(epVal)
-          ? <PathTag value={epVal} />
-          : <EditableCell editKey={`s4_${ri}_1`} value={r.examplePage} edits={edits} onEdit={onEdit} />;
-      })()}
-    </span>,
-    <span key="score">{r.seoScore != null ? <SeoScoreBadge score={r.seoScore} /> : <span style={{ color: "#9CA3AF", fontSize: "10px" }}>—</span>}</span>,
-    <span key="notes" style={{ fontSize: "10px", color: "#6B7280", lineHeight: 1.4 }}>{r.notes ?? ""}</span>,
+    <EditableCell key="e" editKey={`s4_${ri}_1`} value={r.examplePage} edits={edits} onEdit={onEdit} style={{ display: "inline-block", padding: "1px 6px", borderRadius: 3, fontSize: "9px", fontWeight: 500, backgroundColor: `${ACCENT}10`, border: `1px solid ${ACCENT}25`, color: "#374151", wordBreak: "break-all" }} />,
+    <EditableScore key="score" editKey={`s4_${ri}_2`} score={r.seoScore} edits={edits} onEdit={onEdit} />,
+    <EditableCell key="notes" editKey={`s4_${ri}_3`} value={r.notes ?? ""} edits={edits} onEdit={onEdit} style={{ fontSize: "10px", color: "#6B7280", lineHeight: 1.4 }} />,
   ]);
 
   const s6SourceRows: React.ReactNode[][] = section6Priorities.priorities.map((r, ri) => [
     <EditableCell key="n" editKey={`s6_${ri}_0`} value={String(r.priority)} edits={edits} onEdit={onEdit} />,
     <BadgeCell key="i" editKey={`s6_${ri}_1`} value={r.initiative} dataSource={s6SharedSource ? undefined : r.source} edits={edits} onEdit={onEdit} />,
-    <TierBadge key="t" tier={edits[`s6_${ri}_2`] ?? r.tier} />,
-    <ActionTypeBadge key="at" value={edits[`s6_${ri}_5`] ?? (r.actionType ?? "")} />,
+    <EditableCell key="t" editKey={`s6_${ri}_2`} value={r.tier} edits={edits} onEdit={onEdit} />,
+    <EditableCell key="at" editKey={`s6_${ri}_5`} value={r.actionType ?? ""} edits={edits} onEdit={onEdit} />,
     <EditableCell key="a" editKey={`s6_${ri}_3`} value={r.action} edits={edits} onEdit={onEdit} />,
     <EditableCell key="r" editKey={`s6_${ri}_4`} value={r.reason} edits={edits} onEdit={onEdit} />,
   ]);
@@ -959,8 +982,8 @@ export function QbrPrepPreview({
                 </div>
                 {section5Diagnosis.tierScorecard && section5Diagnosis.tierScorecard.length > 0 && (
                   <div style={{ marginBottom: 12 }}>
-                    {section5Diagnosis.tierScorecard.map(entry => (
-                      <TierScorecardCard key={entry.tierNumber} entry={entry} />
+                    {section5Diagnosis.tierScorecard.map((entry, i) => (
+                      <TierScorecardCard key={entry.tierNumber} entry={entry} cardIdx={i} edits={edits} onEdit={onEdit} />
                     ))}
                   </div>
                 )}
@@ -975,13 +998,9 @@ export function QbrPrepPreview({
               <div style={{ padding: "10px 14px", backgroundColor: "#FFF5F5", borderRadius: 4, border: `1.5px solid ${ACCENT}40`, marginBottom: 10, fontSize: "10.5px" }}>
                 <div style={{ fontWeight: 700, color: ACCENT, marginBottom: 6, fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Critical Observations</div>
                 <ul style={{ margin: 0, padding: "0 0 0 16px", lineHeight: 1.6, color: "#374151" }}>
-                  {section6Priorities.shortSummary.map((b, i) => {
-                    const colonIdx = b.indexOf(":");
-                    if (colonIdx > 0 && colonIdx < 60) {
-                      return <li key={i}><strong>{b.slice(0, colonIdx)}:</strong> {b.slice(colonIdx + 1).trimStart()}</li>;
-                    }
-                    return <li key={i}>{b}</li>;
-                  })}
+                  {section6Priorities.shortSummary.map((b, i) => (
+                    <li key={i}><EditableCell editKey={`s6_sum_${i}`} value={b} edits={edits} onEdit={onEdit} /></li>
+                  ))}
                 </ul>
               </div>
             )}
@@ -1126,6 +1145,8 @@ export function QbrPrepPreview({
                                   "create-new":        { bg: "#DBEAFE", color: "#1E40AF" },
                                   "cro-update":        { bg: "#F3E8FF", color: "#6B21A8" },
                                   "internal-linking":  { bg: "#F0FDF4", color: "#14532D" },
+                                  "technical-seo":     { bg: "#FFF7ED", color: "#9A3412" },
+                                  "hub":               { bg: "#F0F9FF", color: "#0C4A6E" },
                                 };
                                 const recTypeLabels: Record<string, string> = {
                                   "optimize-existing": "Optimize existing page",
@@ -1133,10 +1154,14 @@ export function QbrPrepPreview({
                                   "create-new":        "Create new content",
                                   "cro-update":        "CRO / supporting update",
                                   "internal-linking":  "Internal linking support",
+                                  "technical-seo":     "Technical SEO fix",
+                                  "hub":               "Create hub page",
                                 };
                                 const colors = recTypeColors[row.recommendationType] ?? { bg: "#F3F4F6", color: "#374151" };
                                 const label = recTypeLabels[row.recommendationType] ?? row.recommendationType;
-                                const isNewContent = row.targetPage === "New content needed" || row.targetPage === "Suggest new content for this keyword";
+                                const effectiveLabel = edits[`kw_${ri}_recType`] ?? label;
+                                const isTechnicalOrHub = row.recommendationType === "technical-seo" || row.recommendationType === "hub";
+                                const isNewContent = !isTechnicalOrHub && (row.targetPage === "New content needed" || row.targetPage === "Suggest new content for this keyword");
                                 return (
                                   <tr key={ri} style={{ backgroundColor: vi % 2 === 1 ? "#FBF8F7" : "white" }} data-testid={`row-keyword-${ri}`}>
                                     <td style={{ padding: "6px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", fontWeight: 600, wordBreak: "break-word" }}>
@@ -1144,11 +1169,13 @@ export function QbrPrepPreview({
                                     </td>
                                     <td style={{ padding: "6px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", wordBreak: "break-word" }}>
                                       <span style={{ display: "inline-block", padding: "2px 7px", borderRadius: 10, fontSize: "8px", fontWeight: 700, backgroundColor: colors.bg, color: colors.color, whiteSpace: "normal", wordBreak: "break-word" }} data-testid={`badge-rec-type-${ri}`}>
-                                        {label}
+                                        <EditableCell editKey={`kw_${ri}_recType`} value={effectiveLabel} edits={edits} onEdit={onEdit} style={{ color: "inherit" }} />
                                       </span>
                                     </td>
                                     <td style={{ padding: "6px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", wordBreak: "break-word" }}>
-                                      {isNewContent ? (
+                                      {isTechnicalOrHub ? (
+                                        <EditableCell editKey={`kw_${ri}_targetPage`} value={row.targetPage} edits={edits} onEdit={onEdit} style={{ fontSize: "9px", color: "#6B7280" }} />
+                                      ) : isNewContent ? (
                                         <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 10, fontSize: "8px", fontWeight: 700, backgroundColor: "#FEF3C7", color: "#92400E", whiteSpace: "normal", wordBreak: "break-word" }} data-testid={`badge-new-content-${ri}`}>New content needed</span>
                                       ) : (
                                         <span style={{ display: "inline-block", padding: "1px 6px", borderRadius: 3, fontSize: "9px", fontWeight: 500, backgroundColor: `${ACCENT}10`, border: `1px solid ${ACCENT}25`, color: "#374151", wordBreak: "break-all" }} data-testid={`tag-target-page-${ri}`}>

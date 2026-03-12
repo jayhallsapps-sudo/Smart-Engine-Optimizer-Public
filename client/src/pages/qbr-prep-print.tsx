@@ -756,6 +756,8 @@ export default function QbrPrepPrint() {
                         "create-new":        "Create new content",
                         "cro-update":        "CRO / supporting update",
                         "internal-linking":  "Internal linking support",
+                        "technical-seo":     "Technical SEO fix",
+                        "hub":               "Create hub page",
                       };
                       const recTypeColors: Record<string, { bg: string; color: string }> = {
                         "optimize-existing": { bg: "#D1FAE5", color: "#065F46" },
@@ -763,11 +765,15 @@ export default function QbrPrepPrint() {
                         "create-new":        { bg: "#DBEAFE", color: "#1E40AF" },
                         "cro-update":        { bg: "#F3E8FF", color: "#6B21A8" },
                         "internal-linking":  { bg: "#F0FDF4", color: "#14532D" },
+                        "technical-seo":     { bg: "#FFF7ED", color: "#9A3412" },
+                        "hub":               { bg: "#F0F9FF", color: "#0C4A6E" },
                       };
-                      const label  = recTypeLabels[row.recommendationType] ?? row.recommendationType;
+                      const baseLabel = recTypeLabels[row.recommendationType] ?? row.recommendationType;
+                      const label  = edits[`kw_${ri}_recType`] ?? baseLabel;
                       const colors = recTypeColors[row.recommendationType] ?? { bg: "#F3F4F6", color: "#374151" };
                       const rawPage = edits[`kw_${ri}_targetPage`] ?? row.targetPage ?? "";
-                      const isNew = rawPage === "New content needed" || rawPage === "Suggest new content for this keyword";
+                      const isTechnicalOrHub = row.recommendationType === "technical-seo" || row.recommendationType === "hub";
+                      const isNew = !isTechnicalOrHub && (rawPage === "New content needed" || rawPage === "Suggest new content for this keyword");
                       return (
                         <tr key={ri} style={{ backgroundColor: ri % 2 === 1 ? "#FBF8F7" : "white" }}>
                           <td style={{ padding: "7px 9px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", fontWeight: 600, wordBreak: "break-word" }}>
@@ -777,9 +783,11 @@ export default function QbrPrepPrint() {
                             <span style={{ display: "inline-block", padding: "2px 7px", borderRadius: 10, fontSize: "8px", fontWeight: 700, backgroundColor: colors.bg, color: colors.color }}>{label}</span>
                           </td>
                           <td style={{ padding: "7px 9px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", wordBreak: "break-word" }}>
-                            {isNew
-                              ? <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 10, fontSize: "8px", fontWeight: 700, backgroundColor: "#FEF3C7", color: "#92400E" }}>New content needed</span>
-                              : <span style={{ display: "inline-block", padding: "1px 6px", borderRadius: 3, fontSize: "9px", fontWeight: 500, backgroundColor: `${ACCENT}10`, border: `1px solid ${ACCENT}25`, color: "#374151", wordBreak: "break-all" }}>{rawPage}</span>
+                            {isTechnicalOrHub
+                              ? <span style={{ fontSize: "9px", color: "#6B7280" }}>{rawPage}</span>
+                              : isNew
+                                ? <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 10, fontSize: "8px", fontWeight: 700, backgroundColor: "#FEF3C7", color: "#92400E" }}>New content needed</span>
+                                : <span style={{ display: "inline-block", padding: "1px 6px", borderRadius: 3, fontSize: "9px", fontWeight: 500, backgroundColor: `${ACCENT}10`, border: `1px solid ${ACCENT}25`, color: "#374151", wordBreak: "break-all" }}>{rawPage}</span>
                             }
                           </td>
                           <td style={{ padding: "7px 9px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.5, color: "#4B5563", fontSize: "9px", wordBreak: "break-word" }}>{edits[`kw_${ri}_why`] ?? row.whyRecommended}</td>

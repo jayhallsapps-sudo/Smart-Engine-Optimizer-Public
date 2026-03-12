@@ -1,0 +1,240 @@
+You are doing the final editor-usability and keyword-mix pass on the QBS generator and preview experience. This is not a broad rebuild. This is a targeted practical pass to make the report editable enough for human review and to force a more useful recommendation mix in Section 7.
+
+Do not redesign the report.
+Do not change the red QBS design language.
+Do not change solved live-page resolution logic unless required by the fixes below.
+Do not remove existing delete-row controls.
+Do not reopen unrelated logic.
+
+PRIMARY OBJECTIVE
+
+Make the preview fully workable for manual editing and make Section 7 generate a sane strategic mix instead of collapsing everything into CRO / supporting update.
+
+==================================================
+FIX ONLY THE FOLLOWING
+==================================================
+
+1) PREVIEW — MAKE ALL REPORT TEXT EDITABLE
+
+Current problem:
+Too much of the preview is locked text. I need to be able to edit essentially all report text before export.
+
+Required fix:
+Make all human-readable text content editable in preview, including at minimum:
+
+A) Section 4 — Levels of Care Overview
+- Notes text must be editable
+- page URL pills / tags must be editable as text values
+- SEO Score text/value should remain editable if already supported; if not, make it editable too
+
+B) Section 5 — SEO Tier Diagnosis
+- Tier 1, Tier 2, Tier 3, Tier 4 card text must be editable
+- Findings text editable
+- Inference text editable
+- Why It Matters text editable
+- Source text editable if shown as text
+- Any summary / diagnosis narrative above the cards must be editable
+
+C) Section 6 — Critical Observations
+- all Critical Observations text must be editable
+- action titles editable
+- action body / why-it-matters / evidence text editable
+- any labels displayed as text should be editable where practical
+
+D) Section 7 — Suggested Keywords for Next Quarter
+- keyword text editable
+- suggested type editable
+- target editable
+- why it’s suggested editable
+- source editable if shown as text
+
+General rule:
+If it is report copy that a human AM may want to refine before export, it should be editable in preview.
+
+Important:
+- Keep table structure intact
+- Keep current styling intact
+- Editable controls should feel native to the preview
+- Do not expose raw JSON
+- Do not turn pills/tags into broken UI; make them editable cleanly, even if that means editable text inputs styled like pills
+
+Acceptance requirement:
+- a human can edit essentially all report text directly in preview before export
+- those edits persist into export output
+
+2) SECTION 7 — FORCE A USEFUL MIX OF RECOMMENDATION TYPES
+
+Current problem:
+Section 7 is collapsing into too many CRO / supporting updates, which is not useful.
+
+Required output structure for Suggested Keywords for Next Quarter:
+- minimum of 3 new blog posts
+- maximum of 5 content refreshes
+- maximum of 3 CRO updates
+- include 1 internal linking path recommendation
+- include 1 potential hub recommendation if actually needed
+- include minimum of 3 technical issues related to keywords coming directly from the Screaming Frog issues report
+
+This is a required recommendation mix.
+
+Important:
+Do not treat everything as keyword-only content recommendations.
+Section 7 must become a strategic recommendation mix tied to the query set and real site conditions.
+
+Interpretation rules:
+
+A) New blog posts
+- minimum 3
+- these should be real create-new opportunities where existing pages do not already adequately cover the intent
+- use suggested slugs as targets
+
+B) Content refreshes
+- maximum 5
+- use only where an existing page clearly exists and should be improved/refreshed
+
+C) CRO updates
+- maximum 3
+- reserve for pages where conversion-path or on-page conversion support is the real need
+
+D) Internal linking path
+- include at least 1 row specifically framed as internal linking path improvement
+- this should be tied to real existing pages and real keyword intent
+- Suggested Type should clearly indicate internal linking / internal linking path
+
+E) Potential hub
+- include 1 hub recommendation only if actually supported by the site structure and query cluster
+- do not force a hub if one is not needed
+- if included, Suggested Type should clearly indicate hub / structural content recommendation
+
+F) Technical issues tied to keywords
+- minimum 3 rows
+- these must come directly from the Screaming Frog issues report
+- they must be tied to keyword opportunity loss or page discoverability/indexability/performance risk
+- these are not generic technical notes; they must connect technical issues to keyword / visibility / search opportunity impact
+- Suggested Type should clearly indicate technical SEO issue
+
+Required output behavior:
+Section 7 should no longer behave like a one-dimensional keyword content table.
+It should behave like a strategic next-quarter keyword/action mix.
+
+Acceptance requirement:
+- at least 3 new blog posts
+- no more than 5 content refreshes
+- no more than 3 CRO updates
+- at least 1 internal linking path recommendation
+- 1 potential hub recommendation if truly needed
+- at least 3 technical SEO issue recommendations tied to SF issues and keyword impact
+
+3) SECTION 7 — DO NOT ARTIFICIALLY SHRINK THE LIST TO 8 IF THAT BREAKS THE REQUIRED MIX
+
+Current problem:
+The table dropped to 8 rows and lost useful breadth.
+
+Required fix:
+Allow enough rows in Section 7 to satisfy the required strategic mix above.
+Do not hard-cap the table so tightly that the output becomes useless.
+
+Important:
+The recommendation mix matters more than an arbitrary small row count.
+
+Acceptance requirement:
+- Section 7 has enough rows to satisfy the required mix cleanly
+- do not suppress needed rows just to keep the table short
+
+4) SF-ISSUE-DRIVEN TECHNICAL RECOMMENDATIONS MUST BE REAL
+
+Current problem:
+Technical fixes cannot be generic filler.
+
+Required fix:
+For the minimum 3 technical issue rows in Section 7:
+- pull directly from real Screaming Frog issues
+- explain the keyword/search impact in plain English
+- connect each issue to the affected page(s) or page type(s) where possible
+- make the action tangible and defensible
+
+Examples of acceptable technical issue framing:
+- fix non-indexable high-intent page blocking rankings for [keyword cluster]
+- resolve redirect/canonical/indexability issue suppressing visibility for [page/keyword target]
+- improve internal linking / crawl path into [confirmed live page] tied to [keyword cluster]
+
+Not acceptable:
+- generic “technical optimization”
+- generic “fix technical issues”
+- technical rows with no keyword/search connection
+
+Acceptance requirement:
+- the technical rows are real, specific, and traceable to SF issues plus keyword opportunity impact
+
+==================================================
+DO NOT CHANGE THESE THINGS
+==================================================
+
+Leave these alone unless absolutely required by the fixes above:
+- current red design language
+- solved source-badge behavior
+- live website crawl as source of truth
+- current Section 2 / Section 4 page resolution architecture
+- current Tier framework logic
+- current Section 8 and Section 9 framing
+- existing delete-row behavior
+- existing no-fabricated-path safeguards
+
+==================================================
+NON-NEGOTIABLE PRESERVATION RULES
+==================================================
+
+Do not break any of the following already-solved behaviors:
+- no fabricated generic paths
+- no Anchored Tides residue
+- real live page resolution in Sections 2 and 4
+- honest call-tracking behavior
+- no user-facing “service page” leakage where Levels of Care framing is required
+- clean keyword clustering logic
+- confirmed live pages staying mapped correctly
+- Section 8 terminology
+- Section 9 authority framing
+- source-badge no-wrap behavior
+
+==================================================
+FINAL VALIDATION REQUIREMENT
+==================================================
+
+Required steps:
+1. Generate a fresh QBS using live connected data.
+2. Validate the new preview editability directly in the preview UI.
+3. Validate that preview edits persist into export.
+4. Export the actual PDF.
+5. Provide a direct link/path to the PDF.
+6. Provide a short QA note that covers only:
+   - which preview sections/fields are now editable
+   - confirmation that preview edits persist into export
+   - the final Section 7 recommendation-type mix counts
+   - confirmation that at least 3 technical issue rows came directly from SF issues
+   - confirmation that no previously solved issue regressed
+
+==================================================
+FAILURE RULE
+==================================================
+
+Do not declare completion if any of the following remain:
+- locked report text still cannot be edited in preview
+- preview edits do not persist to export
+- Section 7 still collapses mostly into CRO updates
+- fewer than 3 new blog posts
+- more than 5 content refreshes
+- more than 3 CRO updates
+- no internal linking path recommendation
+- missing hub recommendation where clearly needed
+- fewer than 3 technical issue rows tied directly to SF issues
+- Section 7 too short to support the required mix
+
+Instead, list:
+- exact section / feature
+- exact remaining issue
+- exact fix still required
+
+FINAL INSTRUCTION
+
+This is the final editor-usability and keyword-mix pass.
+Make the preview broadly editable, make Section 7 strategically useful, preserve the solved logic, and provide the updated PDF artifact plus QA note.

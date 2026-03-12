@@ -218,7 +218,7 @@ export interface Section7Credits {
 
 export interface SuggestedKeywordRow {
   keyword: string;
-  recommendationType: "optimize-existing" | "refresh-existing" | "create-new" | "cro-update" | "internal-linking";
+  recommendationType: "optimize-existing" | "refresh-existing" | "create-new" | "cro-update" | "internal-linking" | "technical-seo" | "hub";
   targetPage: string;
   whyRecommended: string;
   sources: string[];

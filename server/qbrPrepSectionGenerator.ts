@@ -644,13 +644,15 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
   // Also scan verifiedMoneyPages for any LOC URLs not captured by PAGE_CHECK_GROUPS
   // (e.g. non-standard paths like /womens-addiction-treatment-center/womens-intensive-outpatient-orange-county/)
   const s4UrlPatternMap: Array<{ service: string; pattern: RegExp }> = [
-    { service: "Contact / Admissions", pattern: /\/contact|\/admissions/i },
-    { service: "Verify Insurance", pattern: /\/verify.?insur|\/vob\b|\/insurance/i },
+    { service: "Contact / Admissions", pattern: /\/contact(?!.*insur)|\/contact-us/i },
+    { service: "Verify Insurance", pattern: /\/verify.?insur|\/vob\b|insur(?:ance)?|admissions.*insur|insur.*admissions/i },
     { service: "Detox", pattern: /detox/i },
     { service: "Residential / Inpatient", pattern: /residential|inpatient|long.?term/i },
     { service: "PHP / IOP", pattern: /\/php(?!p)|\/iop|partial.?hosp|intensive.?outpatient/i },
-    { service: "Outpatient", pattern: /\/outpatient(?!.*intensive)/i },
+    { service: "Outpatient", pattern: /\/outpatient(?!.*intensive)|outpatient.?treatment/i },
     { service: "Dual Diagnosis", pattern: /dual.?diagnosis|co.?occurring/i },
+    { service: "Primary Location", pattern: /\/location|\/campus|\/facility|womens.?addiction.?treatment.?center(?:\/)?$|\/levels.?of.?care(?:\/)?$/i },
+    { service: "Therapies", pattern: /\/trauma|\/therap(y|ies)|\/modalities|trauma.?informed/i },
   ];
   for (const mp of verifiedMoneyPages) {
     const mpPath = mp.replace(/^https?:\/\/[^/]+/, "") || "/";
@@ -723,11 +725,13 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
     : { vobInNav: false, vobInFooter: false, contactInNav: false, contactInFooter: false, dataAvailable: false };
 
   // HTTP verification overrides for key page presence flags (S5 Tier Scorecard)
-  // If live verification ran, use it as the truth source for these flags.
-  const httpHasContact = livePageVerification.size > 0 ? contactPath !== null : null;
-  const httpHasVob = livePageVerification.size > 0 ? vobPath !== null : null;
-  const httpHasDetox = livePageVerification.size > 0 ? detoxPath !== null : null;
-  const httpHasResidential = livePageVerification.size > 0 ? residentialPath !== null : null;
+  // Use s4LivePageOverrides as the primary truth source — it integrates both PAGE_CHECK_GROUPS
+  // (standard paths) and the verifiedMoneyPages scan (non-standard client-specific paths).
+  // This prevents false-negatives when clients have non-standard LOC URL structures.
+  const httpHasContact = livePageVerification.size > 0 ? !!s4LivePageOverrides["Contact / Admissions"] : null;
+  const httpHasVob = livePageVerification.size > 0 ? !!s4LivePageOverrides["Verify Insurance"] : null;
+  const httpHasDetox = livePageVerification.size > 0 ? !!s4LivePageOverrides["Detox"] : null;
+  const httpHasResidential = livePageVerification.size > 0 ? !!s4LivePageOverrides["Residential / Inpatient"] : null;
 
   const tierInput: TierDiagnosisInput = {
     sfData,
@@ -3323,8 +3327,13 @@ function generateAdditionalOpportunities(report: QbrPrepReportData): AdditionalO
       const u  = isBehindPace ? 1.0 : (tier === 1 ? 0.78 : 0.60);
       const sf = 0.85;
 
+      const t1Status = s5.tierScorecard?.[0]?.status ?? "Unknown";
+      const locPagesPartiallyPresent = tier === 1 && t1Status === "Partial";
+
       const evidenceItems: string[] = [
-        `Tier ${tier} site diagnosis (${tierName}) — domain authority is the primary constraint on Levels of Care page rankings, which content production alone cannot break through`,
+        locPagesPartiallyPresent
+          ? `Core Levels of Care pages confirmed present — site has cleared most Tier 1 structural requirements. Domain authority is now the primary ceiling on competitive treatment-term rankings.`
+          : `Tier ${tier} site diagnosis (${tierName}) — domain authority is the primary constraint on Levels of Care page rankings, which content production alone cannot break through`,
       ];
       if (isBehindPace && primaryRow) {
         evidenceItems.push(`Primary goal (${primaryRow.goal}) is behind pace — standard content-only work cannot close the authority gap that limits Levels of Care page rankings this cycle`);
@@ -3332,10 +3341,14 @@ function generateAdditionalOpportunities(report: QbrPrepReportData): AdditionalO
         evidenceItems.push(`${highAdmitTopics.length} confirmed high-intent topic cluster${highAdmitTopics.length > 1 ? "s" : ""} identified — authority, not content volume, is the primary ranking constraint on these terms`);
       }
 
+      const whyNow = locPagesPartiallyPresent
+        ? `Core Levels of Care pages are confirmed present — Detox, IOP, Outpatient, and Dual Diagnosis pages are live and indexed. Domain authority is now the primary ceiling on where those pages rank for competitive treatment terms. The standard content roadmap addresses what to publish; a focused authority program removes the ranking ceiling.`
+        : `Site is at Tier ${tier} — Levels of Care page rankings on high-value treatment terms are constrained by domain authority. The standard content roadmap addresses what to publish, not the ceiling that prevents those pages from ranking.`;
+
       pool.push(candidate({
         type: "upsell",
         title: "Custom Authority-Building Initiative",
-        why_now: `Site is at Tier ${tier} — Levels of Care page rankings on high-value treatment terms are constrained by domain authority. The standard content roadmap addresses what to publish, not the ceiling that prevents those pages from ranking.`,
+        why_now: whyNow,
         evidence: evidenceItems,
         recommendation: "A focused link acquisition or digital PR program targeting high-intent Levels of Care pages. This is a deeper SEO investment than the standard monthly retainer covers, designed to remove the authority ceiling that content production alone cannot lift.",
         framing: "Recommended when authority — not content output or keyword strategy — is the confirmed bottleneck. Link acquisition and digital PR address a constraint that standard scope cannot resolve.",
@@ -3734,6 +3747,9 @@ const CLUSTER_STOPWORDS = new Set([
   "would","could","should","may","might","i","you","we","they","my","your","our",
   "their","which","who","after","before","during","about","into","onto","upon",
   "mean","means","meaning","define","defined","definition",
+  // Duration/timing terms — too generic to define intent across unrelated queries
+  "long","stay","last","take","days","time","week","weeks","hours","minutes",
+  "much","many","ever","work","works","working","feel","feeling","feels",
 ]);
 
 function normalizeQueryForCluster(q: string): string[] {
@@ -3767,6 +3783,9 @@ const GENERIC_BH_TERMS = new Set([
   "sober", "sobriety", "clean", "detox", "residential", "inpatient", "outpatient",
   "withdrawal", "symptoms", "side", "effects", "signs", "abuse", "disorder",
   "near", "best", "top", "local", "find", "get", "need",
+  // Broad psychological/emotional terms — appear across many unrelated content clusters
+  "anxiety", "fear", "stress", "panic", "worry", "depression", "trauma", "nervous",
+  "feeling", "emotions", "mood", "mental", "emotional", "healing", "cope", "coping",
 ]);
 
 /**

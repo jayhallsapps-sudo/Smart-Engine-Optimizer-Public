@@ -1,0 +1,335 @@
+You are fixing the QBS generator and audit workflow at the system level. This is not a client-specific patch. This is a foundational correction to how the system gathers truth about a website.
+
+The current behavior is wrong whenever it relies too heavily on Screaming Frog to determine what pages exist, how the site is structured, what is in the menu, or what pages should map into report sections.
+
+That must stop.
+
+PRIMARY OBJECTIVE
+
+For every QBS audit, the system must treat the live website and live sitemap as the primary source of truth for:
+- site structure
+- page inventory
+- menu / nav items
+- footer links
+- actual live URLs
+- page intent
+- whether a page is truly a Level of Care page, Verify Insurance page, Contact / Admissions page, About page, Team page, Primary Location page, etc.
+- page-level content identity
+- internal linking presence
+- whether the page is actually what the slug suggests it is
+
+Screaming Frog must be used primarily for technical audit context, not as the sole or dominant source for what pages exist on the site.
+
+==================================================
+NON-NEGOTIABLE SOURCE HIERARCHY
+==================================================
+
+For any audit question involving the website itself, use this hierarchy:
+
+1. LIVE WEBSITE CRAWL + LIVE SITEMAP = PRIMARY SOURCE OF TRUTH
+Use these to determine:
+- what pages exist
+- what pages are linked in nav / footer
+- what the actual URLs are
+- what the actual page titles / H1s / page purposes are
+- whether a page is live
+- whether a page is a Level of Care page, utility page, trust page, location page, blog/resource page, etc.
+- whether internal links exist between key pages
+- whether a page is reachable and structurally part of the site
+
+2. GA4 + CALL TRACKING = PRIMARY SOURCE OF TRUTH FOR CONVERSIONS
+Use these to determine:
+- top converting pages
+- top converting sources
+- top conversion patterns
+- page-level conversion support
+- where real business actions are happening
+
+3. GSC = PRIMARY SOURCE OF TRUTH FOR ORGANIC DEMAND / VISIBILITY
+Use this to determine:
+- top traffic topics
+- top traffic pages
+- query intent
+- organic visibility patterns
+- whether traffic is informational vs care-intent / modality-intent
+
+4. SCREAMING FROG = TECHNICAL AUDIT / STRUCTURAL SUPPORTING SOURCE
+Use SF to determine:
+- indexability
+- status codes
+- canonicals
+- noindex
+- redirects
+- internal link counts if useful
+- technical warnings / issues / errors
+- template / crawl diagnostics
+- supporting structure context
+
+Do NOT use Screaming Frog as the sole or dominant source for:
+- full site page inventory
+- whether a core page exists
+- whether a page belongs in a report slot
+- whether nav items exist
+- whether a page is truly the page the system thinks it is
+
+==================================================
+CORE SYSTEM CORRECTION
+==================================================
+
+The system must perform a true website crawl for every QBS generation.
+
+Not a shallow slug scan.
+Not just homepage extraction.
+Not just sitemap URL collection.
+Not just Screaming Frog import parsing.
+
+A true crawl means:
+
+- start from the live website homepage
+- extract and follow internal links
+- inspect main navigation
+- inspect footer navigation
+- inspect major site sections
+- inspect sitemap URLs
+- resolve key page templates
+- fetch the page itself, not just the slug
+- inspect page title, H1, and meaningful visible page content
+- use page content and structure to determine page identity
+- confirm whether the page actually matches its URL meaning
+
+Example:
+Do not assume a page is Detox just because the slug contains detox.
+Confirm it by checking page title / H1 / visible content.
+
+Likewise:
+Do not fail to detect a detox-related page just because the slug says detoxification instead of detox.
+The system must inspect the page itself and classify it correctly.
+
+==================================================
+REQUIRED CRAWL BEHAVIOR
+==================================================
+
+For every QBS run, the crawler must gather and use:
+
+A) SITE INVENTORY
+- all crawlable internal page URLs discovered from:
+  - homepage
+  - main nav
+  - footer
+  - sitemap
+  - recursively followed internal links
+- normalized live page inventory
+- deduplicated canonical page list where possible
+
+B) PAGE IDENTITY SIGNALS
+For each important candidate page, inspect:
+- URL
+- page title
+- H1
+- meta title if available
+- visible page content excerpt
+- nav / footer link presence
+- internal-link context if useful
+
+Use these signals together to classify the page.
+Do not classify from slug alone unless there is no better signal.
+
+C) STRUCTURAL SIGNALS
+- whether the page appears in nav
+- whether it appears in footer
+- whether it appears in sitemap
+- whether it is internally linked from key pages
+- whether it is reachable from homepage in a reasonable number of clicks
+- whether it looks like a core conversion-support page vs an orphan vs a blog/resource page
+
+D) TECHNICAL SIGNALS
+From Screaming Frog and/or direct page checks:
+- status code
+- indexability
+- noindex
+- canonical
+- redirect behavior
+- internal-link counts if helpful
+- technical issues relevant to the page
+
+==================================================
+HOW THIS MUST CHANGE REPORT SECTIONS
+==================================================
+
+SECTION 2 — TOP CONVERTING PAGES
+Do not let this section use fake or generic paths.
+Do not let this section classify a page from an assumed slug pattern.
+
+Required behavior:
+- identify actual live pages from the website crawl / sitemap
+- map GA4 and call-tracking conversion evidence onto those actual live pages
+- classify the page type based on live page identity, not just slug matching
+- if a page is Verify Insurance, Contact / Admissions, or a Level of Care page, the classification must reflect what the page actually is
+
+Hard rule:
+No page may appear in Section 2 unless it is confirmed in the live page inventory.
+
+SECTION 4 — LEVELS OF CARE OVERVIEW
+This section must be built from the actual live website crawl plus sitemap plus page inspection.
+
+Required behavior:
+- identify the actual live Levels of Care pages and related support pages from the live site
+- inspect the actual page before assigning the slot
+- use page content signals, not slug-only logic
+- only fall back to “Manual QA Needed” if the system truly cannot confirm the page after:
+  - website crawl
+  - sitemap review
+  - page inspection
+  - technical support checks
+
+Do not use Screaming Frog absence alone as proof that a page does not exist.
+
+SECTION 5 — TIER DIAGNOSIS
+Tier diagnosis must use:
+- live page inventory
+- page identity
+- nav / footer presence
+- site structure
+- technical support data
+- conversion-path reality
+
+Do not let Tier 1 fail merely because Screaming Frog did not supply a matching URL row.
+If the live site crawl confirms the page, the diagnosis must respect that.
+
+SECTION 6 — WHAT WE NEED TO DO NEXT
+All actions must be based on the live website reality.
+Do not recommend creating pages that already exist.
+Do not recommend “confirm whether pages exist” when the live website crawl has already confirmed them.
+Use the confirmed page inventory and page identity from the website crawl first.
+
+SECTION 7 — KEYWORD TARGET DECISIONING
+Before recommending create-new content, the system must check:
+- live website inventory
+- sitemap
+- page identity from crawl
+- GSC page evidence
+- technical support evidence
+
+If an existing live page already covers the intent, do not recommend create-new.
+Recommend CRO / refresh / optimize-existing instead.
+
+==================================================
+SPECIFIC BEHAVIOR TO IMPLEMENT
+==================================================
+
+1) WEBSITE CRAWL OVERRIDES SF ABSENCE
+If Screaming Frog does not show a page, but the live site crawl plus sitemap plus page inspection confirms it, treat the page as existing.
+
+2) PAGE INSPECTION OVERRIDES SLUG ASSUMPTION
+If a slug is ambiguous, inspect the page content and classify the page from what it actually is.
+
+3) SITEMAP IS SUPPORTING TRUTH, NOT OPTIONAL
+Use the live sitemap on every run to help confirm indexable page inventory.
+
+4) MENU / FOOTER MUST BE READ DIRECTLY
+Do not infer nav structure from URL patterns.
+Read the menu and footer from the live site.
+
+5) WEBSITE CRAWL MUST BE CLIENT-AGNOSTIC
+Do not solve this by hardcoding client-specific slugs.
+Fix the resolver architecture.
+
+6) LIVE PAGE INVENTORY MUST BECOME A SHARED SOURCE OF TRUTH
+Once resolved, the same live page inventory must be reused consistently across:
+- Section 2
+- Section 4
+- Section 5
+- Section 6
+- Section 7
+
+No section should be inventing its own conflicting idea of what pages exist.
+
+==================================================
+EXPLICITLY FORBIDDEN
+==================================================
+
+Do not:
+- use SF as the only source of page existence
+- use slug-only assumptions when the live page can be fetched
+- recommend create-new content when a live page already exists and matches intent
+- classify pages purely from path fragments if page content can be inspected
+- fabricate generic paths
+- let one section think a page exists while another section says it does not
+- rely on Anchored Tides-specific fixes or any client-specific shortcuts
+
+==================================================
+REQUIRED IMPLEMENTATION OUTPUT
+==================================================
+
+After implementation, provide a QA report with these exact sections:
+
+1. LIVE WEBSITE CRAWL IMPLEMENTATION
+Show:
+- how the live crawl now works
+- what inputs it uses
+- how deep it goes
+- what page signals it captures
+
+2. SOURCE HIERARCHY ENFORCEMENT
+Show:
+- how live website + sitemap now outrank SF for page existence and structure
+- how GA4 + call tracking outrank other sources for conversions
+- how GSC remains the visibility source
+- how SF is now correctly limited to technical support
+
+3. SHARED LIVE PAGE INVENTORY
+Show:
+- how one resolved live page inventory is now created
+- how it is reused across Sections 2, 4, 5, 6, and 7
+
+4. PAGE IDENTITY CLASSIFICATION
+Show:
+- how page title / H1 / content / nav presence are now used to classify pages
+- how slug-only assumptions were reduced or eliminated
+
+5. CREATE-NEW SAFETY CHECK
+Show:
+- how the system now checks the live site and GSC before recommending create-new
+- how issues-format SF no longer causes false create-new recommendations
+
+6. REGRESSION CHECK
+Confirm:
+- no fabricated paths
+- no false “missing” claims when live crawl confirms the page
+- no Anchored Tides-specific logic reintroduced
+- no previously solved behavior regressed
+
+7. FINAL VALIDATION
+Generate and provide:
+- one Anchored Tides QBS PDF
+- one non-Anchored-Tides QBS PDF
+
+For each, confirm:
+- Section 2 uses real live pages
+- Section 4 reflects real live inventory
+- Section 5 respects live page existence
+- Section 6 does not recommend creating confirmed live pages
+- Section 7 does not recommend create-new where a live matching page already exists
+
+==================================================
+FAILURE RULE
+==================================================
+
+Do not declare completion if:
+- SF is still being used as the dominant source of page existence
+- a live page confirmed by website crawl is still treated as missing
+- page classification still depends mostly on slugs
+- create-new recommendations still ignore live page evidence
+- different sections still disagree about what pages exist
+
+Instead, list:
+- exact section
+- exact failure
+- exact fix still required
+
+FINAL INSTRUCTION
+
+This is a system-truth correction pass.
+The live website and live sitemap must become the primary source of truth for site structure and page inventory.
+Screaming Frog must become supporting technical context, not the dominant source of what exists.
+Implement that architecture cleanly, reuse the resolved page inventory across the report, and prove it with both Anchored Tides and a second real client PDF artifact.

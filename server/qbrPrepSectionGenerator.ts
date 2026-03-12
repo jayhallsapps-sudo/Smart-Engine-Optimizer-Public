@@ -1,4 +1,5 @@
 import { type GapContext, buildGapContext, gapContextToString } from "./gapAnswerContext";
+import { crawlSite, type LivePageInventory } from "./liveCrawler";
 import { storage } from "./storage";
 import { getGoogleAccessToken } from "./googleToken";
 import { fetchNsmGoals, fetchNsmGoalsForSpecificQuarter } from "./sheetsClient";
@@ -159,114 +160,8 @@ import {
   type NavAccessibility,
 } from "./qbrPrepHelpers";
 
-// ── Nav accessibility: fetch homepage HTML and parse nav/footer links ──────────
-async function fetchNavAccessibility(siteUrl: string): Promise<NavAccessibility> {
-  const empty: NavAccessibility = { vobInNav: false, vobInFooter: false, contactInNav: false, contactInFooter: false, dataAvailable: false };
-  try {
-    const resp = await fetch(siteUrl, {
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; SmartEO-QBR/1.0; +https://smarteo.co)" },
-      signal: AbortSignal.timeout(12000),
-    });
-    if (!resp.ok) return empty;
-    const html = await resp.text();
-
-    const extractHrefs = (block: string): string[] =>
-      (block.match(/href=["']([^"']+)["']/gi) ?? [])
-        .map(h => h.match(/href=["']([^"']+)["']/i)?.[1] ?? "")
-        .filter(Boolean);
-
-    const navBlocks = html.match(/<nav[\s>][^]*?<\/nav>/gi) ?? [];
-    const footerBlocks = html.match(/<footer[\s>][^]*?<\/footer>/gi) ?? [];
-
-    const navHrefs = navBlocks.flatMap(extractHrefs);
-    const footerHrefs = footerBlocks.flatMap(extractHrefs);
-
-    const VOB_RE = /verify.?insur|\/vob\b|insurance.?verif|check.?insur|\/insurance\b/i;
-    const CONTACT_RE = /\/contact|\/admissions|\/get.?help|\/intake|\/reach/i;
-
-    const normalize = (href: string): string => {
-      try { return new URL(href, siteUrl).pathname; } catch { return href; }
-    };
-
-    const inNav = (hrefs: string[], re: RegExp) => hrefs.map(normalize).some(p => re.test(p));
-
-    return {
-      vobInNav:     inNav(navHrefs, VOB_RE),
-      vobInFooter:  inNav(footerHrefs, VOB_RE),
-      contactInNav: inNav(navHrefs, CONTACT_RE),
-      contactInFooter: inNav(footerHrefs, CONTACT_RE),
-      dataAvailable: true,
-    };
-  } catch {
-    return empty;
-  }
-}
-
 const ME = "Manual entry needed";
 const NOT_FOUND = "Not found on site";
-
-// ── Live page verification: HEAD-check key paths against the live site ─────────
-// Returns a map of path → { exists: boolean, resolvedPath: string | null }
-// A page is considered "exists" if it resolves to a non-root, non-homepage URL.
-async function verifyLivePages(
-  baseUrl: string,
-  paths: string[]
-): Promise<Map<string, { exists: boolean; resolvedPath: string | null }>> {
-  const results = new Map<string, { exists: boolean; resolvedPath: string | null }>();
-  const base = baseUrl.replace(/\/$/, "");
-  const rootPaths = new Set(["", "/", "/home", "/index.html", "/index.php"]);
-
-  async function checkPath(path: string): Promise<{ exists: boolean; resolvedPath: string | null }> {
-    try {
-      const resp = await fetch(`${base}${path}`, {
-        method: "HEAD",
-        redirect: "follow",
-        headers: { "User-Agent": "Mozilla/5.0 (compatible; SmartEO-QBR/1.0)" },
-        signal: AbortSignal.timeout(5000),
-      });
-      if (!resp.ok) return { exists: false, resolvedPath: null };
-      // Determine where it landed
-      const finalUrl = resp.url ?? `${base}${path}`;
-      let finalPath = "/";
-      try { finalPath = new URL(finalUrl).pathname; } catch {}
-      // If it landed on root/homepage, treat as non-existent
-      if (rootPaths.has(finalPath) || finalPath === "") return { exists: false, resolvedPath: null };
-      return { exists: true, resolvedPath: finalPath };
-    } catch {
-      return { exists: false, resolvedPath: null };
-    }
-  }
-
-  // Batch requests to avoid triggering Cloudflare rate-limits on sites with CDN protection.
-  // Sending 40+ concurrent HEAD requests can cause silent rejections; batching keeps
-  // it within safe limits while still running faster than sequential checks.
-  const BATCH_SIZE = 8;
-  const allResults: Array<PromiseSettledResult<{ exists: boolean; resolvedPath: string | null }>> = [];
-  for (let i = 0; i < paths.length; i += BATCH_SIZE) {
-    const batch = paths.slice(i, i + BATCH_SIZE);
-    const batchResults = await Promise.allSettled(batch.map(p => checkPath(p)));
-    allResults.push(...batchResults);
-    if (i + BATCH_SIZE < paths.length) {
-      await new Promise(res => setTimeout(res, 120));
-    }
-  }
-  paths.forEach((p, i) => {
-    const r = allResults[i];
-    results.set(p, r.status === "fulfilled" ? r.value : { exists: false, resolvedPath: null });
-  });
-  return results;
-}
-
-// ── Infer page verification groups for key service categories ─────────────────
-const PAGE_CHECK_GROUPS: Record<string, string[]> = {
-  contact:     ["/contact", "/contact-us", "/get-help", "/admissions", "/admissions-form", "/reach-out", "/intake", "/get-started", "/start-treatment", "/need-help"],
-  vob:         ["/verify-insurance", "/insurance-verification", "/vob", "/verify-benefits", "/insurance", "/check-insurance", "/insurance-verification"],
-  detox:       ["/detox", "/detox-program", "/detoxification", "/programs/detox", "/detox-center", "/medical-detox"],
-  residential: ["/residential", "/residential-treatment", "/inpatient", "/inpatient-rehab", "/programs/residential", "/residential-program"],
-  about:       ["/about", "/about-us", "/our-story", "/who-we-are", "/our-mission", "/our-approach", "/about-our-program"],
-  team:        ["/team", "/our-team", "/staff", "/meet-the-team", "/leadership", "/providers", "/clinical-team"],
-  alumni:      ["/alumni", "/aftercare", "/alumni-program", "/alumni-network", "/after-treatment"],
-};
 
 function pctDeltaLocal(current: number, previous: number): string {
   if (previous === 0) return current > 0 ? "+∞%" : "—";
@@ -389,6 +284,20 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
 
   const dataSources: string[] = [];
   const missingData: string[] = [];
+
+  // ── Start live website crawl EARLY — runs in parallel with NSM/GSC/GA4 API calls ──
+  // This is the primary source of truth for site structure and page inventory.
+  const _siteBaseUrlForCrawl = client.gscSiteUrl
+    ? client.gscSiteUrl.replace(/^sc-domain:/, "https://").replace(/\/$/, "")
+    : null;
+  const liveCrawlPromise: Promise<LivePageInventory> = _siteBaseUrlForCrawl
+    ? crawlSite(_siteBaseUrlForCrawl)
+    : Promise.resolve({
+        domain: "", baseUrl: "", pages: [], bestByCategory: {}, pathSet: new Set(),
+        navPaths: new Set(), footerPaths: new Set(), sitemapPaths: new Set(),
+        navAccessibility: { vobInNav: false, vobInFooter: false, contactInNav: false, contactInFooter: false, dataAvailable: false },
+        crawlComplete: false, crawledAt: new Date().toISOString(),
+      } as LivePageInventory);
 
   let nsmData: any = null;
   let prevNsmData: any = null;
@@ -600,96 +509,77 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
 
   const section1 = generateSection1(nsmData, ga4FunnelCurr, quarter, client, callTrackingSources, prevNsmData, input.prevQtrAssessment, input.hypothesis, (input as any).clientNotes, input.sentiment);
 
-  // ── Live page verification — run early so S2, S4, S5 all benefit ─────────────
-  // Only runs when we have a real domain (not Issues-format SF or missing config).
-  let livePageVerification: Map<string, { exists: boolean; resolvedPath: string | null }> = new Map();
-  const siteBaseUrl = client.gscSiteUrl
-    ? client.gscSiteUrl.replace(/^sc-domain:/, "https://").replace(/\/$/, "")
-    : null;
-  if (siteBaseUrl && !siteBaseUrl.includes(ME)) {
-    const allPathsToCheck = [
-      ...PAGE_CHECK_GROUPS.contact,
-      ...PAGE_CHECK_GROUPS.vob,
-      ...PAGE_CHECK_GROUPS.detox,
-      ...PAGE_CHECK_GROUPS.residential,
-      ...PAGE_CHECK_GROUPS.about,
-      ...PAGE_CHECK_GROUPS.team,
-      ...PAGE_CHECK_GROUPS.alumni,
-      // Also check configured money pages
-      ...(client.moneyPages ?? []).map((mp: string) => mp.replace(/^https?:\/\/[^/]+/, "") || "/"),
-    ];
-    const uniquePaths = Array.from(new Set(allPathsToCheck));
-    try {
-      livePageVerification = await verifyLivePages(siteBaseUrl, uniquePaths);
-      const foundCount = Array.from(livePageVerification.values()).filter(v => v.exists).length;
-      console.log(`[LiveVerify] Checked ${uniquePaths.length} paths → ${foundCount} found live`);
-    } catch (e: any) {
-      console.warn("[LiveVerify] Page verification failed:", e.message);
-    }
-  }
+  // ── Await the live website crawl (started in parallel above) ─────────────────
+  // The live inventory is the PRIMARY source of truth for site structure and page
+  // existence. SF remains a technical supporting source only (status codes, redirects,
+  // indexability) — not the dominant source for what pages exist.
+  const liveInventory = await liveCrawlPromise;
+  console.log(`[LiveCrawler] Awaited. crawlComplete=${liveInventory.crawlComplete}, pages=${liveInventory.pages.length}, pathSet=${liveInventory.pathSet.size}`);
 
-  // Build a helper to find the first live path in a category
-  function firstLivePath(category: string): string | null {
-    for (const path of PAGE_CHECK_GROUPS[category] ?? []) {
-      const r = livePageVerification.get(path);
-      if (r?.exists) return r.resolvedPath ?? path;
-    }
-    return null;
-  }
-
-  // Filter money pages: keep only those that resolve to a non-homepage URL
+  // ── Filter money pages: keep only those confirmed live by the crawl ───────────
   const verifiedMoneyPages = (client.moneyPages ?? []).filter((mp: string) => {
-    const path = mp.replace(/^https?:\/\/[^/]+/, "") || "/";
-    const r = livePageVerification.get(path);
-    // If verification ran (map has this path) and page doesn't exist, exclude it
-    if (livePageVerification.size > 0 && livePageVerification.has(path)) return r?.exists ?? false;
-    // If no verification data, include as before
-    return true;
+    const path = (mp.replace(/^https?:\/\/[^/]+/, "") || "/").replace(/\/$/, "") || "/";
+    // If crawl ran and has a meaningful path inventory, require the path to be confirmed
+    if (liveInventory.crawlComplete && liveInventory.pathSet.size > 2) {
+      return liveInventory.pathSet.has(path);
+    }
+    return true;  // crawl didn't complete — include all as before
   });
 
   const clientWithVerifiedMoneyPages = { ...client, moneyPages: verifiedMoneyPages };
 
-  const section2 = generateSection2(ga4LandingRows, gscPageRows, clientWithVerifiedMoneyPages, callTrackingLandingPages, callTrackingSources, livePageVerification);
+  const section2 = generateSection2(ga4LandingRows, gscPageRows, clientWithVerifiedMoneyPages, callTrackingLandingPages, callTrackingSources, liveInventory);
   const section3 = generateSection3(gscQueryRows, gscPageRows, ga4LandingRows, client, gscPrevQueryRows, gscPrevPageRows, gscQueryPageRows, gscPrevQueryPageRows);
 
-  // Build live page overrides for S4 (maps service name → real verified URL)
-  const s4LivePageOverrides: Record<string, string> = {};
-  const contactPath = firstLivePath("contact");
-  const vobPath = firstLivePath("vob");
-  const detoxPath = firstLivePath("detox");
-  const residentialPath = firstLivePath("residential");
-  if (contactPath) s4LivePageOverrides["Contact / Admissions"] = contactPath;
-  if (vobPath) s4LivePageOverrides["Verify Insurance"] = vobPath;
-  if (detoxPath) s4LivePageOverrides["Detox"] = detoxPath;
-  if (residentialPath) s4LivePageOverrides["Residential / Inpatient"] = residentialPath;
+  // ── Build S4 live page overrides from the live inventory (PRIMARY source) ─────
+  // Live crawl → nav/footer/sitemap discovery → page title/H1 classification.
+  // This replaces the old fixed-slug-list approach which could not find pages with
+  // non-standard URL structures (e.g. /womens-addiction-treatment-center/detoxification).
+  const S4_CATEGORY_MAP: Array<{ service: string; category: import("./liveCrawler").PageCategory }> = [
+    { service: "Contact / Admissions", category: "contact-admissions" },
+    { service: "Detox",                category: "detox" },
+    { service: "Residential / Inpatient", category: "residential" },
+    { service: "PHP / IOP",            category: "php-iop" },
+    { service: "Outpatient",           category: "outpatient" },
+    { service: "Dual Diagnosis",       category: "dual-diagnosis" },
+    { service: "Verify Insurance",     category: "verify-insurance" },
+    { service: "Primary Location",     category: "primary-location" },
+  ];
 
-  // Also scan verifiedMoneyPages for any LOC URLs not captured by PAGE_CHECK_GROUPS
-  // (e.g. non-standard paths like /womens-addiction-treatment-center/womens-intensive-outpatient-orange-county/)
+  const s4LivePageOverrides: Record<string, string> = {};
+  for (const { service, category } of S4_CATEGORY_MAP) {
+    const best = liveInventory.bestByCategory[category];
+    if (best?.path) s4LivePageOverrides[service] = best.path;
+  }
+
+  // Also scan verifiedMoneyPages for any categories still missing (non-standard slugs)
+  // classified from the crawl but not mapped by the category rules (rare fallback).
   const s4UrlPatternMap: Array<{ service: string; pattern: RegExp }> = [
     { service: "Contact / Admissions", pattern: /\/contact(?!.*insur)|\/contact-us/i },
-    { service: "Verify Insurance", pattern: /\/verify.?insur|\/vob\b|insur(?:ance)?|admissions.*insur|insur.*admissions/i },
-    { service: "Detox", pattern: /detox/i },
+    { service: "Verify Insurance",     pattern: /\/verify.?insur|\/vob\b|insur(?:ance)?|admissions.*insur|insur.*admissions/i },
+    { service: "Detox",                pattern: /detox/i },
     { service: "Residential / Inpatient", pattern: /residential|inpatient|long.?term/i },
-    { service: "PHP / IOP", pattern: /\/php(?!p)|\/iop|partial.?hosp|intensive.?outpatient/i },
-    { service: "Outpatient", pattern: /\/outpatient(?!.*intensive)|outpatient.?treatment/i },
-    { service: "Dual Diagnosis", pattern: /dual.?diagnosis|co.?occurring/i },
-    { service: "Primary Location", pattern: /\/location|\/campus|\/facility|womens.?addiction.?treatment.?center(?:\/)?$|\/levels.?of.?care(?:\/)?$/i },
-    { service: "Therapies", pattern: /\/trauma|\/therap(y|ies)|\/modalities|trauma.?informed/i },
+    { service: "PHP / IOP",            pattern: /\/php(?!p)|\/iop|partial.?hosp|intensive.?outpatient/i },
+    { service: "Outpatient",           pattern: /\/outpatient(?!.*intensive)|outpatient.?treatment/i },
+    { service: "Dual Diagnosis",       pattern: /dual.?diagnosis|co.?occurring/i },
+    { service: "Primary Location",     pattern: /\/location|\/campus|\/facility|\/levels.?of.?care(?:\/)?$/i },
   ];
   for (const mp of verifiedMoneyPages) {
-    const mpPath = mp.replace(/^https?:\/\/[^/]+/, "") || "/";
+    const mpPath = (mp.replace(/^https?:\/\/[^/]+/, "") || "/").replace(/\/$/, "") || "/";
     for (const { service, pattern } of s4UrlPatternMap) {
       if (!s4LivePageOverrides[service] && pattern.test(mpPath)) {
-        s4LivePageOverrides[service] = mpPath.replace(/\/$/, "") || mpPath;
+        s4LivePageOverrides[service] = mpPath;
         break;
       }
     }
   }
 
+  console.log(`[S4Overrides] ${JSON.stringify(s4LivePageOverrides)}`);
+
   // Detect whether SF data is a real URL crawl (has Address/URL column) vs Issues format
   const sfIsUrlCrawl = sfHeaders.some(h => /^address$/i.test(h) || /^url$/i.test(h));
 
-  const section4 = generateSection4(sfData, sfHeaders, client, s4LivePageOverrides, livePageVerification.size > 0, sfIsUrlCrawl);
+  const section4 = generateSection4(sfData, sfHeaders, client, s4LivePageOverrides, liveInventory.crawlComplete, sfIsUrlCrawl);
 
   // T003: Post-process tertiary goal reason with actual traffic data from section3
   const tertiaryIdx = section1.rows.findIndex(r => r.goalType === "Secondary Goal/NSM");
@@ -741,19 +631,16 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
 
   const sfTierInput = analyzeSfForTierInput(sfData, sfHeaders);
 
-  // Fetch nav/footer accessibility for Tier 1 verification — non-blocking
-  const navAccessibility = client.gscSiteUrl
-    ? await fetchNavAccessibility(client.gscSiteUrl.replace(/^sc-domain:/, "https://"))
-    : { vobInNav: false, vobInFooter: false, contactInNav: false, contactInFooter: false, dataAvailable: false };
+  // NavAccessibility comes from the live crawl — no separate fetch needed.
+  // The live crawler reads homepage HTML and classifies nav/footer links.
+  const navAccessibility = liveInventory.navAccessibility;
 
-  // HTTP verification overrides for key page presence flags (S5 Tier Scorecard)
-  // Use s4LivePageOverrides as the primary truth source — it integrates both PAGE_CHECK_GROUPS
-  // (standard paths) and the verifiedMoneyPages scan (non-standard client-specific paths).
-  // This prevents false-negatives when clients have non-standard LOC URL structures.
-  const httpHasContact = livePageVerification.size > 0 ? !!s4LivePageOverrides["Contact / Admissions"] : null;
-  const httpHasVob = livePageVerification.size > 0 ? !!s4LivePageOverrides["Verify Insurance"] : null;
-  const httpHasDetox = livePageVerification.size > 0 ? !!s4LivePageOverrides["Detox"] : null;
-  const httpHasResidential = livePageVerification.size > 0 ? !!s4LivePageOverrides["Residential / Inpatient"] : null;
+  // ── Page presence flags for Tier Scorecard — live crawl is the PRIMARY source ─
+  // Live inventory (nav + footer + sitemap + page content) overrides SF for page
+  // existence. SF remains authoritative for technical signals (status codes, redirects,
+  // indexability counts, title/H1 counts, thin pages, etc.).
+  const liveHasPage = (category: import("./liveCrawler").PageCategory) =>
+    liveInventory.crawlComplete ? !!liveInventory.bestByCategory[category] : null;
 
   const tierInput: TierDiagnosisInput = {
     sfData,
@@ -765,28 +652,21 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
     missingTitles: sfTierInput.missingTitles ?? 0,
     missingH1s: sfTierInput.missingH1s ?? 0,
     servicePageTypes: sfTierInput.servicePageTypes ?? [],
-    // Prefer HTTP verification result over SF analysis; fall back to SF if no HTTP data
-    hasVobPage: httpHasVob !== null ? httpHasVob : (sfTierInput.hasVobPage ?? false),
-    hasContactPage: httpHasContact !== null ? httpHasContact : (sfTierInput.hasContactPage ?? false),
-    hasDetoxPage: httpHasDetox !== null ? httpHasDetox : (sfTierInput.hasDetoxPage ?? false),
-    hasResidentialPage: httpHasResidential !== null ? httpHasResidential : (sfTierInput.hasResidentialPage ?? false),
+    // Live crawl is primary; fall back to SF analysis if crawl did not complete
+    hasVobPage:         liveHasPage("verify-insurance")   ?? (sfTierInput.hasVobPage ?? false),
+    hasContactPage:     liveHasPage("contact-admissions")  ?? (sfTierInput.hasContactPage ?? false),
+    hasDetoxPage:       liveHasPage("detox")               ?? (sfTierInput.hasDetoxPage ?? false),
+    hasResidentialPage: liveHasPage("residential")         ?? (sfTierInput.hasResidentialPage ?? false),
     hasConditionsHub: sfTierInput.hasConditionsHub ?? false,
     hasTherapiesHub: sfTierInput.hasTherapiesHub ?? false,
-    hasLocationPage: sfTierInput.hasLocationPage ?? false,
+    hasLocationPage: liveHasPage("primary-location") ?? (sfTierInput.hasLocationPage ?? false),
     highIntentTrafficLandsOnClearUrls: checkHighIntentLanding(gscPageRows, sfData, sfHeaders),
     duplicateServicePages: sfTierInput.duplicateServicePages ?? 0,
     thinPages: sfTierInput.thinPages ?? 0,
     overlapGeoPages: sfTierInput.overlapGeoPages ?? 0,
-    // Tier 4 page presence — prefer HTTP verification over SF crawl (non-URL crawls miss these)
-    hasAboutPage: livePageVerification.size > 0
-      ? !!firstLivePath("about")
-      : (sfTierInput.hasAboutPage ?? false),
-    hasTeamPage: livePageVerification.size > 0
-      ? !!firstLivePath("team")
-      : (sfTierInput.hasTeamPage ?? false),
-    hasAlumniPage: livePageVerification.size > 0
-      ? !!firstLivePath("alumni")
-      : (sfTierInput.hasAlumniPage ?? false),
+    hasAboutPage:  liveHasPage("about")  ?? (sfTierInput.hasAboutPage ?? false),
+    hasTeamPage:   liveHasPage("team")   ?? (sfTierInput.hasTeamPage ?? false),
+    hasAlumniPage: liveHasPage("alumni") ?? (sfTierInput.hasAlumniPage ?? false),
     navAccessibility,
   };
 
@@ -844,6 +724,7 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
     s6MonthlyCredits,
     client,
     sfIsUrlCrawl,
+    liveInventory,
   );
 
   // T004: Generate account-specific client insights
@@ -1480,19 +1361,17 @@ export function generateSection2(
   client: Client,
   callLandingPages: Array<{ page: string; calls: number }> = [],
   callSources: Array<{ source: string; calls: number }> = [],
-  livePageVerif: Map<string, { exists: boolean; resolvedPath: string | null }> = new Map()
+  liveInv: import("./liveCrawler").LivePageInventory | null = null
 ): Section2Conversions {
-  // Helper: resolve a path to its live destination (or return path unchanged if unknown)
-  const resolvePath = (path: string): string => {
-    const r = livePageVerif.get(path);
-    if (r?.exists && r.resolvedPath && r.resolvedPath !== path) return r.resolvedPath;
-    return path;
-  };
-  // Helper: is a path confirmed dead by live verification?
+  // Helper: resolve a path — with live crawl, paths are already canonical.
+  const resolvePath = (path: string): string => path;
+  // Helper: is a path confirmed dead by live crawl?
+  // Only report dead when the crawl is complete and has a meaningful path inventory.
   const confirmedDead = (path: string): boolean => {
-    if (livePageVerif.size === 0) return false;
-    const r = livePageVerif.get(path);
-    return r !== undefined && !r.exists;
+    if (!liveInv?.crawlComplete || liveInv.pathSet.size < 3) return false;
+    // Only exclude if this path is clearly not in the live inventory AND not in sitemap
+    const norm = path.replace(/\/$/, "") || "/";
+    return !liveInv.pathSet.has(norm) && !liveInv.sitemapPaths.has(norm);
   };
   const topConvertingPages: ConvertingPageRow[] = [];
   const topConvertingSources: ConvertingSourceRow[] = [];
@@ -3910,13 +3789,21 @@ export function generateSuggestedKeywords(
   monthlyCredits: number,
   client: Client,
   sfIsUrlCrawl: boolean = false,
+  liveInv: import("./liveCrawler").LivePageInventory | null = null,
 ): SectionSuggestedKeywords {
   const maxRecommendations = Math.min(monthlyCredits * 2, 48);
   // Branded filter derived from client data — no hardcoded client names in shared code.
   const clientIsNonBranded = (query: string) => !isBrandedQuery(query, client);
 
-  // Build SF page inventory
+  // Build page inventory — live crawl is the PRIMARY source of truth for what pages exist.
   const sfPaths = extractSfPaths(sfData, sfHeaders);
+
+  // Supplement with live crawl paths (confirmed live pages from nav + sitemap + inspection)
+  if (liveInv?.pathSet) {
+    for (const p of liveInv.pathSet) {
+      if (p && p !== "/") sfPaths.add(p);
+    }
+  }
 
   // Supplement SF paths with known pages from Section 3 and Section 4
   for (const p of section3.topTrafficPages) {

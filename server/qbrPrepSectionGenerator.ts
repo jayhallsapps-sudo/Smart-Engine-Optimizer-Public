@@ -56,13 +56,17 @@ function sanitizeString(s: string): string {
   // D) Remove percent-encoded junk
   out = out.replace(/%E2%80%[0-9A-Fa-f]{2}/g, "");
 
-  // E) Specific known broken patterns — fix before whitespace normalization
+  // E) Specific known broken patterns — fix before whitespace normalization.
+  // Each pattern is deliberately narrow to avoid clipping legitimate copy.
   out = out.replace(/\bSource pending confirmation via\s+\w{0,8}\.?\s*$/gi, "Source pending confirmation.");
-  out = out.replace(/\s+via\s+\w{1,8}\.?\s*$/gi, ".");
+  // Strip trailing " via [short-code]." fragments — limit to ≤5-char codes (gsc, ga4, sf, ctm)
+  // to avoid clipping provider names like "CallRail" (8 chars) or other real words.
+  out = out.replace(/\s+via\s+\w{1,5}\.?\s*$/gi, ".");
   out = out.replace(/\s+via\s*\.?\s*$/gi, ".");
   out = out.replace(/\bnot\s*\.\s*$/gi, "");
   out = out.replace(/\b(?:is|are|was|been|not)\s+already\s+\w{1,5}\.?\s*$/gi, "");
-  out = out.replace(/\bunde\w{0,6}\.?\s*$/gi, "");
+  // Only strip known-junk incomplete fragment endings — not broad "unde..." which clips "underway."
+  out = out.replace(/\b(undetermined|undefined)\b\.?\s*$/gi, "");
 
   // F) Whitespace/punctuation normalization
   out = out.replace(/\s{2,}/g, " ");
@@ -255,11 +259,11 @@ async function verifyLivePages(
 
 // ── Infer page verification groups for key service categories ─────────────────
 const PAGE_CHECK_GROUPS: Record<string, string[]> = {
-  contact:     ["/contact", "/contact-us", "/get-help", "/admissions", "/admissions-and-alcohol-rehab-insurance", "/reach-out", "/intake"],
-  vob:         ["/verify-insurance", "/insurance-verification", "/vob", "/verify-benefits", "/insurance"],
-  detox:       ["/detox", "/detox-program", "/detoxification", "/programs/detox", "/detox-center"],
-  residential: ["/residential", "/residential-treatment", "/inpatient", "/inpatient-rehab", "/programs/residential"],
-  about:       ["/about", "/about-us", "/about-anchored-tides", "/our-story", "/who-we-are", "/our-mission"],
+  contact:     ["/contact", "/contact-us", "/get-help", "/admissions", "/admissions-form", "/reach-out", "/intake", "/get-started", "/start-treatment", "/need-help"],
+  vob:         ["/verify-insurance", "/insurance-verification", "/vob", "/verify-benefits", "/insurance", "/check-insurance", "/insurance-verification"],
+  detox:       ["/detox", "/detox-program", "/detoxification", "/programs/detox", "/detox-center", "/medical-detox"],
+  residential: ["/residential", "/residential-treatment", "/inpatient", "/inpatient-rehab", "/programs/residential", "/residential-program"],
+  about:       ["/about", "/about-us", "/our-story", "/who-we-are", "/our-mission", "/our-approach", "/about-our-program"],
   team:        ["/team", "/our-team", "/staff", "/meet-the-team", "/leadership", "/providers", "/clinical-team"],
   alumni:      ["/alumni", "/aftercare", "/alumni-program", "/alumni-network", "/after-treatment"],
 };
@@ -838,6 +842,8 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
     section4,
     section2,
     s6MonthlyCredits,
+    client,
+    sfIsUrlCrawl,
   );
 
   // T004: Generate account-specific client insights
@@ -1195,9 +1201,11 @@ function inferProgram(sfData: Record<string, any>[], sfHeaders: string[]): strin
 }
 
 function detectCallTrackingProvider(client: Client): string | null {
+  // Only return a provider when a real query implementation exists for it.
+  // CTM and Nimbata are present in the client schema but have no implemented
+  // query functions — returning them here would make the report imply call
+  // tracking is active when no call data is actually being fetched.
   if (client.callrailCompanyId) return "CallRail";
-  if (client.ctmAccountId) return "CallTrackingMetrics";
-  if (client.nimbataAccountId) return "Nimbata";
   return null;
 }
 
@@ -2684,8 +2692,8 @@ function addNetNewAmPriorities(
       priority: priorities.length + 1,
       initiative: "Indexability Audit",
       tier: "Tier 3",
-      action: "Audit non-indexable pages — identify any service, location, or content pages accidentally excluded from Google's index and remove incorrect noindex tags",
-      reason: "Non-indexable pages cannot rank regardless of content quality. A single service page accidentally noindexed represents zero organic traffic potential",
+      action: "Audit non-indexable pages — identify any Levels of Care, location, or content pages accidentally excluded from Google's index and remove incorrect noindex tags",
+      reason: "Non-indexable pages cannot rank regardless of content quality. A single Levels of Care page accidentally noindexed represents zero organic traffic potential",
       source: "Manual entry needed",
     });
   }
@@ -2848,8 +2856,8 @@ function generateSection6(
         priority: priorities.length + 1,
         initiative: "Indexability Audit",
         tier: "Tier 3",
-        action: `Audit ${tierInput.nonIndexable} non-indexable pages — identify any service, location, or content pages accidentally excluded from Google's index and remove incorrect noindex tags`,
-        reason: "Non-indexable pages cannot rank regardless of content quality. A single service page accidentally noindexed represents zero organic traffic potential",
+        action: `Audit ${tierInput.nonIndexable} non-indexable pages — identify any Levels of Care, location, or content pages accidentally excluded from Google's index and remove incorrect noindex tags`,
+        reason: "Non-indexable pages cannot rank regardless of content quality. A single Levels of Care page accidentally noindexed represents zero organic traffic potential",
         source: "SF",
       });
     }
@@ -3638,11 +3646,9 @@ function generateAdditionalOpportunities(report: QbrPrepReportData): AdditionalO
 
 // ─── Suggested Keywords for Next Quarter ────────────────────────────────────
 
-const BRANDED_SIGNALS = /\b(anchored tides|bliss recovery|heartland|sol women|williamsburg house|horseshoe ridge|iris healing|webserv)\b/i;
-
-function isNonBranded(query: string): boolean {
-  return !BRANDED_SIGNALS.test(query.toLowerCase());
-}
+// isNonBranded is now implemented as a closure over the client object inside
+// generateSuggestedKeywords — see the clientIsNonBranded function defined there.
+// The old hardcoded BRANDED_SIGNALS regex has been removed.
 
 /**
  * Strategic keyword filter — requires treatment / care-intent / location signal.
@@ -3748,6 +3754,10 @@ function recTypeLabel(type: SuggestedKeywordRow["recommendationType"]): string {
 
 /**
  * Classify the recommendation type based on whether a page exists and its performance signals.
+ *
+ * sfIsUrlCrawl: when false, SF has no URL inventory. In that case, a page confirmed by
+ * GSC (impressions > 0) is treated as existing — return optimize/refresh/cro rather than
+ * create-new, because GSC impressions prove the page is indexed and live.
  */
 function classifyRecType(
   pagePath: string | null,
@@ -3755,12 +3765,15 @@ function classifyRecType(
   query: string,
   impressions: number,
   clicks: number,
+  sfIsUrlCrawl: boolean = true,
 ): SuggestedKeywordRow["recommendationType"] {
   if (!pagePath) return "create-new";
   const inSf = sfPaths.has(pagePath);
+  // When SF is issues-format only, sfPaths is supplemented with GSC-confirmed pages.
+  // A page in sfPaths from that supplement is confirmed live — do not recommend create-new.
   if (!inSf) return "create-new";
   const ctr = impressions > 0 ? clicks / impressions : 0;
-  // Low CTR on an existing indexed page → optimize/CRO
+  // Low CTR on an existing indexed page → CRO / optimize
   if (impressions > 100 && ctr < 0.03) return "cro-update";
   // Reasonable impressions but low clicks → refresh
   if (impressions > 50 && clicks < 5) return "refresh-existing";
@@ -3895,8 +3908,12 @@ export function generateSuggestedKeywords(
   section4: Section4Services,
   section2: Section2Conversions,
   monthlyCredits: number,
+  client: Client,
+  sfIsUrlCrawl: boolean = false,
 ): SectionSuggestedKeywords {
   const maxRecommendations = Math.min(monthlyCredits * 2, 48);
+  // Branded filter derived from client data — no hardcoded client names in shared code.
+  const clientIsNonBranded = (query: string) => !isBrandedQuery(query, client);
 
   // Build SF page inventory
   const sfPaths = extractSfPaths(sfData, sfHeaders);
@@ -3928,7 +3945,7 @@ export function generateSuggestedKeywords(
   const rawCandidates: QueryCandidate[] = gscQueryRows
     .filter((r: any) => {
       const q = r.keys?.[0] ?? "";
-      return q.length > 2 && isNonBranded(q) && isStrategicKeyword(q) && (r.impressions ?? 0) >= 5;
+      return q.length > 2 && clientIsNonBranded(q) && isStrategicKeyword(q) && (r.impressions ?? 0) >= 5;
     })
     .sort((a: any, b: any) => (b.impressions ?? 0) - (a.impressions ?? 0))
     .map((r: any) => ({ query: r.keys?.[0] ?? "", impressions: r.impressions ?? 0, clicks: r.clicks ?? 0 }));
@@ -3963,7 +3980,7 @@ export function generateSuggestedKeywords(
     const targetPath = inSf ? bestPage! : (bestPage ?? null);
 
     // Deduplicate by page path (applies to all rec types including create-new within same cluster)
-    const recType = classifyRecType(targetPath, sfPaths, query, impressions, clicks);
+    const recType = classifyRecType(targetPath, sfPaths, query, impressions, clicks, sfIsUrlCrawl);
     if (targetPath && usedPaths.has(targetPath)) continue;
     if (targetPath) usedPaths.add(targetPath);
 

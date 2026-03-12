@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import swoopHeaderFallback from "@assets/HEADER_IMAGE_1773063127856.png";
 import { ReportTable, SourceBadge, getCustomRows } from "../components/report-preview/report-table";
+import { computeSharedSource, computeSharedSourceList } from "@/lib/reportUtils";
 
 const ACCENT = "#C0392B";
 const FOOTER_TEXT = "Webserv  |  32 Discovery Suite 130, Irvine, CA 92618  |  webserv.io";
@@ -69,22 +70,6 @@ function badgeCell(val: string, dataSource?: string): ReactNode {
   );
 }
 
-function computeSharedSource(sources: (string | undefined)[]): string | null {
-  const filtered = sources.filter(
-    (s): s is string => !!s && s !== "Manual entry needed" && s !== "—" && s !== "Site Structure"
-  );
-  if (filtered.length === 0) return null;
-  const unique = Array.from(new Set(filtered));
-  return unique.length === 1 ? unique[0] : null;
-}
-
-function computeSharedSourceList(sourceSets: string[][]): string | null {
-  if (sourceSets.length === 0) return null;
-  const joined = sourceSets.map(s => Array.from(s).sort().join("+"));
-  const unique = Array.from(new Set(joined));
-  if (unique.length !== 1) return null;
-  return sourceSets[0].join(" + ") || null;
-}
 
 function printIsPathLike(v: string): boolean {
   const t = (v ?? "").trim();

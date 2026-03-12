@@ -3,6 +3,7 @@ import { EyeOff, Eye } from "lucide-react";
 import { EditableSection } from "./editable-section";
 import { AddableReportTable, SourceBadge } from "./report-table";
 import swoopHeaderFallback from "@assets/HEADER_IMAGE_1773063127856.png";
+import { computeSharedSource, computeSharedSourceList } from "@/lib/reportUtils";
 
 const ACCENT = "#C0392B";
 
@@ -471,22 +472,6 @@ function parseS7Sources(source: string): string[] {
   });
 }
 
-function computeSharedSource(sources: (string | undefined)[]): string | null {
-  const filtered = sources.filter(
-    (s): s is string => !!s && s !== "Manual entry needed" && s !== "—" && s !== "Site Structure"
-  );
-  if (filtered.length === 0) return null;
-  const unique = Array.from(new Set(filtered));
-  return unique.length === 1 ? unique[0] : null;
-}
-
-function computeSharedSourceList(sourceSets: string[][]): string | null {
-  if (sourceSets.length === 0) return null;
-  const joined = sourceSets.map(s => Array.from(s).sort().join("+"));
-  const unique = Array.from(new Set(joined));
-  if (unique.length !== 1) return null;
-  return sourceSets[0].join(" + ") || null;
-}
 
 function BadgeCell({
   editKey,

@@ -1175,11 +1175,9 @@ function inferProgram(sfData: Record<string, any>[], sfHeaders: string[]): strin
 }
 
 function detectCallTrackingProvider(client: Client): string | null {
-  // Only return a provider when a real query implementation exists for it.
-  // CTM and Nimbata are present in the client schema but have no implemented
-  // query functions — returning them here would make the report imply call
-  // tracking is active when no call data is actually being fetched.
   if (client.callrailCompanyId) return "CallRail";
+  if (client.ctmAccountId) return "CallTrackingMetrics";
+  if (client.nimbataAccountId) return "Nimbata";
   return null;
 }
 
@@ -1853,7 +1851,7 @@ function clientReadableType(internalType: string): string {
 function buildPagePattern(page: string, internalType: string, dataSource: string): string {
   const clean = shortUrl(page);
   let action = "";
-  if (dataSource === "CallRail" || dataSource === "CTM" || dataSource === "Nimbata") {
+  if (dataSource === "CallRail" || dataSource === "CTM" || dataSource === "CallTrackingMetrics" || dataSource === "Nimbata") {
     action = "Phone Clicks";
   } else if (dataSource === "GA4") {
     if (internalType === "Verify Insurance") action = "VOB Form Start";

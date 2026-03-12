@@ -220,6 +220,14 @@ export function topicAdmitConnection(topic: string): string {
   return "Low";
 }
 
+export interface NavAccessibility {
+  vobInNav: boolean;
+  vobInFooter: boolean;
+  contactInNav: boolean;
+  contactInFooter: boolean;
+  dataAvailable: boolean;
+}
+
 export interface TierDiagnosisInput {
   sfData: Record<string, any>[];
   sfHeaders: string[];
@@ -244,6 +252,7 @@ export interface TierDiagnosisInput {
   hasAboutPage: boolean;
   hasTeamPage: boolean;
   hasAlumniPage: boolean;
+  navAccessibility?: NavAccessibility;
 }
 
 export interface TierDiagnosis {

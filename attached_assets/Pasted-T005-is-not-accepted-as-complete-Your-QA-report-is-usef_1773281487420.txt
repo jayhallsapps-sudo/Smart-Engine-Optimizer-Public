@@ -1,0 +1,98 @@
+T005 is not accepted as complete.
+
+Your QA report is useful and honest, but it confirms that several required spec items remain unfinished. Structural progress is acknowledged, but full compliance is not achieved.
+
+T006 is now required. Implement the following exactly.
+
+T006 REQUIRED FIXES
+
+1) SOURCE-LABEL SWITCHING
+Current state is not acceptable. Per-row source labeling everywhere is not spec-compliant.
+
+Implement exact logic:
+- if all rows in a table share the same source or same source set, show that source label once at the table header level
+- if rows differ in source, show source per row
+- no unlabeled data anywhere
+
+Important:
+This must work on the actual rendered output, not just in data shape.
+
+Acceptance criteria:
+- CallRail-only tables show CallRail once at header level
+- mixed-source tables show sources on rows
+- no redundant row-level repetition in same-source tables
+- preview, print, DOCX, and HTML all follow the same rule
+
+2) TIER 1 ACCESSIBILITY VERIFICATION
+Current state is not acceptable. URL existence in crawl is not the same as accessibility in navigation or site structure.
+
+Implement actual verification for:
+- verify insurance / VOB accessibility
+- admissions / contact accessibility
+- trust / eligibility accessibility in site structure
+
+Minimum acceptable verification:
+- parse main navigation
+- parse footer navigation
+- parse internal links from homepage and key top-level pages
+- distinguish:
+  - URL exists in crawl
+  - linked from nav
+  - linked from footer
+  - linked only internally
+  - not verified as prominent
+
+Update Tier 1 output so it does not overclaim.
+If a page exists but nav prominence is unverified, say so explicitly.
+
+Acceptance criteria:
+- Tier 1 findings distinguish page existence from navigational accessibility
+- no statements imply nav accessibility unless verified
+- findings use fact / inference / unknown correctly
+- preview, print, DOCX, and HTML all reflect the corrected language
+
+3) SEMANTIC KEYWORD CLUSTERING
+Current state is not acceptable. Deduplication by target page path is not enough.
+
+Implement semantic close-variant clustering before final row selection.
+Examples that should cluster into one row when intent is shared:
+- relapse definition / definition of relapse / relapse meaning
+- detox vs detoxification terms when clearly same intent
+- other near-duplicate informational variants
+
+Rules:
+- cluster by intent similarity, not only by page path
+- grouped variants may appear together in one Keyword field
+- one cluster should produce one recommendation row unless materially different intent is proven
+- max 2 rows per tight semantic cluster
+- create-new recommendations must not bypass clustering
+
+Acceptance criteria:
+- close variants no longer appear as repetitive separate rows
+- grouped rows remain readable and strategic
+- clustering works for create-new and non-create-new recommendations alike
+
+4) DOCX VISUAL QA
+Current state is unproven. Width settings alone are not visual confirmation.
+
+Generate a real DOCX and verify in Word-compatible render that:
+- S1 columns are balanced correctly
+- CLICKS stays on one line where required
+- QUERIES does not break mid-word
+- export looks intentional, not crushed
+
+Acceptance criteria:
+- provide screenshot proof or equivalent visual output from real rendered DOCX
+- do not claim compliance from code inspection alone
+
+5) COMPLETION REPORT FORMAT
+After T006, do not send a generalized success summary.
+
+Send a QA report with these exact sections:
+- Source-label switching proof
+- Tier 1 accessibility verification proof
+- Keyword clustering proof
+- DOCX render proof
+- Remaining gaps, if any
+
+Do not state “fully aligned with spec” unless each required behavior is demonstrated in rendered output.

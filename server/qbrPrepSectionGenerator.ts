@@ -152,7 +152,51 @@ import {
   isUtilityAdmissionsPage,
   type QuarterInfo,
   type TierDiagnosisInput,
+  type NavAccessibility,
 } from "./qbrPrepHelpers";
+
+// ── Nav accessibility: fetch homepage HTML and parse nav/footer links ──────────
+async function fetchNavAccessibility(siteUrl: string): Promise<NavAccessibility> {
+  const empty: NavAccessibility = { vobInNav: false, vobInFooter: false, contactInNav: false, contactInFooter: false, dataAvailable: false };
+  try {
+    const resp = await fetch(siteUrl, {
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; SmartEO-QBR/1.0; +https://smarteo.co)" },
+      signal: AbortSignal.timeout(12000),
+    });
+    if (!resp.ok) return empty;
+    const html = await resp.text();
+
+    const extractHrefs = (block: string): string[] =>
+      (block.match(/href=["']([^"']+)["']/gi) ?? [])
+        .map(h => h.match(/href=["']([^"']+)["']/i)?.[1] ?? "")
+        .filter(Boolean);
+
+    const navBlocks = html.match(/<nav[\s>][^]*?<\/nav>/gi) ?? [];
+    const footerBlocks = html.match(/<footer[\s>][^]*?<\/footer>/gi) ?? [];
+
+    const navHrefs = navBlocks.flatMap(extractHrefs);
+    const footerHrefs = footerBlocks.flatMap(extractHrefs);
+
+    const VOB_RE = /verify.?insur|\/vob\b|insurance.?verif|check.?insur|\/insurance\b/i;
+    const CONTACT_RE = /\/contact|\/admissions|\/get.?help|\/intake|\/reach/i;
+
+    const normalize = (href: string): string => {
+      try { return new URL(href, siteUrl).pathname; } catch { return href; }
+    };
+
+    const inNav = (hrefs: string[], re: RegExp) => hrefs.map(normalize).some(p => re.test(p));
+
+    return {
+      vobInNav:     inNav(navHrefs, VOB_RE),
+      vobInFooter:  inNav(footerHrefs, VOB_RE),
+      contactInNav: inNav(navHrefs, CONTACT_RE),
+      contactInFooter: inNav(footerHrefs, CONTACT_RE),
+      dataAvailable: true,
+    };
+  } catch {
+    return empty;
+  }
+}
 
 const ME = "Manual entry needed";
 
@@ -540,6 +584,12 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
   }
 
   const sfTierInput = analyzeSfForTierInput(sfData, sfHeaders);
+
+  // Fetch nav/footer accessibility for Tier 1 verification — non-blocking
+  const navAccessibility = client.gscSiteUrl
+    ? await fetchNavAccessibility(client.gscSiteUrl.replace(/^sc-domain:/, "https://"))
+    : { vobInNav: false, vobInFooter: false, contactInNav: false, contactInFooter: false, dataAvailable: false };
+
   const tierInput: TierDiagnosisInput = {
     sfData,
     sfHeaders,
@@ -564,6 +614,7 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
     hasAboutPage: sfTierInput.hasAboutPage ?? false,
     hasTeamPage: sfTierInput.hasTeamPage ?? false,
     hasAlumniPage: sfTierInput.hasAlumniPage ?? false,
+    navAccessibility,
   };
 
   const tierDiagnosis = diagnoseTier(tierInput);
@@ -2114,16 +2165,34 @@ function buildTierScorecard(tierInput: TierDiagnosisInput): TierScorecardEntry[]
     : (!tierInput.hasDetoxPage && !tierInput.hasResidentialPage) ? "Blocked"
     : "Partial";
 
+  const nav = tierInput.navAccessibility;
+
+  function vobAccessLabel(): string {
+    if (!tierInput.hasVobPage) return "Not confirmed in crawl";
+    if (!nav?.dataAvailable) return "Confirmed in crawl — nav/footer accessibility not verified (homepage fetch unavailable)";
+    if (nav.vobInNav) return "Confirmed in crawl — linked from main navigation (Fact)";
+    if (nav.vobInFooter) return "Confirmed in crawl — linked from footer, not main nav (Fact)";
+    return "Confirmed in crawl — not found in main navigation or footer (Inference: may be accessible only via internal links or direct URL)";
+  }
+
+  function contactAccessLabel(): string {
+    if (!tierInput.hasContactPage) return "Not confirmed in crawl";
+    if (!nav?.dataAvailable) return "Confirmed in crawl — nav/footer accessibility not verified (homepage fetch unavailable)";
+    if (nav.contactInNav) return "Confirmed in crawl — linked from main navigation (Fact)";
+    if (nav.contactInFooter) return "Confirmed in crawl — linked from footer, not main nav (Fact)";
+    return "Confirmed in crawl — not found in main navigation or footer (Inference: may be accessible only via internal links or direct URL)";
+  }
+
   const t1Findings = [
-    `Verify Insurance / VOB page: ${tierInput.hasVobPage ? "Confirmed present" : "Not confirmed in crawl"}`,
-    `Contact / Admissions page: ${tierInput.hasContactPage ? "Confirmed present" : "Not confirmed in crawl"}`,
-    `Detox service page: ${tierInput.hasDetoxPage ? "Confirmed present" : "Not confirmed in crawl"}`,
-    `Residential page: ${tierInput.hasResidentialPage ? "Confirmed present" : "Not confirmed in crawl"}`,
+    `Verify Insurance / VOB page: ${vobAccessLabel()}`,
+    `Contact / Admissions page: ${contactAccessLabel()}`,
+    `Detox service page: ${tierInput.hasDetoxPage ? "Confirmed present in crawl" : "Not confirmed in crawl"}`,
+    `Residential page: ${tierInput.hasResidentialPage ? "Confirmed present in crawl" : "Not confirmed in crawl"}`,
   ].join(". ");
 
   const t1Inferences = tierInput.highIntentTrafficLandsOnClearUrls
-    ? "High-intent traffic appears to land on clear primary URLs — conversion path alignment is directionally sound. Content depth and CTA clarity still require manual verification."
-    : "High-intent traffic may not be landing on clear primary service URLs — review which pages are capturing service-intent queries and whether they are conversion-optimized.";
+    ? "High-intent traffic appears to land on clear primary URLs — conversion path alignment is directionally sound (Inference from GSC data). Content depth, CTA clarity, and form functionality still require manual verification."
+    : "High-intent traffic may not be landing on clear primary service URLs (Inference from GSC data) — review which pages are capturing service-intent queries and whether they are conversion-optimized.";
 
   const t2Pass = tierInput.hasConditionsHub && tierInput.hasTherapiesHub && tierInput.missingH1s <= 10;
   const t2Status: TierScorecardEntry["status"] = t2Pass ? "Pass"
@@ -3407,6 +3476,63 @@ function buildKeywordReason(
   }
 }
 
+// ── Semantic keyword clustering ───────────────────────────────────────────────
+
+const CLUSTER_STOPWORDS = new Set([
+  "a","an","the","of","for","is","in","to","and","or","what","how","why","when",
+  "does","do","can","are","vs","between","from","with","on","at","by","as","its",
+  "it","this","that","these","those","be","been","being","have","has","had","will",
+  "would","could","should","may","might","i","you","we","they","my","your","our",
+  "their","which","who","after","before","during","about","into","onto","upon",
+  "mean","means","meaning","define","defined","definition",
+]);
+
+function normalizeQueryForCluster(q: string): string[] {
+  return q.toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter(w => w.length > 1 && !CLUSTER_STOPWORDS.has(w))
+    .sort();
+}
+
+function jaccardSimilarity(a: string[], b: string[]): number {
+  if (a.length === 0 && b.length === 0) return 1;
+  const setA = new Set(a);
+  const setB = new Set(b);
+  const intersect = [...setA].filter(x => setB.has(x)).length;
+  const unionSize = new Set([...setA, ...setB]).size;
+  return unionSize === 0 ? 0 : intersect / unionSize;
+}
+
+interface QueryCandidate {
+  query: string;
+  impressions: number;
+  clicks: number;
+}
+
+function clusterCandidatesByIntent(candidates: QueryCandidate[]): QueryCandidate[][] {
+  const assigned = new Array<boolean>(candidates.length).fill(false);
+  const clusters: QueryCandidate[][] = [];
+
+  for (let i = 0; i < candidates.length; i++) {
+    if (assigned[i]) continue;
+    const cluster: QueryCandidate[] = [candidates[i]];
+    assigned[i] = true;
+    const wordsI = normalizeQueryForCluster(candidates[i].query);
+
+    for (let j = i + 1; j < candidates.length; j++) {
+      if (assigned[j]) continue;
+      const wordsJ = normalizeQueryForCluster(candidates[j].query);
+      if (jaccardSimilarity(wordsI, wordsJ) >= 0.70) {
+        cluster.push(candidates[j]);
+        assigned[j] = true;
+      }
+    }
+    clusters.push(cluster);
+  }
+  return clusters;
+}
+
 export function generateSuggestedKeywords(
   gscQueryRows: any[],
   gscQueryPageRows: any[],
@@ -3437,36 +3563,45 @@ export function generateSuggestedKeywords(
   }
 
   // Get non-branded, strategically relevant queries sorted by impressions desc
-  const candidateQueries = gscQueryRows
+  const rawCandidates: QueryCandidate[] = gscQueryRows
     .filter((r: any) => {
       const q = r.keys?.[0] ?? "";
-      return q.length > 2 && isNonBranded(q) && isStrategicKeyword(q);
+      return q.length > 2 && isNonBranded(q) && isStrategicKeyword(q) && (r.impressions ?? 0) >= 5;
     })
-    .sort((a: any, b: any) => (b.impressions ?? 0) - (a.impressions ?? 0));
+    .sort((a: any, b: any) => (b.impressions ?? 0) - (a.impressions ?? 0))
+    .map((r: any) => ({ query: r.keys?.[0] ?? "", impressions: r.impressions ?? 0, clicks: r.clicks ?? 0 }));
+
+  // Cluster close variants by intent (Jaccard ≥ 0.70 on normalized tokens)
+  const clusters = clusterCandidatesByIntent(rawCandidates);
 
   // Deduplicate by path — only one recommendation per target page
   const usedPaths = new Set<string>();
   const rows: SuggestedKeywordRow[] = [];
 
-  for (const qRow of candidateQueries) {
+  for (const cluster of clusters) {
     if (rows.length >= maxRecommendations) break;
 
-    const query: string = qRow.keys?.[0] ?? "";
-    const impressions: number = qRow.impressions ?? 0;
-    const clicks: number = qRow.clicks ?? 0;
+    // Representative = highest-impression member
+    const rep = cluster[0];
+    const query = rep.query;
+    const impressions = rep.impressions;
+    const clicks = rep.clicks;
 
-    // Skip very low-signal queries
-    if (impressions < 5) continue;
+    // Build variant label (exclude representative)
+    const variants = cluster.slice(1).map(c => c.query);
+    const keywordDisplay = variants.length > 0
+      ? `${query} / ${variants.slice(0, 2).join(" / ")}`
+      : query;
 
     // Find best associated page from GSC query+page data
     const bestPage = findBestGscPage(query, gscQueryPageRows);
     const inSf = bestPage ? sfPaths.has(bestPage) : false;
     const targetPath = inSf ? bestPage! : (bestPage ?? null);
 
-    // Deduplicate: if same page path already used, skip unless create-new
+    // Deduplicate by page path (applies to all rec types including create-new within same cluster)
     const recType = classifyRecType(targetPath, sfPaths, query, impressions, clicks);
-    if (targetPath && recType !== "create-new" && usedPaths.has(targetPath)) continue;
-    if (targetPath && recType !== "create-new") usedPaths.add(targetPath);
+    if (targetPath && usedPaths.has(targetPath)) continue;
+    if (targetPath) usedPaths.add(targetPath);
 
     const targetPageDisplay = recType === "create-new"
       ? "New content needed"
@@ -3479,7 +3614,7 @@ export function generateSuggestedKeywords(
     if (inSf) sources.push("Screaming Frog");
 
     rows.push({
-      keyword: query,
+      keyword: keywordDisplay,
       recommendationType: recType,
       targetPage: targetPageDisplay,
       whyRecommended,

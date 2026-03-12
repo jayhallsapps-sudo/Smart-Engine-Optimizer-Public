@@ -140,6 +140,24 @@ function pageBreakPara(): Paragraph {
   return new Paragraph({ spacing: { before: 0, after: 0 }, children: [new PageBreak()] });
 }
 
+// ── Source-label switching helper ─────────────────────────────────────────────
+function computeSharedSource(sources: (string | undefined)[]): string | null {
+  const filtered = sources.filter(
+    (s): s is string => !!s && s !== "Manual entry needed" && s !== "—" && s !== "Site Structure"
+  );
+  if (filtered.length === 0) return null;
+  const unique = Array.from(new Set(filtered));
+  return unique.length === 1 ? unique[0] : null;
+}
+
+function computeSharedSourceList(sourceSets: string[][]): string | null {
+  if (sourceSets.length === 0) return null;
+  const joined = sourceSets.map(s => Array.from(s).sort().join("+"));
+  const unique = Array.from(new Set(joined));
+  if (unique.length !== 1) return null;
+  return sourceSets[0].join(" + ") || null;
+}
+
 // ── Generic data table ────────────────────────────────────────────────────────
 interface ColSpec { label: string; dxa: number; align?: AlignmentType }
 
@@ -663,7 +681,16 @@ function buildSection5(reportData: any, secNum: number): (Paragraph | Table)[] {
 function buildSection6(reportData: any, secNum: number, edits: Record<string, string>): (Paragraph | Table)[] {
   const priorities = reportData.section6Priorities?.priorities ?? [];
   const shortSummary: string[] = reportData.section6Priorities?.shortSummary ?? [];
+  const s6SharedSource = computeSharedSource(priorities.map((r: any) => r.source));
   const items: (Paragraph | Table)[] = [sectionHeading(secNum, "What We Need to Do Next")];
+
+  // When all priorities share the same source, show it once at section level
+  if (s6SharedSource) {
+    items.push(new Paragraph({
+      spacing: { before: 0, after: 120 },
+      children: [run(`Source: ${s6SharedSource}`, { size: 16, color: MID, italics: true })],
+    }));
+  }
 
   // Summary box
   if (shortSummary.length > 0) {
@@ -772,8 +799,8 @@ function buildSection6(reportData: any, secNum: number, edits: Record<string, st
       }),
     ];
 
-    // Optional source row (full-width, spanning both columns)
-    if (source) {
+    // Optional source row — suppress when all priorities share same source (shown in header note instead)
+    if (source && !s6SharedSource) {
       bodyRows.push(new TableRow({
         children: [
           new TableCell({
@@ -940,14 +967,20 @@ const KW_REC_LABELS: Record<string, string> = {
 
 function buildSectionKeywords(reportData: any, secNum: number, edits: Record<string, string>): (Paragraph | Table)[] {
   const sk = reportData.sectionSuggestedKeywords;
-  const rows = (sk?.rows ?? []).map((r: any, ri: number) => {
+  const allRows: any[] = sk?.rows ?? [];
+  const kwSharedSource = computeSharedSourceList(allRows.map((r: any) => r.sources ?? []));
+
+  const rows = allRows.map((r: any, ri: number) => {
     const keyword  = safeText(edits[`kw_${ri}_keyword`]    ?? r.keyword ?? "");
     const recType  = KW_REC_LABELS[r.recommendationType] ?? r.recommendationType ?? "";
     const rawPage  = edits[`kw_${ri}_targetPage`] ?? r.targetPage ?? "";
     const isNew    = rawPage === "New content needed" || rawPage === "Suggest new content for this keyword";
     const pageTxt  = isNew ? "New content needed" : rawPage;
     const why      = safeText(edits[`kw_${ri}_why`] ?? r.whyRecommended ?? "");
-    const srcs     = (r.sources ?? []).join(", ");
+    if (kwSharedSource) {
+      return [keyword, recType, pageTxt, why];
+    }
+    const srcs = (r.sources ?? []).join(", ");
     return [keyword, recType, pageTxt, why, srcs];
   });
 
@@ -955,23 +988,33 @@ function buildSectionKeywords(reportData: any, secNum: number, edits: Record<str
 
   const items: (Paragraph | Table)[] = [sectionHeading(secNum, "Suggested Keywords for Next Quarter")];
   if (sk?.quarterlyCreditCap) {
+    const srcNote = kwSharedSource ? ` Source: ${kwSharedSource}.` : "";
     items.push(new Paragraph({
       spacing: { before: 0, after: 120 },
       children: [run(
         `Showing up to ${sk.quarterlyCreditCap} keyword opportunities (2× monthly credit capacity of ${sk.monthlyCredits ?? ""}). ` +
         "Grounded in GSC query data, site crawl inventory, and page performance. " +
-        "Filtered to strategic service, program, condition, and location-intent terms.",
+        `Filtered to strategic service, program, condition, and location-intent terms.${srcNote}`,
         { size: 16, color: MID, italics: true }
       )],
     }));
   }
-  items.push(dataTable([
-    { label: "Keyword",            dxa: 2160 },
-    { label: "Suggested Type",     dxa: 1700 },
-    { label: "Target",             dxa: 2160 },
-    { label: "Why It's Suggested", dxa: 3480 },
-    { label: "Source",             dxa: 1300 },
-  ], rows)); // 2160+1700+2160+3480+1300=10800 ✓
+  if (kwSharedSource) {
+    items.push(dataTable([
+      { label: "Keyword",            dxa: 2480 },
+      { label: "Suggested Type",     dxa: 1960 },
+      { label: "Target",             dxa: 2480 },
+      { label: "Why It's Suggested", dxa: 3880 },
+    ], rows)); // 2480+1960+2480+3880=10800 ✓
+  } else {
+    items.push(dataTable([
+      { label: "Keyword",            dxa: 2160 },
+      { label: "Suggested Type",     dxa: 1700 },
+      { label: "Target",             dxa: 2160 },
+      { label: "Why It's Suggested", dxa: 3480 },
+      { label: "Source",             dxa: 1300 },
+    ], rows)); // 2160+1700+2160+3480+1300=10800 ✓
+  }
   return items;
 }
 

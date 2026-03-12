@@ -128,8 +128,20 @@ function secHeading(num: number, title: string): string {
   return `<div class="sec-heading"><span class="sec-num">${num}</span><span class="sec-title">${escHtml(title)}</span></div>`;
 }
 
-function subLabel(text: string): string {
-  return `<div class="sub-label">${escHtml(text)}</div>`;
+function subLabel(text: string, sourceNote?: string): string {
+  const srcSpan = sourceNote
+    ? ` <span class="source-badge">${escHtml(sourceNote)}</span>`
+    : "";
+  return `<div class="sub-label">${escHtml(text)}${srcSpan}</div>`;
+}
+
+function computeSharedSource(sources: (string | undefined)[]): string | null {
+  const filtered = sources.filter(
+    (s): s is string => !!s && s !== "Manual entry needed" && s !== "—" && s !== "Site Structure"
+  );
+  if (filtered.length === 0) return null;
+  const unique = Array.from(new Set(filtered));
+  return unique.length === 1 ? unique[0] : null;
 }
 
 function escHtml(s: string | null | undefined): string {
@@ -390,6 +402,7 @@ export function renderSection5Html(reportData: any, secNum: number): string {
 // ── Section 6: What We Need to Do Next — improved color/visual treatment ───────
 export function renderSection6Html(reportData: any, secNum: number, edits: Record<string,string> = {}): string {
   const priorities = reportData.section6Priorities?.priorities ?? [];
+  const s6SharedSource = computeSharedSource(priorities.map((r: any) => r.source as string | undefined));
 
   const cards = priorities.map((r: any, ri: number) => {
     const num        = edits[`s6_${ri}_0`] ?? String(r.priority ?? ri + 1);
@@ -441,12 +454,17 @@ export function renderSection6Html(reportData: any, secNum: number, edits: Recor
           </div>
         </div>
 
-        ${source ? `<div style="padding:3px 14px 5px;font-size:8.5px;color:${MID};background:${LIGHT};border-top:1px solid ${BORDER};">Source: ${escHtml(source)}</div>` : ""}
+        ${source && !s6SharedSource ? `<div style="padding:3px 14px 5px;font-size:8.5px;color:${MID};background:${LIGHT};border-top:1px solid ${BORDER};">Source: ${escHtml(source)}</div>` : ""}
       </div>`;
   }).join("");
 
+  const sharedSrcNote = s6SharedSource
+    ? `<div style="font-size:8.5px;color:${MID};font-style:italic;margin-bottom:8px;">Source: ${escHtml(s6SharedSource)}</div>`
+    : "";
+
   const inner = `
     ${secHeading(secNum, "What We Need to Do Next")}
+    ${sharedSrcNote}
     ${cards}`;
   return wrap(inner);
 }

@@ -471,6 +471,23 @@ function parseS7Sources(source: string): string[] {
   });
 }
 
+function computeSharedSource(sources: (string | undefined)[]): string | null {
+  const filtered = sources.filter(
+    (s): s is string => !!s && s !== "Manual entry needed" && s !== "—" && s !== "Site Structure"
+  );
+  if (filtered.length === 0) return null;
+  const unique = Array.from(new Set(filtered));
+  return unique.length === 1 ? unique[0] : null;
+}
+
+function computeSharedSourceList(sourceSets: string[][]): string | null {
+  if (sourceSets.length === 0) return null;
+  const joined = sourceSets.map(s => Array.from(s).sort().join("+"));
+  const unique = Array.from(new Set(joined));
+  if (unique.length !== 1) return null;
+  return sourceSets[0].join(" + ") || null;
+}
+
 function BadgeCell({
   editKey,
   value,
@@ -567,8 +584,29 @@ export function QbrPrepPreview({
     <EditableCell key="r" editKey={`s1_${ri}_4`} value={r.reason} edits={edits} onEdit={onEdit} />,
   ]);
 
+  // Source-label switching: compute shared source for each table BEFORE row builders
+  const s2aSharedSource = computeSharedSource(section2Conversions.topConvertingPages.map(r => r.dataSource));
+  const s6SharedSource  = computeSharedSource(section6Priorities.priorities.map((r: any) => r.source));
+  const s7TrackingSharedSource = computeSharedSource(section7Tracking.tracking.map((r: any) => r.source));
+  const kwSharedSource  = computeSharedSourceList((sectionSuggestedKeywords?.rows ?? []).map((r: any) => r.sources ?? []));
+
+  // Compute actual source tags per Section 2 sub-table from row-level dataSource values
+  const s2aActualSources = Array.from(new Set(
+    section2Conversions.topConvertingPages
+      .map(r => r.dataSource)
+      .filter((s): s is string => !!s && s !== "Manual entry needed" && s !== "Site Structure")
+  ));
+  const s2bActualSources = Array.from(new Set(
+    section2Conversions.topConvertingSources
+      .map(r => r.dataSource)
+      .filter((s): s is string => !!s && s !== "Manual entry needed")
+  ));
+  // Patterns table has no per-row dataSource — derive from the pool sources used in s2a + s2b
+  const s2cActualSources = Array.from(new Set([...s2aActualSources, ...s2bActualSources]));
+
+  // When shared source, suppress per-row dataSource badge (shown at header instead)
   const s2aSourceRows: React.ReactNode[][] = section2Conversions.topConvertingPages.map((r, ri) => [
-    <BadgeCell key="t" editKey={`s2a_${ri}_0`} value={r.type} dataSource={r.dataSource} edits={edits} onEdit={onEdit} />,
+    <BadgeCell key="t" editKey={`s2a_${ri}_0`} value={r.type} dataSource={s2aSharedSource ? undefined : r.dataSource} edits={edits} onEdit={onEdit} />,
     <span key="p" style={{ display: "flex", flexDirection: "column", gap: 3 }}>
       {(() => {
         const pageVal = edits[`s2a_${ri}_1`] ?? r.page;
@@ -592,20 +630,6 @@ export function QbrPrepPreview({
     <EditableCell key="n" editKey={`s2b_${ri}_2`} value={r.notes} edits={edits} onEdit={onEdit} />,
   ]);
 
-  // Compute actual source tags per Section 2 sub-table from row-level dataSource values
-  const s2aActualSources = [...new Set(
-    section2Conversions.topConvertingPages
-      .map(r => r.dataSource)
-      .filter((s): s is string => !!s && s !== "Manual entry needed" && s !== "Site Structure")
-  )];
-  const s2bActualSources = [...new Set(
-    section2Conversions.topConvertingSources
-      .map(r => r.dataSource)
-      .filter((s): s is string => !!s && s !== "Manual entry needed")
-  )];
-  // Patterns table has no per-row dataSource — derive from the pool sources used in s2a + s2b
-  const s2cActualSources = [...new Set([...s2aActualSources, ...s2bActualSources])];
-
   const hasTopicDeltas = section3Traffic.topTrafficTopics.some(r => r.queryCount != null);
   const topicColCount = hasTopicDeltas ? 7 : 3;
 
@@ -628,7 +652,7 @@ export function QbrPrepPreview({
 
   const s6SourceRows: React.ReactNode[][] = section6Priorities.priorities.map((r, ri) => [
     <EditableCell key="n" editKey={`s6_${ri}_0`} value={String(r.priority)} edits={edits} onEdit={onEdit} />,
-    <BadgeCell key="i" editKey={`s6_${ri}_1`} value={r.initiative} dataSource={r.source} edits={edits} onEdit={onEdit} />,
+    <BadgeCell key="i" editKey={`s6_${ri}_1`} value={r.initiative} dataSource={s6SharedSource ? undefined : r.source} edits={edits} onEdit={onEdit} />,
     <TierBadge key="t" tier={edits[`s6_${ri}_2`] ?? r.tier} />,
     <ActionTypeBadge key="at" value={edits[`s6_${ri}_5`] ?? (r.actionType ?? "")} />,
     <EditableCell key="a" editKey={`s6_${ri}_3`} value={r.action} edits={edits} onEdit={onEdit} />,
@@ -638,11 +662,13 @@ export function QbrPrepPreview({
   const s7SourceRows: React.ReactNode[][] = section7Tracking.tracking.map((r, ri) => [
     <EditableCell key="f" editKey={`s7_${ri}_0`} value={r.focusArea} edits={edits} onEdit={onEdit} />,
     <EditableCell key="m" editKey={`s7_${ri}_1`} value={r.metric} edits={edits} onEdit={onEdit} />,
-    <span key="s" style={{ display: "inline-flex", alignItems: "center", gap: 3, flexWrap: "wrap" }}>
-      {parseS7Sources(edits[`s7_${ri}_2`] ?? r.source).map((src, si) => (
-        <SourceBadge key={si} source={src} />
-      ))}
-    </span>,
+    s7TrackingSharedSource
+      ? <span key="s" style={{ color: "#9CA3AF", fontSize: "9px" }}>—</span>
+      : <span key="s" style={{ display: "inline-flex", alignItems: "center", gap: 3, flexWrap: "wrap" }}>
+          {parseS7Sources(edits[`s7_${ri}_2`] ?? r.source).map((src, si) => (
+            <SourceBadge key={si} source={src} />
+          ))}
+        </span>,
     // Status column removed — was showing "Comment Out Status" / verification states not ready for clients
     <EditableCell key="w" editKey={`s7_${ri}_4`} value={r.whyItMatters} edits={edits} onEdit={onEdit} />,
   ]);
@@ -764,7 +790,7 @@ export function QbrPrepPreview({
             ) : !isSectionAutoHidden("section_conversions", hiddenTables) && sectionNums["section_conversions"] !== undefined ? (
               <>
                 <SectionHeading num={sectionNums["section_conversions"]} title="Where Conversions Actually Happen" onHide={hideSecBtn("section_conversions")} />
-                {tblSubLabel("table_s2_pages", "Top Converting Pages", !!hiddenTables["table_s2_pages"])}
+                {tblSubLabel("table_s2_pages", "Top Converting Pages", !!hiddenTables["table_s2_pages"], s2aSharedSource ? [s2aSharedSource] : undefined)}
                 {hiddenTables["table_s2_pages"] ? tblHiddenBar("table_s2_pages", "Top Converting Pages") : (
                   <AddableReportTable tableId="s2a" headers={["Type", "Page", "Notes / What We're Learning"]} sourceRows={s2aSourceRows} edits={edits} onEdit={onEdit} />
                 )}
@@ -968,7 +994,7 @@ export function QbrPrepPreview({
                 </ul>
               </div>
             )}
-            {tblSubLabel("table_s6", "Priority Actions", !!hiddenTables["table_s6"])}
+            {tblSubLabel("table_s6", "Priority Actions", !!hiddenTables["table_s6"], s6SharedSource ? [s6SharedSource] : undefined)}
             {hiddenTables["table_s6"] ? tblHiddenBar("table_s6", "Priority Actions") : (
             <AddableReportTable
               tableId="s6"
@@ -1081,9 +1107,14 @@ export function QbrPrepPreview({
                       </colgroup>
                       <thead>
                         <tr style={{ backgroundColor: `${ACCENT}0D` }}>
-                          {["Keyword", "Suggested Type", "Target", "Why It's Suggested", "Source"].map(h => (
+                          {(kwSharedSource ? ["Keyword", "Suggested Type", "Target", "Why It's Suggested"] : ["Keyword", "Suggested Type", "Target", "Why It's Suggested", "Source"]).map(h => (
                             <th key={h} style={{ padding: "5px 8px", textAlign: "left", fontWeight: 600, fontSize: "9px", color: ACCENT, textTransform: "uppercase" as const, letterSpacing: "0.06em", borderBottom: `1px solid ${ACCENT}20`, wordBreak: "break-word" }}>{h}</th>
                           ))}
+                          {kwSharedSource && (
+                            <th style={{ padding: "5px 8px", textAlign: "left", fontWeight: 600, fontSize: "9px", color: ACCENT, textTransform: "uppercase" as const, letterSpacing: "0.06em", borderBottom: `1px solid ${ACCENT}20` }}>
+                              <SourceBadge source={kwSharedSource} />
+                            </th>
+                          )}
                         </tr>
                       </thead>
                       <tbody>
@@ -1127,13 +1158,15 @@ export function QbrPrepPreview({
                               <td style={{ padding: "6px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4, wordBreak: "break-word", color: "#4B5563", fontSize: "9px" }}>
                                 <EditableCell editKey={`kw_${ri}_why`} value={row.whyRecommended} edits={edits} onEdit={onEdit} />
                               </td>
-                              <td style={{ padding: "6px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top" }}>
-                                <span style={{ display: "inline-flex", flexWrap: "wrap", gap: 3 }}>
-                                  {row.sources.map((src, si) => (
-                                    <SourceBadge key={si} source={src} />
-                                  ))}
-                                </span>
-                              </td>
+                              {!kwSharedSource && (
+                                <td style={{ padding: "6px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top" }}>
+                                  <span style={{ display: "inline-flex", flexWrap: "wrap", gap: 3 }}>
+                                    {row.sources.map((src, si) => (
+                                      <SourceBadge key={si} source={src} />
+                                    ))}
+                                  </span>
+                                </td>
+                              )}
                             </tr>
                           );
                         })}
@@ -1149,7 +1182,7 @@ export function QbrPrepPreview({
             ) : !isSectionAutoHidden("section_tracking", hiddenTables) && sectionNums["section_tracking"] !== undefined ? (
               <>
                 <SectionHeading num={sectionNums["section_tracking"]} title="What We Track" onHide={hideSecBtn("section_tracking")} />
-                {tblSubLabel("table_s8", "Tracked Metrics", !!hiddenTables["table_s8"])}
+                {tblSubLabel("table_s8", "Tracked Metrics", !!hiddenTables["table_s8"], s7TrackingSharedSource ? [s7TrackingSharedSource] : undefined)}
                 {hiddenTables["table_s8"] ? tblHiddenBar("table_s8", "Tracked Metrics") : (
                   <AddableReportTable tableId="s7" headers={["Focus Area", "Metric", "Source", "Why It Matters"]} sourceRows={s7SourceRows} edits={edits} onEdit={onEdit} />
                 )}

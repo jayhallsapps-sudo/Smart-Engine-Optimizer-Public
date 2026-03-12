@@ -69,6 +69,23 @@ function badgeCell(val: string, dataSource?: string): ReactNode {
   );
 }
 
+function computeSharedSource(sources: (string | undefined)[]): string | null {
+  const filtered = sources.filter(
+    (s): s is string => !!s && s !== "Manual entry needed" && s !== "—" && s !== "Site Structure"
+  );
+  if (filtered.length === 0) return null;
+  const unique = Array.from(new Set(filtered));
+  return unique.length === 1 ? unique[0] : null;
+}
+
+function computeSharedSourceList(sourceSets: string[][]): string | null {
+  if (sourceSets.length === 0) return null;
+  const joined = sourceSets.map(s => Array.from(s).sort().join("+"));
+  const unique = Array.from(new Set(joined));
+  if (unique.length !== 1) return null;
+  return sourceSets[0].join(" + ") || null;
+}
+
 function printIsPathLike(v: string): boolean {
   const t = (v ?? "").trim();
   return /^\/[a-z0-9\-._~:/?#[\]@!$&'()*+,;=%]*/i.test(t) || /^https?:\/\//i.test(t);
@@ -272,11 +289,17 @@ export default function QbrPrepPrint() {
     ...customRowsAsNodes(edits, "s1"),
   ];
 
+  // Source-label switching — compute before row builders
+  const s2aSharedSource = computeSharedSource((s2.topConvertingPages ?? []).map((r: any) => r.dataSource));
+  const s6SharedSource  = computeSharedSource((s6.priorities ?? []).map((r: any) => r.source));
+  const s7TrackingSharedSource = computeSharedSource((s7.tracking ?? []).map((r: any) => r.source));
+  const kwSharedSource  = computeSharedSourceList((sectionSuggestedKeywords?.rows ?? []).map((r: any) => r.sources ?? []));
+
   const s2aRows: ReactNode[][] = [
     ...s2.topConvertingPages.map((r: any, ri: number) => {
       const pageVal = e(`s2a_${ri}_1`, r.page);
       return [
-        badgeCell(e(`s2a_${ri}_0`, r.type), r.dataSource),
+        badgeCell(e(`s2a_${ri}_0`, r.type), s2aSharedSource ? undefined : r.dataSource),
         printIsPathLike(pageVal) ? <PrintPathTag value={pageVal} /> : cell(pageVal),
         cell(e(`s2a_${ri}_2`, r.notes)),
       ];
@@ -324,7 +347,7 @@ export default function QbrPrepPrint() {
   const s6Rows: ReactNode[][] = [
     ...s6.priorities.map((r: any, ri: number) => [
       cell(e(`s6_${ri}_0`, String(r.priority))),
-      badgeCell(e(`s6_${ri}_1`, r.initiative), r.source),
+      badgeCell(e(`s6_${ri}_1`, r.initiative), s6SharedSource ? undefined : r.source),
       <PrintTierBadge tier={e(`s6_${ri}_2`, r.tier)} />,
       <PrintActionTypeBadge value={edits[`s6_${ri}_5`] ?? (r.actionType ?? "")} />,
       cell(e(`s6_${ri}_3`, r.action)),
@@ -337,11 +360,13 @@ export default function QbrPrepPrint() {
     ...s7.tracking.map((r: any, ri: number) => [
       cell(e(`s7_${ri}_0`, r.focusArea)),
       cell(e(`s7_${ri}_1`, r.metric)),
-      <span style={{ display: "inline-flex", alignItems: "center", gap: 3, flexWrap: "wrap" }}>
-        {parseS7Sources(e(`s7_${ri}_2`, r.source)).map((src: string, si: number) => (
-          <SourceBadge key={si} source={src} />
-        ))}
-      </span>,
+      s7TrackingSharedSource
+        ? <span style={{ color: "#9CA3AF", fontSize: "9px" }}>—</span>
+        : <span style={{ display: "inline-flex", alignItems: "center", gap: 3, flexWrap: "wrap" }}>
+            {parseS7Sources(e(`s7_${ri}_2`, r.source)).map((src: string, si: number) => (
+              <SourceBadge key={si} source={src} />
+            ))}
+          </span>,
       cell(e(`s7_${ri}_4`, r.whyItMatters)),
     ]),
     ...customRowsAsNodes(edits, "s7"),
@@ -416,7 +441,7 @@ export default function QbrPrepPrint() {
               <SectionHeading num={secNums["section_conversions"]} title="Where Conversions Actually Happen" />
               {tblVis("table_s2_pages") && (
                 <>
-                  <SubLabel text="Top Converting Pages" />
+                  <SubLabel text="Top Converting Pages" sources={s2aSharedSource ? [s2aSharedSource] : undefined} />
                   <ReportTable headers={["Type", "Page", "Notes / What We're Learning"]} rows={s2aRows} />
                 </>
               )}
@@ -628,7 +653,12 @@ export default function QbrPrepPrint() {
                   </ul>
                 </div>
               )}
-              {tblVis("table_s6") && <ReportTable headers={["#", "Initiative", "Tier", "Type", "Action", "Why It Matters"]} rows={s6Rows} />}
+              {tblVis("table_s6") && (
+                <>
+                  {s6SharedSource && <SubLabel text="Priority Actions" sources={[s6SharedSource]} />}
+                  <ReportTable headers={["#", "Initiative", "Tier", "Type", "Action", "Why It Matters"]} rows={s6Rows} />
+                </>
+              )}
               {(() => {
             const raw = edits["s6_crossSells_confirmed"];
             if (!raw) return null;
@@ -687,9 +717,14 @@ export default function QbrPrepPrint() {
                   </colgroup>
                   <thead>
                     <tr style={{ backgroundColor: `${ACCENT}0D` }}>
-                      {["Keyword", "Suggested Type", "Target", "Why It's Suggested", "Source"].map((h: string) => (
+                      {(kwSharedSource ? ["Keyword", "Suggested Type", "Target", "Why It's Suggested"] : ["Keyword", "Suggested Type", "Target", "Why It's Suggested", "Source"]).map((h: string) => (
                         <th key={h} style={{ padding: "5px 8px", textAlign: "left", fontWeight: 600, fontSize: "9px", color: ACCENT, textTransform: "uppercase" as const, letterSpacing: "0.06em", borderBottom: `1px solid ${ACCENT}20`, wordBreak: "break-word" }}>{h}</th>
                       ))}
+                      {kwSharedSource && (
+                        <th style={{ padding: "5px 8px", textAlign: "left", fontWeight: 600, fontSize: "9px", color: ACCENT, textTransform: "uppercase" as const, letterSpacing: "0.06em", borderBottom: `1px solid ${ACCENT}20` }}>
+                          <SourceBadge source={kwSharedSource} />
+                        </th>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
@@ -725,13 +760,15 @@ export default function QbrPrepPrint() {
                             }
                           </td>
                           <td style={{ padding: "5px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4, color: "#4B5563", fontSize: "9px", wordBreak: "break-word" }}>{edits[`kw_${ri}_why`] ?? row.whyRecommended}</td>
-                          <td style={{ padding: "5px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top" }}>
-                            <span style={{ display: "inline-flex", flexWrap: "wrap", gap: 3 }}>
-                              {(row.sources ?? []).map((src: string, si: number) => (
-                                <SourceBadge key={si} source={src} />
-                              ))}
-                            </span>
-                          </td>
+                          {!kwSharedSource && (
+                            <td style={{ padding: "5px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top" }}>
+                              <span style={{ display: "inline-flex", flexWrap: "wrap", gap: 3 }}>
+                                {(row.sources ?? []).map((src: string, si: number) => (
+                                  <SourceBadge key={si} source={src} />
+                                ))}
+                              </span>
+                            </td>
+                          )}
                         </tr>
                       );
                     })}
@@ -744,7 +781,12 @@ export default function QbrPrepPrint() {
           {secVis("section_tracking") && !printSecAutoHidden("section_tracking", hiddenTables) && (
             <>
               <SectionHeading num={secNums["section_tracking"]!} title="What We Track" />
-              {tblVis("table_s8") && <ReportTable headers={["Focus Area", "Metric", "Source", "Why It Matters"]} rows={s7Rows} />}
+              {tblVis("table_s8") && (
+                <>
+                  {s7TrackingSharedSource && <SubLabel text="Tracked Metrics" sources={[s7TrackingSharedSource]} />}
+                  <ReportTable headers={["Focus Area", "Metric", "Source", "Why It Matters"]} rows={s7Rows} />
+                </>
+              )}
             </>
           )}
 

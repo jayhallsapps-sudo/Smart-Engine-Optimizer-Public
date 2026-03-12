@@ -707,7 +707,7 @@ function buildSection6(reportData: any, secNum: number, edits: Record<string, st
               margins: { top: 100, bottom: 100, left: 180, right: 120 },
               borders: noCellBorders(),
               children: [
-                new Paragraph({ spacing: { before: 0, after: 60 }, children: [boldRun("PRIORITY SUMMARY", { size: 16, color: "C0392B", characterSpacing: 60 })] }),
+                new Paragraph({ spacing: { before: 0, after: 60 }, children: [boldRun("CRITICAL OBSERVATIONS", { size: 16, color: "C0392B", characterSpacing: 60 })] }),
                 ...shortSummary.map(b => new Paragraph({ spacing: { before: 0, after: 40 }, bullet: { level: 0 }, children: [run(safeText(b), { size: 17, color: GRAY })] })),
               ],
             }),
@@ -988,6 +988,7 @@ function buildSectionKeywords(reportData: any, secNum: number, edits: Record<str
     const recType  = KW_REC_LABELS[r.recommendationType] ?? r.recommendationType ?? "";
     const rawPage  = edits[`kw_${ri}_targetPage`] ?? r.targetPage ?? "";
     const isNew    = rawPage === "New content needed" || rawPage === "Suggest new content for this keyword";
+    // For create-new, display proposed slug as-is (generated as /blog/... format)
     const pageTxt  = isNew ? "New content needed" : rawPage;
     const why      = safeText(edits[`kw_${ri}_why`] ?? r.whyRecommended ?? "");
     if (kwSharedSource) {
@@ -1004,12 +1005,15 @@ function buildSectionKeywords(reportData: any, secNum: number, edits: Record<str
     const srcNote = kwSharedSource ? ` Source: ${kwSharedSource}.` : "";
     items.push(new Paragraph({
       spacing: { before: 0, after: 120 },
-      children: [run(
-        `Showing up to ${sk.quarterlyCreditCap} keyword opportunities (2× monthly credit capacity of ${sk.monthlyCredits ?? ""}). ` +
-        "Grounded in GSC query data, site crawl inventory, and page performance. " +
-        `Filtered to strategic service, program, condition, and location-intent terms.${srcNote}`,
-        { size: 16, color: MID, italics: true }
-      )],
+      children: [
+        boldRun("ABOUT THIS LIST: ", { size: 16, color: "C0392B", characterSpacing: 30 }),
+        run(
+          `Showing up to ${sk.quarterlyCreditCap} keyword opportunities (2× monthly credit capacity of ${sk.monthlyCredits ?? ""}). ` +
+          "Grounded in GSC query data, site crawl inventory, and page performance. " +
+          `Filtered to strategic Level of Care, program, condition, and location-intent terms.${srcNote}`,
+          { size: 16, color: MID }
+        ),
+      ],
     }));
   }
   if (kwSharedSource) {

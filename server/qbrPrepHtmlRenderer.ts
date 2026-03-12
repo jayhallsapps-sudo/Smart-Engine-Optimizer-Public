@@ -237,7 +237,7 @@ export function renderSection1Html(reportData: any, secNum: number, edits: Recor
     return `<tr class="${ri % 2 === 1 ? "alt" : ""}">
       <td style="font-weight:600;color:${ACCENT}">${escHtml(goalType)}</td>
       <td style="font-weight:700">${escHtml(goal)}</td>
-      <td>${escHtml(source)}</td>
+      <td style="white-space:nowrap">${escHtml(source)}</td>
       <td style="text-align:center">${shiftHtml}</td>
       <td>${escHtml(reason)}</td>
     </tr>`;
@@ -246,7 +246,7 @@ export function renderSection1Html(reportData: any, secNum: number, edits: Recor
   const inner = `
     ${secHeading(secNum, "What Matters Most This Quarter")}
     <div class="tbl-wrap"><table>
-      <colgroup><col style="width:18%"><col style="width:22%"><col style="width:18%"><col style="width:14%"><col style="width:28%"></colgroup>
+      <colgroup><col style="width:22%"><col style="width:26%"><col style="width:16%"><col style="width:10%"><col style="width:26%"></colgroup>
       <thead><tr>
         <th>Goal Type</th><th>Goal / NSM</th><th>Source</th><th style="text-align:center">Goal Shift vs Last Qtr</th><th>Reason</th>
       </tr></thead>
@@ -402,6 +402,7 @@ export function renderSection5Html(reportData: any, secNum: number): string {
 // ── Section 6: What We Need to Do Next — improved color/visual treatment ───────
 export function renderSection6Html(reportData: any, secNum: number, edits: Record<string,string> = {}): string {
   const priorities = reportData.section6Priorities?.priorities ?? [];
+  const shortSummary: string[] = reportData.section6Priorities?.shortSummary ?? [];
   const s6SharedSource = computeSharedSource(priorities.map((r: any) => r.source as string | undefined));
 
   const cards = priorities.map((r: any, ri: number) => {
@@ -462,9 +463,29 @@ export function renderSection6Html(reportData: any, secNum: number, edits: Recor
     ? `<div style="font-size:8.5px;color:${MID};font-style:italic;margin-bottom:8px;">Source: ${escHtml(s6SharedSource)}</div>`
     : "";
 
+  const formatBullet = (b: string): string => {
+    const colonIdx = b.indexOf(":");
+    if (colonIdx > 0 && colonIdx < 60) {
+      const label = b.slice(0, colonIdx);
+      const rest  = b.slice(colonIdx + 1).trimStart();
+      return `<strong>${escHtml(label)}:</strong> ${escHtml(rest)}`;
+    }
+    return escHtml(b);
+  };
+
+  const criticalObsHtml = shortSummary.length > 0
+    ? `<div style="padding:9px 14px;background:#FFF5F5;border:1.5px solid ${ACCENT}40;border-radius:4px;margin-bottom:10px;">
+        <div style="font-weight:700;color:${ACCENT};font-size:8.5px;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Critical Observations</div>
+        <ul style="margin:0;padding:0 0 0 16px;line-height:1.6;color:${GRAY};font-size:10px;">
+          ${shortSummary.map(b => `<li style="margin-bottom:2px;">${formatBullet(b)}</li>`).join("")}
+        </ul>
+      </div>`
+    : "";
+
   const inner = `
     ${secHeading(secNum, "What We Need to Do Next")}
     ${sharedSrcNote}
+    ${criticalObsHtml}
     ${cards}`;
   return wrap(inner);
 }

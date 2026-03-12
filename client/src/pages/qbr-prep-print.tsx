@@ -646,10 +646,16 @@ export default function QbrPrepPrint() {
             <>
               <SectionHeading num={secNums["section_priorities"]!} title="What We Need to Do Next" />
               {(s6 as any).shortSummary && ((s6 as any).shortSummary as string[]).length > 0 && (
-                <div style={{ padding: "8px 12px", backgroundColor: "#F9FAFB", borderRadius: 4, border: "1px solid #E5E7EB", marginBottom: 8, fontSize: "9.5px" }}>
-                  <div style={{ fontWeight: 700, color: ACCENT, marginBottom: 5, fontSize: "9px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Priority Summary</div>
+                <div style={{ padding: "8px 12px", backgroundColor: "#FFF5F5", borderRadius: 4, border: `1.5px solid ${ACCENT}40`, marginBottom: 8, fontSize: "9.5px" }}>
+                  <div style={{ fontWeight: 700, color: ACCENT, marginBottom: 5, fontSize: "9px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Critical Observations</div>
                   <ul style={{ margin: 0, padding: "0 0 0 14px", lineHeight: 1.6, color: "#374151" }}>
-                    {((s6 as any).shortSummary as string[]).map((b: string, i: number) => <li key={i}>{b}</li>)}
+                    {((s6 as any).shortSummary as string[]).map((b: string, i: number) => {
+                      const colonIdx = b.indexOf(":");
+                      if (colonIdx > 0 && colonIdx < 60) {
+                        return <li key={i}><strong>{b.slice(0, colonIdx)}:</strong> {b.slice(colonIdx + 1).trimStart()}</li>;
+                      }
+                      return <li key={i}>{b}</li>;
+                    })}
                   </ul>
                 </div>
               )}
@@ -702,8 +708,9 @@ export default function QbrPrepPrint() {
             <>
               <SectionHeading num={secNums["section_keywords"]!} title="Suggested Keywords for Next Quarter" />
               {sectionSuggestedKeywords?.quarterlyCreditCap && (
-                <div style={{ fontSize: "9px", color: "#6B7280", marginBottom: 8, fontStyle: "italic" }}>
-                  Showing up to {sectionSuggestedKeywords.quarterlyCreditCap} keyword opportunities (2× monthly credit capacity of {sectionSuggestedKeywords.monthlyCredits}). Grounded in GSC query data, site crawl inventory, and page performance. Filtered to strategic service, program, condition, and location-intent terms.
+                <div style={{ padding: "7px 10px", backgroundColor: "#FFF5F5", borderRadius: 4, border: `1.5px solid ${ACCENT}40`, marginBottom: 8, fontSize: "9px", color: "#374151", lineHeight: 1.6 }}>
+                  <span style={{ fontWeight: 700, color: ACCENT, textTransform: "uppercase" as const, letterSpacing: "0.05em", fontSize: "8.5px", marginRight: 5 }}>About This List:</span>
+                  Showing up to {sectionSuggestedKeywords.quarterlyCreditCap} keyword opportunities (2× monthly credit capacity of {sectionSuggestedKeywords.monthlyCredits}). Grounded in GSC query data, site crawl inventory, and page performance. Filtered to strategic Level of Care, program, condition, and location-intent terms.
                 </div>
               )}
               <div style={{ border: `1px solid ${ACCENT}28`, borderRadius: 4, overflow: "hidden", marginBottom: 12 }}>

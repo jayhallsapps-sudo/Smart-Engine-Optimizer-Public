@@ -987,10 +987,16 @@ export function QbrPrepPreview({
             ) : !isSectionAutoHidden("section_priorities", hiddenTables) && sectionNums["section_priorities"] !== undefined ? (<>
             <SectionHeading num={sectionNums["section_priorities"]} title="What We Need to Do Next" onHide={hideSecBtn("section_priorities")} />
             {section6Priorities.shortSummary && section6Priorities.shortSummary.length > 0 && (
-              <div style={{ padding: "10px 14px", backgroundColor: "#F9FAFB", borderRadius: 4, border: "1px solid #E5E7EB", marginBottom: 10, fontSize: "10.5px" }}>
-                <div style={{ fontWeight: 700, color: ACCENT, marginBottom: 6, fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Priority Summary</div>
+              <div style={{ padding: "10px 14px", backgroundColor: "#FFF5F5", borderRadius: 4, border: `1.5px solid ${ACCENT}40`, marginBottom: 10, fontSize: "10.5px" }}>
+                <div style={{ fontWeight: 700, color: ACCENT, marginBottom: 6, fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Critical Observations</div>
                 <ul style={{ margin: 0, padding: "0 0 0 16px", lineHeight: 1.6, color: "#374151" }}>
-                  {section6Priorities.shortSummary.map((b, i) => <li key={i}>{b}</li>)}
+                  {section6Priorities.shortSummary.map((b, i) => {
+                    const colonIdx = b.indexOf(":");
+                    if (colonIdx > 0 && colonIdx < 60) {
+                      return <li key={i}><strong>{b.slice(0, colonIdx)}:</strong> {b.slice(colonIdx + 1).trimStart()}</li>;
+                    }
+                    return <li key={i}>{b}</li>;
+                  })}
                 </ul>
               </div>
             )}
@@ -1092,8 +1098,9 @@ export function QbrPrepPreview({
                 <>
                   <SectionHeading num={sectionNums["section_keywords"]} title="Suggested Keywords for Next Quarter" onHide={hideSecBtn("section_keywords")} />
                   {sectionSuggestedKeywords && (
-                    <div style={{ fontSize: "9px", color: "#6B7280", marginBottom: 8, fontStyle: "italic" }}>
-                      Showing up to {sectionSuggestedKeywords.quarterlyCreditCap} keyword opportunities (2× monthly credit capacity of {sectionSuggestedKeywords.monthlyCredits}). Grounded in GSC query data, site crawl inventory, and page performance. Filtered to strategic service, program, condition, and location-intent terms.
+                    <div style={{ padding: "8px 12px", backgroundColor: "#FFF5F5", borderRadius: 4, border: `1.5px solid ${ACCENT}40`, marginBottom: 10, fontSize: "9.5px", color: "#374151", lineHeight: 1.6 }}>
+                      <span style={{ fontWeight: 700, color: ACCENT, textTransform: "uppercase" as const, letterSpacing: "0.05em", fontSize: "9px", marginRight: 6 }}>About This List:</span>
+                      Showing up to {sectionSuggestedKeywords.quarterlyCreditCap} keyword opportunities (2× monthly credit capacity of {sectionSuggestedKeywords.monthlyCredits}). Grounded in GSC query data, site crawl inventory, and page performance. Filtered to strategic Level of Care, program, condition, and location-intent terms.
                     </div>
                   )}
                   <div style={{ border: `1px solid ${ACCENT}28`, borderRadius: 6, overflow: "hidden", marginBottom: 12, backgroundColor: "#FFFDFB" }}>

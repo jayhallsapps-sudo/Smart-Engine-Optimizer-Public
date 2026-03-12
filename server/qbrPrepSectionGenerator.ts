@@ -1650,23 +1650,23 @@ function clientReadableType(internalType: string): string {
   const map: Record<string, string> = {
     "Verify Insurance": "Verify Insurance",
     "Contact / Admissions": "Contact / Admissions",
-    "Detox": "Service Page",
-    "Residential / Inpatient": "Service Page",
-    "PHP / IOP": "Service Page",
-    "Outpatient": "Service Page",
-    "Dual Diagnosis": "Service Page",
-    "Therapies": "Service Page",
-    "Conditions": "Service Page",
+    "Detox": "Level of Care",
+    "Residential / Inpatient": "Level of Care",
+    "PHP / IOP": "Level of Care",
+    "Outpatient": "Level of Care",
+    "Dual Diagnosis": "Level of Care",
+    "Therapies": "Level of Care",
+    "Conditions": "Level of Care",
     "Homepage": "Homepage",
     "Staff / Team": "Staff Page",
     "Blog / Resource": "Blog / Resource",
     "FAQ": "FAQ Page",
-    "Local Treatment Intent": "Service Page",
+    "Local Treatment Intent": "Level of Care",
     "Branded Navigation": "Homepage",
     "Substance-Specific": "Blog / Resource",
     "Informational / Education": "Blog / Resource",
   };
-  return map[internalType] ?? "Service Page";
+  return map[internalType] ?? "Level of Care";
 }
 
 function buildPagePattern(page: string, internalType: string, dataSource: string): string {
@@ -2538,49 +2538,55 @@ function generateSection6(
 
   if (section5.tier <= 1) {
     if (!tierInput.hasDetoxPage || !tierInput.hasResidentialPage) {
-      if (!isAlreadyDone("service page") && !isAlreadyDone("detox") && !isAlreadyDone("residential")) {
+      if (!isAlreadyDone("service page") && !isAlreadyDone("level of care") && !isAlreadyDone("detox") && !isAlreadyDone("residential")) {
+        const missingLocs: string[] = [];
+        if (!tierInput.hasDetoxPage) missingLocs.push("detox/detoxification");
+        if (!tierInput.hasResidentialPage) missingLocs.push("residential/inpatient");
         priorities.push({
           priority: priorities.length + 1,
-          initiative: "Core Service Page Foundation",
+          initiative: "Levels of Care Page Foundation",
           tier: "Tier 1",
-          action: "Refresh and consolidate primary detox and residential intent so Google sees one clear service path per treatment level",
-          reason: "Core service pages are the foundation for search trust — without clear primary URLs, nothing else compounds",
+          action: `Confirm whether dedicated ${missingLocs.join(" and ")} Level of Care pages exist in the crawl. If present, verify they are indexable and nav-accessible. If absent, create dedicated pages with a clear slug (e.g. /detox, /residential-treatment), proper H1, conversion CTA, and internal links from the homepage and admissions path.`,
+          reason: `Levels of Care pages (${missingLocs.join(", ")}) are not confirmed in the crawl — these are Tier 1 conversion assets. Without a clearly indexed, nav-accessible page for each Level of Care, high-intent search traffic cannot land on a conversion-ready URL.`,
           source: "Multi-source",
         });
       }
     }
     if (!tierInput.hasVobPage || !tierInput.hasContactPage) {
       if (!isAlreadyDone("insurance") && !isAlreadyDone("vob") && !isAlreadyDone("admissions")) {
+        const missing: string[] = [];
+        if (!tierInput.hasVobPage) missing.push("Verify Insurance / VOB");
+        if (!tierInput.hasContactPage) missing.push("Contact / Admissions");
         priorities.push({
           priority: priorities.length + 1,
-          initiative: "Admissions Pathway Clarity",
+          initiative: "Admissions Pathway — Verify Insurance & Contact",
           tier: "Tier 1",
-          action: "Strengthen Verify Insurance and admissions entry points to reduce friction on high-intent traffic",
-          reason: "VOB and contact pages are the primary conversion mechanism — unclear pathways lose admits",
+          action: `Add persistent ${missing.join(" and ")} links to the main navigation and footer if absent. Add direct internal links from all top organic landing pages to the ${missing.join(" and ")} page(s). Verify the ${missing.join("/")} form(s) have GA4 event tracking and/or call-tracking attribution active so conversion actions from organic traffic are measurable.`,
+          reason: `${missing.join(" and ")} page(s) are the last digital step before a user contacts admissions. Every organic landing that reaches this stage without a clear path to ${missing.length > 1 ? "these pages" : "this page"} is a measurable conversion leak. Navigation and footer placement are the lowest-cost fix.`,
           source: "Multi-source",
         });
       }
     }
   }
 
-  if (section5.tier <= 2 && priorities.length < 7) {
+  if (section5.tier <= 2 && priorities.length < 8) {
     if (!tierInput.hasConditionsHub && !isAlreadyDone("conditions hub")) {
       priorities.push({
         priority: priorities.length + 1,
-        initiative: "Conditions Hub Structure",
+        initiative: "Conditions Hub — Topical Authority Structure",
         tier: "Tier 2",
-        action: "Build a conditions hub to support authority flow into existing service pages",
-        reason: "Hub structure lets Google understand topical relationships and pass authority to conversion pages",
+        action: "Create a /mental-health or /conditions hub page with internal links to individual condition pages (depression, anxiety, PTSD, trauma, etc.). Each condition page should link back to the hub and forward to relevant Levels of Care pages, creating a clear topical cluster for Google to index.",
+        reason: "Without a conditions hub, each condition page competes independently for authority. A hub structure consolidates topical signals, passes authority to Levels of Care pages, and gives Google a clear taxonomy — all three effects improve rankings on condition-specific queries.",
         source: "Multi-source",
       });
     }
     if (!tierInput.hasTherapiesHub && !isAlreadyDone("therapies hub") && !isAlreadyDone("therapy hub")) {
       priorities.push({
         priority: priorities.length + 1,
-        initiative: "Therapies Architecture",
+        initiative: "Therapies Hub — Treatment Modality Architecture",
         tier: "Tier 2",
-        action: "Organize treatment modalities into a therapies hub that reinforces service page authority",
-        reason: "Therapy pages support E-E-A-T and differentiate the program in competitive searches",
+        action: "Create a /therapies or /treatment-modalities hub page listing all therapy types (CBT, DBT, EMDR, trauma-informed care, etc.) with links to individual therapy pages. Link each therapy page back to the hub and cross-link to relevant Levels of Care pages (e.g., CBT → IOP, Trauma → PHP/Residential).",
+        reason: "Therapy pages are strong E-E-A-T differentiators but they generate authority in isolation without a hub. Organizing them under a hub page lets Google understand the program's clinical depth, improves rankings on therapy-specific searches, and strengthens internal authority flow to conversion pages.",
         source: "Multi-source",
       });
     }
@@ -2707,7 +2713,7 @@ function generateSection6(
   ];
 
   for (const f of evidenceFillers) {
-    if (priorities.length >= 5) break;
+    if (priorities.length >= 8) break;
     if (f.condition) {
       priorities.push({
         priority: priorities.length + 1,
@@ -2720,13 +2726,13 @@ function generateSection6(
     }
   }
 
-  if (priorities.length < 5) {
+  if (priorities.length < 4) {
     priorities.push({
       priority: priorities.length + 1,
-      initiative: "Organic Channel Health Review",
+      initiative: "Organic Channel Baseline Audit",
       tier: `Tier ${section5.tier}`,
-      action: "Review organic channel baseline metrics QoQ to identify acceleration or decay signals before setting Q3 strategy",
-      reason: "Establishing a clean QoQ baseline is prerequisite to any growth investment — without it, directional decisions are made without evidence",
+      action: "Pull QoQ GSC and GA4 data for organic channel: compare sessions, conversions, and impressions quarter-over-quarter. Identify the 3 pages with the largest positive and largest negative movement. Use this baseline to set data-backed Q2 targets before committing to new content or structural work.",
+      reason: "Directional strategy decisions without a clean QoQ baseline lead to misallocated credits. A one-time baseline review prevents that and sharpens every downstream recommendation.",
       source: "GA4",
     });
   }
@@ -2835,7 +2841,7 @@ function generateSection6(
     return "Medium";
   }
 
-  const finalPriorities = cappedPriorities.slice(0, 7).map(p => ({
+  const finalPriorities = cappedPriorities.slice(0, 10).map(p => ({
     ...p,
     actionType: p.actionType ?? inferActionType(p),
     impact: p.impact ?? inferImpact(p),
@@ -3510,6 +3516,30 @@ interface QueryCandidate {
   clicks: number;
 }
 
+// Generic behavioral-health terms that should NOT be treated as primary anchor terms
+// (too common to define a meaningful cluster by themselves)
+const GENERIC_BH_TERMS = new Set([
+  "addiction", "recovery", "treatment", "rehab", "rehabilitation", "therapy",
+  "drug", "substance", "alcohol", "mental", "health", "help", "center", "program",
+  "sober", "sobriety", "clean", "detox", "residential", "inpatient", "outpatient",
+  "withdrawal", "symptoms", "side", "effects", "signs", "abuse", "disorder",
+  "near", "best", "top", "local", "find", "get", "need",
+]);
+
+/**
+ * Returns true if the two normalized token sets share a specific non-generic anchor term.
+ * This ensures "molly drug" + "molly and alcohol" + "what is molly" all cluster together
+ * because they share "molly", which is not in the generic BH terms list.
+ */
+function sharesPrimaryAnchor(a: string[], b: string[]): boolean {
+  const setA = new Set(a);
+  const setB = new Set(b);
+  for (const w of setA) {
+    if (w.length > 3 && !GENERIC_BH_TERMS.has(w) && setB.has(w)) return true;
+  }
+  return false;
+}
+
 function clusterCandidatesByIntent(candidates: QueryCandidate[]): QueryCandidate[][] {
   const assigned = new Array<boolean>(candidates.length).fill(false);
   const clusters: QueryCandidate[][] = [];
@@ -3523,7 +3553,8 @@ function clusterCandidatesByIntent(candidates: QueryCandidate[]): QueryCandidate
     for (let j = i + 1; j < candidates.length; j++) {
       if (assigned[j]) continue;
       const wordsJ = normalizeQueryForCluster(candidates[j].query);
-      if (jaccardSimilarity(wordsI, wordsJ) >= 0.70) {
+      // Cluster if Jaccard similarity is high OR if they share a specific anchor term
+      if (jaccardSimilarity(wordsI, wordsJ) >= 0.65 || sharesPrimaryAnchor(wordsI, wordsJ)) {
         cluster.push(candidates[j]);
         assigned[j] = true;
       }
@@ -3587,10 +3618,10 @@ export function generateSuggestedKeywords(
     const impressions = rep.impressions;
     const clicks = rep.clicks;
 
-    // Build variant label (exclude representative)
+    // Build variant label (exclude representative) — show ALL variants in the cluster
     const variants = cluster.slice(1).map(c => c.query);
     const keywordDisplay = variants.length > 0
-      ? `${query} / ${variants.slice(0, 2).join(" / ")}`
+      ? `${query} / ${variants.join(" / ")}`
       : query;
 
     // Find best associated page from GSC query+page data
@@ -3603,9 +3634,17 @@ export function generateSuggestedKeywords(
     if (targetPath && usedPaths.has(targetPath)) continue;
     if (targetPath) usedPaths.add(targetPath);
 
+    // For create-new, propose a concrete slug based on the representative query
+    const proposedSlug = "/blog/" + query
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, "")
+      .trim()
+      .replace(/\s+/g, "-")
+      .replace(/-{2,}/g, "-")
+      .replace(/^-|-$/g, "");
     const targetPageDisplay = recType === "create-new"
-      ? "New content needed"
-      : (targetPath ?? "New content needed");
+      ? proposedSlug
+      : (targetPath ?? proposedSlug);
 
     const whyRecommended = buildKeywordReason(query, impressions, clicks, targetPath, recType, sfPaths);
 

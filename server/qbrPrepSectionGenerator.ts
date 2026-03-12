@@ -627,7 +627,7 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
 
   const clientWithVerifiedMoneyPages = { ...client, moneyPages: verifiedMoneyPages };
 
-  const section2 = generateSection2(ga4LandingRows, gscPageRows, clientWithVerifiedMoneyPages, callTrackingLandingPages, callTrackingSources);
+  const section2 = generateSection2(ga4LandingRows, gscPageRows, clientWithVerifiedMoneyPages, callTrackingLandingPages, callTrackingSources, livePageVerification);
   const section3 = generateSection3(gscQueryRows, gscPageRows, ga4LandingRows, client, gscPrevQueryRows, gscPrevPageRows, gscQueryPageRows, gscPrevQueryPageRows);
 
   // Build live page overrides for S4 (maps service name → real verified URL)
@@ -641,7 +641,10 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
   if (detoxPath) s4LivePageOverrides["Detox"] = detoxPath;
   if (residentialPath) s4LivePageOverrides["Residential / Inpatient"] = residentialPath;
 
-  const section4 = generateSection4(sfData, sfHeaders, client, s4LivePageOverrides, livePageVerification.size > 0);
+  // Detect whether SF data is a real URL crawl (has Address/URL column) vs Issues format
+  const sfIsUrlCrawl = sfHeaders.some(h => /^address$/i.test(h) || /^url$/i.test(h));
+
+  const section4 = generateSection4(sfData, sfHeaders, client, s4LivePageOverrides, livePageVerification.size > 0, sfIsUrlCrawl);
 
   // T003: Post-process tertiary goal reason with actual traffic data from section3
   const tertiaryIdx = section1.rows.findIndex(r => r.goalType === "Secondary Goal/NSM");
@@ -827,7 +830,7 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
     // 3. Service page question
     const services = section4.services.slice(0, 3).map(s => s.service).filter(Boolean);
     if (services.length > 0) {
-      insights.push({ question: `Your main service pages cover ${services.join(", ")}. Are there any new programs or treatment modalities you're planning to launch or expand that we should be building content around?` });
+      insights.push({ question: `Your main Levels of Care pages cover ${services.join(", ")}. Are there any new programs or treatment modalities you're planning to launch or expand that we should be building content around?` });
     }
 
     // 4. Sessions goal question
@@ -1418,8 +1421,21 @@ export function generateSection2(
   gscPages: any[],
   client: Client,
   callLandingPages: Array<{ page: string; calls: number }> = [],
-  callSources: Array<{ source: string; calls: number }> = []
+  callSources: Array<{ source: string; calls: number }> = [],
+  livePageVerif: Map<string, { exists: boolean; resolvedPath: string | null }> = new Map()
 ): Section2Conversions {
+  // Helper: resolve a path to its live destination (or return path unchanged if unknown)
+  const resolvePath = (path: string): string => {
+    const r = livePageVerif.get(path);
+    if (r?.exists && r.resolvedPath && r.resolvedPath !== path) return r.resolvedPath;
+    return path;
+  };
+  // Helper: is a path confirmed dead by live verification?
+  const confirmedDead = (path: string): boolean => {
+    if (livePageVerif.size === 0) return false;
+    const r = livePageVerif.get(path);
+    return r !== undefined && !r.exists;
+  };
   const topConvertingPages: ConvertingPageRow[] = [];
   const topConvertingSources: ConvertingSourceRow[] = [];
 
@@ -1523,7 +1539,7 @@ export function generateSection2(
       "insurance":      { confidence: "High-confidence inference", note: "Insurance verification pages are direct conversion-support pages — users checking coverage are one step away from committing to admission." },
       "verify":         { confidence: "High-confidence inference", note: "Insurance verification pages are direct conversion-support pages — users checking coverage are one step away from committing to admission." },
       "vob":            { confidence: "High-confidence inference", note: "VOB pages are direct conversion-support pages — users checking coverage are one step away from committing to admission." },
-      "detox":          { confidence: "Moderate-confidence inference", note: "Detox service pages attract near-decision query traffic — users researching detox are typically closer to admission than users at earlier awareness stages." },
+      "detox":          { confidence: "Moderate-confidence inference", note: "Levels of Care pages for detox attract near-decision query traffic — users researching detox are typically closer to admission than users at earlier awareness stages." },
       "residential":    { confidence: "Moderate-confidence inference", note: "Residential treatment pages capture users comparing inpatient options — high intent relative to informational pages." },
       "inpatient":      { confidence: "Moderate-confidence inference", note: "Inpatient program pages attract users making level-of-care decisions — typically mid-to-bottom funnel intent." },
       "rehab":          { confidence: "Moderate-confidence inference", note: "Primary rehabilitation program page — likely supports a meaningful share of conversion activity given its funnel proximity to the admissions path." },
@@ -1534,19 +1550,27 @@ export function generateSection2(
     };
     for (const mp of (client.moneyPages ?? [])) {
       if (topConvertingPages.length >= 2) break;
-      const path = mp.replace(/^https?:\/\/[^/]+/, "").toLowerCase();
-      if (seenPageKeys.has(path)) continue;
+      const rawPath = mp.replace(/^https?:\/\/[^/]+/, "").toLowerCase();
+      if (seenPageKeys.has(rawPath)) continue;
+      // Skip paths confirmed dead by live verification
+      if (confirmedDead(rawPath)) {
+        console.log(`[Section2] P4 skip ${rawPath} — confirmed dead by live verification`);
+        continue;
+      }
+      // Use resolved path if live verification found a redirect destination
+      const displayPath = resolvePath(rawPath);
+      if (seenPageKeys.has(displayPath)) continue;
       const internalType = classifyPageType(mp);
       const displayType = clientReadableType(internalType);
-      // Pick the best matching intent label
-      const matchedKey = Object.keys(intentMap).find(k => path.includes(k));
+      const matchedKey = Object.keys(intentMap).find(k => rawPath.includes(k));
       const { confidence, note } = matchedKey
         ? intentMap[matchedKey]
         : { confidence: "Moderate-confidence inference", note: "Client-configured priority page — likely supports conversion activity based on its position in the admissions funnel, though direct attribution is not yet confirmed." };
-      seenPageKeys.add(path);
+      seenPageKeys.add(rawPath);
+      seenPageKeys.add(displayPath);
       topConvertingPages.push({
         type: displayType,
-        page: path || mp,
+        page: displayPath,
         conversionSource: "Site Structure",
         notes: `${confidence}: ${note}`,
         dataSource: undefined,
@@ -1555,20 +1579,31 @@ export function generateSection2(
   }
 
   // P5 — Structural inference from common treatment center admission-path patterns
-  // Only fires when no client money pages covered the key high-intent URLs
+  // Only fires when no client money pages covered the key high-intent URLs.
+  // Uses live verification to resolve redirect destinations and skip confirmed-dead paths.
   const structuralCandidates: Array<{ path: string; type: string; note: string }> = [
     { path: "/contact", type: "Contact / Admissions", note: "High-confidence inference: Contact page is a near-certain conversion-support URL for any treatment center — it is the primary destination for admissions inquiries regardless of whether conversion tracking is active." },
+    { path: "/contact-us", type: "Contact / Admissions", note: "High-confidence inference: Contact page is a near-certain conversion-support URL for any treatment center — it is the primary destination for admissions inquiries." },
     { path: "/admissions", type: "Contact / Admissions", note: "High-confidence inference: Admissions page sits at the bottom of the conversion funnel — users reaching this page have moved past evaluation and are initiating the intake process." },
+    { path: "/admissions-and-alcohol-rehab-insurance", type: "Contact / Admissions", note: "High-confidence inference: Combined admissions and insurance page is the primary conversion-support URL — users here are evaluating coverage and committing to intake." },
     { path: "/insurance", type: "Verify Insurance", note: "High-confidence inference: Insurance verification pages are direct conversion-support pages — users checking coverage are typically one step away from committing to admission." },
     { path: "/verify-insurance", type: "Verify Insurance", note: "High-confidence inference: VOB pages are direct conversion-support pages — users checking coverage before calling are one of the clearest pre-admission signals." },
   ];
   for (const sc of structuralCandidates) {
     if (topConvertingPages.length >= 2) break;
-    if (seenPageKeys.has(sc.path)) continue;
+    // Skip confirmed-dead paths (when verification ran)
+    if (confirmedDead(sc.path)) {
+      console.log(`[Section2] P5 skip ${sc.path} — confirmed dead by live verification`);
+      continue;
+    }
+    // Use resolved path
+    const displayPath = resolvePath(sc.path);
+    if (seenPageKeys.has(sc.path) || seenPageKeys.has(displayPath)) continue;
     seenPageKeys.add(sc.path);
+    seenPageKeys.add(displayPath);
     topConvertingPages.push({
       type: sc.type,
-      page: sc.path,
+      page: displayPath,
       conversionSource: "Site Structure",
       notes: sc.note,
       dataSource: undefined,
@@ -1630,7 +1665,7 @@ export function generateSection2(
   if (hasServicePage) {
     candidatePatterns.push({
       pattern: "Service Page Conversion Capture",
-      whyItMatters: "Core service pages (Detox, Residential, PHP/IOP) are the primary entry point for treatment-intent searches. Visitors landing here are actively evaluating fit — page quality and clear conversion paths determine whether they move toward admissions.",
+      whyItMatters: "Levels of Care pages (Detox, Residential, PHP/IOP) are the primary entry point for treatment-intent searches. Visitors landing here are actively evaluating fit — page quality and clear conversion paths determine whether they move toward admissions.",
       evidence: hasCallSignal
         ? `Moderate-confidence inference: Service pages are generating inbound call volume, suggesting that treatment-intent searchers who land on these pages are converting to phone contact at a meaningful rate — indicating the pages are functioning as active demand-capture points rather than passive informational stops.`
         : `Moderate-confidence inference: Service page sessions are associated with on-site conversion activity, suggesting that treatment-intent traffic landing on these pages is producing measurable admit-path actions — though page-level attribution should be verified to confirm the depth of that signal.`,
@@ -1826,7 +1861,7 @@ function buildConvertingPageNote(internalType: string, dataSource: string, conve
     if (internalType === "Verify Insurance") return "Insurance page with organic visibility — add Verify Insurance / VOB form submit tracking to confirm direct admit contribution.";
     if (internalType === "Contact / Admissions") return "Contact page receiving organic traffic — verify contact form submit tracking is active to capture admission-driving events.";
     if (internalType === "Homepage") return "Homepage is the top organic entry point — brand and direct traffic dominate here; validate quality of organic sessions reaching admissions.";
-    if (internalType === "Service Page" || ["Detox", "Residential / Inpatient", "PHP / IOP", "Outpatient", "Dual Diagnosis", "Therapies"].includes(internalType)) return "High-visibility service page with likely support value — direct conversion attribution is limited; add call or form tracking to confirm.";
+    if (internalType === "Service Page" || ["Detox", "Residential / Inpatient", "PHP / IOP", "Outpatient", "Dual Diagnosis", "Therapies"].includes(internalType)) return "High-visibility program page with likely support value — direct conversion attribution is limited; add call or form tracking to confirm.";
     return "High-visibility page with likely support value, but direct conversion attribution is limited. Add event tracking to validate whether this page contributes to admits.";
   }
 
@@ -1873,18 +1908,18 @@ function buildTrafficPageInsight(pageType: string, url: string, clicksStr: strin
     case "Contact / Admissions":
       return "Primary admissions contact page. Traffic signals users in final decision-making stage — page clarity and response speed have the highest direct impact on admits.";
     case "Detox":
-      return "Core service page for high-intent detox-seekers. Visitors are actively evaluating programs — page quality and admissions CTA directly influence intake conversion.";
+      return "Core Levels of Care page for high-intent detox-seekers. Visitors are actively evaluating programs — page quality and admissions CTA directly influence intake conversion.";
     case "Residential / Inpatient":
-      return "Residential treatment service page. Traffic here signals users comparing inpatient programs — differentiation and a clear admissions path are the priority.";
+      return "Residential Levels of Care page. Traffic here signals users comparing inpatient programs — differentiation and a clear admissions path are the priority.";
     case "PHP / IOP":
-      return "Step-down or flexible care service page. Users are weighing level-of-care options — a clear admissions path can improve conversion from this already-evaluated segment.";
+      return "Step-down or flexible care Levels of Care page. Users are weighing level-of-care options — a clear admissions path can improve conversion from this already-evaluated segment.";
     case "Substance-Specific": {
       if (/alcohol/.test(path)) return `${hiVol ? "High-volume" : "Moderate-volume"} alcohol-awareness content. Entry-stage traffic that needs a clear route from educational content to detox or treatment program pages.`;
       if (/opioid|heroin|fentanyl/.test(path)) return "Opioid-specific informational entry point. Early-funnel users researching substances — internal links to detox and residential pages capture the highest conversion value.";
       if (/meth/.test(path)) return "Methamphetamine-specific awareness content. Mostly early-funnel — route toward detox and dual-diagnosis pages where appropriate.";
-      if (/cocaine|coke/.test(path)) return "Cocaine-specific awareness content. Educational traffic that supports later conversion when paired with clear internal links to service pages.";
+      if (/cocaine|coke/.test(path)) return "Cocaine-specific awareness content. Educational traffic that supports later conversion when paired with clear internal links to Levels of Care pages.";
       if (/benzo/.test(path)) return "Benzodiazepine-specific information page. Medical detox intent is elevated for this substance — route users toward detox and residential program pages.";
-      return `${hiVol ? "High-volume" : "Moderate-volume"} substance-specific awareness content. Educational entry point that needs targeted internal links to appropriate service pages to convert traffic.`;
+      return `${hiVol ? "High-volume" : "Moderate-volume"} substance-specific awareness content. Educational entry point that needs targeted internal links to appropriate Levels of Care pages to convert traffic.`;
     }
     case "Conditions":
       return "Condition-specific content attracting users researching symptoms or mental health concerns. Should route toward dual-diagnosis or appropriate treatment program pages.";
@@ -1907,12 +1942,12 @@ function buildTrafficPageInsight(pageType: string, url: string, clicksStr: strin
     case "Outpatient":
       return "Outpatient program page attracting users seeking flexible or lower-acuity care. Assisted admission path — users may be open to stepping up to higher levels of care if properly guided.";
     case "Homepage":
-      return "Primary branded entry point serving a mix of direct, branded, and first-time visitors. Should route efficiently to service pages and the admissions path for maximum conversion.";
+      return "Primary branded entry point serving a mix of direct, branded, and first-time visitors. Should route efficiently to Levels of Care pages and the admissions path for maximum conversion.";
     default: {
       if (/meet|\/team|\/staff/.test(path)) return "Trust-building page that supports credibility evaluation. Late-stage visitors — internal links to admissions and program pages can convert this research intent.";
       if (/\/review|\/testimonial|\/alumni/.test(path)) return "Social proof content that builds confidence in the program. Can move hesitant users toward admissions contact when paired with clear CTAs.";
       if (/\/faq|\/guide/.test(path)) return "FAQ or guide attracting users with specific treatment questions. Informational stage — structured links to relevant service and admissions pages improve conversion.";
-      return `${hiVol ? "High-volume" : "Moderate-volume"} informational entry point with limited direct admit linkage. Awareness-stage content — internal links to service pages are the highest-ROI improvement for this traffic.`;
+      return `${hiVol ? "High-volume" : "Moderate-volume"} informational entry point with limited direct admit linkage. Awareness-stage content — internal links to Levels of Care pages are the highest-ROI improvement for this traffic.`;
     }
   }
 }
@@ -2160,8 +2195,13 @@ function generateSection4(
   sfHeaders: string[],
   client: Client,
   livePageOverrides: Record<string, string> = {},
-  verificationRan: boolean = false
+  verificationRan: boolean = false,
+  sfIsUrlCrawl: boolean = false
 ): Section4Services {
+  // When SF is Issues format (no URL crawl), we can only assert a page is missing
+  // if HTTP verification positively found it elsewhere. Otherwise "Manual entry needed".
+  // Only URL-crawl SF data gives us comprehensive coverage to say "Not found on site".
+  const missingPageLabel = sfIsUrlCrawl ? NOT_FOUND : ME;
   const services: ServiceRow[] = [];
   const urlCol = sfHeaders.find(h => /^address$/i.test(h) || /^url$/i.test(h)) ?? sfHeaders[0] ?? "";
 
@@ -2231,7 +2271,7 @@ function generateSection4(
     if (livePageOverrides["Contact / Admissions"]) {
       services.push({ service: "Contact / Admissions", examplePage: livePageOverrides["Contact / Admissions"] });
     } else {
-      services.push({ service: "Contact / Admissions", examplePage: verificationRan ? NOT_FOUND : ME });
+      services.push({ service: "Contact / Admissions", examplePage: missingPageLabel });
     }
   } else if (livePageOverrides["Contact / Admissions"]) {
     // SF found something but live verification found a cleaner resolved path — prefer live
@@ -2241,16 +2281,14 @@ function generateSection4(
     }
   }
 
-  // Fill remaining missing services with live overrides or ME/NOT_FOUND up to 8 rows
+  // Fill remaining missing services with live overrides or missingPageLabel up to 8 rows
   for (const target of serviceTargets) {
     if (services.length >= 8) break;
     if (!services.find(s => s.service === target.service)) {
-      // Check if HTTP verification confirmed this page exists at a live path
       if (livePageOverrides[target.service]) {
         services.push({ service: target.service, examplePage: livePageOverrides[target.service] });
       } else {
-        // If verification ran, we actively confirmed page is missing → NOT_FOUND (more specific than ME)
-        services.push({ service: target.service, examplePage: verificationRan ? NOT_FOUND : ME });
+        services.push({ service: target.service, examplePage: missingPageLabel });
       }
     }
   }
@@ -2308,7 +2346,7 @@ function buildTierScorecard(tierInput: TierDiagnosisInput): TierScorecardEntry[]
   const nav = tierInput.navAccessibility;
 
   function vobAccessLabel(): string {
-    if (!tierInput.hasVobPage) return "Not found on live site — this is a critical Tier 1 gap";
+    if (!tierInput.hasVobPage) return "Not confirmed — no dedicated insurance verification page found at standard paths; verify with AM and provide URL";
     if (!nav?.dataAvailable) return "Confirmed present — nav/footer accessibility not verified (homepage fetch unavailable)";
     if (nav.vobInNav) return "Confirmed present — linked from main navigation (Fact)";
     if (nav.vobInFooter) return "Confirmed present — linked from footer, not main nav (Fact)";
@@ -2316,7 +2354,7 @@ function buildTierScorecard(tierInput: TierDiagnosisInput): TierScorecardEntry[]
   }
 
   function contactAccessLabel(): string {
-    if (!tierInput.hasContactPage) return "Not found on live site — this is a critical Tier 1 gap";
+    if (!tierInput.hasContactPage) return "Not confirmed — no dedicated contact/admissions page found at standard paths; verify with AM and provide URL";
     if (!nav?.dataAvailable) return "Confirmed present — nav/footer accessibility not verified (homepage fetch unavailable)";
     if (nav.contactInNav) return "Confirmed present — linked from main navigation (Fact)";
     if (nav.contactInFooter) return "Confirmed present — linked from footer, not main nav (Fact)";
@@ -2326,8 +2364,8 @@ function buildTierScorecard(tierInput: TierDiagnosisInput): TierScorecardEntry[]
   const t1Findings = [
     `Verify Insurance / VOB page: ${vobAccessLabel()}`,
     `Contact / Admissions page: ${contactAccessLabel()}`,
-    `Detox service page: ${tierInput.hasDetoxPage ? "Confirmed present" : "Not found on live site — this is a critical Tier 1 gap"}`,
-    `Residential page: ${tierInput.hasResidentialPage ? "Confirmed present" : "Not found on live site — this is a critical Tier 1 gap"}`,
+    `Detox service page: ${tierInput.hasDetoxPage ? "Confirmed present" : "Not confirmed — no dedicated detox page found at standard paths; verify with AM and provide URL"}`,
+    `Residential page: ${tierInput.hasResidentialPage ? "Confirmed present" : "Not confirmed — no dedicated residential page found at standard paths; verify with AM and provide URL"}`,
   ].join(". ");
 
   const t1Inferences = tierInput.highIntentTrafficLandsOnClearUrls
@@ -2346,7 +2384,7 @@ function buildTierScorecard(tierInput: TierDiagnosisInput): TierScorecardEntry[]
   ].join(". ");
 
   const t2Inferences = !tierInput.hasConditionsHub || !tierInput.hasTherapiesHub
-    ? "Without hub structures, condition and therapy pages may be fragmenting authority rather than consolidating it into service pages. Hub pages create a topical map that Google uses to distribute ranking signals."
+    ? "Without hub structures, condition and therapy pages may be fragmenting authority rather than consolidating it into Levels of Care pages. Hub pages create a topical map that Google uses to distribute ranking signals."
     : "Hub structures appear present. Internal linking quality and depth within the hub require manual review to confirm authority flow is functioning.";
 
   const hasT3Issues = tierInput.duplicateServicePages > 3 || tierInput.thinPages > 15
@@ -2363,7 +2401,7 @@ function buildTierScorecard(tierInput: TierDiagnosisInput): TierScorecardEntry[]
   const t3Inferences = tierInput.thinPages > 10
     ? "Thin pages suppress crawl efficiency and dilute domain quality signals. Consolidate or strengthen pages with fewer than ~300 words of meaningful content."
     : tierInput.errors4xx5xx > 10
-    ? "Error pages create structural drag on crawl budget — crawlers may be wasting capacity on dead URLs instead of priority service pages."
+    ? "Error pages create structural drag on crawl budget — crawlers may be wasting capacity on dead URLs instead of priority Levels of Care pages."
     : "Technical indicators are within a manageable range. Spot-check error pages and redirect chains for any suppression on key conversion pages.";
 
   const t4Present = tierInput.hasAboutPage && tierInput.hasTeamPage;
@@ -2388,7 +2426,7 @@ function buildTierScorecard(tierInput: TierDiagnosisInput): TierScorecardEntry[]
       status: t1Status,
       findings: t1Findings,
       inferences: t1Inferences,
-      whyItMatters: "Tier 1 pages are the foundation of organic admissions conversion. Without a clear VOB page, contact path, and primary service pages, all higher-tier work cannot compound.",
+      whyItMatters: "Tier 1 pages are the foundation of organic admissions conversion. Without a clear VOB page, contact path, and primary Levels of Care pages, all higher-tier work cannot compound.",
       source: "Screaming Frog",
     },
     {
@@ -2397,7 +2435,7 @@ function buildTierScorecard(tierInput: TierDiagnosisInput): TierScorecardEntry[]
       status: t2Status,
       findings: t2Findings,
       inferences: t2Inferences,
-      whyItMatters: "Service architecture determines how authority flows between pages. Hub structures allow Google to map topical expertise and pass ranking power into service pages.",
+      whyItMatters: "Service architecture determines how authority flows between pages. Hub structures allow Google to map topical expertise and pass ranking power into Levels of Care and program pages.",
       source: "Screaming Frog",
     },
     {
@@ -2599,8 +2637,8 @@ function addNetNewAmPriorities(
       tier: "Tier 3",
       action: "Identify pages competing for the same service and condition keywords and consolidate or differentiate them to protect primary ranking pages",
       reason: amCtx.hypothesisSummary
-        ? `AM focus area: ${amCtx.hypothesisSummary.slice(0, 90).replace(/\.$/, "")}. Cannibalization dilutes authority on core service pages.`
-        : "Pages competing for the same keywords split ranking signals — consolidation protects the primary service page hierarchy",
+        ? `AM focus area: ${amCtx.hypothesisSummary.slice(0, 90).replace(/\.$/, "")}. Cannibalization dilutes authority on core Levels of Care pages.`
+        : "Pages competing for the same keywords split ranking signals — consolidation protects the primary Levels of Care page hierarchy",
       source: "Manual entry needed",
     });
   }
@@ -2670,7 +2708,7 @@ function generateSection6(
       priority: 1,
       initiative: "Tracking & Attribution Setup",
       tier: "Tier 1",
-      action: "Implement or verify GA4 and call-tracking instrumentation on key admissions-path pages — track contact form submits separately from Verify Insurance / VOB form submits, starting with Contact, Verify Insurance, and highest-intent service pages.",
+      action: "Implement or verify GA4 and call-tracking instrumentation on key admissions-path pages — track contact form submits separately from Verify Insurance / VOB form submits, starting with Contact, Verify Insurance, and highest-intent Levels of Care pages.",
       reason: "Reporting confidence is limited where conversion tracking is missing. Instrumentation must be in place before page-level admit connection can be quantified reliably.",
       source: "Multi-source",
     });
@@ -2830,7 +2868,7 @@ function generateSection6(
       initiative: "Content Refresh — Highest-Traffic Assisted Pages",
       tier: `Tier ${Math.min(section5.tier + 1, 5)}`,
       action: topTrafficTopic
-        ? `Refresh content in the ${clusterRef(topTrafficTopic)} to improve engagement and strengthen links to service pages${refreshExamples}`
+        ? `Refresh content in the ${clusterRef(topTrafficTopic)} to improve engagement and strengthen links to Levels of Care pages${refreshExamples}`
         : `Refresh highest-traffic assisted-conversion pages${thinPagesNote}${refreshExamples}`,
       reason: topTrafficTopic
         ? `The ${clusterRef(topTrafficTopic)} drives meaningful traffic but shows ${topTrafficTopic.connectionToAdmits.toLowerCase()} admit connection — refreshed content with stronger CTAs and internal links captures more value from existing impressions`
@@ -3042,7 +3080,7 @@ function generateSection7(section6: Section6Priorities, section5: Section5Diagno
     },
     "Core Service Page Foundation": {
       focusArea: "Service Page Visibility",
-      metric: "GSC clicks to primary service pages (detox, residential, PHP/IOP)",
+      metric: "GSC clicks to primary Levels of Care pages (detox, residential, PHP/IOP)",
       source: "Google Search Console",
       status: inferStatus("Google Search Console"),
       whyItMatters: "Measures whether core pages are capturing high-intent search demand",
@@ -3265,10 +3303,10 @@ function generateAdditionalOpportunities(report: QbrPrepReportData): AdditionalO
       const sf = 0.85;
 
       const evidenceItems: string[] = [
-        `Tier ${tier} site diagnosis (${tierName}) — domain authority is the primary constraint on service-page rankings, which content production alone cannot break through`,
+        `Tier ${tier} site diagnosis (${tierName}) — domain authority is the primary constraint on Levels of Care page rankings, which content production alone cannot break through`,
       ];
       if (isBehindPace && primaryRow) {
-        evidenceItems.push(`Primary goal (${primaryRow.goal}) is behind pace — standard content-only work cannot close the authority gap that limits service-page rankings this cycle`);
+        evidenceItems.push(`Primary goal (${primaryRow.goal}) is behind pace — standard content-only work cannot close the authority gap that limits Levels of Care page rankings this cycle`);
       } else {
         evidenceItems.push(`${highAdmitTopics.length} confirmed high-intent topic cluster${highAdmitTopics.length > 1 ? "s" : ""} identified — authority, not content volume, is the primary ranking constraint on these terms`);
       }
@@ -3276,9 +3314,9 @@ function generateAdditionalOpportunities(report: QbrPrepReportData): AdditionalO
       pool.push(candidate({
         type: "upsell",
         title: "Custom Authority-Building Initiative",
-        why_now: `Site is at Tier ${tier} — service-page rankings on high-value treatment terms are constrained by domain authority. The standard content roadmap addresses what to publish, not the ceiling that prevents those pages from ranking.`,
+        why_now: `Site is at Tier ${tier} — Levels of Care page rankings on high-value treatment terms are constrained by domain authority. The standard content roadmap addresses what to publish, not the ceiling that prevents those pages from ranking.`,
         evidence: evidenceItems,
-        recommendation: "A focused link acquisition or digital PR program targeting high-intent service pages. This is a deeper SEO investment than the standard monthly retainer covers, designed to remove the authority ceiling that content production alone cannot lift.",
+        recommendation: "A focused link acquisition or digital PR program targeting high-intent Levels of Care pages. This is a deeper SEO investment than the standard monthly retainer covers, designed to remove the authority ceiling that content production alone cannot lift.",
         framing: "Recommended when authority — not content output or keyword strategy — is the confirmed bottleneck. Link acquisition and digital PR address a constraint that standard scope cannot resolve.",
       }, bi, es, u, sf));
     }
@@ -3350,7 +3388,7 @@ function generateAdditionalOpportunities(report: QbrPrepReportData): AdditionalO
         `High-admit-connection clusters: ${highAdmitTopics.slice(0, 3).map(t => `"${t.topic}"`).join(", ")}`,
         `Full cluster coverage at competitive depth would require a production volume beyond what the standard monthly allocation supports`,
       ],
-      recommendation: "An expanded content production program to systematically build out service page clusters, topic hubs, and conversion-path pages across all confirmed high-intent areas — more output capacity applied to confirmed demand signals.",
+      recommendation: "An expanded content production program to systematically build out Levels of Care page clusters, topic hubs, and conversion-path pages across all confirmed high-intent areas — more output capacity applied to confirmed demand signals.",
       framing: "Relevant when production capacity — not strategy, authority, or keyword targeting — is the reason high-intent clusters remain underdeveloped.",
     }, bi, es, u, sf));
   }
@@ -3868,7 +3906,7 @@ function buildCreditActionPool(
     s => !s.examplePage || s.examplePage === "—" || /need|manual|tbd|missing/i.test(s.examplePage)
   ).slice(0, 3);
   for (const svc of missingSvcPages) {
-    pool.push({ credits: 1, activity: `Create ${svc.service} service page to fill coverage gap`, weight: 6 });
+    pool.push({ credits: 1, activity: `Create ${svc.service} Levels of Care page to fill coverage gap`, weight: 6 });
   }
 
   // 3. Section 3 high-traffic topics with weak admit connection
@@ -3908,7 +3946,7 @@ export function generateSection7Credits(
   const GENERIC_FALLBACKS = [
     "Refresh one high-traffic informational page with weak admit connection",
     "Create one new care-access-supporting content piece",
-    "Refresh one service page to improve conversion intent alignment",
+    "Refresh one Levels of Care page to improve conversion intent alignment",
     "Expand cluster content for top organic query topic",
     "Create one locally-targeted content piece to support program discovery",
     "Refresh one underperforming money page with updated admissions messaging",

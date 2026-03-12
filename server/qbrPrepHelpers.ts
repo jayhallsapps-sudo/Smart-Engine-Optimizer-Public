@@ -307,10 +307,14 @@ export function diagnoseTier(input: TierDiagnosisInput): TierDiagnosis {
   }
 
   if (tier1Issues.length > 0) {
+    const t1IsBlocked = !input.hasDetoxPage && !input.hasResidentialPage;
+    const t1Diagnosis = t1IsBlocked
+      ? `Site is blocked at Tier 1 — Trust & Eligibility. ${tier1Issues.join(". ")}. Until core Levels of Care pages are established and clearly accessible, higher-tier work will not produce meaningful results.`
+      : `Site is partially cleared at Tier 1 — Trust & Eligibility. Most core Levels of Care pages are confirmed present, but gaps remain: ${tier1Issues.join("; ")}. Closing these remaining gaps will complete Tier 1 and allow authority-building work to compound.`;
     return {
       tier: 1,
       tierName: TIER_NAMES[1],
-      diagnosis: `Site is currently blocked at Tier 1 — Trust & Eligibility. ${tier1Issues.join(". ")}. Until core Levels of Care pages are strong, clear, and properly indexed, higher-tier work will not produce meaningful results.`,
+      diagnosis: t1Diagnosis,
       evidence: tier1Issues,
     };
   }

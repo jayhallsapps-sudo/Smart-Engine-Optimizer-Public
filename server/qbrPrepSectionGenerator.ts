@@ -233,9 +233,21 @@ async function verifyLivePages(
     }
   }
 
-  const checks = await Promise.allSettled(paths.map(p => checkPath(p)));
+  // Batch requests to avoid triggering Cloudflare rate-limits on sites with CDN protection.
+  // Sending 40+ concurrent HEAD requests can cause silent rejections; batching keeps
+  // it within safe limits while still running faster than sequential checks.
+  const BATCH_SIZE = 8;
+  const allResults: Array<PromiseSettledResult<{ exists: boolean; resolvedPath: string | null }>> = [];
+  for (let i = 0; i < paths.length; i += BATCH_SIZE) {
+    const batch = paths.slice(i, i + BATCH_SIZE);
+    const batchResults = await Promise.allSettled(batch.map(p => checkPath(p)));
+    allResults.push(...batchResults);
+    if (i + BATCH_SIZE < paths.length) {
+      await new Promise(res => setTimeout(res, 120));
+    }
+  }
   paths.forEach((p, i) => {
-    const r = checks[i];
+    const r = allResults[i];
     results.set(p, r.status === "fulfilled" ? r.value : { exists: false, resolvedPath: null });
   });
   return results;
@@ -247,6 +259,9 @@ const PAGE_CHECK_GROUPS: Record<string, string[]> = {
   vob:         ["/verify-insurance", "/insurance-verification", "/vob", "/verify-benefits", "/insurance"],
   detox:       ["/detox", "/detox-program", "/detoxification", "/programs/detox", "/detox-center"],
   residential: ["/residential", "/residential-treatment", "/inpatient", "/inpatient-rehab", "/programs/residential"],
+  about:       ["/about", "/about-us", "/about-anchored-tides", "/our-story", "/who-we-are", "/our-mission"],
+  team:        ["/team", "/our-team", "/staff", "/meet-the-team", "/leadership", "/providers", "/clinical-team"],
+  alumni:      ["/alumni", "/aftercare", "/alumni-program", "/alumni-network", "/after-treatment"],
 };
 
 function pctDeltaLocal(current: number, previous: number): string {
@@ -593,6 +608,9 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
       ...PAGE_CHECK_GROUPS.vob,
       ...PAGE_CHECK_GROUPS.detox,
       ...PAGE_CHECK_GROUPS.residential,
+      ...PAGE_CHECK_GROUPS.about,
+      ...PAGE_CHECK_GROUPS.team,
+      ...PAGE_CHECK_GROUPS.alumni,
       // Also check configured money pages
       ...(client.moneyPages ?? []).map((mp: string) => mp.replace(/^https?:\/\/[^/]+/, "") || "/"),
     ];
@@ -755,9 +773,16 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
     duplicateServicePages: sfTierInput.duplicateServicePages ?? 0,
     thinPages: sfTierInput.thinPages ?? 0,
     overlapGeoPages: sfTierInput.overlapGeoPages ?? 0,
-    hasAboutPage: sfTierInput.hasAboutPage ?? false,
-    hasTeamPage: sfTierInput.hasTeamPage ?? false,
-    hasAlumniPage: sfTierInput.hasAlumniPage ?? false,
+    // Tier 4 page presence — prefer HTTP verification over SF crawl (non-URL crawls miss these)
+    hasAboutPage: livePageVerification.size > 0
+      ? !!firstLivePath("about")
+      : (sfTierInput.hasAboutPage ?? false),
+    hasTeamPage: livePageVerification.size > 0
+      ? !!firstLivePath("team")
+      : (sfTierInput.hasTeamPage ?? false),
+    hasAlumniPage: livePageVerification.size > 0
+      ? !!firstLivePath("alumni")
+      : (sfTierInput.hasAlumniPage ?? false),
     navAccessibility,
   };
 
@@ -2882,7 +2907,7 @@ function generateSection6(
       tier: `Tier ${Math.min(section5.tier, 4)}`,
       action: goalBehind
         ? `Audit and repair the organic-to-VOB path — goal is behind pace and conversion leakage is the most likely cause`
-        : "Audit and strengthen the path from organic landing pages to VOB/contact submission",
+        : "Audit internal-link paths from top organic landing pages to Verify Insurance and Contact pages — confirm those links exist above the fold or in body copy, and validate that GA4 event tracking is firing on the destination actions",
       reason: goalBehind
         ? `Organic sessions are behind Q pace — improving conversion rate on existing traffic is higher ROI than acquiring new traffic`
         : "Conversion path gaps compound slowly; fixing them now avoids a larger gap by end of quarter (lower confidence without GA4 data)",
@@ -3750,6 +3775,10 @@ const CLUSTER_STOPWORDS = new Set([
   // Duration/timing terms — too generic to define intent across unrelated queries
   "long","stay","last","take","days","time","week","weeks","hours","minutes",
   "much","many","ever","work","works","working","feel","feeling","feels",
+  // Body/detection terms — appear across all substance-specific queries, must not
+  // serve as anchors that merge unrelated drugs (e.g. molly+tramadol+alcohol)
+  "system","body","urine","blood","pee","piss","test","hair","sweat","saliva",
+  "screen","panel","pass","fail","detect","detected","show","shows","showing",
 ]);
 
 function normalizeQueryForCluster(q: string): string[] {

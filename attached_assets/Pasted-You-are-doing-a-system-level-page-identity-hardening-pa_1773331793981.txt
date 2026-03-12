@@ -1,0 +1,170 @@
+You are doing a system-level page-identity hardening pass on the QBS generator. The new live crawler is helping, but the latest Bliss Recovery QBS proves the system is still too loose when assigning page identity and report slots.
+
+This is not a client-specific patch. This is a generalized behavioral-health page-classification correction pass.
+
+PRIMARY OBJECTIVE
+
+Make the QBS system distinguish correctly between:
+- core Levels of Care pages
+- utility / admissions pages
+- trust pages
+- location pages
+- blog / resource pages
+- blog category pages
+- media/image asset URLs
+- homepage
+- non-core supporting pages
+
+The current system is still over-accepting weak matches and then using them as if they were primary Levels of Care pages. That is not acceptable.
+
+CONFIRMED FAILURES FROM THE BLISS PDF
+
+1. Section 4 mapped Detox to a blog category URL.
+2. Section 4 mapped Residential / Inpatient to a blog post.
+3. Section 4 mapped Primary Location to /about/our-locations while the header still showed Primary Location as unresolved.
+4. Section 5 treated those weak mappings as confirmed core Tier 1 assets.
+5. Section 7 recommended media-file URLs (.jpg / .webp) as optimization targets.
+6. Section 7 summary math did not match the stated credit-capacity formula.
+
+These are system-quality failures, not just Bliss-specific quirks.
+
+==================================================
+REQUIRED FIXES
+==================================================
+
+1) STRICT PAGE-TYPE GATING
+
+Do not allow the following to fill a core Levels of Care slot unless explicitly configured by a stronger rule:
+- /blog/
+- /post/
+- /category/
+- /categories/
+- media/image/file asset URLs (.jpg, .jpeg, .png, .webp, .gif, .svg, .pdf, etc.)
+
+Core Levels of Care slots must prefer true destination pages, not editorial/supporting content.
+
+Examples:
+- Detox slot should prefer a real detox/detoxification page
+- Residential slot should prefer a real residential/inpatient page
+- PHP / IOP slot should prefer a real PHP/IOP page
+- Outpatient slot should prefer a real outpatient page
+- Dual Diagnosis slot should prefer a real dual diagnosis page
+
+If only blog/resource content exists for a concept, do not treat that as a confirmed core Levels of Care page.
+Instead, classify it honestly as supporting content and reflect the gap in the diagnosis.
+
+2) PAGE IDENTITY MUST USE STRONGER EVIDENCE
+
+For a page to qualify as a core Levels of Care page, require stronger evidence than keyword presence alone.
+
+Use a weighted identity model combining:
+- URL pattern
+- page title
+- H1
+- visible content
+- nav / footer prominence
+- whether the page reads like a primary service/LOC destination
+- whether the page is editorial/resource content instead
+
+Do not let a single weak match like “residential” in a blog post title cause Residential / Inpatient to be marked confirmed.
+
+3) PRIMARY LOCATION CONSISTENCY
+
+If the report header shows Primary Location unresolved, Section 4 must not independently assign a confident Primary Location page without using the same resolved inventory source.
+
+Create one shared resolved page inventory and location-slot resolution outcome, then reuse it consistently in:
+- report header
+- Section 4
+- Section 5
+- Section 6
+- Section 9 where relevant
+
+No cross-section disagreement.
+
+4) TIER 1 CONFIRMATION STANDARD
+
+Tier 1 must not treat blog posts, blog categories, or other supporting/editorial pages as equivalent to confirmed primary Levels of Care pages.
+
+If the only evidence for Detox or Residential is editorial/supporting content, the diagnosis must say that:
+- supporting content exists
+- dedicated primary Levels of Care destination page not clearly confirmed
+
+Do not overstate.
+
+5) SECTION 7 TARGET SANITY FILTER
+
+Never use media-file URLs as keyword recommendation targets.
+
+Explicitly exclude targets that are:
+- image files
+- media library assets
+- raw CDN/media paths
+- non-page assets
+
+If the best-matching URL is a media asset, route the recommendation to:
+- the parent page if that can be reliably determined
+or
+- create a safer optimize-existing/create-new decision using actual page URLs only
+
+6) SECTION 7 COUNT / CAP MATH
+
+Any summary sentence describing row count, cap, or multiplier must be mathematically consistent with the actual rendered values.
+
+Example:
+If monthly credit capacity is 8, then “2× monthly credit capacity” must mean 16, not 11.
+Either:
+- change the count logic
+- change the wording
+- or remove the multiplier phrasing if it is not actually what the section is doing
+
+7) BLOG / RESOURCE VS LOC CLASSIFICATION
+
+Strengthen clientReadableType / page classification so pages like:
+- /post/...
+- /blog/...
+- /blog/categories/...
+do not get promoted into core LOC slots simply because they contain treatment terms.
+
+They may still be:
+- Blog / Resource
+- Supporting content
+- Assisted conversion content
+- Continuum-support content
+But not primary LOC pages unless truly intended as such.
+
+==================================================
+VALIDATION REQUIREMENT
+==================================================
+
+Use Bliss Recovery again as the validation account because the latest artifact exposed these problems clearly.
+
+Required steps:
+1. Generate a fresh Bliss Recovery QBS using the live connected data.
+2. Export the actual PDF.
+3. Provide a direct link/path to the PDF.
+4. Provide a QA note covering only:
+   - Section 4 LOC slot corrections
+   - Tier 1 confirmation standard correction
+   - Primary Location consistency
+   - Section 7 target sanity filter
+   - Section 7 count/cap math correction
+   - confirmation that no fabricated paths or Anchored Tides residue appeared
+
+FAILURE RULE
+
+Do not declare completion if any of the following remain in the Bliss PDF:
+- blog/category/post URL assigned as a confirmed core LOC page
+- media asset URL used as a keyword target
+- header/section disagreement on Primary Location
+- Tier 1 claiming confirmed LOC pages from weak editorial evidence
+- count/cap math mismatch in Section 7
+
+Instead, list:
+- exact section
+- exact remaining issue
+- exact fix still required
+
+FINAL INSTRUCTION
+
+This is a generalized page-identity hardening pass.
+Make the system stricter about what counts as a real Levels of Care page, stop weak editorial/media matches from polluting the report, keep one shared resolved inventory across sections, and prove it with a fresh Bliss Recovery PDF.

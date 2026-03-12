@@ -323,10 +323,37 @@ async function fetchAllSitemapUrls(baseUrl: string): Promise<string[]> {
   return collected.slice(0, MAX_SITEMAP_URLS);
 }
 
+// ── Editorial / blog path detection ─────────────────────────────────────────
+// These path prefixes indicate editorial/resource content — blog posts, news,
+// resource articles, blog category pages, etc. They must never fill a core
+// Levels of Care slot even if their title/H1 contains treatment terms.
+
+const EDITORIAL_PATH_RE = /^\/(?:blog(?:\/|$)|post(?:s)?(?:\/|$)|news(?:\/|$)|articles?(?:\/|$)|resources?(?:\/|$)|(?:blog\/)?categor(?:y|ies)(?:\/|$)|tag(?:s)?(?:\/|$)|author(?:s)?(?:\/|$)|learn(?:ing)?(?:\/|$)|education(?:al)?(?:\/|$))/i;
+
+/**
+ * Returns true when the path is clearly editorial / blog content.
+ * Editorial pages may mention treatment topics in their titles/H1s — this
+ * prevents those mentions from promoting them into core LOC slots.
+ * Exported so the generator can use the same rule when validating overrides.
+ */
+export function isEditorialPath(path: string): boolean {
+  return EDITORIAL_PATH_RE.test(path);
+}
+
+/** Core Levels of Care categories — must never accept editorial/blog pages. */
+const LOC_CORE_CATEGORIES: ReadonlySet<PageCategory> = new Set([
+  "detox", "residential", "php-iop", "outpatient", "dual-diagnosis",
+]);
+
 // ── Page classification ──────────────────────────────────────────────────────
 
 function classifyPage(title: string, h1: string, path: string): PageCategory {
   if (path === "/" || path === "") return "homepage";
+
+  // Hard gate: editorial/blog paths must never be assigned a core LOC category.
+  // They may still score on title/H1 content (e.g. a detox blog post), but that
+  // content-match is editorial, not a primary Levels of Care destination page.
+  if (isEditorialPath(path)) return "blog";
 
   let bestCategory: PageCategory = "other";
   let bestScore = 0;
@@ -607,12 +634,22 @@ export async function crawlSite(baseUrl: string): Promise<LivePageInventory> {
 
     for (const [cat, pages] of byCategory) {
       const rule = CATEGORY_RULES.find(r => r.category === cat);
+
+      // Safety: core LOC slots must never resolve to editorial/blog pages.
+      // classifyPage() already gates this, but non-inspected slug-only entries
+      // (added for sitemap paths) could theoretically slip through — exclude them.
+      const eligible = LOC_CORE_CATEGORIES.has(cat)
+        ? pages.filter(p => !isEditorialPath(p.path))
+        : pages;
+
+      if (eligible.length === 0) continue;  // no valid candidates — leave slot empty
+
       if (!rule) {
-        inv.bestByCategory[cat] = pages[0];
+        inv.bestByCategory[cat] = eligible[0];
         continue;
       }
       // Pick the page with the highest category match score
-      const sorted = pages.slice().sort((a, b) => scoreCategoryMatch(b, rule) - scoreCategoryMatch(a, rule));
+      const sorted = eligible.slice().sort((a, b) => scoreCategoryMatch(b, rule) - scoreCategoryMatch(a, rule));
       inv.bestByCategory[cat] = sorted[0];
     }
 

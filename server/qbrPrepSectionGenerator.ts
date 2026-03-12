@@ -1,5 +1,5 @@
 import { type GapContext, buildGapContext, gapContextToString } from "./gapAnswerContext";
-import { crawlSite, type LivePageInventory } from "./liveCrawler";
+import { crawlSite, isEditorialPath, type LivePageInventory } from "./liveCrawler";
 import { storage } from "./storage";
 import { getGoogleAccessToken } from "./googleToken";
 import { fetchNsmGoals, fetchNsmGoalsForSpecificQuarter } from "./sheetsClient";
@@ -546,26 +546,35 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
     { service: "Primary Location",     category: "primary-location" },
   ];
 
+  // Build S4 overrides from live crawl bestByCategory.
+  // The liveCrawler's editorial gate already prevents blog/post/category paths
+  // from filling core LOC slots, but we double-check here for defence-in-depth.
   const s4LivePageOverrides: Record<string, string> = {};
   for (const { service, category } of S4_CATEGORY_MAP) {
     const best = liveInventory.bestByCategory[category];
-    if (best?.path) s4LivePageOverrides[service] = best.path;
+    if (best?.path && !isEditorialPath(best.path)) {
+      s4LivePageOverrides[service] = best.path;
+    }
   }
 
-  // Also scan verifiedMoneyPages for any categories still missing (non-standard slugs)
-  // classified from the crawl but not mapped by the category rules (rare fallback).
+  // Also scan verifiedMoneyPages (client.moneyPages) for categories still missing.
+  // Only use this as a last-resort fallback — requires a non-editorial, slug-matching URL.
+  // Core LOC patterns are intentionally conservative to avoid false positives from blog paths.
   const s4UrlPatternMap: Array<{ service: string; pattern: RegExp }> = [
     { service: "Contact / Admissions", pattern: /\/contact(?!.*insur)|\/contact-us/i },
     { service: "Verify Insurance",     pattern: /\/verify.?insur|\/vob\b|insur(?:ance)?|admissions.*insur|insur.*admissions/i },
-    { service: "Detox",                pattern: /detox/i },
-    { service: "Residential / Inpatient", pattern: /residential|inpatient|long.?term/i },
-    { service: "PHP / IOP",            pattern: /\/php(?!p)|\/iop|partial.?hosp|intensive.?outpatient/i },
-    { service: "Outpatient",           pattern: /\/outpatient(?!.*intensive)|outpatient.?treatment/i },
-    { service: "Dual Diagnosis",       pattern: /dual.?diagnosis|co.?occurring/i },
-    { service: "Primary Location",     pattern: /\/location|\/campus|\/facility|\/levels.?of.?care(?:\/)?$/i },
+    // Core LOC slots: require slug-level evidence (not just a term in a blog path)
+    { service: "Detox",                pattern: /\/detox(?:ification)?(?:[/?#]|$)/i },
+    { service: "Residential / Inpatient", pattern: /\/(?:residential|inpatient|long.?term)(?:[/?#-]|$)/i },
+    { service: "PHP / IOP",            pattern: /\/(?:php(?!p)|iop|partial.?hosp|intensive.?outpatient)(?:[/?#]|$)/i },
+    { service: "Outpatient",           pattern: /\/outpatient(?!.*intensive)(?:[/?#-]|$)/i },
+    { service: "Dual Diagnosis",       pattern: /\/(?:dual.?diagnosis|co.?occurring)(?:[/?#-]|$)/i },
+    { service: "Primary Location",     pattern: /\/(?:location|campus|facility|our.?location)(?:[/?#-]|$)/i },
   ];
   for (const mp of verifiedMoneyPages) {
     const mpPath = (mp.replace(/^https?:\/\/[^/]+/, "") || "/").replace(/\/$/, "") || "/";
+    // Reject editorial/blog paths from filling any S4 slot
+    if (isEditorialPath(mpPath)) continue;
     for (const { service, pattern } of s4UrlPatternMap) {
       if (!s4LivePageOverrides[service] && pattern.test(mpPath)) {
         s4LivePageOverrides[service] = mpPath;
@@ -3795,36 +3804,52 @@ export function generateSuggestedKeywords(
   // Branded filter derived from client data — no hardcoded client names in shared code.
   const clientIsNonBranded = (query: string) => !isBrandedQuery(query, client);
 
+  // Media/asset path guard — prevents image files, CDN assets, and media library URLs
+  // from becoming keyword recommendation targets or polluting the page inventory.
+  const MEDIA_ASSET_PATH_RE = /\.(?:jpg|jpeg|png|gif|webp|svg|pdf|mp4|mp3|zip|ico|woff|woff2|ttf|rss)(?:[?#]|$)/i;
+  const MEDIA_SEGMENT_RE = /\/(?:media|uploads?|wp-content\/uploads?|cdn|_assets?|images?|img)\//i;
+  function isMediaAssetPath(path: string): boolean {
+    if (!path) return false;
+    return MEDIA_ASSET_PATH_RE.test(path) || MEDIA_SEGMENT_RE.test(path);
+  }
+
   // Build page inventory — live crawl is the PRIMARY source of truth for what pages exist.
   const sfPaths = extractSfPaths(sfData, sfHeaders);
+  // Purge any media/asset paths that the SF crawl may have included (Wix/WordPress sites
+  // include CDN image and media library URLs in crawl exports).
+  for (const p of Array.from(sfPaths)) {
+    if (isMediaAssetPath(p)) sfPaths.delete(p);
+  }
 
   // Supplement with live crawl paths (confirmed live pages from nav + sitemap + inspection)
+  // Media paths are excluded — they should never become keyword targets.
   if (liveInv?.pathSet) {
     for (const p of liveInv.pathSet) {
-      if (p && p !== "/") sfPaths.add(p);
+      if (p && p !== "/" && !isMediaAssetPath(p)) sfPaths.add(p);
     }
   }
 
   // Supplement SF paths with known pages from Section 3 and Section 4
   for (const p of section3.topTrafficPages) {
-    if (p.page) sfPaths.add(normalizePath(p.page));
+    if (p.page && !isMediaAssetPath(p.page)) sfPaths.add(normalizePath(p.page));
   }
   for (const s of section4.services) {
-    if (s.examplePage && s.examplePage !== "—" && s.examplePage.startsWith("/")) {
+    if (s.examplePage && s.examplePage !== "—" && s.examplePage.startsWith("/") && !isMediaAssetPath(s.examplePage)) {
       sfPaths.add(s.examplePage.replace(/\/$/, "") || s.examplePage);
     }
   }
   // Also pull converting pages from Section 2
   for (const p of section2.topConvertingPages) {
-    if (p.page && p.page.startsWith("/")) sfPaths.add(p.page.replace(/\/$/, "") || p.page);
+    if (p.page && p.page.startsWith("/") && !isMediaAssetPath(p.page)) sfPaths.add(p.page.replace(/\/$/, "") || p.page);
   }
   // Supplement with all unique pages from GSC query+page data — these are confirmed
   // to exist (they received impressions) even when the SF crawl is issues-format only.
+  // Exclude media/asset paths — Wix/WordPress sites include CDN image URLs in GSC data.
   for (const row of gscQueryPageRows) {
     const pageUrl = row.keys?.[1];
     if (pageUrl) {
       const path = normalizePath(pageUrl);
-      if (path && path !== "/") sfPaths.add(path);
+      if (path && path !== "/" && !isMediaAssetPath(path)) sfPaths.add(path);
     }
   }
 
@@ -3859,8 +3884,10 @@ export function generateSuggestedKeywords(
       ? `${query} / ${variants.join(" / ")}`
       : query;
 
-    // Find best associated page from GSC query+page data; fall back to SF semantic match
-    const gscPage = findBestGscPage(query, gscQueryPageRows);
+    // Find best associated page from GSC query+page data; fall back to SF semantic match.
+    // Media/asset URLs are rejected outright — they must never become keyword targets.
+    const gscPageRaw = findBestGscPage(query, gscQueryPageRows);
+    const gscPage = gscPageRaw && !isMediaAssetPath(gscPageRaw) ? gscPageRaw : null;
     const sfFallback = (!gscPage || !sfPaths.has(gscPage)) ? findSemanticSfMatch(query, sfPaths) : null;
     const bestPage = (gscPage && sfPaths.has(gscPage)) ? gscPage : (sfFallback ?? gscPage ?? null);
     const inSf = bestPage ? sfPaths.has(bestPage) : false;

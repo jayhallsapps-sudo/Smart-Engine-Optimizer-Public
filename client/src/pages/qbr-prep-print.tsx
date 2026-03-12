@@ -69,6 +69,43 @@ function badgeCell(val: string, dataSource?: string): ReactNode {
   );
 }
 
+function printIsPathLike(v: string): boolean {
+  const t = (v ?? "").trim();
+  return /^\/[a-z0-9\-._~:/?#[\]@!$&'()*+,;=%]*/i.test(t) || /^https?:\/\//i.test(t);
+}
+
+function PrintPathTag({ value }: { value: string }) {
+  return (
+    <span style={{ display: "inline-block", padding: "1px 6px", borderRadius: 3, fontSize: "9px", fontWeight: 500, backgroundColor: `${ACCENT}10`, border: `1px solid ${ACCENT}25`, color: "#374151", wordBreak: "break-all" }}>
+      {value}
+    </span>
+  );
+}
+
+const PRINT_TIER_COLORS: Record<string, { bg: string; color: string }> = {
+  "1": { bg: "#FEE2E2", color: "#991B1B" },
+  "2": { bg: "#FEF3C7", color: "#92400E" },
+  "3": { bg: "#DBEAFE", color: "#1E40AF" },
+};
+function PrintTierBadge({ tier }: { tier: string }) {
+  const t = (tier ?? "").replace(/[^0-9]/g, "");
+  const colors = PRINT_TIER_COLORS[t] ?? { bg: "#F3F4F6", color: "#6B7280" };
+  return (
+    <span style={{ display: "inline-block", padding: "1px 8px", borderRadius: 10, fontSize: "8px", fontWeight: 700, backgroundColor: colors.bg, color: colors.color, whiteSpace: "nowrap" }}>
+      {tier || "—"}
+    </span>
+  );
+}
+
+function SubLabel({ text, sources }: { text: string; sources?: string[] }) {
+  return (
+    <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
+      {text}
+      {sources?.map((src, i) => <SourceBadge key={i} source={src} />)}
+    </div>
+  );
+}
+
 function parseS7Sources(source: string): string[] {
   return source.split(" + ").map(s => {
     if (s === "Google Search Console") return "GSC";

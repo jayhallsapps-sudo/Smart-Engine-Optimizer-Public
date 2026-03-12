@@ -36,7 +36,7 @@ function computePrintSecNums(hs: Record<string, boolean>, ht: Record<string, boo
 
 function SectionHeading({ num, title }: { num: number; title: string }) {
   return (
-    <div style={{ color: ACCENT, fontWeight: 700, fontSize: "14px", borderBottom: `2px solid ${ACCENT}`, paddingBottom: 4, marginBottom: 12, marginTop: num > 1 ? 28 : 0 }}>
+    <div style={{ color: ACCENT, fontWeight: 700, fontSize: "14px", borderBottom: `2px solid ${ACCENT}`, paddingBottom: 5, marginBottom: 14, marginTop: num > 1 ? 36 : 0 }}>
       {num}. {title}
     </div>
   );
@@ -116,7 +116,7 @@ function PrintTierBadge({ tier }: { tier: string }) {
 
 function SubLabel({ text, sources }: { text: string; sources?: string[] }) {
   return (
-    <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
+    <div style={{ fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: 8, marginTop: 4, display: "flex", alignItems: "center", gap: 6 }}>
       {text}
       {sources?.map((src, i) => <SourceBadge key={i} source={src} />)}
     </div>
@@ -172,12 +172,12 @@ function PrintTierScorecardCard({ entry }: { entry: PrintTierScorecardEntryProps
   };
   const [sColor, sBg] = STATUS_MAP[entry.status] ?? ["#374151", "#F3F4F6"];
   return (
-    <div style={{ border: "1px solid #E5E7EB", borderRadius: 4, marginBottom: 6, overflow: "hidden", breakInside: "avoid" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", backgroundColor: "#F9FAFB", borderBottom: "1px solid #E5E7EB" }}>
+    <div style={{ border: "1px solid #E5E7EB", borderRadius: 4, marginBottom: 8, overflow: "hidden", breakInside: "avoid" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 12px", backgroundColor: "#F9FAFB", borderBottom: "1px solid #E5E7EB" }}>
         <span style={{ fontWeight: 700, fontSize: "10px", color: ACCENT }}>Tier {entry.tierNumber} — {entry.tierName}</span>
         <span style={{ marginLeft: "auto", padding: "1px 7px", borderRadius: 10, backgroundColor: sBg, color: sColor, fontWeight: 700, fontSize: "9px" }}>{entry.status}</span>
       </div>
-      <div style={{ padding: "6px 10px", fontSize: "9.5px", lineHeight: 1.5 }}>
+      <div style={{ padding: "8px 12px", fontSize: "9.5px", lineHeight: 1.55 }}>
         <div style={{ marginBottom: 4 }}><span style={{ fontWeight: 600, color: "#374151" }}>Findings: </span><span style={{ color: "#4B5563" }}>{entry.findings}</span></div>
         <div style={{ marginBottom: 4 }}><span style={{ fontWeight: 600, color: "#374151" }}>Inference: </span><span style={{ color: "#4B5563" }}>{entry.inferences}</span></div>
         <div style={{ marginBottom: 4 }}><span style={{ fontWeight: 600, color: "#374151" }}>Why It Matters: </span><span style={{ color: "#6B7280" }}>{entry.whyItMatters}</span></div>
@@ -388,7 +388,7 @@ export default function QbrPrepPrint() {
           <div style={{ marginBottom: "4px", fontSize: "20px", fontWeight: 700 }}>QBS</div>
           <div style={{ fontSize: "14px", fontWeight: 600, color: "#374151", marginBottom: "12px" }}>{e("meta_site", meta.site ?? "")}</div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 24px", fontSize: "11px", marginBottom: "20px", padding: "12px 16px", backgroundColor: "#F9FAFB", borderRadius: 4, border: "1px solid #E5E7EB" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 24px", fontSize: "11px", marginBottom: "24px", padding: "14px 18px", backgroundColor: "#F9FAFB", borderRadius: 4, border: "1px solid #E5E7EB" }}>
             <div><strong>Domain:</strong> {e("meta_domain", meta.domain ?? "")}</div>
             <div><strong>Primary Location:</strong> {e("meta_location", meta.primaryLocation ?? "")}</div>
             <div><strong>Program / Positioning:</strong> {e("meta_program", meta.programPositioning ?? "")}</div>
@@ -398,7 +398,7 @@ export default function QbrPrepPrint() {
           </div>
 
           {(amPrint.amThoughts || amPrint.hypothesis || amPrint.prevQtrAssessment || amPrint.clientNotes || amPrint.clientSentiment || amPrint.sentiment) && (
-            <div style={{ border: `1px solid ${ACCENT}28`, borderRadius: 6, padding: "10px 14px", marginBottom: 20, backgroundColor: "#FFFDFB", fontSize: "10px" }}>
+            <div style={{ border: `1px solid ${ACCENT}28`, borderRadius: 6, padding: "12px 16px", marginBottom: 24, backgroundColor: "#FFFDFB", fontSize: "10px" }}>
               <div style={{ fontWeight: 700, fontSize: "9px", color: ACCENT, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
                 Account Manager Context
               </div>
@@ -466,7 +466,7 @@ export default function QbrPrepPrint() {
           {secVis("section_traffic") && !printSecAutoHidden("section_traffic", hiddenTables) && (<>
           <SectionHeading num={secNums["section_traffic"]!} title="Top Organic Traffic Drivers" />
           {tblVis("table_s3_topics") && <><SubLabel text="Top Traffic Topics" sources={["GSC"]} />
-          <div style={{ border: `1px solid ${ACCENT}28`, borderRadius: 4, overflow: "hidden", marginBottom: 12 }}>
+          <div style={{ border: `1px solid ${ACCENT}28`, borderRadius: 4, overflow: "hidden", marginBottom: 16 }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px", tableLayout: "fixed" }}>
               <colgroup>
                 {hasTopicDeltas ? (
@@ -540,7 +540,7 @@ export default function QbrPrepPrint() {
           </div></>}
 
           {tblVis("table_s3_pages") && <><SubLabel text="Top Traffic Pages" sources={["GSC"]} />
-          <div style={{ border: `1px solid ${ACCENT}28`, borderRadius: 4, overflow: "hidden", marginBottom: 12 }}>
+          <div style={{ border: `1px solid ${ACCENT}28`, borderRadius: 4, overflow: "hidden", marginBottom: 16 }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px", tableLayout: "fixed" }}>
               <colgroup>
                 {hasPageDeltas ? (
@@ -628,7 +628,7 @@ export default function QbrPrepPrint() {
           {secVis("section_diagnosis") && (
             <>
               <SectionHeading num={secNums["section_diagnosis"]!} title="SEO Tier Diagnosis" />
-              <div style={{ padding: "12px 16px", backgroundColor: "#FDF2F0", borderRadius: 4, border: `1px solid ${ACCENT}33`, marginBottom: 10, fontSize: "11px" }}>
+              <div style={{ padding: "14px 18px", backgroundColor: "#FDF2F0", borderRadius: 4, border: `1px solid ${ACCENT}33`, marginBottom: 14, fontSize: "11px" }}>
                 <div style={{ fontWeight: 700, color: ACCENT, marginBottom: 6, fontSize: "12px" }}>Tier {s5.tier} — {s5.tierName}</div>
                 <div style={{ color: "#374151", lineHeight: 1.6 }}>{e("s5_diagnosis", s5.diagnosis)}</div>
               </div>
@@ -646,7 +646,7 @@ export default function QbrPrepPrint() {
             <>
               <SectionHeading num={secNums["section_priorities"]!} title="What We Need to Do Next" />
               {(s6 as any).shortSummary && ((s6 as any).shortSummary as string[]).length > 0 && (
-                <div style={{ padding: "8px 12px", backgroundColor: "#FFF5F5", borderRadius: 4, border: `1.5px solid ${ACCENT}40`, marginBottom: 8, fontSize: "9.5px" }}>
+                <div style={{ padding: "10px 14px", backgroundColor: "#FFF5F5", borderRadius: 4, border: `1.5px solid ${ACCENT}40`, marginBottom: 12, fontSize: "9.5px" }}>
                   <div style={{ fontWeight: 700, color: ACCENT, marginBottom: 5, fontSize: "9px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Critical Observations</div>
                   <ul style={{ margin: 0, padding: "0 0 0 14px", lineHeight: 1.6, color: "#374151" }}>
                     {((s6 as any).shortSummary as string[]).map((b: string, i: number) => {
@@ -708,12 +708,12 @@ export default function QbrPrepPrint() {
             <>
               <SectionHeading num={secNums["section_keywords"]!} title="Suggested Keywords for Next Quarter" />
               {sectionSuggestedKeywords?.quarterlyCreditCap && (
-                <div style={{ padding: "7px 10px", backgroundColor: "#FFF5F5", borderRadius: 4, border: `1.5px solid ${ACCENT}40`, marginBottom: 8, fontSize: "9px", color: "#374151", lineHeight: 1.6 }}>
+                <div style={{ padding: "9px 12px", backgroundColor: "#FFF5F5", borderRadius: 4, border: `1.5px solid ${ACCENT}40`, marginBottom: 12, fontSize: "9px", color: "#374151", lineHeight: 1.65 }}>
                   <span style={{ fontWeight: 700, color: ACCENT, textTransform: "uppercase" as const, letterSpacing: "0.05em", fontSize: "8.5px", marginRight: 5 }}>About This List:</span>
                   Showing up to {sectionSuggestedKeywords.quarterlyCreditCap} keyword opportunities (2× monthly credit capacity of {sectionSuggestedKeywords.monthlyCredits}). Grounded in GSC query data, site crawl inventory, and page performance. Filtered to strategic Level of Care, program, condition, and location-intent terms.
                 </div>
               )}
-              <div style={{ border: `1px solid ${ACCENT}28`, borderRadius: 4, overflow: "hidden", marginBottom: 12 }}>
+              <div style={{ border: `1px solid ${ACCENT}28`, borderRadius: 4, overflow: "hidden", marginBottom: 16 }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px", tableLayout: "fixed" }}>
                   <colgroup>
                     <col style={{ width: "20%" }} />
@@ -756,21 +756,21 @@ export default function QbrPrepPrint() {
                       const isNew = rawPage === "New content needed" || rawPage === "Suggest new content for this keyword";
                       return (
                         <tr key={ri} style={{ backgroundColor: ri % 2 === 1 ? "#FBF8F7" : "white" }}>
-                          <td style={{ padding: "5px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", fontWeight: 600, wordBreak: "break-word" }}>
+                          <td style={{ padding: "7px 9px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", fontWeight: 600, wordBreak: "break-word" }}>
                             {edits[`kw_${ri}_keyword`] ?? row.keyword ?? ""}
                           </td>
-                          <td style={{ padding: "5px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", wordBreak: "break-word" }}>
+                          <td style={{ padding: "7px 9px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", wordBreak: "break-word" }}>
                             <span style={{ display: "inline-block", padding: "2px 7px", borderRadius: 10, fontSize: "8px", fontWeight: 700, backgroundColor: colors.bg, color: colors.color }}>{label}</span>
                           </td>
-                          <td style={{ padding: "5px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", wordBreak: "break-word" }}>
+                          <td style={{ padding: "7px 9px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", wordBreak: "break-word" }}>
                             {isNew
                               ? <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 10, fontSize: "8px", fontWeight: 700, backgroundColor: "#FEF3C7", color: "#92400E" }}>New content needed</span>
                               : <span style={{ display: "inline-block", padding: "1px 6px", borderRadius: 3, fontSize: "9px", fontWeight: 500, backgroundColor: `${ACCENT}10`, border: `1px solid ${ACCENT}25`, color: "#374151", wordBreak: "break-all" }}>{rawPage}</span>
                             }
                           </td>
-                          <td style={{ padding: "5px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.4, color: "#4B5563", fontSize: "9px", wordBreak: "break-word" }}>{edits[`kw_${ri}_why`] ?? row.whyRecommended}</td>
+                          <td style={{ padding: "7px 9px", borderBottom: "1px solid #F3EDED", verticalAlign: "top", lineHeight: 1.5, color: "#4B5563", fontSize: "9px", wordBreak: "break-word" }}>{edits[`kw_${ri}_why`] ?? row.whyRecommended}</td>
                           {!kwSharedSource && (
-                            <td style={{ padding: "5px 8px", borderBottom: "1px solid #F3EDED", verticalAlign: "top" }}>
+                            <td style={{ padding: "7px 9px", borderBottom: "1px solid #F3EDED", verticalAlign: "top" }}>
                               <span style={{ display: "inline-flex", flexWrap: "wrap", gap: 3 }}>
                                 {(row.sources ?? []).map((src: string, si: number) => (
                                   <SourceBadge key={si} source={src} />
@@ -807,16 +807,16 @@ export default function QbrPrepPrint() {
 
                 {/* Auto-generated opportunity cards */}
                 {_autoOpps.length > 0 && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 0, fontSize: "11px" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 0, fontSize: "11px" }}>
                     {_autoOpps.map((opp: any, i: number) => (
                       <div key={i} style={{ border: "1px solid #E5E7EB", borderRadius: 6, overflow: "hidden", pageBreakInside: "avoid" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 12px", backgroundColor: "#F9FAFB", borderBottom: "1px solid #E5E7EB" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", backgroundColor: "#F9FAFB", borderBottom: "1px solid #E5E7EB" }}>
                           <span style={{ display: "inline-block", padding: "1px 8px", borderRadius: 10, fontSize: "9px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", backgroundColor: opp.type === "upsell" ? "#FEF3C7" : "#DBEAFE", color: opp.type === "upsell" ? "#92400E" : "#1E40AF" }}>
                             {opp.type === "upsell" ? "Upsell" : "Cross-sell"}
                           </span>
                           <span style={{ fontWeight: 700, fontSize: "12px", color: "#111827" }}>{e(`opp_${i}_title`, opp.title)}</span>
                         </div>
-                        <div style={{ padding: "9px 12px", display: "flex", flexDirection: "column", gap: 7 }}>
+                        <div style={{ padding: "11px 14px", display: "flex", flexDirection: "column", gap: 9 }}>
                           <div style={{ color: "#374151", fontStyle: "italic" }}>{e(`opp_${i}_why_now`, opp.why_now)}</div>
                           <div>
                             <div style={{ fontWeight: 600, fontSize: "10px", color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 3 }}>Evidence</div>

@@ -1,0 +1,149 @@
+You are doing one final tightening pass on the QBS generator and output. This is no longer a major rebuild. The Anchored Tides QBS is now broadly acceptable. This pass is for polish, consistency, and small remaining quality improvements only.
+
+Do not regress any of the fixes already made.
+Do not reopen solved logic.
+Do not change the established red QBS design language.
+Do not change the table design system.
+Do not replace the current structure with a new layout.
+
+PRIMARY OBJECTIVE
+
+Tighten the final QBS so it feels cleaner, more deliberate, and more internally consistent, while preserving all of the working logic already confirmed in the latest Anchored Tides PDF.
+
+FINAL TIGHTENING SCOPE ONLY
+
+1) SPACING / RHYTHM POLISH
+The report is better, but still a bit dense in places.
+
+Polish the spacing only:
+- add slightly more breathing room between sections
+- add slightly more breathing room between subsection headings and tables
+- add slightly more breathing room around commentary / summary boxes
+- improve row padding where tables still feel cramped
+- keep the red QBS design and existing table style exactly intact
+
+Important:
+Do not redesign.
+Do not change brand styling.
+Do not introduce a new color system.
+Do not make the report look like the gold-standard report.
+Only borrow spacing/rhythm discipline, not design language.
+
+2) SECTION 1 GOALS TABLE DENSITY
+Section 1 is improved, but still visually dense.
+
+Tighten:
+- make the goals table a little easier to scan
+- preserve the existing corrected source-badge behavior
+- preserve the current column logic
+- slightly improve vertical spacing/padding so the section feels less compressed
+
+Do not:
+- re-break source badges
+- create new wrapping issues
+- shrink Goal Type / Goal again
+
+3) TERMINOLOGY CONSISTENCY CLEANUP
+Remove small remaining terminology drift.
+
+Rules:
+- keep “Levels of Care” language where that is the correct Webserv framing
+- eliminate any remaining phrasing that weakens that consistency
+- if “program pages” appears in places where “Levels of Care pages” is clearly the better phrase, standardize it
+- do not do reckless find-and-replace; only change terms where context clearly requires it
+
+Important:
+Do not reintroduce “service page” or “service pages.”
+Do not use mixed terminology for the same concept within the same report.
+
+4) COPY TIGHTENING
+Some sections still read slightly templated.
+
+Tighten the writing only where needed:
+- make executive-summary-style boxes read more directly
+- reduce filler phrasing
+- keep strategy language concrete
+- preserve fact / inference / Manual QA Needed behavior already established
+- preserve the evidence-led tone
+
+Do not:
+- rewrite the report voice completely
+- add new generic strategy filler
+- soften specific actions into consultant vagueness
+
+5) SECTION 3 / SECTION 5 / SECTION 6 POLISH
+These sections are working, but may still contain wording that can be sharpened.
+
+Polish:
+- Section 3 page/topic insights so they read a little cleaner
+- Section 5 tier summaries so they are concise and consistent
+- Section 6 action wording so every action remains concrete and defensible
+
+Preserve:
+- current Tier logic
+- current confirmed live page resolution
+- current priority ordering unless wording cleanup requires no logic change
+
+6) SECTION 7 / SECTION 8 / SECTION 9 POLISH
+These sections are close. Only tighten presentation and consistency.
+
+Polish:
+- grouped keyword rows for readability if they feel visually overloaded
+- section summary boxes for consistency of tone and spacing
+- Section 8 metric descriptions for concise clarity
+- Section 9 opportunity framing so it stays aligned with Tier 1 pass / Tier 2 gap logic
+
+Do not:
+- change the solved IOP row back to net-new
+- reintroduce bad clustering
+- reintroduce “service/VOB pages”
+- break the solved Tier 1 / Tier 2 framing
+
+NON-NEGOTIABLE PRESERVATION RULES
+
+Do not break any of the following already-solved behaviors:
+- real live page resolution in Sections 2 and 4
+- no fabricated generic paths
+- Tier 1 pass logic where supported by live evidence
+- Section 7 create-new vs CRO/update correction for existing live pages
+- corrected terminology in Sections 8 and 9
+- current red design language
+- current source-badge behavior
+- current slug generation for create-new rows
+- current full keyword-cluster display behavior
+
+FINAL VALIDATION REQUIREMENT
+
+Use Anchored Tides again as the validation account.
+
+Required steps:
+1. Generate a fresh Anchored Tides QBS using the live connected data and the same AM inputs already provided.
+2. Export the actual PDF.
+3. Provide a direct link/path to the generated PDF.
+4. Provide a short QA note that covers only:
+   - spacing/rhythm improvements made
+   - terminology consistency changes made
+   - copy-tightening changes made
+   - confirmation that no previously fixed behavior regressed
+
+FAILURE RULE
+
+If any previously solved issue reappears, do not declare completion.
+Examples of regression:
+- fabricated paths return
+- live pages revert to “Manual entry needed”
+- Tier 1 false negatives return
+- service-page terminology returns
+- IOP row reverts to create-new
+- source badges wrap badly again
+
+If regression occurs, list:
+- the exact section
+- the exact regression
+- the exact fix still required
+
+FINAL INSTRUCTION
+
+This is a refinement pass, not a reinvention pass.
+Tighten spacing, rhythm, terminology consistency, and copy quality while preserving the now-working logic and design system.
+Generate the Anchored Tides PDF as the final proof artifact and link it directly.

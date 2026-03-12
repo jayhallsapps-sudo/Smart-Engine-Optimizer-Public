@@ -1541,11 +1541,11 @@ export function generateSection2(
       "vob":            { confidence: "High-confidence inference", note: "VOB pages are direct conversion-support pages — users checking coverage are one step away from committing to admission." },
       "detox":          { confidence: "Moderate-confidence inference", note: "Levels of Care pages for detox attract near-decision query traffic — users researching detox are typically closer to admission than users at earlier awareness stages." },
       "residential":    { confidence: "Moderate-confidence inference", note: "Residential treatment pages capture users comparing inpatient options — high intent relative to informational pages." },
-      "inpatient":      { confidence: "Moderate-confidence inference", note: "Inpatient program pages attract users making level-of-care decisions — typically mid-to-bottom funnel intent." },
-      "rehab":          { confidence: "Moderate-confidence inference", note: "Primary rehabilitation program page — likely supports a meaningful share of conversion activity given its funnel proximity to the admissions path." },
-      "treatment":      { confidence: "Moderate-confidence inference", note: "Core treatment program page — a likely conversion-support URL based on service intent and proximity to admissions actions." },
-      "php":            { confidence: "Moderate-confidence inference", note: "PHP program pages attract users actively comparing treatment intensity — meaningful intent signal." },
-      "iop":            { confidence: "Moderate-confidence inference", note: "IOP program pages attract users evaluating outpatient options — typically mid-funnel with real conversion potential." },
+      "inpatient":      { confidence: "Moderate-confidence inference", note: "Inpatient Levels of Care page attracts users making level-of-care decisions — typically mid-to-bottom funnel intent." },
+      "rehab":          { confidence: "Moderate-confidence inference", note: "Primary rehabilitation Levels of Care page — likely supports a meaningful share of conversion activity given its funnel proximity to the admissions path." },
+      "treatment":      { confidence: "Moderate-confidence inference", note: "Core Levels of Care page — a likely conversion-support URL based on treatment intent and proximity to admissions actions." },
+      "php":            { confidence: "Moderate-confidence inference", note: "PHP Levels of Care page attracts users actively comparing treatment intensity — meaningful intent signal." },
+      "iop":            { confidence: "Moderate-confidence inference", note: "IOP Levels of Care page attracts users evaluating outpatient options — typically mid-funnel with real conversion potential." },
       "program":        { confidence: "Moderate-confidence inference", note: "Program landing page likely supports conversion activity — users reviewing program details are actively evaluating fit before contacting admissions." },
     };
     for (const mp of (client.moneyPages ?? [])) {
@@ -1861,7 +1861,7 @@ function buildConvertingPageNote(internalType: string, dataSource: string, conve
     if (internalType === "Verify Insurance") return "Insurance page with organic visibility — add Verify Insurance / VOB form submit tracking to confirm direct admit contribution.";
     if (internalType === "Contact / Admissions") return "Contact page receiving organic traffic — verify contact form submit tracking is active to capture admission-driving events.";
     if (internalType === "Homepage") return "Homepage is the top organic entry point — brand and direct traffic dominate here; validate quality of organic sessions reaching admissions.";
-    if (internalType === "Service Page" || ["Detox", "Residential / Inpatient", "PHP / IOP", "Outpatient", "Dual Diagnosis", "Therapies"].includes(internalType)) return "High-visibility program page with likely support value — direct conversion attribution is limited; add call or form tracking to confirm.";
+    if (internalType === "Service Page" || ["Detox", "Residential / Inpatient", "PHP / IOP", "Outpatient", "Dual Diagnosis", "Therapies"].includes(internalType)) return "High-visibility Levels of Care page with likely support value — direct conversion attribution is limited; add call or form tracking to confirm.";
     return "High-visibility page with likely support value, but direct conversion attribution is limited. Add event tracking to validate whether this page contributes to admits.";
   }
 
@@ -1914,39 +1914,39 @@ function buildTrafficPageInsight(pageType: string, url: string, clicksStr: strin
     case "PHP / IOP":
       return "Step-down or flexible care Levels of Care page. Users are weighing level-of-care options — a clear admissions path can improve conversion from this already-evaluated segment.";
     case "Substance-Specific": {
-      if (/alcohol/.test(path)) return `${hiVol ? "High-volume" : "Moderate-volume"} alcohol-awareness content. Entry-stage traffic that needs a clear route from educational content to detox or treatment program pages.`;
-      if (/opioid|heroin|fentanyl/.test(path)) return "Opioid-specific informational entry point. Early-funnel users researching substances — internal links to detox and residential pages capture the highest conversion value.";
-      if (/meth/.test(path)) return "Methamphetamine-specific awareness content. Mostly early-funnel — route toward detox and dual-diagnosis pages where appropriate.";
+      if (/alcohol/.test(path)) return `${hiVol ? "High-volume" : "Moderate-volume"} alcohol-awareness content. Entry-stage traffic that needs a clear route from educational content to Levels of Care pages (detox, residential).`;
+      if (/opioid|heroin|fentanyl/.test(path)) return "Opioid-specific informational entry point. Early-funnel users researching substances — internal links to detox and residential Levels of Care pages capture the highest conversion value.";
+      if (/meth/.test(path)) return "Methamphetamine-specific awareness content. Mostly early-funnel — route toward detox and dual-diagnosis Levels of Care pages where appropriate.";
       if (/cocaine|coke/.test(path)) return "Cocaine-specific awareness content. Educational traffic that supports later conversion when paired with clear internal links to Levels of Care pages.";
-      if (/benzo/.test(path)) return "Benzodiazepine-specific information page. Medical detox intent is elevated for this substance — route users toward detox and residential program pages.";
+      if (/benzo/.test(path)) return "Benzodiazepine-specific information page. Medical detox intent is elevated for this substance — route users toward Levels of Care pages (detox, residential).";
       return `${hiVol ? "High-volume" : "Moderate-volume"} substance-specific awareness content. Educational entry point that needs targeted internal links to appropriate Levels of Care pages to convert traffic.`;
     }
     case "Conditions":
-      return "Condition-specific content attracting users researching symptoms or mental health concerns. Should route toward dual-diagnosis or appropriate treatment program pages.";
+      return "Condition-specific content attracting users researching symptoms or mental health concerns. Should route toward dual-diagnosis or appropriate Levels of Care pages.";
     case "Dual Diagnosis":
-      return "Dual diagnosis content attracting users with complex or co-occurring treatment needs. Higher conversion intent than general conditions traffic — route toward program details and admissions.";
+      return "Dual diagnosis content attracting users with complex or co-occurring treatment needs. Higher conversion intent than general conditions traffic — route toward Levels of Care pages and the admissions path.";
     case "Therapies":
-      return "Therapy and modalities content that supports program differentiation. Trust-building for users actively comparing programs — reinforce with links to service and admissions pages.";
+      return "Therapy and modalities content that supports program differentiation. Trust-building for users actively comparing programs — reinforce with links to Levels of Care and admissions pages.";
     case "Population-Specific":
-      if (/women|female/.test(path)) return "Women's program content targeting a defined audience. Evaluation-stage traffic from users assessing program fit — route toward program details and admissions.";
-      if (/men|male/.test(path)) return "Men's program content attracting a specific audience segment. Route toward program details and admissions to capture high-intent users.";
-      return "Audience-segmented content attracting a defined population. Evaluation-stage traffic that needs clear routing to relevant program and admissions pages.";
+      if (/women|female/.test(path)) return "Women's program content targeting a defined audience. Evaluation-stage traffic from users assessing program fit — route toward Levels of Care pages and admissions.";
+      if (/men|male/.test(path)) return "Men's program content attracting a specific audience segment. Route toward Levels of Care pages and admissions to capture high-intent users.";
+      return "Audience-segmented content attracting a defined population. Evaluation-stage traffic that needs clear routing to relevant Levels of Care and admissions pages.";
     case "About / Team":
       return "Trust-building page supporting late-stage evaluation. Users here are assessing credibility before committing — strong links to admissions pages can convert this high-consideration intent.";
     case "Aftercare / Alumni":
       return "Aftercare and alumni content that demonstrates outcomes and builds credibility. Influences prospective clients and families during program evaluation — trust-building before admissions.";
     case "Blog / Resource":
-      return `Informational content entry point with ${hiVol ? "high" : "lower"} organic volume. Awareness-stage traffic — targeted internal links toward service and admissions pages are the highest-ROI improvement.`;
+      return `Informational content entry point with ${hiVol ? "high" : "lower"} organic volume. Awareness-stage traffic — targeted internal links toward Levels of Care and admissions pages are the highest-ROI improvement.`;
     case "Location":
       return "Location or facility page attracting geo-targeted traffic. Local intent users searching for nearby treatment — important for admissions volume from the primary service area.";
     case "Outpatient":
-      return "Outpatient program page attracting users seeking flexible or lower-acuity care. Assisted admission path — users may be open to stepping up to higher levels of care if properly guided.";
+      return "Outpatient Levels of Care page attracting users seeking flexible or lower-acuity care. Assisted admission path — users may be open to stepping up to higher levels of care if properly guided.";
     case "Homepage":
       return "Primary branded entry point serving a mix of direct, branded, and first-time visitors. Should route efficiently to Levels of Care pages and the admissions path for maximum conversion.";
     default: {
-      if (/meet|\/team|\/staff/.test(path)) return "Trust-building page that supports credibility evaluation. Late-stage visitors — internal links to admissions and program pages can convert this research intent.";
+      if (/meet|\/team|\/staff/.test(path)) return "Trust-building page that supports credibility evaluation. Late-stage visitors — internal links to admissions and Levels of Care pages can convert this research intent.";
       if (/\/review|\/testimonial|\/alumni/.test(path)) return "Social proof content that builds confidence in the program. Can move hesitant users toward admissions contact when paired with clear CTAs.";
-      if (/\/faq|\/guide/.test(path)) return "FAQ or guide attracting users with specific treatment questions. Informational stage — structured links to relevant service and admissions pages improve conversion.";
+      if (/\/faq|\/guide/.test(path)) return "FAQ or guide attracting users with specific treatment questions. Informational stage — structured links to relevant Levels of Care and admissions pages improve conversion.";
       return `${hiVol ? "High-volume" : "Moderate-volume"} informational entry point with limited direct admit linkage. Awareness-stage content — internal links to Levels of Care pages are the highest-ROI improvement for this traffic.`;
     }
   }
@@ -2435,7 +2435,7 @@ function buildTierScorecard(tierInput: TierDiagnosisInput): TierScorecardEntry[]
       status: t2Status,
       findings: t2Findings,
       inferences: t2Inferences,
-      whyItMatters: "Service architecture determines how authority flows between pages. Hub structures allow Google to map topical expertise and pass ranking power into Levels of Care and program pages.",
+      whyItMatters: "Site architecture determines how authority flows between pages. Hub structures allow Google to map topical expertise and consolidate ranking power into Levels of Care pages.",
       source: "Screaming Frog",
     },
     {

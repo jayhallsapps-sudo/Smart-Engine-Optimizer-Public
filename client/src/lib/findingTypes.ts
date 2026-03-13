@@ -5,9 +5,9 @@
 // When real AI findings arrive with unique generated text, they will naturally
 // get unique IDs at creation time.
 
-import { scoreFinding, type PriorityMeta } from "./priorityEngine";
+import { scoreFinding, type PriorityMeta, type PriorityOverride } from "./priorityEngine";
 
-export type { PriorityMeta };
+export type { PriorityMeta, PriorityOverride };
 
 export type FindingStatus = "draft" | "accepted" | "rejected" | "revised";
 
@@ -37,6 +37,12 @@ export interface Finding {
    * Heuristic, transparent, and non-binding. AMs remain fully in control.
    */
   priority?: PriorityMeta;
+  /**
+   * Manual priority override set by the AM in the chat panel.
+   * Takes precedence over `priority` for display and sorting.
+   * The original `priority` is never mutated — reset clears this field only.
+   */
+  priorityOverride?: PriorityOverride;
 }
 
 export interface FindingChatMessage {

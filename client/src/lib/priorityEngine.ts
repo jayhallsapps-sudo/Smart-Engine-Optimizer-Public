@@ -266,7 +266,63 @@ export function scoreFinding(areaId: string, body: string): PriorityMeta {
   };
 }
 
-/** Sort findings (or any scored item) by descending priority score. */
+/** Sort findings (or any scored item) by descending heuristic priority score. */
 export function byPriorityDesc<T extends { priority?: PriorityMeta }>(a: T, b: T): number {
   return (b.priority?.score ?? 0) - (a.priority?.score ?? 0);
+}
+
+// ─── Manual override model ─────────────────────────────────────────────────────
+// AMs can override the heuristic priority signal for any finding.
+// The override is stored separately — the original score/rationale is always
+// preserved so the AM can see what the system thought and reset if needed.
+
+export interface PriorityOverride {
+  bucket: PriorityBucket;
+  /** Optional short note from the AM explaining why they changed the priority. */
+  reason?: string;
+  /** Unix ms timestamp of when the override was applied. */
+  overriddenAt: number;
+}
+
+/**
+ * Representative score midpoints for each bucket.
+ * Used when an override sets a bucket directly rather than computing a score.
+ */
+export const BUCKET_SCORES: Record<PriorityBucket, number> = {
+  must_do_now:       8.75,
+  should_do_next:    6.25,
+  worth_doing_later: 4.0,
+  deprioritize:      1.5,
+};
+
+/**
+ * Returns the effective priority bucket for display and sorting.
+ * Override takes precedence over heuristic; falls back to undefined if neither exists.
+ */
+export function effectiveBucket(
+  finding: { priority?: PriorityMeta; priorityOverride?: PriorityOverride },
+): PriorityBucket | undefined {
+  return finding.priorityOverride?.bucket ?? finding.priority?.bucket;
+}
+
+/**
+ * Returns the effective priority score for sorting.
+ * If manually overridden, uses the bucket midpoint score.
+ * If heuristic only, uses the computed score.
+ */
+export function effectiveScore(
+  finding: { priority?: PriorityMeta; priorityOverride?: PriorityOverride },
+): number {
+  if (finding.priorityOverride) {
+    return BUCKET_SCORES[finding.priorityOverride.bucket];
+  }
+  return finding.priority?.score ?? 0;
+}
+
+/** Sort comparator using effective priority (override > heuristic). */
+export function byEffectivePriorityDesc<T extends {
+  priority?: PriorityMeta;
+  priorityOverride?: PriorityOverride;
+}>(a: T, b: T): number {
+  return effectiveScore(b) - effectiveScore(a);
 }

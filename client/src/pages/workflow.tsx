@@ -31,8 +31,11 @@ import {
   BUCKET_LABELS,
   BUCKET_BADGE_COLORS,
   BUCKET_DOT_COLORS,
-  byPriorityDesc,
+  byEffectivePriorityDesc,
+  effectiveBucket,
+  BUCKET_SCORES,
   type PriorityBucket,
+  type PriorityOverride,
 } from "@/lib/priorityEngine";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -70,6 +73,10 @@ function PriorityBadge({
   rationale,
   signals,
   variant = "pill",
+  isOverridden = false,
+  heuristicBucket,
+  heuristicScore,
+  overrideReason,
 }: {
   bucket: PriorityBucket;
   score: number;
@@ -77,6 +84,14 @@ function PriorityBadge({
   signals: string[];
   /** pill = badge pill, dot = status dot only */
   variant?: "pill" | "dot";
+  /** True when the displayed priority is an AM manual override. */
+  isOverridden?: boolean;
+  /** The original heuristic bucket, for tooltip comparison when overridden. */
+  heuristicBucket?: PriorityBucket;
+  /** The original heuristic score. */
+  heuristicScore?: number;
+  /** AM's reason note for the override. */
+  overrideReason?: string;
 }) {
   const label = BUCKET_LABELS[bucket];
   const pillCls = BUCKET_BADGE_COLORS[bucket];
@@ -98,24 +113,50 @@ function PriorityBadge({
             >
               <span className={`w-1.5 h-1.5 rounded-full ${dotCls}`} />
               {label}
+              {isOverridden && (
+                <span className="opacity-60 font-normal normal-case tracking-normal">· adj</span>
+              )}
             </span>
           )}
         </TooltipTrigger>
         <TooltipContent
           side="top"
-          className="max-w-[260px] text-[11px] leading-relaxed z-[9999]"
+          className="max-w-[270px] text-[11px] leading-relaxed z-[9999]"
           data-testid="priority-tooltip"
         >
-          <p className="font-semibold mb-1">{label} · score {score.toFixed(1)}/10</p>
-          <p className="text-muted-foreground leading-snug">{rationale}</p>
-          {signals.length > 0 && (
-            <p className="text-muted-foreground mt-1.5 text-[10px]">
-              Signals: {signals.join(", ")}
-            </p>
+          {isOverridden ? (
+            <>
+              <p className="font-semibold mb-1 text-amber-600 dark:text-amber-400">
+                Manually adjusted · {label}
+              </p>
+              {overrideReason && (
+                <p className="text-muted-foreground leading-snug mb-1">
+                  Reason: {overrideReason}
+                </p>
+              )}
+              {heuristicBucket && heuristicScore !== undefined && (
+                <p className="text-muted-foreground/70 text-[10px]">
+                  Auto-scored: {BUCKET_LABELS[heuristicBucket]} · {heuristicScore.toFixed(1)}/10
+                </p>
+              )}
+              <p className="text-muted-foreground/60 mt-1.5 text-[10px] italic">
+                Open finding chat to change or reset.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="font-semibold mb-1">{label} · score {score.toFixed(1)}/10</p>
+              <p className="text-muted-foreground leading-snug">{rationale}</p>
+              {signals.length > 0 && (
+                <p className="text-muted-foreground mt-1.5 text-[10px]">
+                  Signals: {signals.join(", ")}
+                </p>
+              )}
+              <p className="text-muted-foreground/70 mt-1.5 text-[10px] italic">
+                First-pass heuristic — open finding chat to adjust.
+              </p>
+            </>
           )}
-          <p className="text-muted-foreground/70 mt-1.5 text-[10px] italic">
-            First-pass heuristic — use your judgment.
-          </p>
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
@@ -520,7 +561,7 @@ function SectionMiniFlow({
   }
 
   if (state.phase === "findings") {
-    const sortedFindings = [...state.findings].sort(byPriorityDesc);
+    const sortedFindings = [...state.findings].sort(byEffectivePriorityDesc);
     return (
       <div className="flex flex-col gap-4">
         <div className="flex items-center gap-2 flex-wrap">
@@ -532,6 +573,9 @@ function SectionMiniFlow({
           {sortedFindings.map(finding => {
             const isRevised = finding.body !== finding.originalBody;
             const p = finding.priority;
+            const ov = finding.priorityOverride;
+            const effBucket = ov?.bucket ?? p?.bucket;
+            const effScore = ov ? BUCKET_SCORES[ov.bucket] : (p?.score ?? 0);
             return (
               <div
                 key={finding.id}
@@ -579,12 +623,16 @@ function SectionMiniFlow({
                         {finding.status}
                       </span>
                     )}
-                    {p && (
+                    {effBucket && p && (
                       <PriorityBadge
-                        bucket={p.bucket}
-                        score={p.score}
-                        rationale={p.rationale}
+                        bucket={effBucket}
+                        score={effScore}
+                        rationale={ov ? (ov.reason ?? "Manually adjusted.") : p.rationale}
                         signals={p.signals}
+                        isOverridden={!!ov}
+                        heuristicBucket={p.bucket}
+                        heuristicScore={p.score}
+                        overrideReason={ov?.reason}
                       />
                     )}
                   </div>
@@ -815,9 +863,12 @@ function StepFindingsReview({
                     </button>
                   </div>
                   <div className="px-4 py-3 flex flex-col gap-2">
-                    {[...state.findings.filter(f => f.selected)].sort(byPriorityDesc).map(finding => {
+                    {[...state.findings.filter(f => f.selected)].sort(byEffectivePriorityDesc).map(finding => {
                       const isRevised = finding.body !== finding.originalBody;
                       const p = finding.priority;
+                      const ov = finding.priorityOverride;
+                      const effBucket = ov?.bucket ?? p?.bucket;
+                      const effScore = ov ? BUCKET_SCORES[ov.bucket] : (p?.score ?? 0);
                       return (
                         <div key={finding.id} className="flex items-start gap-2 group" data-testid={`review-finding-${finding.id}`}>
                           <div className={[
@@ -846,12 +897,16 @@ function StepFindingsReview({
                                   {finding.status}
                                 </span>
                               )}
-                              {p && (
+                              {effBucket && p && (
                                 <PriorityBadge
-                                  bucket={p.bucket}
-                                  score={p.score}
-                                  rationale={p.rationale}
+                                  bucket={effBucket}
+                                  score={effScore}
+                                  rationale={ov ? (ov.reason ?? "Manually adjusted.") : p.rationale}
                                   signals={p.signals}
+                                  isOverridden={!!ov}
+                                  heuristicBucket={p.bucket}
+                                  heuristicScore={p.score}
+                                  overrideReason={ov?.reason}
                                 />
                               )}
                             </div>
@@ -1211,6 +1266,31 @@ export default function WorkflowPage() {
     });
   }, []);
 
+  // Priority override — updates the finding in place; does NOT close the chat panel.
+  const onOverrideFindingPriority = useCallback((finding: Finding, override: PriorityOverride | null) => {
+    setState(s => {
+      const areaId = finding.areaId as StrategyAreaId;
+      const section = s.sections[areaId];
+      if (!section) return s;
+      const updatedFindings = section.findings.map(f =>
+        f.id === finding.id
+          ? override ? { ...f, priorityOverride: override } : (() => { const { priorityOverride: _, ...rest } = f; return rest; })()
+          : f
+      );
+      return {
+        ...s,
+        // Keep chat open so AM can continue interacting after override.
+        chatFinding: s.chatFinding?.id === finding.id
+          ? updatedFindings.find(f => f.id === finding.id) ?? s.chatFinding
+          : s.chatFinding,
+        sections: {
+          ...s.sections,
+          [areaId]: { ...section, findings: updatedFindings },
+        },
+      };
+    });
+  }, []);
+
   return (
     <div className="flex flex-col h-full overflow-hidden bg-background" data-testid="page-workflow">
       <StepperHeader currentStep={state.step} />
@@ -1282,6 +1362,7 @@ export default function WorkflowPage() {
           finding={state.chatFinding}
           onClose={onCloseChatFinding}
           onCommit={(newBody, status) => onCommitFindingRevision(state.chatFinding!, newBody, status)}
+          onOverride={(override) => onOverrideFindingPriority(state.chatFinding!, override)}
         />
       )}
 

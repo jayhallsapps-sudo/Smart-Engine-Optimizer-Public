@@ -18,13 +18,27 @@ import { Badge } from "@/components/ui/badge";
 import { apiRequest } from "@/lib/queryClient";
 import { findingShortLabel } from "@/lib/findingTypes";
 import type { Finding, FindingStatus, FindingChatMessage } from "@/lib/findingTypes";
-import { BUCKET_LABELS, BUCKET_BADGE_COLORS, BUCKET_DOT_COLORS } from "@/lib/priorityEngine";
+import {
+  BUCKET_LABELS,
+  BUCKET_BADGE_COLORS,
+  BUCKET_DOT_COLORS,
+  BUCKET_SCORES,
+  type PriorityBucket,
+  type PriorityOverride,
+} from "@/lib/priorityEngine";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 // ─── Quick actions ────────────────────────────────────────────────────────────
 const QUICK_ACTIONS = [
@@ -107,9 +121,19 @@ interface FindingChatPanelProps {
   finding: Finding;
   onClose: () => void;
   onCommit: (newBody: string, status: FindingStatus) => void;
+  /** Called when the AM sets or clears a manual priority override. */
+  onOverride: (override: PriorityOverride | null) => void;
 }
 
-export function FindingChatPanel({ finding, onClose, onCommit }: FindingChatPanelProps) {
+// All selectable buckets in display order for the override picker.
+const BUCKET_OPTIONS: PriorityBucket[] = [
+  "must_do_now",
+  "should_do_next",
+  "worth_doing_later",
+  "deprioritize",
+];
+
+export function FindingChatPanel({ finding, onClose, onCommit, onOverride }: FindingChatPanelProps) {
   const currentBody = finding.body;
   const shortTitle = findingShortLabel(finding.body);
 
@@ -118,6 +142,31 @@ export function FindingChatPanel({ finding, onClose, onCommit }: FindingChatPane
   const [isLoading, setIsLoading] = useState(false);
   const [pendingRevision, setPendingRevision] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // ── Local override state — mirrors the finding's current override (if any) ──
+  // Seeded from `finding.priorityOverride` so the panel reflects current state.
+  const [overrideBucket, setOverrideBucket] = useState<PriorityBucket | "">(
+    finding.priorityOverride?.bucket ?? "",
+  );
+  const [overrideReason, setOverrideReason] = useState<string>(
+    finding.priorityOverride?.reason ?? "",
+  );
+
+  // Sync local state if the finding prop changes (e.g. AM opened a different finding).
+  useEffect(() => {
+    setOverrideBucket(finding.priorityOverride?.bucket ?? "");
+    setOverrideReason(finding.priorityOverride?.reason ?? "");
+  }, [finding.id]);
+
+  function applyOverride(bucket: PriorityBucket, reason: string) {
+    onOverride({ bucket, reason: reason.trim() || undefined, overriddenAt: Date.now() });
+  }
+
+  function clearOverride() {
+    setOverrideBucket("");
+    setOverrideReason("");
+    onOverride(null);
+  }
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -353,6 +402,94 @@ export function FindingChatPanel({ finding, onClose, onCommit }: FindingChatPane
             </div>
           )}
         </div>
+
+        {/* ── Priority override section ── */}
+        {finding.priority && (
+          <div
+            className="mx-5 mt-3 rounded-lg border border-border/60 bg-muted/20 px-3.5 py-3"
+            data-testid="priority-override-section"
+          >
+            {/* Header row */}
+            <div className="flex items-center justify-between mb-2.5">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
+                Priority signal
+              </p>
+              <div className="flex items-center gap-1.5">
+                {finding.priorityOverride ? (
+                  <>
+                    <span className="text-[9px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide">
+                      Adjusted
+                    </span>
+                    <button
+                      data-testid="btn-reset-priority"
+                      onClick={clearOverride}
+                      className="text-[10px] text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
+                    >
+                      Reset to auto
+                    </button>
+                  </>
+                ) : (
+                  <span className="text-[9px] text-muted-foreground uppercase tracking-wide">
+                    System
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Heuristic reference (always shown for context) */}
+            {finding.priorityOverride && finding.priority && (
+              <p className="text-[10px] text-muted-foreground mb-2">
+                Auto-scored: <span className="font-medium">{BUCKET_LABELS[finding.priority.bucket]}</span>
+                {" "}· {finding.priority.score.toFixed(1)}/10
+              </p>
+            )}
+
+            {/* Bucket picker */}
+            <Select
+              value={overrideBucket}
+              onValueChange={(val) => {
+                const bucket = val as PriorityBucket;
+                setOverrideBucket(bucket);
+                applyOverride(bucket, overrideReason);
+              }}
+            >
+              <SelectTrigger
+                className="h-7 text-[11px] w-full"
+                data-testid="select-priority-override"
+              >
+                <SelectValue placeholder="Override priority…" />
+              </SelectTrigger>
+              <SelectContent>
+                {BUCKET_OPTIONS.map(b => (
+                  <SelectItem key={b} value={b} className="text-[11px]">
+                    <span className={`inline-flex items-center gap-1.5`}>
+                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${BUCKET_DOT_COLORS[b]}`} />
+                      {BUCKET_LABELS[b]}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {/* Optional reason — shown when a bucket is selected */}
+            {overrideBucket && (
+              <input
+                data-testid="input-priority-reason"
+                type="text"
+                value={overrideReason}
+                onChange={e => setOverrideReason(e.target.value)}
+                onBlur={() => overrideBucket && applyOverride(overrideBucket, overrideReason)}
+                onKeyDown={e => {
+                  if (e.key === "Enter" && overrideBucket) {
+                    applyOverride(overrideBucket, overrideReason);
+                  }
+                }}
+                placeholder="Reason (optional)…"
+                className="mt-2 w-full rounded border border-border bg-background text-[11px] text-foreground px-2 py-1 placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-[#1B3A6B]/40"
+              />
+            )}
+          </div>
+        )}
 
         {/* ── Quick actions — shown only until first message ── */}
         {messages.length === 0 && !isLoading && (

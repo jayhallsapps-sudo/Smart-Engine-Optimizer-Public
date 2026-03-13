@@ -35,8 +35,13 @@ import {
   byEffectivePriorityDesc,
   effectiveBucket,
   BUCKET_SCORES,
+  EXECUTION_STATUS_LABELS,
+  EXECUTION_STATUS_CHIP_COLORS,
+  EXECUTION_STATUS_DOT_COLORS,
+  getExecutionStatusHint,
   type PriorityBucket,
   type PriorityOverride,
+  type ExecutionContext,
 } from "@/lib/priorityEngine";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -164,6 +169,41 @@ function PriorityBadge({
                 First-pass heuristic — open finding chat to adjust.
               </p>
             </>
+          )}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+// ─── Execution chip ───────────────────────────────────────────────────────────
+
+function ExecutionChip({ ctx }: { ctx: ExecutionContext | undefined }) {
+  if (!ctx || ctx.status === "not_tracked") return null;
+  const label = EXECUTION_STATUS_LABELS[ctx.status];
+  const chipColors = EXECUTION_STATUS_CHIP_COLORS[ctx.status];
+  const dotColor = EXECUTION_STATUS_DOT_COLORS[ctx.status];
+  const hint = getExecutionStatusHint(ctx);
+  return (
+    <TooltipProvider delayDuration={300}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span
+            className={`inline-flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded border cursor-help ${chipColors}`}
+            data-testid="execution-status-chip"
+          >
+            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotColor}`} />
+            {label}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-[220px] text-[11px] leading-relaxed z-[9999]">
+          <p className="font-semibold mb-1">{label}</p>
+          <p className="text-muted-foreground text-[10px] leading-snug">{hint}</p>
+          {ctx.note && (
+            <p className="text-foreground mt-1 text-[10px]">{ctx.note}</p>
+          )}
+          {ctx.linkedRef && (
+            <p className="text-muted-foreground mt-1 text-[10px]">Ref: {ctx.linkedRef}</p>
           )}
         </TooltipContent>
       </Tooltip>
@@ -593,6 +633,7 @@ function SectionMiniFlow({
                     ? "border-[#1B3A6B]/40 bg-[#1B3A6B]/5"
                     : "border-border bg-card",
                   finding.status === "rejected" ? "opacity-50" : "",
+                  finding.executionContext?.status === "completed" ? "opacity-70" : "",
                 ].join(" ")}
                 data-testid={`finding-card-${finding.id}`}
               >
@@ -616,7 +657,12 @@ function SectionMiniFlow({
 
                 {/* Body + status + priority */}
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs text-foreground leading-relaxed">{finding.body}</p>
+                  <p className={[
+                    "text-xs leading-relaxed",
+                    finding.executionContext?.status === "completed"
+                      ? "text-muted-foreground line-through"
+                      : "text-foreground",
+                  ].join(" ")}>{finding.body}</p>
                   {isRevised && (
                     <p className="text-[10px] text-muted-foreground line-through mt-0.5">{finding.originalBody}</p>
                   )}
@@ -643,6 +689,7 @@ function SectionMiniFlow({
                         overrideReason={ov?.reason}
                       />
                     )}
+                    <ExecutionChip ctx={finding.executionContext} />
                   </div>
                 </div>
 
@@ -917,6 +964,7 @@ function StepFindingsReview({
                                   overrideReason={ov?.reason}
                                 />
                               )}
+                              <ExecutionChip ctx={finding.executionContext} />
                             </div>
                           </div>
                           <button
@@ -1356,7 +1404,30 @@ export default function WorkflowPage() {
       );
       return {
         ...s,
-        // Keep chat open so AM can continue interacting after override.
+        chatFinding: s.chatFinding?.id === finding.id
+          ? updatedFindings.find(f => f.id === finding.id) ?? s.chatFinding
+          : s.chatFinding,
+        sections: {
+          ...s.sections,
+          [areaId]: { ...section, findings: updatedFindings },
+        },
+      };
+    });
+  }, []);
+
+  // Execution context update — persists the AM's execution tagging without closing the panel.
+  const onUpdateFindingExecution = useCallback((finding: Finding, ctx: ExecutionContext | null) => {
+    setState(s => {
+      const areaId = finding.areaId as StrategyAreaId;
+      const section = s.sections[areaId];
+      if (!section) return s;
+      const updatedFindings = section.findings.map(f =>
+        f.id === finding.id
+          ? ctx ? { ...f, executionContext: ctx } : (() => { const { executionContext: _, ...rest } = f; return rest; })()
+          : f
+      );
+      return {
+        ...s,
         chatFinding: s.chatFinding?.id === finding.id
           ? updatedFindings.find(f => f.id === finding.id) ?? s.chatFinding
           : s.chatFinding,
@@ -1467,6 +1538,7 @@ export default function WorkflowPage() {
           onClose={onCloseChatFinding}
           onCommit={(newBody, status) => onCommitFindingRevision(state.chatFinding!, newBody, status)}
           onOverride={(override) => onOverrideFindingPriority(state.chatFinding!, override)}
+          onUpdateExecution={(ctx) => onUpdateFindingExecution(state.chatFinding!, ctx)}
         />
       )}
 

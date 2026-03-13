@@ -23,8 +23,14 @@ import {
   BUCKET_BADGE_COLORS,
   BUCKET_DOT_COLORS,
   BUCKET_SCORES,
+  EXECUTION_STATUS_LABELS,
+  EXECUTION_STATUS_CHIP_COLORS,
+  EXECUTION_STATUS_DOT_COLORS,
+  getExecutionStatusHint,
   type PriorityBucket,
   type PriorityOverride,
+  type ExecutionStatus,
+  type ExecutionContext,
 } from "@/lib/priorityEngine";
 import {
   Tooltip,
@@ -117,12 +123,25 @@ const CONFIDENCE_COLORS = {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
+// All selectable execution statuses in display order.
+const EXECUTION_STATUS_OPTIONS: ExecutionStatus[] = [
+  "not_tracked",
+  "proposed",
+  "planned",
+  "in_progress",
+  "blocked",
+  "deferred",
+  "completed",
+];
+
 interface FindingChatPanelProps {
   finding: Finding;
   onClose: () => void;
   onCommit: (newBody: string, status: FindingStatus) => void;
   /** Called when the AM sets or clears a manual priority override. */
   onOverride: (override: PriorityOverride | null) => void;
+  /** Called when the AM updates the execution context. Pass null to clear. */
+  onUpdateExecution: (ctx: ExecutionContext | null) => void;
 }
 
 // All selectable buckets in display order for the override picker.
@@ -133,7 +152,7 @@ const BUCKET_OPTIONS: PriorityBucket[] = [
   "deprioritize",
 ];
 
-export function FindingChatPanel({ finding, onClose, onCommit, onOverride }: FindingChatPanelProps) {
+export function FindingChatPanel({ finding, onClose, onCommit, onOverride, onUpdateExecution }: FindingChatPanelProps) {
   const currentBody = finding.body;
   const shortTitle = findingShortLabel(finding.body);
 
@@ -152,10 +171,24 @@ export function FindingChatPanel({ finding, onClose, onCommit, onOverride }: Fin
     finding.priorityOverride?.reason ?? "",
   );
 
-  // Sync local state if the finding prop changes (e.g. AM opened a different finding).
+  // ── Local execution state — mirrors the finding's current execution context ──
+  const [execStatus, setExecStatus] = useState<ExecutionStatus>(
+    finding.executionContext?.status ?? "not_tracked",
+  );
+  const [execNote, setExecNote] = useState<string>(
+    finding.executionContext?.note ?? "",
+  );
+  const [execRef, setExecRef] = useState<string>(
+    finding.executionContext?.linkedRef ?? "",
+  );
+
+  // Sync all local state if the finding prop changes (AM opened a different finding).
   useEffect(() => {
     setOverrideBucket(finding.priorityOverride?.bucket ?? "");
     setOverrideReason(finding.priorityOverride?.reason ?? "");
+    setExecStatus(finding.executionContext?.status ?? "not_tracked");
+    setExecNote(finding.executionContext?.note ?? "");
+    setExecRef(finding.executionContext?.linkedRef ?? "");
   }, [finding.id]);
 
   function applyOverride(bucket: PriorityBucket, reason: string) {
@@ -166,6 +199,32 @@ export function FindingChatPanel({ finding, onClose, onCommit, onOverride }: Fin
     setOverrideBucket("");
     setOverrideReason("");
     onOverride(null);
+  }
+
+  function applyExecution(status: ExecutionStatus, note: string, ref: string) {
+    if (status === "not_tracked" && !note.trim() && !ref.trim()) {
+      onUpdateExecution(null);
+    } else {
+      const prevCtx = finding.executionContext;
+      const deferCount =
+        status === "deferred"
+          ? (prevCtx?.status === "deferred" ? (prevCtx.deferCount ?? 1) + 1 : 1)
+          : prevCtx?.deferCount;
+      onUpdateExecution({
+        status,
+        note: note.trim() || undefined,
+        linkedRef: ref.trim() || undefined,
+        deferCount,
+        updatedAt: Date.now(),
+      });
+    }
+  }
+
+  function clearExecution() {
+    setExecStatus("not_tracked");
+    setExecNote("");
+    setExecRef("");
+    onUpdateExecution(null);
   }
 
   useEffect(() => {
@@ -490,6 +549,104 @@ export function FindingChatPanel({ finding, onClose, onCommit, onOverride }: Fin
             )}
           </div>
         )}
+
+        {/* ── Execution context section ── */}
+        <div
+          className="mx-5 mt-2 rounded-lg border border-border/60 bg-muted/20 px-3.5 py-3"
+          data-testid="execution-context-section"
+        >
+          {/* Header row */}
+          <div className="flex items-center justify-between mb-2.5">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
+              Execution status
+            </p>
+            <div className="flex items-center gap-1.5">
+              {finding.executionContext && finding.executionContext.status !== "not_tracked" ? (
+                <>
+                  <span className={`text-[9px] font-semibold uppercase tracking-wide ${EXECUTION_STATUS_CHIP_COLORS[finding.executionContext.status].split(" ")[0]}`}>
+                    {EXECUTION_STATUS_LABELS[finding.executionContext.status]}
+                  </span>
+                  <button
+                    data-testid="btn-clear-execution"
+                    onClick={clearExecution}
+                    className="text-[10px] text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
+                  >
+                    Clear
+                  </button>
+                </>
+              ) : (
+                <span className="text-[9px] text-muted-foreground uppercase tracking-wide">
+                  Not set
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Status picker */}
+          <Select
+            value={execStatus}
+            onValueChange={(val) => {
+              const status = val as ExecutionStatus;
+              setExecStatus(status);
+              applyExecution(status, execNote, execRef);
+            }}
+          >
+            <SelectTrigger
+              className="h-7 text-[11px] w-full"
+              data-testid="select-execution-status"
+            >
+              <SelectValue placeholder="Set execution status…" />
+            </SelectTrigger>
+            <SelectContent>
+              {EXECUTION_STATUS_OPTIONS.map(s => (
+                <SelectItem key={s} value={s} className="text-[11px]">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${EXECUTION_STATUS_DOT_COLORS[s]}`} />
+                    {EXECUTION_STATUS_LABELS[s]}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Note + linked ref — shown when a meaningful status is set */}
+          {execStatus !== "not_tracked" && (
+            <>
+              <input
+                data-testid="input-execution-note"
+                type="text"
+                value={execNote}
+                onChange={e => setExecNote(e.target.value)}
+                onBlur={() => applyExecution(execStatus, execNote, execRef)}
+                onKeyDown={e => { if (e.key === "Enter") applyExecution(execStatus, execNote, execRef); }}
+                placeholder="Note (optional)…"
+                className="mt-2 w-full rounded border border-border bg-background text-[11px] text-foreground px-2 py-1 placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-[#1B3A6B]/40"
+              />
+              <input
+                data-testid="input-execution-ref"
+                type="text"
+                value={execRef}
+                onChange={e => setExecRef(e.target.value)}
+                onBlur={() => applyExecution(execStatus, execNote, execRef)}
+                onKeyDown={e => { if (e.key === "Enter") applyExecution(execStatus, execNote, execRef); }}
+                placeholder="Task ref (Asana / Airtable ID)…"
+                className="mt-1.5 w-full rounded border border-border bg-background text-[11px] text-foreground px-2 py-1 placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-[#1B3A6B]/40"
+              />
+            </>
+          )}
+
+          {/* Deferred recurrence escalation hint */}
+          {execStatus === "deferred" && finding.executionContext?.deferCount !== undefined && finding.executionContext.deferCount >= 2 && (
+            <p className="mt-2 text-[10px] text-orange-500 dark:text-orange-400">
+              {getExecutionStatusHint(finding.executionContext)}
+            </p>
+          )}
+
+          {/* Future integration hint */}
+          <p className="mt-2 text-[9px] text-muted-foreground/50 leading-relaxed">
+            Future: will sync to Asana tasks and Airtable backlog.
+          </p>
+        </div>
 
         {/* ── Quick actions — shown only until first message ── */}
         {messages.length === 0 && !isLoading && (

@@ -5,9 +5,15 @@
 // When real AI findings arrive with unique generated text, they will naturally
 // get unique IDs at creation time.
 
-import { scoreFinding, type PriorityMeta, type PriorityOverride } from "./priorityEngine";
+import {
+  scoreFinding,
+  type PriorityMeta,
+  type PriorityOverride,
+  type ExecutionStatus,
+  type ExecutionContext,
+} from "./priorityEngine";
 
-export type { PriorityMeta, PriorityOverride };
+export type { PriorityMeta, PriorityOverride, ExecutionStatus, ExecutionContext };
 
 export type FindingStatus = "draft" | "accepted" | "rejected" | "revised";
 
@@ -43,6 +49,12 @@ export interface Finding {
    * The original `priority` is never mutated — reset clears this field only.
    */
   priorityOverride?: PriorityOverride;
+  /**
+   * Execution context for this finding.
+   * Set manually by the AM in the chat panel.
+   * Future: will map to Asana tasks / Airtable backlog records.
+   */
+  executionContext?: ExecutionContext;
 }
 
 export interface FindingChatMessage {

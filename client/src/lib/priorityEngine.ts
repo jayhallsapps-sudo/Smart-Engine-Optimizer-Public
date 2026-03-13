@@ -326,3 +326,79 @@ export function byEffectivePriorityDesc<T extends {
 }>(a: T, b: T): number {
   return effectiveScore(b) - effectiveScore(a);
 }
+
+// ─── Execution awareness ──────────────────────────────────────────────────────
+// Types live here (not in findingTypes) to avoid a circular dependency:
+//   findingTypes → priorityEngine → findingTypes.
+// findingTypes re-exports ExecutionStatus and ExecutionContext for consumers.
+// Display helpers are display-only — execution status never mutates scores or sort order.
+
+export type ExecutionStatus =
+  | "not_tracked"
+  | "proposed"
+  | "planned"
+  | "in_progress"
+  | "blocked"
+  | "completed"
+  | "deferred";
+
+export interface ExecutionContext {
+  status: ExecutionStatus;
+  note?: string;
+  deferCount?: number;
+  linkedRef?: string;
+  updatedAt: number;
+}
+
+export const EXECUTION_STATUS_LABELS: Record<ExecutionStatus, string> = {
+  not_tracked:  "Not tracked",
+  proposed:     "Proposed",
+  planned:      "Planned",
+  in_progress:  "In progress",
+  blocked:      "Blocked",
+  completed:    "Completed",
+  deferred:     "Deferred",
+};
+
+/** Tailwind text + border + bg classes for the execution chip per status */
+export const EXECUTION_STATUS_CHIP_COLORS: Record<ExecutionStatus, string> = {
+  not_tracked:  "",
+  proposed:     "text-blue-600 dark:text-blue-400 border-blue-300/40 bg-blue-500/5",
+  planned:      "text-[#1B3A6B] dark:text-blue-300 border-[#1B3A6B]/25 bg-[#1B3A6B]/5",
+  in_progress:  "text-emerald-600 dark:text-emerald-400 border-emerald-400/30 bg-emerald-500/5",
+  blocked:      "text-amber-600 dark:text-amber-400 border-amber-400/30 bg-amber-500/8",
+  completed:    "text-muted-foreground border-border/50 bg-muted/40",
+  deferred:     "text-orange-500 dark:text-orange-400 border-orange-400/30 bg-orange-500/5",
+};
+
+/** Tailwind bg classes for the colored dot inside the chip */
+export const EXECUTION_STATUS_DOT_COLORS: Record<ExecutionStatus, string> = {
+  not_tracked:  "bg-muted-foreground/30",
+  proposed:     "bg-blue-500",
+  planned:      "bg-[#1B3A6B]",
+  in_progress:  "bg-emerald-500",
+  blocked:      "bg-amber-500",
+  completed:    "bg-muted-foreground/60",
+  deferred:     "bg-orange-500",
+};
+
+/**
+ * Returns a short contextual hint for the tooltip on an execution chip.
+ * Incorporates deferCount escalation language when relevant.
+ */
+export function getExecutionStatusHint(ctx: ExecutionContext): string {
+  switch (ctx.status) {
+    case "not_tracked":  return "No execution record — not yet tracked in a backlog.";
+    case "proposed":     return "Surfaced as a recommendation — not yet formally scheduled.";
+    case "planned":      return "Committed to a backlog or sprint.";
+    case "in_progress":  return "Actively being executed.";
+    case "blocked":      return "Work started but blocked — flag for review.";
+    case "completed":    return "Work completed. Finding retained for record.";
+    case "deferred": {
+      const count = ctx.deferCount ?? 1;
+      if (count >= 3) return `Deferred ${count}× — consider escalating or closing.`;
+      if (count === 2) return `Deferred ${count}× — review whether this should be re-prioritized.`;
+      return "Intentionally pushed back.";
+    }
+  }
+}

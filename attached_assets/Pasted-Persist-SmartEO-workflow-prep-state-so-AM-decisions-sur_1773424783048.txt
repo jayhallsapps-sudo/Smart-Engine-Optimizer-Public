@@ -1,0 +1,111 @@
+Persist SmartEO workflow prep state so AM decisions survive refreshes and carry more reliably into report creation.
+
+IMPORTANT CONTEXT
+
+The following already exist and must be extended, not replaced:
+- guided workflow shell
+- stable finding object model
+- heuristic priority engine
+- manual priority overrides
+- contextual finding chat
+- workflow-to-report handoff bridge
+- workflow field mapping layer
+- current localStorage-based handoff into report pages
+
+Do not rebuild the workflow or report system from scratch.
+
+CORE OBJECTIVE
+
+Make the workflow feel like a real working session by persisting key AM decisions across refreshes and preserving them through the handoff into report creation.
+
+PRIMARY GOALS
+
+1. PERSIST WORKFLOW SESSION STATE
+
+Persist at minimum:
+- selected client
+- selected report type
+- AM inputs by strategy area
+- findings
+- finding statuses
+- selected findings
+- revised finding body text
+- manual priority overrides
+- committed workflow areas
+
+Use the lightest sensible persistence model that fits the current architecture.
+
+2. SURVIVE REFRESH / RETURN
+
+Requirements:
+- if the AM refreshes the workflow page or returns shortly after, their in-progress session should restore cleanly
+- restoration should be scoped safely by report type + client or another clear session key
+- do not restore stale or unrelated work accidentally
+
+3. IMPROVE REPORT-BUILDER HANDOFF
+
+Requirements:
+- preserve the current bridge behavior
+- ensure committed workflow decisions, including priority overrides and revised finding text, survive into the report-builder handoff model where relevant
+- reduce the feeling that workflow state is temporary or fragile
+
+4. KEEP THE USER IN CONTROL
+
+Requirements:
+- make it possible to start fresh intentionally
+- make restored state understandable, not confusing
+- if a restored session is loaded, indicate that clearly
+- avoid silent weirdness
+
+5. PRESERVE CURRENT UX
+
+Requirements:
+- do not break current workflow shell behavior
+- do not break report-page direct access
+- do not overbuild a full workflow history browser yet
+- do not jump to final database-backed workflow persistence unless clearly justified
+
+6. REUSE / COMPATIBILITY RULES
+
+- extend the existing workflow state model
+- extend the existing handoff bridge
+- preserve current report mapping behavior
+- do not break saved reports
+- do not overbuild the final session/history architecture
+
+7. DEFERRED ITEMS
+
+Do not build in this prompt:
+- full workflow history UI
+- account-level long-term memory
+- multi-session comparison
+- final database-backed audit log
+- automatic task generation
+
+This prompt is about making workflow sessions durable and dependable.
+
+DELIVERABLES
+
+Build/refine:
+- workflow session persistence
+- clean restoration logic
+- clear reset/fresh-start behavior
+- improved carry-forward of workflow decisions into the handoff path
+
+IMPLEMENTATION REPORT REQUIRED
+
+After building, provide a short implementation report including:
+- files changed
+- what was reused
+- what was refactored
+- what was newly added
+- exact persistence model used
+- exactly which workflow fields now persist
+- how restore/reset behavior works
+- what still remains ephemeral
+- any UX compromises
+- any risks or deferred items
+
+SUCCESS CONDITION
+
+A SmartEO user can refresh or briefly leave workflow without losing key prep work, and workflow decisions feel durable enough to support real report preparation instead of acting like a fragile temporary shell.

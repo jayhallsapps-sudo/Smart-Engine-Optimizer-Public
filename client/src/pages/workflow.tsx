@@ -20,6 +20,7 @@ import {
   CircleDot,
   Circle,
   CheckCircle2,
+  X,
 } from "lucide-react";
 import { FindingChatPanel } from "@/components/workflow/FindingChatPanel";
 import {
@@ -53,6 +54,13 @@ import {
   type StrategyAreaId,
 } from "@/lib/workflowStrategyAreas";
 import { saveWorkflowContext } from "@/lib/workflowHandoff";
+import {
+  saveWorkflowSession,
+  loadWorkflowSession,
+  clearWorkflowSession,
+  formatSessionAge,
+  type PersistedSectionState,
+} from "@/lib/workflowSession";
 import { GuidancePanel, areaIdToWorkflowGroup } from "@/components/GuidancePanel";
 import { useConfigOverrides } from "@/hooks/useConfigOverrides";
 import { useTemplateConfig } from "@/hooks/useTemplateConfig";
@@ -1189,7 +1197,35 @@ export default function WorkflowPage() {
   const [, setLocation] = useLocation();
   const urlParams = getUrlParams();
 
+  // URL params with both type+client signal an explicit navigation intent (e.g. from command center).
+  // In that case we start fresh rather than restoring a potentially-mismatched session.
+  const urlHasFullPreset = !!(urlParams.type && urlParams.client);
+
   const [state, setState] = useState<WorkflowState>(() => {
+    if (!urlHasFullPreset) {
+      const saved = loadWorkflowSession();
+      if (saved) {
+        // Merge restored sections with current defaults so any newly-added strategy
+        // areas (from config changes) still appear at their defaults.
+        const defaultSections = makeDefaultSections();
+        const merged = { ...defaultSections };
+        for (const [areaId, sec] of Object.entries(saved.sections)) {
+          if (areaId in defaultSections) {
+            merged[areaId as StrategyAreaId] = sec as SectionState;
+          }
+        }
+        return {
+          step: saved.step as StepId,
+          reportTypeId: saved.reportTypeId,
+          clientId: saved.clientId,
+          activeSectionId: (saved.activeSectionId in defaultSections
+            ? saved.activeSectionId
+            : DEFAULT_STRATEGY_AREAS[0].id) as StrategyAreaId,
+          sections: merged,
+          chatFinding: null,
+        };
+      }
+    }
     const initialStep: StepId = urlParams.type ? (urlParams.client ? 3 : 2) : 1;
     return {
       step: initialStep,
@@ -1199,6 +1235,13 @@ export default function WorkflowPage() {
       sections: makeDefaultSections(),
       chatFinding: null,
     };
+  });
+
+  // Track whether we restored a saved session so we can show the banner.
+  const [restoredAt, setRestoredAt] = useState<number | null>(() => {
+    if (urlHasFullPreset) return null;
+    const saved = loadWorkflowSession();
+    return saved ? saved.savedAt : null;
   });
 
   const { data: clients = [] } = useQuery<Client[]>({ queryKey: ["/api/clients"] });
@@ -1244,6 +1287,40 @@ export default function WorkflowPage() {
   const onCloseChatFinding = useCallback(() => {
     setState(s => ({ ...s, chatFinding: null }));
   }, []);
+
+  // ─── Session persistence ───────────────────────────────────────────────────
+  // Debounced auto-save: fires 600 ms after any state change.
+  // `chatFinding` is transient UI state and is intentionally excluded.
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      saveWorkflowSession(
+        state.step,
+        state.reportTypeId,
+        state.clientId,
+        state.activeSectionId,
+        state.sections as Record<string, PersistedSectionState>,
+      );
+    }, 600);
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, [state]);
+
+  const startFresh = useCallback(() => {
+    clearWorkflowSession();
+    setRestoredAt(null);
+    setState({
+      step: 1,
+      reportTypeId: null,
+      clientId: null,
+      activeSectionId: DEFAULT_STRATEGY_AREAS[0].id,
+      sections: makeDefaultSections(),
+      chatFinding: null,
+    });
+  }, []);
+  // ──────────────────────────────────────────────────────────────────────────
 
   const onCommitFindingRevision = useCallback((finding: Finding, newBody: string, status: FindingStatus) => {
     setState(s => {
@@ -1294,6 +1371,33 @@ export default function WorkflowPage() {
   return (
     <div className="flex flex-col h-full overflow-hidden bg-background" data-testid="page-workflow">
       <StepperHeader currentStep={state.step} />
+
+      {/* Restore banner — shown when a saved session was loaded on mount */}
+      {restoredAt !== null && (
+        <div className="flex items-center gap-2.5 px-6 py-2 bg-amber-500/10 border-b border-amber-400/20 shrink-0">
+          <RotateCcw className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+          <span className="text-xs text-amber-700 dark:text-amber-400 leading-snug" data-testid="text-session-restored">
+            Session restored — {formatSessionAge(restoredAt)}
+            {state.reportTypeId && reportType && <> · {reportType.label}</>}
+            {selectedClient && <> · {selectedClient.name}</>}
+          </span>
+          <button
+            onClick={startFresh}
+            className="text-xs text-amber-700 dark:text-amber-400 underline underline-offset-2 hover:no-underline ml-1 shrink-0"
+            data-testid="btn-start-fresh"
+          >
+            Start fresh
+          </button>
+          <button
+            onClick={() => setRestoredAt(null)}
+            className="ml-auto text-amber-600/50 hover:text-amber-600 dark:hover:text-amber-400 transition-colors shrink-0"
+            aria-label="Dismiss"
+            data-testid="btn-dismiss-restore-banner"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       <div className="flex-1 min-h-0 overflow-hidden">
         {state.step === 1 && (

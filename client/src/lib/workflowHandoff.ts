@@ -11,6 +11,7 @@
  */
 
 import type { Finding } from "./findingTypes";
+import { effectiveScore, BUCKET_LABELS } from "./priorityEngine";
 
 const STORAGE_KEY = "smarteo:wf_ctx";
 const TTL_MS = 4 * 60 * 60 * 1000;
@@ -80,15 +81,27 @@ export function buildAmThoughtsFromContext(ctx: WorkflowHandoffContext): string 
 
 /**
  * Derive a priority checks string (bullet list) from accepted/revised findings.
+ *
+ * Findings are sorted by effective priority (manual override > heuristic) so the
+ * highest-impact items surface first in the report builder's pre-populated inputs.
+ * Each line includes the effective priority bucket label so report authors can see
+ * AM priority judgements at a glance.
  */
 export function buildPriorityChecksFromContext(ctx: WorkflowHandoffContext): string {
   const lines: string[] = [];
   for (const area of ctx.committedAreas) {
-    const selected = area.findings.filter(
-      f => f.selected && f.status !== "rejected",
-    );
+    const selected = area.findings
+      .filter(f => f.selected && f.status !== "rejected")
+      .slice()
+      .sort((a, b) => effectiveScore(b) - effectiveScore(a));
+
     for (const f of selected) {
-      lines.push(`• [${area.areaLabel}] ${f.body}`);
+      const ov = f.priorityOverride;
+      const bucket = ov?.bucket ?? f.priority?.bucket;
+      const bucketLabel = bucket ? BUCKET_LABELS[bucket] : null;
+      const overrideMarker = ov ? " [adj]" : "";
+      const priorityTag = bucketLabel ? ` (${bucketLabel}${overrideMarker})` : "";
+      lines.push(`• [${area.areaLabel}]${priorityTag} ${f.body}`);
     }
   }
   return lines.join("\n");

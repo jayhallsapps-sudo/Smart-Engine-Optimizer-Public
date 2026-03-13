@@ -13,7 +13,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { apiRequest } from "@/lib/queryClient";
 import type { Finding, FindingStatus, FindingChatMessage } from "@/lib/findingTypes";
 
@@ -69,18 +68,14 @@ const STATUS_LABELS: Record<FindingStatus, string> = {
 
 interface FindingChatPanelProps {
   finding: Finding;
-  overrideBody?: string;
   onClose: () => void;
   onCommit: (newBody: string, status: FindingStatus) => void;
 }
 
-export function FindingChatPanel({
-  finding,
-  overrideBody,
-  onClose,
-  onCommit,
-}: FindingChatPanelProps) {
-  const currentBody = overrideBody ?? finding.body;
+export function FindingChatPanel({ finding, onClose, onCommit }: FindingChatPanelProps) {
+  // finding.body is always the current text (originalBody unless already revised in state)
+  const currentBody = finding.body;
+
   const [messages, setMessages] = useState<FindingChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -147,10 +142,7 @@ export function FindingChatPanel({
     }
   }
 
-  const displayStatus: FindingStatus =
-    pendingRevision
-      ? "revised"
-      : finding.status;
+  const displayStatus: FindingStatus = pendingRevision ? "revised" : finding.status;
 
   return (
     <div className="fixed inset-0 z-50 flex" data-testid="finding-chat-panel">

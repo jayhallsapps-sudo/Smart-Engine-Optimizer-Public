@@ -338,9 +338,14 @@ export function AppSidebar() {
   const [adminUnlocked, setAdminUnlocked] = useState<boolean>(isAdminUnlocked);
 
   const handleProfileUpdate = useCallback((updated: UserProfile) => {
+    // If switching away from an admin-eligible role, immediately end the admin session
+    if (isAdminRole(profile.role) && !isAdminRole(updated.role) && adminUnlocked) {
+      clearAdminToken();
+      setAdminUnlocked(false);
+    }
     setProfile(updated);
     saveProfile(updated);
-  }, []);
+  }, [profile.role, adminUnlocked]);
 
   function handleClearAdmin() {
     clearAdminToken();

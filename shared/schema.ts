@@ -246,6 +246,37 @@ export type AdminGuidance = typeof adminGuidance.$inferSelect;
 export type InsertAdminGuidance = z.infer<typeof insertAdminGuidanceSchema>;
 export type UpdateAdminGuidance = z.infer<typeof updateAdminGuidanceSchema>;
 
+// ─── Admin Config Overrides ──────────────────────────────────────────────────
+// Stores admin-editable annotations on top of code-driven config objects.
+// Structural keys (IDs, routes, field names) remain code-only; only safe
+// metadata fields (notes, descriptions, labels) are stored here.
+//
+// Namespace values:  "reportType" | "fieldMap" | "qbsMap"
+// Field values:      "note"  (currently the only editable field)
+// ItemKey examples:  "biweekly" | "monthly:amThoughts" | "amFocusNextQuarter"
+//
+// Fallback behavior: if no override exists, the calling code uses the
+// code-defined default value (displayName, sourceHint, etc.).
+
+export const adminConfigOverrides = pgTable("admin_config_overrides", {
+  id: serial("id").primaryKey(),
+  namespace: varchar("namespace", { length: 64 }).notNull(),
+  itemKey: varchar("item_key", { length: 128 }).notNull(),
+  field: varchar("field", { length: 64 }).notNull(),
+  value: text("value").notNull(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertAdminConfigOverrideSchema = z.object({
+  namespace: z.string().min(1).max(64),
+  itemKey: z.string().min(1).max(128),
+  field: z.string().min(1).max(64),
+  value: z.string(),
+});
+
+export type AdminConfigOverride = typeof adminConfigOverrides.$inferSelect;
+export type InsertAdminConfigOverride = z.infer<typeof insertAdminConfigOverrideSchema>;
+
 export const CLIENT_SENTIMENT_OPTIONS = ["Happy", "Neutral", "Concerned", "Frustrated"] as const;
 export type ClientSentiment = typeof CLIENT_SENTIMENT_OPTIONS[number];
 

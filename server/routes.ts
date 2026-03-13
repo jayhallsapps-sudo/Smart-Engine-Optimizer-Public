@@ -3169,5 +3169,31 @@ export async function registerRoutes(
     return res.status(204).end();
   });
 
+  // ── Admin Config Overrides ──────────────────────────────────────────────────
+  // GET  /api/admin/config-overrides?namespace=X  → list all (or by namespace)
+  // PUT  /api/admin/config-overrides              → upsert (body: {namespace, itemKey, field, value})
+  // DELETE /api/admin/config-overrides/:id        → delete by id
+
+  app.get("/api/admin/config-overrides", async (req, res) => {
+    const { namespace } = req.query as Record<string, string>;
+    const items = await storage.listConfigOverrides(namespace || undefined);
+    return res.json(items);
+  });
+
+  app.put("/api/admin/config-overrides", async (req, res) => {
+    const { insertAdminConfigOverrideSchema } = await import("@shared/schema");
+    const parsed = insertAdminConfigOverrideSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    const item = await storage.upsertConfigOverride(parsed.data);
+    return res.json(item);
+  });
+
+  app.delete("/api/admin/config-overrides/:id", async (req, res) => {
+    const id = Number(req.params.id);
+    const deleted = await storage.deleteConfigOverride(id);
+    if (!deleted) return res.status(404).json({ error: "Not found" });
+    return res.status(204).end();
+  });
+
   return httpServer;
 }

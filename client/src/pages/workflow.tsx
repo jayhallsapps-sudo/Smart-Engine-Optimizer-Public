@@ -44,6 +44,7 @@ import {
 } from "@/lib/workflowStrategyAreas";
 import { saveWorkflowContext } from "@/lib/workflowHandoff";
 import { GuidancePanel, areaIdToWorkflowGroup } from "@/components/GuidancePanel";
+import { useConfigOverrides } from "@/hooks/useConfigOverrides";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -174,6 +175,7 @@ function StepSelectType({
   onSelect: (id: string) => void;
 }) {
   const allTypes = listReportTypes();
+  const { getNote: getAdminNote } = useConfigOverrides("reportType");
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -227,6 +229,14 @@ function StepSelectType({
                     )}
                   </div>
                   <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-2">{rt.description}</p>
+                  {(() => {
+                    const adminNote = getAdminNote(rt.id);
+                    return adminNote ? (
+                      <p className="text-[10px] text-[#1B3A6B]/80 leading-relaxed mt-1 italic border-t border-[#1B3A6B]/15 pt-1">
+                        {adminNote}
+                      </p>
+                    ) : null;
+                  })()}
                 </div>
                 {isSelected && <Check className="w-4 h-4 text-[#1B3A6B] shrink-0 mt-1" />}
               </button>

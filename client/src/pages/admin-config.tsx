@@ -1,11 +1,22 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { ChevronLeft, CheckCircle2, XCircle } from "lucide-react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import {
+  ChevronLeft,
+  CheckCircle2,
+  XCircle,
+  Pencil,
+  Plus,
+  Check,
+  X,
+  Info,
+} from "lucide-react";
 import { listReportTypes } from "@shared/reportRegistry";
 import { QBS_QBR_FIELD_MAP } from "@/lib/qbsQbrMapping";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import type { AdminConfigOverride } from "@shared/schema";
 
 // ─── Static representation of workflow field maps ─────────────────────────────
-// These mirror workflowFieldMapping.ts but are shown as read-only config data.
 
 const WORKFLOW_FIELD_MAPS = [
   {
@@ -63,9 +74,181 @@ function Chip({ label, color }: { label: string; color: string }) {
   );
 }
 
+// ─── Inline note editor ────────────────────────────────────────────────────────
+
+interface NoteEditorProps {
+  note: string | null;
+  editKey: string;
+  activeEditKey: string | null;
+  editValue: string;
+  isSaving: boolean;
+  onStartEdit: (key: string, current: string) => void;
+  onChangeValue: (v: string) => void;
+  onSave: () => void;
+  onCancel: () => void;
+}
+
+function NoteEditor({
+  note,
+  editKey,
+  activeEditKey,
+  editValue,
+  isSaving,
+  onStartEdit,
+  onChangeValue,
+  onSave,
+  onCancel,
+}: NoteEditorProps) {
+  const isEditing = activeEditKey === editKey;
+
+  if (isEditing) {
+    return (
+      <div className="space-y-1.5 min-w-[160px]" data-testid={`note-editor-${editKey}`}>
+        <textarea
+          className="w-full text-[10px] rounded border border-[#1B3A6B]/30 px-1.5 py-1 resize-none focus:outline-none focus:ring-1 focus:ring-[#1B3A6B]/40 bg-background"
+          rows={3}
+          value={editValue}
+          onChange={e => onChangeValue(e.target.value)}
+          placeholder="Add a note for this item… (leave blank to clear)"
+          autoFocus
+          data-testid={`textarea-note-${editKey}`}
+        />
+        <div className="flex gap-1">
+          <button
+            onClick={onSave}
+            disabled={isSaving}
+            className="flex items-center gap-0.5 text-[9px] px-2 py-1 rounded bg-[#1B3A6B] text-white hover:bg-[#1B3A6B]/85 transition-colors disabled:opacity-50"
+            data-testid={`button-save-note-${editKey}`}
+          >
+            <Check className="w-2.5 h-2.5" /> Save
+          </button>
+          <button
+            onClick={onCancel}
+            className="text-[9px] px-2 py-1 rounded bg-muted text-muted-foreground hover:bg-muted/70 transition-colors"
+            data-testid={`button-cancel-note-${editKey}`}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (note) {
+    return (
+      <div className="group flex items-start gap-1.5 min-w-[120px]">
+        <p className="text-[10px] text-foreground/75 leading-relaxed flex-1 italic">
+          {note}
+        </p>
+        <button
+          onClick={() => onStartEdit(editKey, note)}
+          className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-[#1B3A6B]"
+          title="Edit note"
+          data-testid={`button-edit-note-${editKey}`}
+        >
+          <Pencil className="w-2.5 h-2.5" />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      onClick={() => onStartEdit(editKey, "")}
+      className="flex items-center gap-0.5 text-[10px] text-muted-foreground/50 hover:text-[#1B3A6B] transition-colors"
+      data-testid={`button-add-note-${editKey}`}
+    >
+      <Plus className="w-2.5 h-2.5" />
+      <span>Add note</span>
+    </button>
+  );
+}
+
+// ─── Main page ─────────────────────────────────────────────────────────────────
+
 export default function AdminConfigPage() {
   const [tab, setTab] = useState<TabId>("registry");
   const allReports = listReportTypes();
+
+  // Inline edit state
+  const [activeEditKey, setActiveEditKey] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+  // For registry tab: track which report-type note row is expanded
+  const [expandedNote, setExpandedNote] = useState<string | null>(null);
+
+  // Fetch all config overrides
+  const { data: overrides = [] } = useQuery<AdminConfigOverride[]>({
+    queryKey: ["/api/admin/config-overrides"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/admin/config-overrides");
+      const json = await res.json();
+      return Array.isArray(json) ? json : [];
+    },
+    staleTime: 30_000,
+  });
+
+  const upsertMutation = useMutation({
+    mutationFn: async (data: { namespace: string; itemKey: string; field: string; value: string }) => {
+      const res = await apiRequest("PUT", "/api/admin/config-overrides", data);
+      return res.json();
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/admin/config-overrides"] }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/admin/config-overrides/${id}`);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/admin/config-overrides"] }),
+  });
+
+  const isSaving = upsertMutation.isPending || deleteMutation.isPending;
+
+  // Helpers
+  function getNote(namespace: string, itemKey: string): string | null {
+    return overrides.find(o => o.namespace === namespace && o.itemKey === itemKey && o.field === "note")?.value ?? null;
+  }
+
+  function getEntry(namespace: string, itemKey: string): AdminConfigOverride | null {
+    return overrides.find(o => o.namespace === namespace && o.itemKey === itemKey && o.field === "note") ?? null;
+  }
+
+  function startEdit(key: string, current: string) {
+    setActiveEditKey(key);
+    setEditValue(current);
+  }
+
+  function cancelEdit() {
+    setActiveEditKey(null);
+    setEditValue("");
+  }
+
+  function saveNote(namespace: string, itemKey: string) {
+    const trimmed = editValue.trim();
+    if (!trimmed) {
+      const entry = getEntry(namespace, itemKey);
+      if (entry) deleteMutation.mutate(entry.id);
+    } else {
+      upsertMutation.mutate({ namespace, itemKey, field: "note", value: trimmed });
+    }
+    setActiveEditKey(null);
+    setEditValue("");
+  }
+
+  // Shared NoteEditor props factory for reducing prop repetition
+  function noteEditorProps(editKey: string, namespace: string, itemKey: string) {
+    return {
+      note: getNote(namespace, itemKey),
+      editKey,
+      activeEditKey,
+      editValue,
+      isSaving,
+      onStartEdit: startEdit,
+      onChangeValue: setEditValue,
+      onSave: () => saveNote(namespace, itemKey),
+      onCancel: cancelEdit,
+    };
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -79,7 +262,12 @@ export default function AdminConfigPage() {
           </Link>
           <h1 className="text-xl font-bold text-foreground tracking-tight">Report Config</h1>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Read-only view of the code-driven structures that define how SmartEO processes and presents reports.
+            Code-driven structures that define how SmartEO processes reports.{" "}
+            <span className="inline-flex items-center gap-0.5 text-[#1B3A6B]">
+              <Pencil className="w-2.5 h-2.5" />
+              <span>Admin notes are editable</span>
+            </span>
+            {" "}and surfaced to AMs at runtime. Structural fields (IDs, routes, field names) remain code-only.
           </p>
         </div>
       </div>
@@ -110,10 +298,14 @@ export default function AdminConfigPage() {
         {/* ── Report Registry ─────────────────────────────────────────────────── */}
         {tab === "registry" && (
           <div>
-            <p className="text-xs text-muted-foreground mb-4">
-              All {allReports.length} report types in canonical lifecycle order. These definitions are code-driven and control which preview component, exporter, and route is used for each report.
-            </p>
-            <div className="rounded-lg border border-border overflow-hidden">
+            <div className="flex items-start gap-3 mb-4">
+              <p className="text-xs text-muted-foreground flex-1">
+                All {allReports.length} report types in canonical lifecycle order. These definitions are code-driven.
+                Hover any row and click <Pencil className="inline w-2.5 h-2.5 mx-0.5" /> to add a note — notes appear in the workflow Report Type step.
+              </p>
+            </div>
+
+            <div className="rounded-lg border border-border overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
                   <tr className="bg-muted/50 border-b border-border">
@@ -126,52 +318,94 @@ export default function AdminConfigPage() {
                     <th className="text-left px-4 py-2.5 font-semibold text-foreground/70">Phase</th>
                     <th className="text-left px-4 py-2.5 font-semibold text-foreground/70">Done</th>
                     <th className="text-left px-4 py-2.5 font-semibold text-foreground/70">Route</th>
-                    <th className="text-left px-4 py-2.5 font-semibold text-foreground/70">Derives from</th>
+                    <th className="text-left px-4 py-2.5 font-semibold text-foreground/70 whitespace-nowrap">
+                      Admin Note <span className="text-[#1B3A6B]/60 font-normal">(editable)</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {allReports.map((r, i) => (
-                    <tr
-                      key={r.id}
-                      className={`border-b border-border last:border-0 ${i % 2 === 0 ? "bg-background" : "bg-muted/20"}`}
-                      data-testid={`row-report-config-${r.id}`}
-                    >
-                      <td className="px-4 py-2.5 text-muted-foreground">{r.order}</td>
-                      <td className="px-4 py-2.5 font-medium text-foreground">{r.displayName}</td>
-                      <td className="px-4 py-2.5 font-mono text-[10px] text-muted-foreground">{r.id}</td>
-                      <td className="px-4 py-2.5">
-                        <Chip label={r.family} color={FAMILY_COLORS[r.family] ?? ""} />
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <Chip label={r.audience} color={AUDIENCE_COLORS[r.audience] ?? ""} />
-                      </td>
-                      <td className="px-4 py-2.5 text-muted-foreground font-mono text-[10px]">
-                        {r.exportFormats.join(", ")}
-                      </td>
-                      <td className="px-4 py-2.5 text-muted-foreground">{r.phase}</td>
-                      <td className="px-4 py-2.5">
-                        {r.implemented ? (
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                        ) : (
-                          <XCircle className="w-3.5 h-3.5 text-muted-foreground/40" />
+                  {allReports.map((r, i) => {
+                    const noteKey = `rt-${r.id}`;
+                    const isExpanded = expandedNote === r.id;
+                    const existingNote = getNote("reportType", r.id);
+                    return (
+                      <>
+                        <tr
+                          key={r.id}
+                          className={`border-b border-border ${isExpanded ? "" : "last:border-0"} ${i % 2 === 0 ? "bg-background" : "bg-muted/20"}`}
+                          data-testid={`row-report-config-${r.id}`}
+                        >
+                          <td className="px-4 py-2.5 text-muted-foreground">{r.order}</td>
+                          <td className="px-4 py-2.5 font-medium text-foreground">{r.displayName}</td>
+                          <td className="px-4 py-2.5 font-mono text-[10px] text-muted-foreground">{r.id}</td>
+                          <td className="px-4 py-2.5">
+                            <Chip label={r.family} color={FAMILY_COLORS[r.family] ?? ""} />
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <Chip label={r.audience} color={AUDIENCE_COLORS[r.audience] ?? ""} />
+                          </td>
+                          <td className="px-4 py-2.5 text-muted-foreground font-mono text-[10px]">
+                            {r.exportFormats.join(", ")}
+                          </td>
+                          <td className="px-4 py-2.5 text-muted-foreground">{r.phase}</td>
+                          <td className="px-4 py-2.5">
+                            {r.implemented ? (
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                            ) : (
+                              <XCircle className="w-3.5 h-3.5 text-muted-foreground/40" />
+                            )}
+                          </td>
+                          <td className="px-4 py-2.5 font-mono text-[10px] text-muted-foreground">
+                            {r.route ?? "—"}
+                          </td>
+                          <td className="px-4 py-2.5 min-w-[160px]">
+                            {activeEditKey === noteKey ? (
+                              <NoteEditor {...noteEditorProps(noteKey, "reportType", r.id)} />
+                            ) : existingNote ? (
+                              <div className="group flex items-start gap-1.5">
+                                <p className="text-[10px] text-foreground/75 leading-relaxed italic flex-1 line-clamp-2">
+                                  {existingNote}
+                                </p>
+                                <button
+                                  onClick={() => startEdit(noteKey, existingNote)}
+                                  className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-[#1B3A6B]"
+                                  title="Edit note"
+                                  data-testid={`button-edit-note-${noteKey}`}
+                                >
+                                  <Pencil className="w-2.5 h-2.5" />
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => startEdit(noteKey, "")}
+                                className="flex items-center gap-0.5 text-[10px] text-muted-foreground/40 hover:text-[#1B3A6B] transition-colors"
+                                data-testid={`button-add-note-${noteKey}`}
+                              >
+                                <Plus className="w-2.5 h-2.5" />
+                                <span>Add note</span>
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                        {isExpanded && (
+                          <tr key={`${r.id}-note`} className="border-b border-border bg-[#1B3A6B]/5">
+                            <td colSpan={10} className="px-4 py-3">
+                              <NoteEditor {...noteEditorProps(noteKey, "reportType", r.id)} />
+                            </td>
+                          </tr>
                         )}
-                      </td>
-                      <td className="px-4 py-2.5 font-mono text-[10px] text-muted-foreground">
-                        {r.route ?? "—"}
-                      </td>
-                      <td className="px-4 py-2.5 font-mono text-[10px] text-muted-foreground">
-                        {r.derivedFrom ?? "—"}
-                      </td>
-                    </tr>
-                  ))}
+                      </>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
 
-            <div className="mt-4 rounded-lg bg-muted/30 border border-border px-4 py-3">
+            <div className="mt-4 rounded-lg bg-muted/30 border border-border px-4 py-3 flex items-start gap-2">
+              <Info className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-0.5" />
               <p className="text-[11px] text-muted-foreground">
-                <span className="font-semibold text-foreground/60">Source:</span>{" "}
-                <code className="font-mono text-[10px]">shared/reportRegistry.ts</code> — editing this file changes all downstream report behavior. WYSIWYG editing of this config is deferred to a later phase.
+                <span className="font-semibold text-foreground/60">Code source:</span>{" "}
+                <code className="font-mono text-[10px]">shared/reportRegistry.ts</code> — structural fields (ID, route, family, exports) are code-only. Admin notes persist in the database and fall back to no note if unset.
               </p>
             </div>
           </div>
@@ -181,7 +415,8 @@ export default function AdminConfigPage() {
         {tab === "workflow-mapping" && (
           <div className="space-y-6">
             <p className="text-xs text-muted-foreground">
-              These mappings control which workflow findings and AM inputs are pre-populated into each report type when the AM completes the workflow handoff step.
+              These mappings control which workflow findings and AM inputs are pre-populated into each report type.
+              Hover a field row and click <Pencil className="inline w-2.5 h-2.5 mx-0.5" /> to add an admin note on any field — notes are surfaced to AMs as helper guidance in the workflow.
             </p>
             {WORKFLOW_FIELD_MAPS.map(map => (
               <div key={map.reportId} className="rounded-lg border border-border overflow-hidden">
@@ -195,24 +430,37 @@ export default function AdminConfigPage() {
                       <th className="text-left px-4 py-2 font-semibold text-foreground/60">Field ID</th>
                       <th className="text-left px-4 py-2 font-semibold text-foreground/60">Label</th>
                       <th className="text-left px-4 py-2 font-semibold text-foreground/60">Workflow Source</th>
+                      <th className="text-left px-4 py-2 font-semibold text-foreground/60 whitespace-nowrap">
+                        Admin Note <span className="text-[#1B3A6B]/60 font-normal">(editable)</span>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {map.fields.map((f, i) => (
-                      <tr key={f.fieldId} className={`border-b border-border last:border-0 ${i % 2 === 0 ? "" : "bg-muted/10"}`}>
-                        <td className="px-4 py-2 font-mono text-[10px] text-muted-foreground">{f.fieldId}</td>
-                        <td className="px-4 py-2 font-medium text-foreground">{f.fieldLabel}</td>
-                        <td className="px-4 py-2 text-muted-foreground">{f.sourceHint}</td>
-                      </tr>
-                    ))}
+                    {map.fields.map((f, i) => {
+                      const noteKey = `fm-${map.reportId}-${f.fieldId}`;
+                      const itemKey = `${map.reportId}:${f.fieldId}`;
+                      return (
+                        <tr key={f.fieldId} className={`border-b border-border last:border-0 ${i % 2 === 0 ? "" : "bg-muted/10"}`}
+                          data-testid={`row-field-map-${map.reportId}-${f.fieldId}`}
+                        >
+                          <td className="px-4 py-2 font-mono text-[10px] text-muted-foreground">{f.fieldId}</td>
+                          <td className="px-4 py-2 font-medium text-foreground">{f.fieldLabel}</td>
+                          <td className="px-4 py-2 text-muted-foreground">{f.sourceHint}</td>
+                          <td className="px-4 py-2 min-w-[160px]">
+                            <NoteEditor {...noteEditorProps(noteKey, "fieldMap", itemKey)} />
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
             ))}
-            <div className="rounded-lg bg-muted/30 border border-border px-4 py-3">
+            <div className="rounded-lg bg-muted/30 border border-border px-4 py-3 flex items-start gap-2">
+              <Info className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-0.5" />
               <p className="text-[11px] text-muted-foreground">
-                <span className="font-semibold text-foreground/60">Source:</span>{" "}
-                <code className="font-mono text-[10px]">client/src/lib/workflowFieldMapping.ts</code> — per-report field arrays define which workflow context fields map to which report inputs.
+                <span className="font-semibold text-foreground/60">Code source:</span>{" "}
+                <code className="font-mono text-[10px]">client/src/lib/workflowFieldMapping.ts</code> — field IDs and mapping logic are code-only. Admin notes persist in the database as editable metadata.
               </p>
             </div>
           </div>
@@ -222,7 +470,8 @@ export default function AdminConfigPage() {
         {tab === "qbs-qbr" && (
           <div className="space-y-4">
             <p className="text-xs text-muted-foreground">
-              These mappings define how saved QBS (planning doc) fields are pre-populated into a QBR when the AM imports QBS context. The QBS selection is quarter-aware — it prefers an exact planningQuarter + planningYear match before falling back.
+              These mappings define how saved QBS fields are pre-populated into a QBR.
+              Hover a field row and click <Pencil className="inline w-2.5 h-2.5 mx-0.5" /> to add a note — notes appear in the QBS import banner on the QBR page.
             </p>
             <div className="rounded-lg border border-border overflow-hidden">
               <div className="px-4 py-2.5 bg-muted/50 border-b border-border">
@@ -234,16 +483,27 @@ export default function AdminConfigPage() {
                     <th className="text-left px-4 py-2 font-semibold text-foreground/60">QBR Field ID</th>
                     <th className="text-left px-4 py-2 font-semibold text-foreground/60">QBR Label</th>
                     <th className="text-left px-4 py-2 font-semibold text-foreground/60">QBS Source Description</th>
+                    <th className="text-left px-4 py-2 font-semibold text-foreground/60 whitespace-nowrap">
+                      Admin Note <span className="text-[#1B3A6B]/60 font-normal">(editable)</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {QBS_QBR_FIELD_MAP.map((f, i) => (
-                    <tr key={f.fieldId} className={`border-b border-border last:border-0 ${i % 2 === 0 ? "" : "bg-muted/10"}`}>
-                      <td className="px-4 py-2 font-mono text-[10px] text-muted-foreground">{f.fieldId}</td>
-                      <td className="px-4 py-2 font-medium text-foreground">{f.fieldLabel}</td>
-                      <td className="px-4 py-2 text-muted-foreground">{f.sourceHint}</td>
-                    </tr>
-                  ))}
+                  {QBS_QBR_FIELD_MAP.map((f, i) => {
+                    const noteKey = `qbs-${f.fieldId}`;
+                    return (
+                      <tr key={f.fieldId} className={`border-b border-border last:border-0 ${i % 2 === 0 ? "" : "bg-muted/10"}`}
+                        data-testid={`row-qbs-map-${f.fieldId}`}
+                      >
+                        <td className="px-4 py-2 font-mono text-[10px] text-muted-foreground">{f.fieldId}</td>
+                        <td className="px-4 py-2 font-medium text-foreground">{f.fieldLabel}</td>
+                        <td className="px-4 py-2 text-muted-foreground">{f.sourceHint}</td>
+                        <td className="px-4 py-2 min-w-[160px]">
+                          <NoteEditor {...noteEditorProps(noteKey, "qbsMap", f.fieldId)} />
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -268,10 +528,11 @@ export default function AdminConfigPage() {
               </div>
             </div>
 
-            <div className="rounded-lg bg-muted/30 border border-border px-4 py-3">
+            <div className="rounded-lg bg-muted/30 border border-border px-4 py-3 flex items-start gap-2">
+              <Info className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-0.5" />
               <p className="text-[11px] text-muted-foreground">
-                <span className="font-semibold text-foreground/60">Source:</span>{" "}
-                <code className="font-mono text-[10px]">client/src/lib/qbsQbrMapping.ts</code>
+                <span className="font-semibold text-foreground/60">Code source:</span>{" "}
+                <code className="font-mono text-[10px]">client/src/lib/qbsQbrMapping.ts</code> — field IDs, tier logic, and warning messages are code-only. Admin notes persist in the database.
               </p>
             </div>
           </div>

@@ -11,6 +11,7 @@ import {
   gapAnalysisSessions,
   reportComments,
   adminGuidance,
+  adminConfigOverrides,
   type Client,
   type InsertClient,
   type QueryLog,
@@ -32,6 +33,8 @@ import {
   type AdminGuidance,
   type InsertAdminGuidance,
   type UpdateAdminGuidance,
+  type AdminConfigOverride,
+  type InsertAdminConfigOverride,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -86,6 +89,11 @@ export interface IStorage {
   createAdminGuidance(data: InsertAdminGuidance): Promise<AdminGuidance>;
   updateAdminGuidance(id: number, data: UpdateAdminGuidance): Promise<AdminGuidance | undefined>;
   deleteAdminGuidance(id: number): Promise<boolean>;
+
+  // Admin Config Overrides
+  listConfigOverrides(namespace?: string): Promise<AdminConfigOverride[]>;
+  upsertConfigOverride(data: InsertAdminConfigOverride): Promise<AdminConfigOverride>;
+  deleteConfigOverride(id: number): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -379,6 +387,44 @@ export class DatabaseStorage implements IStorage {
 
   async deleteAdminGuidance(id: number): Promise<boolean> {
     const result = await db.delete(adminGuidance).where(eq(adminGuidance.id, id)).returning();
+    return result.length > 0;
+  }
+
+  // ── Admin Config Overrides ──────────────────────────────────────────────────
+
+  async listConfigOverrides(namespace?: string): Promise<AdminConfigOverride[]> {
+    let query = db.select().from(adminConfigOverrides).$dynamic();
+    if (namespace) query = query.where(eq(adminConfigOverrides.namespace, namespace));
+    return query.orderBy(adminConfigOverrides.namespace, adminConfigOverrides.itemKey);
+  }
+
+  async upsertConfigOverride(data: InsertAdminConfigOverride): Promise<AdminConfigOverride> {
+    const { namespace, itemKey, field, value } = data;
+    const [existing] = await db.select().from(adminConfigOverrides)
+      .where(and(
+        eq(adminConfigOverrides.namespace, namespace),
+        eq(adminConfigOverrides.itemKey, itemKey),
+        eq(adminConfigOverrides.field, field),
+      )).limit(1);
+
+    if (existing) {
+      const [updated] = await db.update(adminConfigOverrides)
+        .set({ value, updatedAt: new Date() })
+        .where(eq(adminConfigOverrides.id, existing.id))
+        .returning();
+      return updated;
+    } else {
+      const [inserted] = await db.insert(adminConfigOverrides)
+        .values({ namespace, itemKey, field, value })
+        .returning();
+      return inserted;
+    }
+  }
+
+  async deleteConfigOverride(id: number): Promise<boolean> {
+    const result = await db.delete(adminConfigOverrides)
+      .where(eq(adminConfigOverrides.id, id))
+      .returning();
     return result.length > 0;
   }
 }

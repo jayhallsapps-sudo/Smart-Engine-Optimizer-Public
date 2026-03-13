@@ -18,6 +18,7 @@
  */
 
 import { useState } from "react";
+import { useConfigOverrides } from "@/hooks/useConfigOverrides";
 import {
   ChevronDown,
   ChevronRight,
@@ -69,6 +70,7 @@ export function QbsContextBanner({
   onDismiss,
 }: QbsContextBannerProps) {
   const { tier, note, alternatives } = selection;
+  const { getNote: getAdminNote } = useConfigOverrides("qbsMap");
 
   // Active source — starts as the auto-selected match, AM can change via picker
   const [activeReport, setActiveReport] = useState<SavedReport>(selection.match);
@@ -250,6 +252,14 @@ export function QbsContextBanner({
                     <div className="text-muted-foreground leading-snug truncate">
                       {hasContent ? entry.sourceHint : "Not set in this QBS"}
                     </div>
+                    {(() => {
+                      const adminNote = getAdminNote(entry.fieldId);
+                      return adminNote ? (
+                        <div className="text-[9px] text-[#1B3A6B]/70 italic leading-snug mt-0.5">
+                          {adminNote}
+                        </div>
+                      ) : null;
+                    })()}
                   </div>
 
                   {hasContent && (

@@ -26,6 +26,8 @@ import {
   AlertTriangle,
   MessageSquare,
   CheckCircle2,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { QbrPrepPreview } from "@/components/report-preview/qbr-prep-preview";
@@ -165,6 +167,7 @@ export default function QbrPrepPage() {
   const [showAmInputs, setShowAmInputs] = useState(true);
   const [amValidationErrors, setAmValidationErrors] = useState<Record<string, string>>({});
   const [showCommentPanel, setShowCommentPanel] = useState(false);
+  const [focusMode, setFocusMode] = useState(false);
 
   const [reportData, setReportData] = useState<any>(null);
   const [edits, setEdits] = useState<Record<string, string>>({});
@@ -481,7 +484,7 @@ export default function QbrPrepPage() {
 
   return (
     <div className="flex h-full min-h-0" data-testid="qbr-prep-page">
-      <aside className="w-72 shrink-0 border-r bg-card flex flex-col overflow-y-auto">
+      <aside className={`shrink-0 border-r bg-card flex flex-col overflow-y-auto transition-all duration-200 ${focusMode ? "w-0 overflow-hidden border-0" : "w-72"}`}>
         <div className="p-4 border-b">
           <div className="flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-primary" />
@@ -889,7 +892,20 @@ export default function QbrPrepPage() {
         })()}
       </aside>
 
-      <div className="flex-1 min-w-0 overflow-auto">
+      <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+        <div className="shrink-0 flex items-center gap-1 px-3 py-1 border-b bg-background/90">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 w-7 p-0"
+            onClick={() => setFocusMode(v => !v)}
+            title={focusMode ? "Show sidebar" : "Focus mode (hide sidebar)"}
+            data-testid="button-focus-mode"
+          >
+            {focusMode ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
+          </Button>
+        </div>
+        <div className="flex-1 overflow-auto">
         {!reportData && !generateMutation.isPending && (
           <div className="h-full flex items-center justify-center">
             <div className="text-center space-y-3 max-w-xs">
@@ -943,6 +959,7 @@ export default function QbrPrepPage() {
             onToggleTable={toggleTable}
           />
         )}
+      </div>
       </div>
 
       {showCommentPanel && (

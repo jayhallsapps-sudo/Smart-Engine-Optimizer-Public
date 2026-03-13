@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect } from "react";
-import { Pencil, Check, X } from "lucide-react";
-import { EditableSection } from "./editable-section";
+import { useState, useRef, useEffect, useContext } from "react";
+import { Pencil, Check, X, Eye, BookOpen } from "lucide-react";
+import { EditableSection, ReadModeContext } from "./editable-section";
 import { MetricCard } from "./report-chart";
 import { SourceBadge, AddableReportTable, getCustomRows, setCustomRows } from "./report-table";
 
@@ -19,6 +19,7 @@ function WorkLogBulletCell({
   edits: Record<string, string>;
   onEdit: (k: string, v: string) => void;
 }) {
+  const readMode = useContext(ReadModeContext);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -36,6 +37,7 @@ function WorkLogBulletCell({
   }, [editing]);
 
   function startEdit() {
+    if (readMode) return;
     setDraft(current);
     setEditing(true);
   }
@@ -66,39 +68,47 @@ function WorkLogBulletCell({
     );
   }
 
+  const bulletList = (
+    <ul className="space-y-0.5 list-none p-0 m-0">
+      {displayItems.length === 0 ? (
+        <li className="text-muted-foreground italic">—</li>
+      ) : (
+        displayItems.map((item, ii) => (
+          <li key={ii} className="flex items-start gap-1.5 flex-wrap">
+            <span className="text-gray-400 mt-px shrink-0">•</span>
+            <span className="flex items-start gap-1 flex-1 flex-wrap">
+              {item.url && !wasEdited ? (
+                <a
+                  href={item.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 underline break-all"
+                  onClick={e => e.stopPropagation()}
+                >
+                  {item.text}
+                </a>
+              ) : (
+                <span className="break-words">{item.text}</span>
+              )}
+              {item.source && !wasEdited && <SourceBadge source={item.source} />}
+            </span>
+          </li>
+        ))
+      )}
+    </ul>
+  );
+
+  if (readMode) {
+    return <div className="min-h-[20px]">{bulletList}</div>;
+  }
+
   return (
     <div
       className="group relative cursor-pointer hover:outline hover:outline-1 hover:outline-border rounded transition-all min-h-[20px]"
       onClick={startEdit}
       title="Click to edit"
     >
-      <ul className="space-y-0.5 list-none p-0 m-0">
-        {displayItems.length === 0 ? (
-          <li className="text-muted-foreground italic">—</li>
-        ) : (
-          displayItems.map((item, ii) => (
-            <li key={ii} className="flex items-start gap-1.5 flex-wrap">
-              <span className="text-gray-400 mt-px shrink-0">•</span>
-              <span className="flex items-start gap-1 flex-1 flex-wrap">
-                {item.url && !wasEdited ? (
-                  <a
-                    href={item.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 underline break-all"
-                    onClick={e => e.stopPropagation()}
-                  >
-                    {item.text}
-                  </a>
-                ) : (
-                  <span className="break-words">{item.text}</span>
-                )}
-                {item.source && !wasEdited && <SourceBadge source={item.source} />}
-              </span>
-            </li>
-          ))
-        )}
-      </ul>
+      {bulletList}
       <Pencil className="w-2.5 h-2.5 text-muted-foreground opacity-0 group-hover:opacity-100 absolute top-0.5 right-0.5 pointer-events-none" />
     </div>
   );
@@ -192,6 +202,15 @@ export function DocxPreview({
 }: DocxPreviewProps) {
   const accentColor = bwTheme ? "#C0392B" : "#1B3A6B";
   const [headerImgUrl, setHeaderImgUrl] = useState<string | null>(null);
+  const [readMode, setReadMode] = useState(false);
+
+  const tocItems = sections
+    .filter(s => s.title && !s.loading && s.id !== "bw_purpose")
+    .map(s => ({ id: s.id, title: s.title! }));
+
+  function scrollToSection(id: string) {
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   useEffect(() => {
     if (!bwTheme) return;
@@ -201,12 +220,51 @@ export function DocxPreview({
       .catch(() => setHeaderImgUrl(null));
   }, [bwTheme]);
 
+  const toolbar = (
+    <div
+      className="shrink-0 flex items-center gap-2 px-4 py-1.5 border-b bg-background/90 backdrop-blur-sm z-10"
+      style={{ position: "sticky", top: 0 }}
+    >
+      <button
+        onClick={() => setReadMode(v => !v)}
+        className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+          readMode
+            ? "bg-primary text-primary-foreground"
+            : "bg-muted text-muted-foreground hover:bg-muted/80"
+        }`}
+        data-testid="button-toggle-read-mode"
+        title={readMode ? "Switch to edit mode" : "Switch to read mode"}
+      >
+        {readMode ? <Pencil className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+        {readMode ? "Edit" : "Read"}
+      </button>
+      {readMode && tocItems.length > 0 && (
+        <div className="flex items-center gap-1 overflow-x-auto flex-nowrap pl-1">
+          <BookOpen className="w-3 h-3 text-muted-foreground shrink-0" />
+          {tocItems.map(item => (
+            <button
+              key={item.id}
+              onClick={() => scrollToSection(item.id)}
+              className="shrink-0 text-[11px] px-2 py-0.5 rounded border border-border text-muted-foreground hover:text-foreground hover:border-foreground/40 transition-colors whitespace-nowrap"
+              data-testid={`toc-jump-${item.id}`}
+            >
+              {item.title}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
   if (bwTheme) {
     const purposeSection = sections.find(s => s.id === "bw_purpose");
     const otherSections = sections.filter(s => s.id !== "bw_purpose");
 
     return (
-      <div className="bg-muted/30 min-h-full flex items-start justify-center p-6 overflow-y-auto">
+      <ReadModeContext.Provider value={readMode}>
+        <div className="flex flex-col h-full">
+          {toolbar}
+          <div className="flex-1 bg-muted/30 flex items-start justify-center p-6 overflow-y-auto">
         <div
           className="bg-white shadow-lg overflow-hidden"
           style={{
@@ -298,12 +356,17 @@ export function DocxPreview({
             </div>
           </div>
         </div>
-      </div>
+        </div>
+        </div>
+      </ReadModeContext.Provider>
     );
   }
 
   return (
-    <div className="bg-gray-200 dark:bg-gray-700 min-h-full p-4 overflow-y-auto">
+    <ReadModeContext.Provider value={readMode}>
+      <div className="flex flex-col h-full">
+        {toolbar}
+        <div className="flex-1 bg-gray-200 dark:bg-gray-700 p-4 overflow-y-auto">
       <div
         className="bg-white shadow-lg mx-auto"
         style={{
@@ -371,13 +434,23 @@ export function DocxPreview({
           {footerText}
         </div>
       </div>
-    </div>
+      </div>
+      </div>
+    </ReadModeContext.Provider>
   );
 }
 
 function DocxCustomCell({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const readMode = useContext(ReadModeContext);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
+  if (readMode) {
+    return (
+      <span className="block min-h-[16px]" style={{ color: value ? "#111827" : "#9CA3AF", fontSize: "10px" }}>
+        {value || "—"}
+      </span>
+    );
+  }
   if (editing) {
     return (
       <textarea
@@ -430,7 +503,7 @@ function DocxSectionBlock({
   const num = sectionIndex + 1;
 
   return (
-    <div className="mb-6" data-testid={`section-${section.id}`}>
+    <div id={section.id} className="mb-6 scroll-mt-4" data-testid={`section-${section.id}`}>
       {section.title && (
         <div
           className="text-base font-bold mb-2"

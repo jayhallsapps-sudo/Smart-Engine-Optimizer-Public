@@ -1,5 +1,7 @@
-import { useState, useRef, useEffect } from "react";
+import { createContext, useContext, useState, useRef, useEffect } from "react";
 import { Pencil, Check, X } from "lucide-react";
+
+export const ReadModeContext = createContext(false);
 
 interface EditableSectionProps {
   editKey: string;
@@ -22,6 +24,7 @@ export function EditableSection({
   multiline = false,
   as: Tag = "div",
 }: EditableSectionProps) {
+  const readMode = useContext(ReadModeContext);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const ref = useRef<HTMLTextAreaElement | HTMLInputElement>(null);
@@ -45,6 +48,14 @@ export function EditableSection({
   useEffect(() => {
     if (editing && ref.current) ref.current.focus();
   }, [editing]);
+
+  if (readMode) {
+    return (
+      <Tag className={className} style={style}>
+        {current}
+      </Tag>
+    );
+  }
 
   if (editing) {
     return (

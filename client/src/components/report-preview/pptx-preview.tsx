@@ -1,6 +1,7 @@
-import { useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import { EditableSection } from "./editable-section";
+import { useState, useEffect, useLayoutEffect } from "react";
+import { createPortal } from "react-dom";
+import { ChevronLeft, ChevronRight, Maximize2, X } from "lucide-react";
+import { EditableSection, ReadModeContext } from "./editable-section";
 import { ReportBarChart, ReportLineChart, MetricCard } from "./report-chart";
 import { getCustomRows, setCustomRows } from "./report-table";
 
@@ -62,11 +63,23 @@ const LIGHT_BLUE = "#E8F0FE";
 export function PptxPreview({ slides, edits, onEdit }: PptxPreviewProps) {
   const visibleSlides = slides.filter(s => !s.hidden);
   const [current, setCurrent] = useState(0);
+  const [isPresentMode, setIsPresentMode] = useState(false);
   const total = visibleSlides.length;
   const slide = visibleSlides[current];
 
   function prev() { setCurrent(c => Math.max(0, c - 1)); }
   function next() { setCurrent(c => Math.min(total - 1, c + 1)); }
+
+  useEffect(() => {
+    if (!isPresentMode) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") { setIsPresentMode(false); return; }
+      if (e.key === "ArrowRight" || e.key === "PageDown") { e.preventDefault(); setCurrent(c => Math.min(total - 1, c + 1)); }
+      if (e.key === "ArrowLeft" || e.key === "PageUp") { e.preventDefault(); setCurrent(c => Math.max(0, c - 1)); }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isPresentMode, total]);
 
   return (
     <div className="flex flex-col h-full bg-gray-800" data-testid="pptx-preview">
@@ -93,7 +106,17 @@ export function PptxPreview({ slides, edits, onEdit }: PptxPreviewProps) {
           </button>
         </div>
         <div className="text-xs text-gray-400 truncate max-w-xs">{slide?.title ?? ""}</div>
-        <div className="text-xs text-gray-500">16:9</div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-500">16:9</span>
+          <button
+            onClick={() => setIsPresentMode(true)}
+            className="p-1 rounded hover:bg-gray-700 text-gray-300 hover:text-white transition-colors"
+            title="Present (fullscreen)"
+            data-testid="button-present-mode"
+          >
+            <Maximize2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 flex overflow-hidden">
@@ -136,6 +159,131 @@ export function PptxPreview({ slides, edits, onEdit }: PptxPreviewProps) {
             </button>
           ))}
         </div>
+      </div>
+
+      {isPresentMode && createPortal(
+        <PresentationOverlay
+          slide={slide}
+          current={current}
+          total={total}
+          onPrev={prev}
+          onNext={next}
+          onExit={() => setIsPresentMode(false)}
+          edits={edits}
+          onEdit={onEdit}
+        />,
+        document.body
+      )}
+    </div>
+  );
+}
+
+function PresentationOverlay({
+  slide,
+  current,
+  total,
+  onPrev,
+  onNext,
+  onExit,
+  edits,
+  onEdit,
+}: {
+  slide: Slide | undefined;
+  current: number;
+  total: number;
+  onPrev: () => void;
+  onNext: () => void;
+  onExit: () => void;
+  edits: Record<string, string>;
+  onEdit: (k: string, v: string) => void;
+}) {
+  const [scale, setScale] = useState(1);
+
+  useLayoutEffect(() => {
+    function compute() {
+      const availW = window.innerWidth - 64;
+      const availH = window.innerHeight - 120;
+      setScale(Math.min(availW / SLIDE_W, availH / SLIDE_H, 2));
+    }
+    compute();
+    window.addEventListener("resize", compute);
+    return () => window.removeEventListener("resize", compute);
+  }, []);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex flex-col bg-gray-950"
+      data-testid="presentation-overlay"
+    >
+      <div className="flex items-center justify-between px-6 py-3 bg-gray-900 shrink-0">
+        <div className="text-white text-sm font-medium truncate max-w-lg">
+          {slide?.title ?? ""}
+        </div>
+        <div className="flex items-center gap-4 shrink-0">
+          <span className="text-gray-400 text-xs">
+            {current + 1} / {total}
+          </span>
+          <button
+            onClick={onExit}
+            className="p-1.5 rounded hover:bg-gray-700 text-gray-300 hover:text-white transition-colors"
+            title="Exit presentation (Esc)"
+            data-testid="button-exit-present-mode"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+
+      <div className="flex-1 flex items-center justify-center overflow-hidden">
+        {slide && (
+          <ReadModeContext.Provider value={true}>
+            <div
+              style={{
+                width: SLIDE_W,
+                height: SLIDE_H,
+                transform: `scale(${scale})`,
+                transformOrigin: "center center",
+                flexShrink: 0,
+                boxShadow: "0 12px 48px rgba(0,0,0,0.7)",
+                background: "#F8FAFC",
+                fontFamily: "'Calibri', 'Segoe UI', Arial, sans-serif",
+                overflow: "hidden",
+                position: "relative",
+              }}
+              data-testid={`present-slide-${slide.id}`}
+            >
+              <SlideRenderer slide={slide} edits={edits} onEdit={onEdit} />
+            </div>
+          </ReadModeContext.Provider>
+        )}
+      </div>
+
+      <div
+        className="flex items-center justify-center gap-4 px-6 py-4 bg-gray-900 shrink-0"
+        style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}
+      >
+        <button
+          onClick={onPrev}
+          disabled={current === 0}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-30 text-white text-sm transition-colors"
+          data-testid="button-present-prev"
+        >
+          <ChevronLeft className="w-4 h-4" /> Prev
+        </button>
+        <span className="text-gray-300 text-sm tabular-nums w-20 text-center">
+          {current + 1} of {total}
+        </span>
+        <button
+          onClick={onNext}
+          disabled={current === total - 1}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-30 text-white text-sm transition-colors"
+          data-testid="button-present-next"
+        >
+          Next <ChevronRight className="w-4 h-4" />
+        </button>
+        <span className="text-gray-500 text-xs ml-4 hidden sm:block">
+          ← → or Page Up/Down · Esc to exit
+        </span>
       </div>
     </div>
   );

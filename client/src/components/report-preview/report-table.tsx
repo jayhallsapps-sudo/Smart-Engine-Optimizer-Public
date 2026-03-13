@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useContext } from "react";
 import type { ReactNode } from "react";
+import { ReadModeContext } from "./editable-section";
 
 const ACCENT = "#C0392B";
 
@@ -95,8 +96,17 @@ function CustomRowCell({
   value: string;
   onChange: (v: string) => void;
 }) {
+  const readMode = useContext(ReadModeContext);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
+
+  if (readMode) {
+    return (
+      <span style={{ display: "block", minHeight: 16, fontSize: "10px", lineHeight: 1.4, color: value ? "#111827" : "#9CA3AF" }}>
+        {value || "—"}
+      </span>
+    );
+  }
 
   if (editing) {
     return (
@@ -296,6 +306,8 @@ export function AddableReportTable({
   fontSize?: string;
   title?: string;
 }) {
+  const readMode = useContext(ReadModeContext);
+  const effectiveExportMode = exportMode || readMode;
   const customRows = getCustomRows(edits, tableId);
   const deletedSourceIndices = getDeletedSourceRows(edits, tableId);
   const colCount = headers.length;
@@ -323,14 +335,14 @@ export function AddableReportTable({
     setDeletedSourceRows(tableId, next, onEdit);
   }
 
-  const deleteColHeader = exportMode ? [] : [""];
+  const deleteColHeader = effectiveExportMode ? [] : [""];
 
   const visibleSourceRows: { node: ReactNode[]; originalIndex: number }[] = sourceRows
     .map((row, i) => ({ node: row, originalIndex: i }))
     .filter(({ originalIndex }) => !deletedSourceIndices.has(originalIndex));
 
   const sourceNodeRows: ReactNode[][] = visibleSourceRows.map(({ node, originalIndex }) => {
-    if (exportMode) return node;
+    if (effectiveExportMode) return node;
     const deleteBtn = (
       <DeleteRowBtn
         key="del"
@@ -344,7 +356,7 @@ export function AddableReportTable({
   const customNodeRows: ReactNode[][] = customRows.map((row, ri) =>
     row.map((cell, ci) => {
       const isLast = ci === colCount - 1;
-      if (exportMode) {
+      if (effectiveExportMode) {
         return <span key={ci}>{cell}</span>;
       }
       return (
@@ -367,13 +379,13 @@ export function AddableReportTable({
           )}
         </span>
       );
-    }).concat(exportMode ? [] : [<span key="del-placeholder" />]),
+    }).concat(effectiveExportMode ? [] : [<span key="del-placeholder" />]),
   );
 
   const allRows = [...sourceNodeRows, ...customNodeRows];
   const highlightRows = customRows.map((_, i) => visibleSourceRows.length + i);
 
-  const displayHeaders = exportMode ? headers : [...headers, ...deleteColHeader];
+  const displayHeaders = effectiveExportMode ? headers : [...headers, ...deleteColHeader];
 
   return (
     <div>
@@ -385,7 +397,7 @@ export function AddableReportTable({
         fontSize={fontSize}
         highlightRows={highlightRows}
       />
-      {!exportMode && (
+      {!effectiveExportMode && (
         <button
           onClick={addRow}
           data-testid={`button-add-row-${tableId}`}

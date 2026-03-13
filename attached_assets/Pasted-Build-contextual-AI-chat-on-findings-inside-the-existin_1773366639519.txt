@@ -1,0 +1,184 @@
+Build contextual AI chat on findings inside the existing SmartEO Phase 2 workflow.
+
+IMPORTANT CONTEXT
+
+The following are already in place and must be extended, not replaced:
+- Phase 2 foundation / reuse-first architecture
+- Command Center
+- canonical report registry
+- report family split foundations
+- repurposed left sidebar
+- guided workflow shell at /workflow
+- workflow strategy areas moved into config
+- client pre-seeding into report pages
+- quick-launch option from /prepare
+- native comments/review system with saved-report scoping
+- stable semantic anchors across current report types
+
+Do not rebuild the workflow shell, report pages, or comments system from scratch.
+
+CORE OBJECTIVE
+
+Add contextual AI chat on findings so a user can click a specific finding/recommendation inside the workflow and open a focused AI conversation tied only to that item.
+
+This is not a general chatbot.
+This is a finding-level analyst assistant.
+
+CRITICAL PRODUCT RULES
+
+- The chat must attach to a single finding or recommendation.
+- The chat must not behave like a global freeform assistant.
+- The chat must help the user understand, refine, and commit a specific finding.
+- The user should feel like they are interrogating one recommendation, not leaving the workflow to go talk to a bot.
+
+FINDING MODEL REQUIREMENT
+
+Before building the chat UI, ensure findings are represented as stable objects, not just loose text blobs.
+
+Each finding should have a stable identity and a structured shape that can support chat and later editing/refresh behavior.
+
+At minimum, each finding should support:
+- id
+- title or short label
+- body / recommendation text
+- category or strategy area
+- status
+  - draft
+  - accepted
+  - rejected
+  - revised
+- optional evidence summary
+- optional source metadata placeholder
+- optional confidence placeholder
+- optional notes / revision history placeholder
+
+Do not overbuild the final intelligence schema yet.
+Do create a stable finding object model that later phases can extend.
+
+CHAT REQUIREMENTS
+
+For each finding, the contextual chat should support:
+
+- explain why this finding was surfaced
+- explain what evidence informed it
+- answer follow-up questions about the finding
+- revise the finding wording
+- help the user strengthen, narrow, or reject the recommendation
+- allow the user to commit changes back into the workflow state
+
+The chat should be able to support conversations like:
+- why did this surface?
+- what data would make this stronger?
+- is this really technical or content?
+- rewrite this more clearly
+- make this more cautious
+- make this more direct
+- merge this with another finding later (not required now, but do not block it)
+
+UI / UX REQUIREMENTS
+
+Preferred interaction:
+- user clicks a finding inside the workflow
+- contextual chat opens in a drawer, side panel, or similarly integrated surface
+- main workflow remains visible and understandable
+- user can close the chat and return to the workflow easily
+- user can commit changes from chat back into the finding
+- user can cancel without losing the original finding unless they explicitly save changes
+
+Keep the UI:
+- clean
+- contextual
+- low clutter
+- professional
+- consistent with the current SmartEO workflow style
+
+Avoid:
+- generic chat page
+- floating chat bubble unrelated to findings
+- modal-heavy clutter if a drawer/side panel works better
+- breaking the stepper flow
+
+WORKFLOW INTEGRATION
+
+Integrate this into the existing guided workflow, especially where findings are reviewed.
+
+Requirements:
+- findings in the workflow should be clickable/selectable
+- each finding should expose a “chat” or equivalent action
+- the chat should open for that finding only
+- revisions committed in chat should update the finding in the workflow state
+- accepted/rejected/revised state should remain coherent after chat use
+
+Do not bypass the workflow by dumping the user into a separate assistant experience.
+
+COMMENTS SYSTEM RELATIONSHIP
+
+Do not merge comments and finding chat into one thing.
+
+They are different systems:
+- comments = human collaboration on report artifacts
+- finding chat = AI interaction about a specific recommendation during workflow
+
+Keep them conceptually and structurally separate.
+
+REUSE / COMPATIBILITY RULES
+
+- reuse the existing workflow shell
+- reuse existing report family architecture where relevant
+- do not break the existing comments system
+- do not rebuild preview/edit pages in this prompt
+- preserve compatibility with both slideshow-style and document-style report families
+- preserve current saved report behavior
+
+IMPLEMENTATION SCOPE
+
+For this phase:
+- the chat may use mock/simulated AI behavior if the full backend intelligence path is not ready
+- but the interaction model must be real and well-structured
+- the finding object model must be real
+- the commit/update flow must be real
+
+If mock behavior is used:
+- keep it realistic
+- keep it contextual to the finding
+- do not make it generic filler
+- clearly structure the code so real AI logic can replace the mock layer later
+
+DO NOT OVERBUILD YET
+
+Do not add in this prompt:
+- full source citation engine
+- full confidence scoring engine
+- full evidence drilldown system
+- multi-finding merge UI
+- report-wide global assistant
+- presentation mode changes
+- admin controls for finding behavior
+
+Those can come later.
+
+DELIVERABLES
+
+Build:
+- structured finding object model in the workflow layer
+- clickable/selectable findings in the workflow
+- contextual AI chat panel/drawer for a single finding
+- revise / accept / reject / commit interaction flow
+- workflow state updates after chat-based revision
+- clean UI that fits the existing product
+
+IMPLEMENTATION REPORT REQUIRED
+
+After building, provide a short implementation report including:
+- files changed
+- what was reused
+- what was newly built
+- whether findings are now stable structured objects
+- how chat state is tied to finding identity
+- what was deferred
+- any UX compromises
+- any architecture risks
+
+SUCCESS CONDITION
+
+A user can click a specific finding inside the SmartEO workflow, open a focused AI chat tied only to that finding, understand or revise the recommendation, and commit changes back into the workflow without leaving the guided process.

@@ -2913,5 +2913,128 @@ export async function registerRoutes(
     }
   });
 
+  // ─── Workflow: Finding AI Chat ─────────────────────────────────────────────
+  // Mock AI analyst layer. Structured so the mock response generation can be
+  // replaced with a real LLM call (OpenAI, Anthropic, etc.) without changing
+  // the request/response contract or any frontend code.
+
+  app.post("/api/workflow/finding-chat", (req, res) => {
+    const { findingBody, areaId, areaLabel, messages } = req.body as {
+      findingId: string;
+      findingBody: string;
+      areaId: string;
+      areaLabel: string;
+      messages: Array<{ role: "user" | "assistant"; content: string }>;
+    };
+
+    if (!findingBody || !Array.isArray(messages) || messages.length === 0) {
+      return res.status(400).json({ message: "findingBody and messages are required" });
+    }
+
+    const lastUser = messages.filter(m => m.role === "user").pop()?.content?.toLowerCase() ?? "";
+
+    // ── Intent detection ──────────────────────────────────────────────────────
+    const isExplain = /why|surface|trigger|signal|data|came from|how did/.test(lastUser);
+    const isStrengthen = /strengthen|stronger|evidence|data.*support|support.*data|specific|validate|back/.test(lastUser);
+    const isRewrite = /rewrite|clearer|cleaner|better|improve|rephrase|simpler|concise/.test(lastUser);
+    const isCautious = /cautious|hedge|careful|conditional|might|may|possibly|soften|weaker/.test(lastUser);
+    const isDirect = /direct|decisive|action|strong|assertive|bold|firm|definitive/.test(lastUser);
+    const isTechnical = /technical|infra|crawl|render|core web/.test(lastUser);
+    const isContent = /content|copy|rewrite|page|cluster|keyword/.test(lastUser);
+    const isCategory = /technical or content|content or technical|category|which type|classify/.test(lastUser);
+    const isLocal = /local|gbp|map pack|citation/.test(lastUser);
+    const isMerge = /merge|combine|similar|another finding|consolidate/.test(lastUser);
+
+    // ── Area-specific context map ─────────────────────────────────────────────
+    const areaContext: Record<string, string> = {
+      content_refresh: "declining organic clicks, keyword drift, content staleness signals, or cannibalization patterns in GSC data",
+      new_content: "keyword gap analysis, competitor footprint research, GSC impression-without-click signals, and DR-weighted opportunity scoring",
+      cro_content: "high organic traffic pages with low conversion rates, user journey friction, CTA absence or placement issues, or bounce rate patterns",
+      technical_infra: "Screaming Frog crawl output, GSC coverage errors, Core Web Vitals reports, and redirect chain analysis",
+      technical_content: "on-page SEO audits, title tag and meta description analysis, internal link graph review, and schema markup gaps",
+      advanced_technical: "server log analysis, JavaScript rendering validation, hreflang configuration checks, and crawl frequency anomalies",
+      local_gbp: "GBP profile completeness scores, map pack visibility tracking, NAP consistency audits, and location page performance",
+      discoverability: "entity coverage analysis, structured data audits, AI overview appearance tracking, and topical authority mapping",
+    };
+
+    const signals = areaContext[areaId] ?? "data signals relevant to this area";
+
+    // ── Response generation ───────────────────────────────────────────────────
+    let reply = "";
+    let suggestedRevision: string | null = null;
+
+    // Extract the core action from the finding body for use in responses
+    const bodyLower = findingBody.toLowerCase();
+    const hasNumbers = /\d/.test(findingBody);
+    const recommendWord = findingBody.match(/recommend[a-z]*/i)?.[0] ?? "recommend";
+
+    if (isExplain) {
+      reply = `This finding surfaced based on ${signals}.\n\n` +
+        `The pattern it describes — ${findingBody.split("—")[0].trim().toLowerCase()} — typically emerges when the underlying data shows a measurable gap between current performance and expected outcome for an account at this stage.\n\n` +
+        `In ${areaLabel} analysis, findings like this are flagged when the severity or frequency exceeds normal variance. ` +
+        (hasNumbers
+          ? `The specific numbers in this finding are indicative benchmarks drawn from the analysis data available — they should be verified against the client's actual live data before committing.`
+          : `The recommendation is based on pattern recognition across the relevant data sources — specific quantification would require pulling the client's live metrics.`);
+    } else if (isStrengthen) {
+      reply = `To strengthen this finding, consider adding:\n\n` +
+        `1. **Specific URLs or pages** affected, not just a count estimate\n` +
+        `2. **Time range** for the decline or gap being observed (e.g., "since Q4 2025" or "last 90 days")\n` +
+        `3. **Comparison benchmarks** — how does this compare to the prior period or industry norms?\n` +
+        `4. **Estimated impact** — if this were addressed, what outcome change is realistic?\n\n` +
+        `For ${areaLabel} specifically, the strongest supporting evidence usually comes from ${signals}. Pulling explicit data points from those sources before the report session will let you make this recommendation with more precision.`;
+    } else if (isRewrite) {
+      // Generate a revised version of the finding
+      const revised = findingBody
+        .replace(/\d–\d/g, (m) => m) // preserve ranges
+        .replace(/recommend[a-z]*/i, "Action required:")
+        .replace(/^([^—]+)—\s*/, (_, lead) => lead.trim() + " — ");
+      suggestedRevision = revised !== findingBody ? revised : findingBody.replace(/\.$/, "") + " — prioritize for Q2 sprint.";
+      reply = `Here's a cleaner rewrite of this finding:\n\n"${suggestedRevision}"\n\nThe main changes: leading with the observed condition more directly, and ending with a more explicit action signal. You can accept this revision below or tweak it further.`;
+    } else if (isCautious) {
+      const cautious = findingBody
+        .replace(/recommend[a-z]*/i, "may warrant")
+        .replace(/\bwill\b/g, "could")
+        .replace(/\bneeded\b/g, "worth reviewing")
+        .replace(/\brequired\b/g, "recommended");
+      suggestedRevision = cautious !== findingBody ? cautious : `Based on available signals, ${findingBody.charAt(0).toLowerCase() + findingBody.slice(1).replace(/\.$/, "")} — validate before prioritizing.`;
+      reply = `Here's a more cautious framing:\n\n"${suggestedRevision}"\n\nThis version positions the finding as conditional on further validation rather than a definitive recommendation. Use this if the underlying data is directional but not conclusive.`;
+    } else if (isDirect) {
+      const direct = findingBody
+        .replace(/\brecommend\b/i, "Fix:")
+        .replace(/may be|could be|might be/gi, "is")
+        .replace(/consider/gi, "implement");
+      suggestedRevision = direct !== findingBody ? direct : findingBody.replace(/\.$/, "") + " Complete by end of sprint.";
+      reply = `Here's a more direct version:\n\n"${suggestedRevision}"\n\nThis framing removes hedging language and treats the recommendation as a decision, not a suggestion. Use this when the evidence is solid and the client is in execution mode.`;
+    } else if (isCategory) {
+      const isTech = ["technical_infra", "technical_content", "advanced_technical"].includes(areaId);
+      const isContentArea = ["content_refresh", "new_content", "cro_content"].includes(areaId);
+      reply = isTech
+        ? `This is a technical finding. It sits in the ${areaLabel} strategy area, which means the root cause and fix path are infrastructure/code-level rather than content-level. That said, the downstream impact is often visible in organic performance, so it may need coordination with the content team on timing.`
+        : isContentArea
+        ? `This is a content finding. The work required here is editorial — page-level copy, structure, or targeting decisions. Technical changes (redirects, canonicals) may support it but the core action is content-side.`
+        : `This finding sits in ${areaLabel}, which spans both technical and content dimensions. The ${bodyLower.includes("schema") || bodyLower.includes("tag") || bodyLower.includes("crawl") ? "primary action is technical" : "primary action is content-related"}, though cross-team coordination is likely needed.`;
+    } else if (isLocal) {
+      reply = `Local SEO findings like this one typically involve three parallel tracks: GBP optimization, on-page location signals, and citation/NAP consistency. The most impactful first step is usually auditing the GBP profile completeness score and cross-checking NAP data across the major aggregators (Neustar, Acxiom, Foursquare). That foundation unlocks the map pack visibility work downstream.`;
+    } else if (isMerge) {
+      reply = `Merging findings is supported in a future phase of the workflow. For now, if you think this overlaps with another finding, note it in your context notes and handle the consolidation when writing the report section. The key is that both findings are selected and visible — the report author can then decide how to present them together.`;
+    } else {
+      // General analyst-style response based on the area
+      const followUps: Record<string, string> = {
+        content_refresh: "Is there a specific cluster of pages where you've observed this pattern, or is this spread across the site?",
+        new_content: "Do you have the keyword gap report pulled, or are we working from impression data alone right now?",
+        cro_content: "What's the current conversion mechanism on the affected pages — form, call button, chat widget?",
+        technical_infra: "Do we have a recent Screaming Frog crawl or is this based on GSC coverage data?",
+        technical_content: "Are the affected pages high-priority by traffic, or are these lower-volume pages that have been overlooked?",
+        advanced_technical: "Has Googlebot rendering been validated recently, or is this based on crawl log inference?",
+        local_gbp: "Is the GBP profile currently verified and actively managed, or has it been neglected?",
+        discoverability: "Has the client appeared in any AI overview results for target queries, or is this entirely absent?",
+      };
+      const followUp = followUps[areaId] ?? "What additional context do you have on this from recent client conversations?";
+      reply = `Good question. For this ${areaLabel} finding, the key consideration is how confident we are in the underlying signal.\n\n${findingBody}\n\nThe strength of a ${recommendWord.toLowerCase()} like this depends heavily on how recent and how specific the data is. ${followUp}`;
+    }
+
+    return res.json({ reply, suggestedRevision });
+  });
+
   return httpServer;
 }

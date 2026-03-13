@@ -21,6 +21,13 @@ import {
   Circle,
   CheckCircle2,
 } from "lucide-react";
+import { FindingChatPanel } from "@/components/workflow/FindingChatPanel";
+import {
+  buildFinding,
+  findingShortLabel,
+  type Finding,
+  type FindingStatus,
+} from "@/lib/findingTypes";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -58,7 +65,9 @@ interface SectionState {
   phase: SectionPhase;
   amInput: string;
   questionAnswers: Record<number, string>;
-  selectedFindings: Set<number>;
+  selectedFindings: Set<string>;
+  findingOverrides: Record<string, string>;
+  findingStatuses: Record<string, FindingStatus>;
   committed: boolean;
 }
 
@@ -68,6 +77,7 @@ interface WorkflowState {
   clientId: number | null;
   activeSectionId: StrategyAreaId;
   sections: Record<StrategyAreaId, SectionState>;
+  chatFinding: Finding | null;
 }
 
 type Client = { id: number; name: string; gscSiteUrl?: string | null };
@@ -89,7 +99,9 @@ function makeDefaultSections(): Record<StrategyAreaId, SectionState> {
       phase: "idle",
       amInput: "",
       questionAnswers: {},
-      selectedFindings: new Set(area.mockFindings.map((_, i) => i)),
+      selectedFindings: new Set(area.mockFindings.map((_, i) => `${area.id}:${i}`)),
+      findingOverrides: {},
+      findingStatuses: {},
       committed: false,
     };
   }
@@ -302,10 +314,12 @@ function SectionMiniFlow({
   area,
   state,
   onChange,
+  onOpenChat,
 }: {
   area: typeof DEFAULT_STRATEGY_AREAS[number];
   state: SectionState;
   onChange: (next: Partial<SectionState>) => void;
+  onOpenChat: (finding: Finding) => void;
 }) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -428,35 +442,72 @@ function SectionMiniFlow({
           <span className="text-[10px] text-muted-foreground">Select what to include</span>
         </div>
         <div className="flex flex-col gap-2">
-          {area.mockFindings.map((finding, i) => {
-            const isSelected = state.selectedFindings.has(i);
+          {area.mockFindings.map((rawBody, i) => {
+            const fid = `${area.id}:${i}`;
+            const isSelected = state.selectedFindings.has(fid);
+            const overrideBody = state.findingOverrides[fid];
+            const fStatus = state.findingStatuses[fid];
+            const displayBody = overrideBody ?? rawBody;
+            const finding = buildFinding(area.id, area.label, i, rawBody);
             return (
-              <button
-                key={i}
-                onClick={() => {
-                  const next = new Set(state.selectedFindings);
-                  if (isSelected) next.delete(i);
-                  else next.add(i);
-                  onChange({ selectedFindings: next });
-                }}
+              <div
+                key={fid}
                 className={[
-                  "flex items-start gap-3 rounded-lg border px-3 py-2.5 text-left transition-all text-xs",
+                  "flex items-start gap-3 rounded-lg border px-3 py-2.5 transition-all",
                   isSelected
                     ? "border-[#1B3A6B]/40 bg-[#1B3A6B]/5"
-                    : "border-border bg-card hover:bg-muted/40",
+                    : "border-border bg-card",
+                  fStatus === "rejected" ? "opacity-50" : "",
                 ].join(" ")}
-                data-testid={`btn-finding-${i}`}
+                data-testid={`finding-card-${fid}`}
               >
-                <div
+                {/* Checkbox */}
+                <button
+                  onClick={() => {
+                    const next = new Set(state.selectedFindings);
+                    if (isSelected) next.delete(fid);
+                    else next.add(fid);
+                    onChange({ selectedFindings: next });
+                  }}
                   className={[
                     "w-4 h-4 rounded border flex items-center justify-center shrink-0 mt-0.5",
-                    isSelected ? "border-[#1B3A6B] bg-[#1B3A6B]" : "border-border",
+                    isSelected ? "border-[#1B3A6B] bg-[#1B3A6B]" : "border-border hover:border-[#1B3A6B]/50",
                   ].join(" ")}
+                  data-testid={`btn-finding-${fid}`}
                 >
                   {isSelected && <Check className="w-2.5 h-2.5 text-white" />}
+                </button>
+
+                {/* Body + status */}
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-foreground leading-relaxed">{displayBody}</p>
+                  {overrideBody && (
+                    <p className="text-[10px] text-muted-foreground line-through mt-0.5">{rawBody}</p>
+                  )}
+                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                    {fStatus && fStatus !== "draft" && (
+                      <span className={[
+                        "text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded",
+                        fStatus === "accepted" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" :
+                        fStatus === "rejected" ? "bg-red-500/10 text-[#C0392B]" :
+                        "bg-amber-500/10 text-amber-700 dark:text-amber-400",
+                      ].join(" ")}>
+                        {fStatus}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <span className="text-foreground leading-relaxed">{finding}</span>
-              </button>
+
+                {/* Chat button */}
+                <button
+                  onClick={() => onOpenChat({ ...finding, body: displayBody, status: fStatus ?? "draft" })}
+                  className="shrink-0 text-muted-foreground hover:text-[#1B3A6B] transition-colors p-1 rounded"
+                  title="Interrogate with AI"
+                  data-testid={`btn-chat-finding-${fid}`}
+                >
+                  <MessageSquare className="w-3.5 h-3.5" />
+                </button>
+              </div>
             );
           })}
         </div>
@@ -512,11 +563,13 @@ function StepStrategyAreas({
   activeSectionId,
   onActivate,
   onSectionChange,
+  onOpenChat,
 }: {
   sections: Record<StrategyAreaId, SectionState>;
   activeSectionId: StrategyAreaId;
   onActivate: (id: StrategyAreaId) => void;
   onSectionChange: (id: StrategyAreaId, next: Partial<SectionState>) => void;
+  onOpenChat: (finding: Finding) => void;
 }) {
   // DIVERGENCE POINT (Step 3): replace getStrategyAreas() with getStrategyAreas(reportFamily)
   // when per-family section sets are needed. Section state keys are typed to DEFAULT_STRATEGY_AREAS ids.
@@ -598,6 +651,7 @@ function StepStrategyAreas({
               area={activeArea}
               state={activeState}
               onChange={next => onSectionChange(activeArea.id, next)}
+              onOpenChat={onOpenChat}
             />
           </div>
         </ScrollArea>
@@ -611,9 +665,11 @@ function StepStrategyAreas({
 function StepFindingsReview({
   sections,
   onEdit,
+  onOpenChat,
 }: {
   sections: Record<StrategyAreaId, SectionState>;
   onEdit: (id: StrategyAreaId) => void;
+  onOpenChat: (finding: Finding) => void;
 }) {
   const committed = DEFAULT_STRATEGY_AREAS.filter(a => sections[a.id].committed);
   const skipped = DEFAULT_STRATEGY_AREAS.filter(a => !sections[a.id].committed);
@@ -641,7 +697,9 @@ function StepFindingsReview({
           <div className="flex flex-col gap-3">
             {committed.map(area => {
               const state = sections[area.id];
-              const findings = area.mockFindings.filter((_, i) => state.selectedFindings.has(i));
+              const selectedIndices = area.mockFindings
+                .map((_, i) => i)
+                .filter(i => state.selectedFindings.has(`${area.id}:${i}`));
               return (
                 <div key={area.id} className="rounded-xl border border-border bg-card">
                   <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/60">
@@ -657,13 +715,53 @@ function StepFindingsReview({
                       <RotateCcw className="w-2.5 h-2.5" /> Edit
                     </button>
                   </div>
-                  <div className="px-4 py-3 flex flex-col gap-1.5">
-                    {findings.map((f, i) => (
-                      <div key={i} className="flex items-start gap-2">
-                        <div className="w-1 h-1 rounded-full bg-[#1B3A6B] mt-1.5 shrink-0" />
-                        <p className="text-xs text-foreground leading-relaxed">{f}</p>
-                      </div>
-                    ))}
+                  <div className="px-4 py-3 flex flex-col gap-2">
+                    {selectedIndices.map(i => {
+                      const fid = `${area.id}:${i}`;
+                      const rawBody = area.mockFindings[i];
+                      const overrideBody = state.findingOverrides[fid];
+                      const fStatus = state.findingStatuses[fid];
+                      const displayBody = overrideBody ?? rawBody;
+                      const finding = buildFinding(area.id, area.label, i, rawBody);
+                      return (
+                        <div key={fid} className="flex items-start gap-2 group" data-testid={`review-finding-${fid}`}>
+                          <div className={[
+                            "w-1.5 h-1.5 rounded-full mt-1.5 shrink-0",
+                            fStatus === "accepted" ? "bg-emerald-500" :
+                            fStatus === "rejected" ? "bg-[#C0392B]" :
+                            fStatus === "revised" ? "bg-amber-500" :
+                            "bg-[#1B3A6B]",
+                          ].join(" ")} />
+                          <div className="flex-1 min-w-0">
+                            <p className={[
+                              "text-xs leading-relaxed",
+                              fStatus === "rejected" ? "line-through text-muted-foreground" : "text-foreground",
+                            ].join(" ")}>{displayBody}</p>
+                            {overrideBody && (
+                              <p className="text-[10px] text-muted-foreground line-through">{rawBody}</p>
+                            )}
+                            {fStatus && fStatus !== "draft" && (
+                              <span className={[
+                                "inline-block text-[9px] font-semibold uppercase tracking-wide mt-0.5 px-1.5 py-0.5 rounded",
+                                fStatus === "accepted" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" :
+                                fStatus === "rejected" ? "bg-red-500/10 text-[#C0392B]" :
+                                "bg-amber-500/10 text-amber-700 dark:text-amber-400",
+                              ].join(" ")}>
+                                {fStatus}
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => onOpenChat({ ...finding, body: displayBody, status: fStatus ?? "draft" })}
+                            className="shrink-0 text-muted-foreground hover:text-[#1B3A6B] transition-colors p-1 rounded opacity-0 group-hover:opacity-100"
+                            title="Interrogate with AI"
+                            data-testid={`btn-review-chat-${fid}`}
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      );
+                    })}
                     {state.amInput && (
                       <div className="mt-1.5 pt-1.5 border-t border-border/40">
                         <p className="text-[10px] text-muted-foreground italic">
@@ -890,6 +988,7 @@ export default function WorkflowPage() {
       clientId: urlParams.client ? parseInt(urlParams.client, 10) : null,
       activeSectionId: DEFAULT_STRATEGY_AREAS[0].id,
       sections: makeDefaultSections(),
+      chatFinding: null,
     };
   });
 
@@ -929,6 +1028,39 @@ export default function WorkflowPage() {
     setState(s => ({ ...s, step: 3, activeSectionId: id }));
   }, []);
 
+  const onOpenChatFinding = useCallback((finding: Finding) => {
+    setState(s => ({ ...s, chatFinding: finding }));
+  }, []);
+
+  const onCloseChatFinding = useCallback(() => {
+    setState(s => ({ ...s, chatFinding: null }));
+  }, []);
+
+  const onCommitFindingRevision = useCallback((finding: Finding, newBody: string, status: FindingStatus) => {
+    setState(s => {
+      const areaId = finding.areaId as StrategyAreaId;
+      const sectionState = s.sections[areaId];
+      if (!sectionState) return { ...s, chatFinding: null };
+      return {
+        ...s,
+        chatFinding: null,
+        sections: {
+          ...s.sections,
+          [areaId]: {
+            ...sectionState,
+            findingOverrides: newBody !== finding.body
+              ? { ...sectionState.findingOverrides, [finding.id]: newBody }
+              : sectionState.findingOverrides,
+            findingStatuses: {
+              ...sectionState.findingStatuses,
+              [finding.id]: status,
+            },
+          },
+        },
+      };
+    });
+  }, []);
+
   return (
     <div className="flex flex-col h-full overflow-hidden bg-background" data-testid="page-workflow">
       <StepperHeader currentStep={state.step} />
@@ -952,10 +1084,15 @@ export default function WorkflowPage() {
             activeSectionId={state.activeSectionId}
             onActivate={id => setState(s => ({ ...s, activeSectionId: id }))}
             onSectionChange={onSectionChange}
+            onOpenChat={onOpenChatFinding}
           />
         )}
         {state.step === 4 && (
-          <StepFindingsReview sections={state.sections} onEdit={onEditSection} />
+          <StepFindingsReview
+            sections={state.sections}
+            onEdit={onEditSection}
+            onOpenChat={onOpenChatFinding}
+          />
         )}
         {state.step === 5 && (
           <StepAssembly
@@ -972,6 +1109,19 @@ export default function WorkflowPage() {
           />
         )}
       </div>
+
+      {/* Finding AI chat panel — portal-style fixed overlay */}
+      {state.chatFinding && (
+        <FindingChatPanel
+          finding={state.chatFinding}
+          overrideBody={
+            state.sections[state.chatFinding.areaId as StrategyAreaId]
+              ?.findingOverrides[state.chatFinding.id]
+          }
+          onClose={onCloseChatFinding}
+          onCommit={(newBody, status) => onCommitFindingRevision(state.chatFinding!, newBody, status)}
+        />
+      )}
 
       <div className="flex items-center justify-between px-6 py-3 border-t bg-card/40 shrink-0">
         <Button

@@ -2866,12 +2866,18 @@ export async function registerRoutes(
   app.get("/api/comments", async (req, res) => {
     try {
       const { reportType, clientId, savedReportId } = req.query;
-      if (!reportType || typeof reportType !== "string") {
-        return res.status(400).json({ message: "reportType is required" });
+      const sid = savedReportId && savedReportId !== "null" ? Number(savedReportId) : null;
+      // reportType is required only when savedReportId is absent — when sid is set,
+      // the storage layer filters by savedReportId alone and ignores reportType.
+      if (sid === null && (!reportType || typeof reportType !== "string")) {
+        return res.status(400).json({ message: "reportType is required when savedReportId is not provided" });
       }
       const cid = clientId && clientId !== "null" ? Number(clientId) : null;
-      const sid = savedReportId && savedReportId !== "null" ? Number(savedReportId) : null;
-      const comments = await storage.getReportComments(reportType, cid, sid);
+      const comments = await storage.getReportComments(
+        typeof reportType === "string" ? reportType : "",
+        cid,
+        sid
+      );
       res.json(comments);
     } catch (err: any) {
       res.status(500).json({ message: err.message });

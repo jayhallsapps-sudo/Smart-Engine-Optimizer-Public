@@ -1,0 +1,127 @@
+Harden the SmartEO comments system so it is safe to use across real reporting cycles.
+
+IMPORTANT CONTEXT
+
+The native comments and review system already exists and must be extended, not rebuilt.
+
+Current comments functionality already includes:
+- database persistence
+- report_comments table
+- CRUD API routes
+- threaded replies
+- resolve/unresolve
+- right-side comment panel
+- integration into Bi-Weekly, Monthly, QBR, and QBS pages
+
+Do not replace this system from scratch.
+
+CORE OBJECTIVE
+
+Fix the structural weaknesses in the current comments system so it becomes production-safe for repeated reporting periods and does not create messy or ambiguous comment history.
+
+PRIORITY ISSUES TO FIX
+
+1. COMMENT SCOPING
+
+Current problem:
+Comments are scoped only by reportType + clientId, which means comments from different report instances / reporting periods can mix together.
+
+This must be fixed.
+
+Preferred solution:
+- scope comments by savedReportId
+
+If savedReportId is not yet available everywhere comments are used:
+- propose and implement the least risky fallback only if necessary
+- clearly document the tradeoff
+
+Requirements:
+- comments for one saved report instance must not bleed into another report of the same type for the same client
+- document exactly how isolation now works
+- preserve compatibility with the existing report system wherever possible
+
+2. QBR CONSISTENCY
+
+Current problem:
+QBR naming and reportType usage are inconsistent in places, with “QBR Full Report” still appearing and qbr/qbr_full mismatches existing.
+
+Fix this.
+
+Requirements:
+- visible UI should use canonical “QBR”
+- normalize reportType handling on the QBR page
+- do not allow mixed qbr / qbr_full values to break comment queries
+- preserve compatibility with existing saved report/report page behavior where needed
+
+3. REPLY INTEGRITY
+
+Current problem:
+Deleting a parent comment leaves orphaned child replies in the database that disappear from the UI.
+
+Fix this.
+
+Choose one approach:
+- cascade delete replies when parent is deleted
+or
+- soft-delete/tombstone parent comments so reply threads stay intact
+
+Use the approach that best fits the current architecture and internal review workflow.
+Explain the choice.
+
+4. MONTHLY ANCHOR DECISION
+
+Current issue:
+Monthly is canonically document-style, but the current comment anchors are slide-index based because the preview is slide-based under the hood.
+
+Do not casually ignore this.
+
+Requirements:
+- review whether Monthly should remain slide-anchored for now or move to stable named anchors now
+- choose the least risky approach for the current product state
+- if slide anchors remain temporarily, document the limitation clearly
+- if stable named anchors are feasible now, implement them
+
+5. ANCHOR STABILITY
+
+Review current anchor behavior across all integrated report pages.
+
+Requirements:
+- confirm which anchors are stable
+- reduce drift risk where practical
+- preserve existing working behavior unless a fix is clearly worthwhile
+- document current anchor granularity for each report page after the changes
+
+IMPLEMENTATION RULES
+
+- extend the existing comments system
+- do not rebuild it from scratch
+- preserve current UI patterns where possible
+- keep the right-side comment panel
+- keep threaded replies and resolve/unresolve
+- do not add mentions/notifications/assignments yet
+- do not move on to broader collaboration features in this prompt
+
+DELIVERABLES
+
+Build and/or fix:
+- per-instance comment scoping
+- QBR naming/reportType consistency
+- reply deletion integrity
+- Monthly anchor decision and implementation
+- updated anchor/scoping logic where needed
+
+IMPLEMENTATION REPORT REQUIRED
+
+After building, provide a short implementation report including:
+- files changed
+- what was reused
+- what was refactored
+- what was newly added
+- how comments are now scoped
+- how parent/reply deletion now works
+- current anchor model by report page
+- any risks or deferred items
+
+SUCCESS CONDITION
+
+Comments are isolated to the correct report instance, QBR comment behavior is consistent, reply threads cannot silently break, and the comment system is safe to use across repeated reporting cycles.

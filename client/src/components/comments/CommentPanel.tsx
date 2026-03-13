@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { X, MessageSquare, ChevronDown, ChevronRight, Check, CornerDownRight, Plus, Loader2, Lock } from "lucide-react";
+import { X, MessageSquare, ChevronDown, ChevronRight, Check, CornerDownRight, Plus, Loader2, Lock, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -195,6 +195,17 @@ function CommentItem({ comment, replies, anchors, onResolve, onDelete, onAddRepl
             <CornerDownRight className="h-3 w-3" />
             Reply
           </Button>
+          <Button
+            data-testid={`comment-delete-btn-${comment.id}`}
+            variant="ghost"
+            size="sm"
+            className="h-6 text-[10px] px-1.5 gap-1 text-gray-300 hover:text-[#C0392B]"
+            onClick={() => onDelete(comment.id)}
+            disabled={isActing}
+            title="Delete comment and its replies"
+          >
+            <Trash2 className="h-3 w-3" />
+          </Button>
           {replies.length > 0 && (
             <Button
               data-testid={`comment-toggle-replies-${comment.id}`}
@@ -267,7 +278,12 @@ export function CommentPanel({ reportType, clientId, savedReportId, anchors, onC
     ...anchors,
   ];
 
-  const qKey = `/api/comments?reportType=${reportType}&clientId=${clientId ?? "null"}&savedReportId=${savedReportId ?? "null"}`;
+  // When savedReportId is available, scope the query and cache key by it alone —
+  // the backend ignores reportType/clientId when savedReportId is supplied.
+  // When null, the panel is locked (disabled) so this path is never fetched.
+  const qKey = savedReportId !== null
+    ? `/api/comments?savedReportId=${savedReportId}`
+    : `/api/comments?reportType=${reportType}&clientId=${clientId ?? "null"}`;
 
   const { data: comments = [], isLoading } = useQuery<ReportComment[]>({
     queryKey: [qKey],

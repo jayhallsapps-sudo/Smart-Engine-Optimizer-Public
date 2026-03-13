@@ -947,7 +947,7 @@ export default function QbrPrepPage() {
 
       {showCommentPanel && (
         <CommentPanel
-          reportType="qbs"
+          reportType="qbr_prep"
           clientId={clientId || null}
           savedReportId={reportSave.savedReportId}
           anchors={[

@@ -9,6 +9,7 @@ import {
   settings,
   qbrPrepReports,
   gapAnalysisSessions,
+  reportComments,
   type Client,
   type InsertClient,
   type QueryLog,
@@ -25,6 +26,8 @@ import {
   type GapAnalysisSession,
   type GapQuestion,
   type GapAnswer,
+  type ReportComment,
+  type InsertReportComment,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -68,6 +71,11 @@ export interface IStorage {
   updateGapSession(id: number, data: { answers?: GapAnswer[]; linkedReportId?: number; linkedReportType?: string; answerUsage?: Record<string, string> }): Promise<GapAnalysisSession | undefined>;
   getGapSession(id: number): Promise<GapAnalysisSession | undefined>;
   getGapSessionsByClient(clientId: number): Promise<GapAnalysisSession[]>;
+
+  getReportComments(reportType: string, clientId: number | null): Promise<ReportComment[]>;
+  createReportComment(data: InsertReportComment): Promise<ReportComment>;
+  updateReportComment(id: number, data: { body?: string; resolved?: boolean }): Promise<ReportComment | undefined>;
+  deleteReportComment(id: number): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -287,6 +295,37 @@ export class DatabaseStorage implements IStorage {
       .from(gapAnalysisSessions)
       .where(eq(gapAnalysisSessions.clientId, clientId))
       .orderBy(desc(gapAnalysisSessions.createdAt));
+  }
+
+  async getReportComments(reportType: string, clientId: number | null): Promise<ReportComment[]> {
+    const conditions = [eq(reportComments.reportType, reportType)];
+    if (clientId !== null) {
+      conditions.push(eq(reportComments.clientId, clientId));
+    }
+    return db
+      .select()
+      .from(reportComments)
+      .where(and(...conditions))
+      .orderBy(reportComments.createdAt);
+  }
+
+  async createReportComment(data: InsertReportComment): Promise<ReportComment> {
+    const [created] = await db.insert(reportComments).values(data).returning();
+    return created;
+  }
+
+  async updateReportComment(id: number, data: { body?: string; resolved?: boolean }): Promise<ReportComment | undefined> {
+    const [updated] = await db
+      .update(reportComments)
+      .set(data)
+      .where(eq(reportComments.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteReportComment(id: number): Promise<boolean> {
+    const result = await db.delete(reportComments).where(eq(reportComments.id, id)).returning();
+    return result.length > 0;
   }
 }
 

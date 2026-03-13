@@ -21,6 +21,7 @@ import {
   ChevronDown,
   ChevronRight,
   Save,
+  MessageSquare,
   CheckCircle2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -35,6 +36,7 @@ import { useFillInTheGaps } from "@/hooks/useFillInTheGaps";
 import { FillInTheGapsModal } from "@/components/FillInTheGapsModal";
 import { ClarificationTrail } from "@/components/ClarificationTrail";
 import { Checkbox } from "@/components/ui/checkbox";
+import { CommentPanel } from "@/components/comments/CommentPanel";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -64,6 +66,7 @@ export default function MonthlyPage() {
   const [clientNotes, setClientNotes] = useState("");
 
   const [amProgressFeeling, setAmProgressFeeling] = useState("");
+  const [showCommentPanel, setShowCommentPanel] = useState(false);
   const [amContextAnomalies, setAmContextAnomalies] = useState("");
   const [amLeadershipNote, setAmLeadershipNote] = useState("");
   const [amFocusNextMonth, setAmFocusNextMonth] = useState("");
@@ -280,10 +283,20 @@ export default function MonthlyPage() {
         <div className="p-4 border-b">
           <div className="flex items-center gap-2">
             <BarChart3 className="w-5 h-5 text-primary" />
-            <div>
+            <div className="flex-1 min-w-0">
               <h1 className="font-semibold text-sm">Monthly Report</h1>
               <p className="text-xs text-muted-foreground">SEO Performance Deck (PPTX)</p>
             </div>
+            <Button
+              data-testid="toggle-comment-panel"
+              variant={showCommentPanel ? "secondary" : "ghost"}
+              size="sm"
+              className="h-7 w-7 p-0 shrink-0"
+              onClick={() => setShowCommentPanel(v => !v)}
+              title="Comments"
+            >
+              <MessageSquare className="h-4 w-4" />
+            </Button>
           </div>
           {clientId && (
             <div className="mt-2">
@@ -630,6 +643,16 @@ export default function MonthlyPage() {
           />
         )}
       </div>
+
+      {showCommentPanel && (
+        <CommentPanel
+          reportType="monthly"
+          clientId={clientId || null}
+          anchors={(report?.slides ?? []).map((s: any, i: number) => ({ id: `slide:${i}`, label: s.title ?? `Slide ${i + 1}` }))}
+          onClose={() => setShowCommentPanel(false)}
+          className="h-full"
+        />
+      )}
 
       {/* ClarificationTrail hidden — gap answers still saved to DB via answerUsage */}
       {/* {fillInGapsEnabled && sessionId && questions.length > 0 && (

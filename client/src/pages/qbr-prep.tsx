@@ -24,6 +24,7 @@ import {
   ChevronDown,
   ChevronRight,
   AlertTriangle,
+  MessageSquare,
   CheckCircle2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -36,6 +37,7 @@ import { ReportSaveSelector } from "@/components/reports/ReportSaveSelector";
 import { CrawlAssetSelector } from "@/components/reports/CrawlAssetSelector";
 import { useFillInTheGaps } from "@/hooks/useFillInTheGaps";
 import { FillInTheGapsModal } from "@/components/FillInTheGapsModal";
+import { CommentPanel } from "@/components/comments/CommentPanel";
 import { ClarificationTrail } from "@/components/ClarificationTrail";
 import { Checkbox } from "@/components/ui/checkbox";
 
@@ -162,6 +164,7 @@ export default function QbrPrepPage() {
   const [currentCrawlId, setCurrentCrawlId] = useState<number | null>(null);
   const [showAmInputs, setShowAmInputs] = useState(true);
   const [amValidationErrors, setAmValidationErrors] = useState<Record<string, string>>({});
+  const [showCommentPanel, setShowCommentPanel] = useState(false);
 
   const [reportData, setReportData] = useState<any>(null);
   const [edits, setEdits] = useState<Record<string, string>>({});
@@ -482,10 +485,20 @@ export default function QbrPrepPage() {
         <div className="p-4 border-b">
           <div className="flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-primary" />
-            <div>
+            <div className="flex-1 min-w-0">
               <h1 className="font-semibold text-sm" data-testid="text-page-title">QBS</h1>
               <p className="text-xs text-muted-foreground">7-section SEO planning snapshot</p>
             </div>
+            <Button
+              data-testid="toggle-comment-panel"
+              variant={showCommentPanel ? "secondary" : "ghost"}
+              size="sm"
+              className="h-7 w-7 p-0 shrink-0"
+              onClick={() => setShowCommentPanel(v => !v)}
+              title="Comments"
+            >
+              <MessageSquare className="h-4 w-4" />
+            </Button>
           </div>
           {clientId && <div className="mt-1"><SaveStatusIndicator status={reportSave.saveStatus} /></div>}
         </div>
@@ -931,6 +944,24 @@ export default function QbrPrepPage() {
           />
         )}
       </div>
+
+      {showCommentPanel && (
+        <CommentPanel
+          reportType="qbs"
+          clientId={clientId || null}
+          anchors={[
+            { id: "section:goals", label: "Goals" },
+            { id: "section:conversions", label: "Conversions" },
+            { id: "section:traffic", label: "Traffic" },
+            { id: "section:services", label: "Services" },
+            { id: "section:diagnosis", label: "Diagnosis" },
+            { id: "section:priorities", label: "Priorities" },
+            { id: "section:tracking", label: "Tracking" },
+          ]}
+          onClose={() => setShowCommentPanel(false)}
+          className="h-full"
+        />
+      )}
 
       {/* ClarificationTrail hidden — gap answers still saved to DB via answerUsage */}
       {/* {fillInGapsEnabled && sessionId && questions.length > 0 && (

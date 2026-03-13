@@ -30,7 +30,7 @@ import { seedDatabase } from "./seed";
 import { encrypt, decrypt, deriveInternalToken } from "./encryption";
 import { buildGoogleAuthUrl, exchangeCodeForToken, callbackHtml, isGoogleConfigured } from "./googleAuth";
 import { testCredential } from "./connectionTest";
-import { insertSfReportSchema, insertCallTrackingReportSchema, amInputsSchema, migrateLegacyAmInputs } from "@shared/schema";
+import { insertSfReportSchema, insertCallTrackingReportSchema, amInputsSchema, migrateLegacyAmInputs, insertReportCommentSchema, updateReportCommentSchema } from "@shared/schema";
 import { generateBiweeklyDocx, generatePptx, generateMidStrategyPptx, generateQbrPrepDocx } from "./reportGenerators";
 import { generateBiweeklyPdf, generateMonthlyPdf } from "./pdfGenerator";
 import { generatePdfViaPuppeteer } from "./puppeteerPdfGenerator";
@@ -2855,6 +2855,57 @@ export async function registerRoutes(
       }
       const ok = await deleteCrawlAsset(id);
       if (!ok) return res.status(404).json({ message: "Not found" });
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ─── Report Comments ────────────────────────────────────────────────────────
+
+  app.get("/api/comments", async (req, res) => {
+    try {
+      const { reportType, clientId } = req.query;
+      if (!reportType || typeof reportType !== "string") {
+        return res.status(400).json({ message: "reportType is required" });
+      }
+      const cid = clientId && clientId !== "null" ? Number(clientId) : null;
+      const comments = await storage.getReportComments(reportType, cid);
+      res.json(comments);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/comments", async (req, res) => {
+    try {
+      const parsed = insertReportCommentSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+      const comment = await storage.createReportComment(parsed.data);
+      res.status(201).json(comment);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.patch("/api/comments/:id", async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const parsed = updateReportCommentSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+      const updated = await storage.updateReportComment(id, parsed.data);
+      if (!updated) return res.status(404).json({ message: "Comment not found" });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.delete("/api/comments/:id", async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const ok = await storage.deleteReportComment(id);
+      if (!ok) return res.status(404).json({ message: "Comment not found" });
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ message: err.message });

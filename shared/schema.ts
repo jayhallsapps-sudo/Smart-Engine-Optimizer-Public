@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, jsonb, integer, serial, index } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, jsonb, integer, serial, index, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -185,6 +185,35 @@ export const insertSavedReportSchema = createInsertSchema(savedReports).omit({
 
 export type SavedReport = typeof savedReports.$inferSelect;
 export type InsertSavedReport = z.infer<typeof insertSavedReportSchema>;
+
+export const reportComments = pgTable("report_comments", {
+  id: serial("id").primaryKey(),
+  reportType: text("report_type").notNull(),
+  clientId: integer("client_id").references(() => clients.id, { onDelete: "cascade" }),
+  anchorId: text("anchor_id").notNull().default("report"),
+  anchorLabel: text("anchor_label"),
+  authorName: text("author_name").notNull(),
+  body: text("body").notNull(),
+  parentId: integer("parent_id"),
+  resolved: boolean("resolved").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [
+  index("report_comments_type_client_idx").on(t.reportType, t.clientId),
+  index("report_comments_parent_idx").on(t.parentId),
+]);
+
+export const insertReportCommentSchema = createInsertSchema(reportComments).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const updateReportCommentSchema = z.object({
+  body: z.string().min(1).optional(),
+  resolved: z.boolean().optional(),
+});
+
+export type ReportComment = typeof reportComments.$inferSelect;
+export type InsertReportComment = z.infer<typeof insertReportCommentSchema>;
 
 export const CLIENT_SENTIMENT_OPTIONS = ["Happy", "Neutral", "Concerned", "Frustrated"] as const;
 export type ClientSentiment = typeof CLIENT_SENTIMENT_OPTIONS[number];

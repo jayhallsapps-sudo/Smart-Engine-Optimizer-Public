@@ -19,6 +19,7 @@ import {
   CloudUpload,
   Loader2,
   RefreshCw,
+  MessageSquare,
   CheckCircle2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -33,6 +34,7 @@ import { useFillInTheGaps } from "@/hooks/useFillInTheGaps";
 import { FillInTheGapsModal } from "@/components/FillInTheGapsModal";
 import { ClarificationTrail } from "@/components/ClarificationTrail";
 import { Checkbox } from "@/components/ui/checkbox";
+import { CommentPanel } from "@/components/comments/CommentPanel";
 
 function toYMD(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -76,6 +78,7 @@ export default function BiweeklyPage() {
   const [clientNotes, setClientNotes] = useState("");
 
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [showCommentPanel, setShowCommentPanel] = useState(false);
 
   const { data: clients = [] } = useQuery<Client[]>({ queryKey: ["/api/clients"] });
 
@@ -296,10 +299,20 @@ export default function BiweeklyPage() {
         <div className="p-4 border-b">
           <div className="flex items-center gap-2">
             <CalendarDays className="w-5 h-5 text-primary" />
-            <div>
+            <div className="flex-1 min-w-0">
               <h1 className="font-semibold text-sm">Bi-Weekly Report</h1>
               <p className="text-xs text-muted-foreground">Live data · click to edit</p>
             </div>
+            <Button
+              data-testid="toggle-comment-panel"
+              variant={showCommentPanel ? "secondary" : "ghost"}
+              size="sm"
+              className="h-7 w-7 p-0 shrink-0"
+              onClick={() => setShowCommentPanel(v => !v)}
+              title="Comments"
+            >
+              <MessageSquare className="h-4 w-4" />
+            </Button>
           </div>
           {clientId && <div className="mt-1"><SaveStatusIndicator status={reportSave.saveStatus} /></div>}
         </div>
@@ -607,6 +620,16 @@ export default function BiweeklyPage() {
           />
         )}
       </div>
+
+      {showCommentPanel && (
+        <CommentPanel
+          reportType="biweekly"
+          clientId={clientId || null}
+          anchors={(report?.sections ?? []).map((s: any) => ({ id: s.id, label: s.title }))}
+          onClose={() => setShowCommentPanel(false)}
+          className="h-full"
+        />
+      )}
 
       {/* ClarificationTrail hidden — gap answers still saved to DB via answerUsage */}
       {/* {fillInGapsEnabled && sessionId && questions.length > 0 && (

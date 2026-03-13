@@ -1,0 +1,96 @@
+Make SmartEO’s QBS → QBR bridge quarter-aware so QBR imports the correct QBS for the intended reporting period instead of just the most recently created one.
+
+IMPORTANT CONTEXT
+
+The QBS → QBR bridge already exists and must be extended, not rebuilt.
+
+What already exists:
+- QBS → QBR mapping layer
+- QBS import banner in QBR
+- QBR can query saved QBS reports for a client
+- current selection rule uses the most recently created QBS
+- graceful fallback when no QBS exists
+
+Do not rebuild this system from scratch.
+
+CORE OBJECTIVE
+
+Replace the simplistic “most recent QBS” selection rule with a reporting-period-aware selection model so QBR imports the correct quarterly planning source for the intended quarter/year.
+
+PRIMARY GOALS
+
+1. ADD REPORTING-PERIOD METADATA
+
+Define and wire the minimum metadata needed to identify the quarter/year a QBS belongs to.
+
+Requirements:
+- support quarter and year in a structured way
+- use the lightest sensible implementation that fits the current architecture
+- prefer extending existing saved report metadata or source snapshot structures over inventing a separate system
+- document exactly where this metadata now lives
+
+2. MAKE QBS SELECTION QUARTER-AWARE
+
+Requirements:
+- when opening/building a QBR, the system should select the best matching QBS for the same client and intended reporting period
+- if an exact quarter/year match exists, use it
+- if no exact match exists, fail gracefully with a clear fallback rule
+- document the full selection priority order
+
+3. KEEP THE USER IN CONTROL
+
+Requirements:
+- if the system is confident in the correct QBS match, the current simple banner flow is fine
+- if multiple plausible QBS candidates exist, provide a clean way to select the source rather than silently guessing
+- keep the UI calm and lightweight
+- do not overbuild a giant report-picker modal unless needed
+
+4. PRESERVE CURRENT QBS → QBR MAPPING
+
+Requirements:
+- do not rewrite the mapping layer unnecessarily
+- keep the existing import/apply UX where possible
+- improve source selection, not the entire QBS → QBR feature
+
+5. REUSE / COMPATIBILITY RULES
+
+- reuse existing saved report infrastructure
+- preserve current QBS/QBR flows wherever possible
+- do not break existing saved reports that do not yet have quarter/year metadata
+- define a backward-compatible fallback path for older QBS records
+
+6. DEFERRED ITEMS
+
+Do not build in this prompt:
+- full quarter history UI
+- final annual/quarter planning dashboards
+- full admin period management
+- LLM-generated quarterly synthesis
+- template builder work
+
+This prompt is about selecting the correct QBS source reliably.
+
+DELIVERABLES
+
+Build/refine:
+- structured quarter/year metadata support
+- quarter-aware QBS selection logic
+- backward-compatible fallback behavior for older QBS records
+- optional lightweight source selection UI if multiple candidates exist
+
+IMPLEMENTATION REPORT REQUIRED
+
+After building, provide a short implementation report including:
+- files changed
+- what was reused
+- what was refactored
+- what was newly added
+- where quarter/year metadata is stored
+- exact QBS selection priority order
+- how older QBS reports without metadata are handled
+- any UX compromises
+- any risks or deferred items
+
+SUCCESS CONDITION
+
+A SmartEO user opening QBR gets the correct QBS source for the intended quarter/year whenever possible, with a clear fallback path for older or ambiguous records, making the QBS → QBR bridge trustworthy across multiple quarters.

@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -38,6 +38,7 @@ import { ClarificationTrail } from "@/components/ClarificationTrail";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CommentPanel } from "@/components/comments/CommentPanel";
 import { QbsContextBanner } from "@/components/qbs/QbsContextBanner";
+import { selectQbsSource } from "@/lib/qbsQbrMapping";
 
 const THIS_YEAR = new Date().getFullYear();
 const YEARS = [THIS_YEAR, THIS_YEAR - 1, THIS_YEAR - 2];
@@ -88,7 +89,18 @@ export default function QbrFullPage() {
     enabled: !!clientId,
   });
 
-  const bestQbs: SavedReport | null = qbsSavedReports?.[0] ?? null;
+  const qbsSelection = useMemo(
+    () =>
+      qbsSavedReports?.length
+        ? selectQbsSource(qbsSavedReports, Number(quarter), Number(year))
+        : null,
+    [qbsSavedReports, quarter, year],
+  );
+
+  // Re-surface the banner when the target quarter/year changes
+  useEffect(() => {
+    setQbsDismissed(false);
+  }, [quarter, year]);
 
   const reportSave = useReportSave({
     reportType: "qbr_full",
@@ -321,10 +333,10 @@ export default function QbrFullPage() {
           )}
         </div>
 
-        {/* QBS → QBR context import banner */}
-        {bestQbs && !qbsDismissed && (
+        {/* QBS → QBR context import banner (quarter-aware) */}
+        {qbsSelection && !qbsDismissed && (
           <QbsContextBanner
-            qbsReport={bestQbs}
+            selection={qbsSelection}
             onApply={(fields) => {
               if (fields.amThoughts) setAmThoughts(fields.amThoughts);
               if (fields.priorityChecks) setPriorityChecks(fields.priorityChecks);

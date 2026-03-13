@@ -1,17 +1,19 @@
 /**
  * QbsContextBanner
  * ─────────────────────────────────────────────────────────────────────────────
- * Shown in the QBR sidebar when a matching QBS saved report exists for the
- * current client. Lets the AM intentionally import structured planning context
- * from QBS into QBR fields before generating.
+ * Shown in the QBR sidebar when a matching QBS saved report exists. Lets the
+ * AM intentionally import structured planning context from QBS into QBR fields.
  *
- * UX design mirrors WorkflowContextBanner:
- *  • Source label — which QBS report + when it was saved
- *  • Field list — one card per mappable field, checkbox to include/exclude
- *  • Per-field preview toggle (shows derived text before applying)
- *  • Disabled + greyed-out cards for fields with no QBS content
- *  • Single "Apply N fields" button — intentional, not automatic
- *  • Calm confirmation state after apply; banner stays until dismissed
+ * Tier-aware display:
+ *   "exact"   — exact Q+Y match; no warning shown
+ *   "year"    — same year, different Q; amber note shown
+ *   "legacy"  — no period metadata; amber note shown
+ *   "fallback"— last resort; amber note shown
+ *
+ * Multi-candidate handling:
+ *   When alternatives.length > 0, an inline source picker appears so the AM
+ *   can select a different QBS from the same tier rather than accepting the
+ *   auto-selected one silently.
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
@@ -22,9 +24,11 @@ import {
   Check,
   Minus,
   BookOpen,
+  AlertTriangle,
   X,
 } from "lucide-react";
 import type { SavedReport } from "@shared/schema";
+import type { QbsSelectionResult } from "@/lib/qbsQbrMapping";
 import {
   QBS_QBR_FIELD_MAP,
   buildQbsQbrValues,
@@ -33,25 +37,46 @@ import {
 // ─── Props ─────────────────────────────────────────────────────────────────────
 
 interface QbsContextBannerProps {
-  /** The best QBS saved report for this client */
-  qbsReport: SavedReport;
+  /** Result from selectQbsSource — includes match, tier, alternatives, note */
+  selection: QbsSelectionResult;
   /** Called with fieldId → derived text for all selected non-empty fields */
   onApply: (fields: Record<string, string>) => void;
   onDismiss: () => void;
 }
 
+// ─── Helpers ───────────────────────────────────────────────────────────────────
+
+function formatDate(d: Date | string): string {
+  return new Date(d).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function quarterLabel(report: SavedReport): string {
+  if (report.planningQuarter && report.planningYear) {
+    return `Q${report.planningQuarter} ${report.planningYear}`;
+  }
+  return "No period";
+}
+
 // ─── Component ─────────────────────────────────────────────────────────────────
 
 export function QbsContextBanner({
-  qbsReport,
+  selection,
   onApply,
   onDismiss,
 }: QbsContextBannerProps) {
-  // ── Build derived values ──────────────────────────────────────────────────
+  const { tier, note, alternatives } = selection;
 
-  const builtValues = buildQbsQbrValues(qbsReport);
+  // Active source — starts as the auto-selected match, AM can change via picker
+  const [activeReport, setActiveReport] = useState<SavedReport>(selection.match);
 
-  // fieldId → checked (only non-empty fields are checked by default)
+  // Build values from the active report (recomputed when source changes)
+  const builtValues = buildQbsQbrValues(activeReport);
+
+  // fieldId → checked (non-empty fields default to checked)
   const [checkedFields, setCheckedFields] = useState<Record<string, boolean>>(
     () =>
       Object.fromEntries(
@@ -61,23 +86,35 @@ export function QbsContextBanner({
 
   // fieldId → preview open
   const [previewOpen, setPreviewOpen] = useState<Record<string, boolean>>({});
-
   const [applied, setApplied] = useState(false);
   const [appliedCount, setAppliedCount] = useState(0);
-
-  // ── Derived counts ────────────────────────────────────────────────────────
 
   const selectedNonEmpty = QBS_QBR_FIELD_MAP.filter(
     e => checkedFields[e.fieldId] && builtValues[e.fieldId],
   );
 
-  const qbsDate = new Date(qbsReport.createdAt).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  const showTierWarning = tier !== "exact";
+  const showPicker = alternatives.length > 0;
+
+  // All options for the picker = active + alternatives
+  const allCandidates = [activeReport, ...alternatives];
 
   // ── Handlers ─────────────────────────────────────────────────────────────
+
+  function handleSourceChange(id: string) {
+    const chosen = allCandidates.find(r => String(r.id) === id);
+    if (!chosen) return;
+    setActiveReport(chosen);
+    // Re-initialize checked state from new source's values
+    const newValues = buildQbsQbrValues(chosen);
+    setCheckedFields(
+      Object.fromEntries(
+        QBS_QBR_FIELD_MAP.map(e => [e.fieldId, !!newValues[e.fieldId]]),
+      ),
+    );
+    setPreviewOpen({});
+    setApplied(false);
+  }
 
   function toggleField(fieldId: string) {
     setCheckedFields(prev => ({ ...prev, [fieldId]: !prev[fieldId] }));
@@ -89,9 +126,10 @@ export function QbsContextBanner({
 
   function handleApply() {
     const toApply: Record<string, string> = {};
+    const currentValues = buildQbsQbrValues(activeReport);
     for (const e of QBS_QBR_FIELD_MAP) {
-      if (checkedFields[e.fieldId] && builtValues[e.fieldId]) {
-        toApply[e.fieldId] = builtValues[e.fieldId];
+      if (checkedFields[e.fieldId] && currentValues[e.fieldId]) {
+        toApply[e.fieldId] = currentValues[e.fieldId];
       }
     }
     onApply(toApply);
@@ -123,12 +161,46 @@ export function QbsContextBanner({
               <X className="w-3 h-3" />
             </button>
           </div>
-          <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug truncate">
-            {qbsReport.reportName}
-          </p>
-          <p className="text-[10px] text-muted-foreground leading-snug">
-            Saved {qbsDate}
-          </p>
+
+          {/* Source picker or static name */}
+          {showPicker ? (
+            <div className="mt-1">
+              <p className="text-[9.5px] text-muted-foreground mb-0.5 uppercase tracking-wide">
+                Source QBS
+              </p>
+              <select
+                value={String(activeReport.id)}
+                onChange={e => handleSourceChange(e.target.value)}
+                className="w-full text-[10px] rounded border border-border bg-background px-1.5 py-1 text-foreground focus:outline-none focus:ring-1 focus:ring-[#C0392B]/50"
+                data-testid="select-qbs-source"
+              >
+                {allCandidates.map(r => (
+                  <option key={r.id} value={String(r.id)}>
+                    {r.reportName} · {quarterLabel(r)} · {formatDate(r.createdAt)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <>
+              <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug truncate">
+                {activeReport.reportName}
+              </p>
+              <p className="text-[10px] text-muted-foreground leading-snug">
+                {quarterLabel(activeReport)} · Saved {formatDate(activeReport.createdAt)}
+              </p>
+            </>
+          )}
+
+          {/* Tier warning for non-exact matches */}
+          {showTierWarning && (
+            <div className="flex items-start gap-1 mt-1.5 rounded bg-amber-50 dark:bg-amber-950/30 border border-amber-200/60 px-1.5 py-1">
+              <AlertTriangle className="w-2.5 h-2.5 text-amber-600 shrink-0 mt-px" />
+              <p className="text-[9.5px] text-amber-700 dark:text-amber-400 leading-snug">
+                {note}
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -139,10 +211,11 @@ export function QbsContextBanner({
             Fields to import
           </p>
           {QBS_QBR_FIELD_MAP.map(entry => {
-            const hasContent = !!builtValues[entry.fieldId];
+            const currentValues = buildQbsQbrValues(activeReport);
+            const hasContent = !!currentValues[entry.fieldId];
             const checked = checkedFields[entry.fieldId] && hasContent;
             const isPreviewOpen = previewOpen[entry.fieldId] ?? false;
-            const preview = builtValues[entry.fieldId] ?? "";
+            const preview = currentValues[entry.fieldId] ?? "";
 
             return (
               <div
@@ -155,7 +228,6 @@ export function QbsContextBanner({
                 data-testid={`qbs-field-entry-${entry.fieldId}`}
               >
                 <div className="flex items-center gap-1.5 px-2 py-1.5">
-                  {/* Checkbox */}
                   <button
                     onClick={() => hasContent && toggleField(entry.fieldId)}
                     disabled={!hasContent}
@@ -171,7 +243,6 @@ export function QbsContextBanner({
                     {!hasContent && <Minus className="w-2 h-2 text-muted-foreground" />}
                   </button>
 
-                  {/* Label + hint */}
                   <div className="flex-1 min-w-0">
                     <div className="font-semibold text-foreground/80 truncate">
                       {entry.fieldLabel}
@@ -181,7 +252,6 @@ export function QbsContextBanner({
                     </div>
                   </div>
 
-                  {/* Preview toggle */}
                   {hasContent && (
                     <button
                       onClick={() => togglePreview(entry.fieldId)}
@@ -198,7 +268,6 @@ export function QbsContextBanner({
                   )}
                 </div>
 
-                {/* Inline preview */}
                 {hasContent && isPreviewOpen && (
                   <div className="px-2 pb-2 pt-0.5 border-t border-[#C0392B]/10">
                     <p

@@ -1308,12 +1308,14 @@ function StepHandoff({
           </a>
         </div>
 
-        <div className="rounded-lg border border-border bg-muted/30 px-4 py-3 max-w-sm w-full">
-          <p className="text-[10px] text-muted-foreground leading-relaxed">
-            <span className="font-semibold text-foreground">Coming in a future sprint: </span>
-            Strategy findings committed in this workflow will pre-populate the report builder's section
-            inputs, reducing manual entry. For now, use your committed findings as reference while
-            building in the editor.
+        <div
+          className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-4 py-3 max-w-sm w-full"
+          data-testid="handoff-context-saved-note"
+        >
+          <p className="text-[10px] text-emerald-700 dark:text-emerald-400 leading-relaxed">
+            <span className="font-semibold">Workflow context saved. </span>
+            Your committed findings and AM notes will appear as a pre-fill banner when you open
+            the report builder — review and apply them to jump-start the report.
           </p>
         </div>
       </div>
@@ -1484,6 +1486,10 @@ export default function WorkflowPage() {
   const startFresh = useCallback(() => {
     clearWorkflowSession();
     setRestoredAt(null);
+    // Reset the history tracking refs so a fresh session correctly re-fetches
+    // and re-saves finding history regardless of any prior run.
+    historyFetchedRef.current = null;
+    historyAlreadySavedRef.current = false;
     setState({
       step: 1,
       reportTypeId: null,

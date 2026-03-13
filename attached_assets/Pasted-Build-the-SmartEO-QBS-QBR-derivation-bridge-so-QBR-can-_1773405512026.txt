@@ -1,0 +1,123 @@
+Build the SmartEO QBS → QBR derivation bridge so QBR can inherit structured planning context from QBS in a controlled, reviewable way.
+
+IMPORTANT CONTEXT
+
+The following already exist and must be extended, not replaced:
+- canonical report definitions where QBS is internal-only and QBR is client-facing
+- workflow-to-report handoff bridge
+- structured workflow field mapping for Bi-Weekly, Monthly, and QBS
+- existing QBS page (qbr_prep) and QBR page
+- comments system
+- contextual finding chat
+- current report save/load infrastructure
+
+Do not rebuild QBS or QBR from scratch.
+
+CORE OBJECTIVE
+
+Make QBR meaningfully downstream from QBS by allowing the system to carry structured content from a saved QBS into the QBR workflow/page in a way that is useful, reviewable, and editable.
+
+PRIMARY GOALS
+
+1. STRUCTURED QBS → QBR HANDOFF
+
+Build a bridge so the QBR page can detect and ingest relevant structured content from the most relevant QBS instance for the same client.
+
+At minimum, support carrying forward:
+- high-level AM hypothesis / strategic framing
+- priority checks / key priority themes
+- previous-quarter assessment signals
+- next-quarter planning themes where relevant
+
+Do not attempt full automatic deck writing yet.
+Do create a real structured inheritance layer.
+
+2. KEEP THE USER IN CONTROL
+
+Requirements:
+- QBR should not silently auto-overwrite fields
+- the user should be shown what QBS-derived context is available
+- the user should be able to apply/import it intentionally
+- the user should still be able to edit everything afterward
+- preserve the principle that ADR / Director of SEO adjustments can modify what goes to the client
+
+3. CHOOSE THE RIGHT QBS SOURCE
+
+Requirements:
+- use the best available saved QBS instance for the current client
+- if multiple QBS reports exist, choose the most relevant one by a clear rule
+- document the selection rule used
+- if no QBS exists, fail gracefully and do not clutter the QBR UI
+
+4. MAKE THE IMPORT UX CLEAR
+
+Add a QBS-derived context banner/panel/import flow in QBR similar in spirit to the workflow context banner, but specific to QBS → QBR inheritance.
+
+The UI should:
+- clearly indicate the source is QBS
+- show what fields/themes are available
+- allow intentional apply/import
+- keep the experience calm and internal-workflow-friendly
+
+5. START WITH A MAPPING LAYER
+
+Build a structured mapping layer for QBS → QBR similar to the workflow field mapping approach.
+
+Requirements:
+- define which QBS fields/themes can feed which QBR fields
+- keep the mapping explicit and extensible
+- do not overbuild a giant admin rules engine yet
+- make it easy to expand later
+
+6. PRESERVE CURRENT REPORT USABILITY
+
+Requirements:
+- QBR must still be usable directly even if no QBS exists
+- existing save/load flows must not break
+- comments and preview/presentation behavior must remain compatible
+- do not break direct report generation or editing
+
+7. REUSE / COMPATIBILITY RULES
+
+- reuse the existing saved report infrastructure
+- reuse current QBS and QBR page structures where possible
+- do not rebuild report pages unnecessarily
+- do not overbuild the final AI synthesis engine in this prompt
+
+8. DEFERRED ITEMS
+
+Do not build in this prompt:
+- full automatic client-facing slide writing
+- final LLM-driven quarterly synthesis
+- admin template system
+- deep approval workflow
+- cross-client quarter comparison logic
+
+This prompt is about the structured inheritance bridge, not the final polished quarterly intelligence engine.
+
+DELIVERABLES
+
+Build/refine:
+- QBS source selection logic
+- structured QBS → QBR mapping layer
+- QBS-derived context import UX inside QBR
+- intentional apply/import behavior into QBR fields
+- graceful fallback when no QBS exists
+
+IMPLEMENTATION REPORT REQUIRED
+
+After building, provide a short implementation report including:
+- files changed
+- what was reused
+- what was refactored
+- what was newly added
+- exact QBS selection rule
+- exact QBS → QBR mapping model
+- which QBS data now carries into which QBR fields
+- what still remains manual
+- any UX compromises
+- any risks or deferred items
+
+SUCCESS CONDITION
+
+A SmartEO user can open QBR for a client and, when a relevant QBS exists, intentionally import structured planning context from that QBS into the QBR in a way that feels useful, controlled, and clearly aligned with QBR being downstream from QBS.

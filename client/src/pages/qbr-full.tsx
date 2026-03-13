@@ -37,6 +37,7 @@ import { FillInTheGapsModal } from "@/components/FillInTheGapsModal";
 import { ClarificationTrail } from "@/components/ClarificationTrail";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CommentPanel } from "@/components/comments/CommentPanel";
+import { QbsContextBanner } from "@/components/qbs/QbsContextBanner";
 
 const THIS_YEAR = new Date().getFullYear();
 const YEARS = [THIS_YEAR, THIS_YEAR - 1, THIS_YEAR - 2];
@@ -72,10 +73,22 @@ export default function QbrFullPage() {
   const [amTrackingNotes, setAmTrackingNotes] = useState("");
 
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [qbsDismissed, setQbsDismissed] = useState(false);
 
   const { data: clients = [] } = useQuery<Client[]>({ queryKey: ["/api/clients"] });
 
   const clientName = (clients as Client[]).find(c => String(c.id) === clientId)?.name ?? "";
+
+  const { data: qbsSavedReports } = useQuery<SavedReport[]>({
+    queryKey: ["/api/saved-reports", clientId, "qbr_prep"],
+    queryFn: () =>
+      clientId
+        ? fetch(`/api/saved-reports?clientId=${clientId}&reportType=qbr_prep`).then(r => r.json())
+        : Promise.resolve([]),
+    enabled: !!clientId,
+  });
+
+  const bestQbs: SavedReport | null = qbsSavedReports?.[0] ?? null;
 
   const reportSave = useReportSave({
     reportType: "qbr_full",
@@ -247,6 +260,7 @@ export default function QbrFullPage() {
     setCurrentCrawlId(null);
     setComparisonCrawlId(null);
     reportSave.setSavedReportId(null);
+    setQbsDismissed(false);
   }
 
   const handleGenerateClick = async () => {
@@ -306,6 +320,20 @@ export default function QbrFullPage() {
             </div>
           )}
         </div>
+
+        {/* QBS → QBR context import banner */}
+        {bestQbs && !qbsDismissed && (
+          <QbsContextBanner
+            qbsReport={bestQbs}
+            onApply={(fields) => {
+              if (fields.amThoughts) setAmThoughts(fields.amThoughts);
+              if (fields.priorityChecks) setPriorityChecks(fields.priorityChecks);
+              if (fields.amFocusNextQuarter) setAmFocusNextQuarter(fields.amFocusNextQuarter);
+              if (fields.clientNotes) setClientNotes(fields.clientNotes);
+            }}
+            onDismiss={() => setQbsDismissed(true)}
+          />
+        )}
 
         <div className="flex-1 p-4 space-y-4">
           {/* Client */}

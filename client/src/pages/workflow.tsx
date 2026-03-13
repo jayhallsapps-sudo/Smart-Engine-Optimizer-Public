@@ -43,6 +43,7 @@ import {
   type StrategyAreaId,
 } from "@/lib/workflowStrategyAreas";
 import { saveWorkflowContext } from "@/lib/workflowHandoff";
+import { GuidancePanel, areaIdToWorkflowGroup } from "@/components/GuidancePanel";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -557,12 +558,14 @@ function StepStrategyAreas({
   onActivate,
   onSectionChange,
   onOpenChat,
+  reportTypeId,
 }: {
   sections: Record<StrategyAreaId, SectionState>;
   activeSectionId: StrategyAreaId;
   onActivate: (id: StrategyAreaId) => void;
   onSectionChange: (id: StrategyAreaId, next: Partial<SectionState>) => void;
   onOpenChat: (finding: Finding) => void;
+  reportTypeId?: string | null;
 }) {
   // DIVERGENCE POINT (Step 3): replace getStrategyAreas() with getStrategyAreas(reportFamily)
   // when per-family section sets are needed. Section state keys are typed to DEFAULT_STRATEGY_AREAS ids.
@@ -638,6 +641,11 @@ function StepStrategyAreas({
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">{activeArea.description}</p>
         </div>
+        <GuidancePanel
+          reportType={reportTypeId ?? null}
+          workflowArea={areaIdToWorkflowGroup(activeSectionId)}
+          sessionKey={`workflow-area-${activeSectionId}`}
+        />
         <ScrollArea className="flex-1">
           <div className="px-5 py-4">
             <SectionMiniFlow
@@ -920,6 +928,10 @@ function StepHandoff({
           {reportType?.displayName ?? "report"}.
         </p>
       </div>
+      <GuidancePanel
+        reportType={reportType?.id ?? null}
+        sessionKey={`workflow-handoff-${reportType?.id ?? "none"}`}
+      />
       <div className="flex-1 flex flex-col items-center justify-center gap-5 px-6 pb-4 overflow-y-auto">
         <div
           className="flex items-center justify-center w-14 h-14 rounded-2xl"
@@ -1107,6 +1119,7 @@ export default function WorkflowPage() {
             onActivate={id => setState(s => ({ ...s, activeSectionId: id }))}
             onSectionChange={onSectionChange}
             onOpenChat={onOpenChatFinding}
+            reportTypeId={state.reportTypeId ?? null}
           />
         )}
         {state.step === 4 && (

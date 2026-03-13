@@ -44,6 +44,7 @@ import { WorkflowContextBanner } from "@/components/workflow/WorkflowContextBann
 import { loadWorkflowContext, type WorkflowHandoffContext } from "@/lib/workflowHandoff";
 import { ClarificationTrail } from "@/components/ClarificationTrail";
 import { Checkbox } from "@/components/ui/checkbox";
+import { GuidancePanel } from "@/components/GuidancePanel";
 
 interface CrawlAsset {
   id: number;
@@ -522,6 +523,8 @@ export default function QbrPrepPage() {
             onDismiss={() => setWorkflowCtx(null)}
           />
         )}
+
+        <GuidancePanel reportType="qbr_prep" sessionKey="qbr-prep" />
 
         <div className="flex-1 p-4 space-y-4 overflow-y-auto">
           <div className="space-y-3">

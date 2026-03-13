@@ -37,6 +37,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { CommentPanel } from "@/components/comments/CommentPanel";
 import { WorkflowContextBanner } from "@/components/workflow/WorkflowContextBanner";
 import { loadWorkflowContext, type WorkflowHandoffContext } from "@/lib/workflowHandoff";
+import { GuidancePanel } from "@/components/GuidancePanel";
 
 function toYMD(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -332,6 +333,8 @@ export default function BiweeklyPage() {
             onDismiss={() => setWorkflowCtx(null)}
           />
         )}
+
+        <GuidancePanel reportType="biweekly" sessionKey="biweekly" />
 
         <div className="flex-1 p-4 space-y-5">
           <div className="space-y-2">

@@ -39,6 +39,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { CommentPanel } from "@/components/comments/CommentPanel";
 import { WorkflowContextBanner } from "@/components/workflow/WorkflowContextBanner";
 import { loadWorkflowContext, type WorkflowHandoffContext } from "@/lib/workflowHandoff";
+import { GuidancePanel } from "@/components/GuidancePanel";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -322,6 +323,8 @@ export default function MonthlyPage() {
             onDismiss={() => setWorkflowCtx(null)}
           />
         )}
+
+        <GuidancePanel reportType="monthly" sessionKey="monthly" />
 
         <div className="flex-1 p-4 space-y-4">
           {/* Client */}

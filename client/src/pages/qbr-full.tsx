@@ -39,6 +39,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { CommentPanel } from "@/components/comments/CommentPanel";
 import { QbsContextBanner } from "@/components/qbs/QbsContextBanner";
 import { selectQbsSource } from "@/lib/qbsQbrMapping";
+import { GuidancePanel } from "@/components/GuidancePanel";
 
 const THIS_YEAR = new Date().getFullYear();
 const YEARS = [THIS_YEAR, THIS_YEAR - 1, THIS_YEAR - 2];
@@ -346,6 +347,8 @@ export default function QbrFullPage() {
             onDismiss={() => setQbsDismissed(true)}
           />
         )}
+
+        <GuidancePanel reportType="qbr_full" sessionKey="qbr-full" />
 
         <div className="flex-1 p-4 space-y-4">
           {/* Client */}

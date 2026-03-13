@@ -1,0 +1,128 @@
+Wire the new Admin Guidance Library into SmartEO’s actual AM workflow and report-prep experience so guidance becomes operational, not just stored.
+
+IMPORTANT CONTEXT
+
+The Admin / Governance layer already exists and must be extended, not replaced.
+
+What already exists:
+- adminGuidance table
+- admin guidance CRUD API
+- Governance Hub
+- Report Config Viewer
+- Guidance Library UI
+- workflow shell
+- workflow-to-report handoff
+- comments system
+- contextual finding chat
+- current report pages and report mapping layers
+
+Do not rebuild the admin system or workflow from scratch.
+
+CORE OBJECTIVE
+
+Make admin guidance entries show up in the places where AMs actually work, so SmartEO can begin using in-app leadership guidance to shape report preparation and decision-making.
+
+PRIMARY GOALS
+
+1. SURFACE RELEVANT GUIDANCE IN WORKFLOW
+
+When an AM is in the guided workflow, the app should be able to show relevant guidance based on:
+- report type
+- workflow area
+- active status
+
+Requirements:
+- use the existing guidance data model
+- show only relevant active guidance
+- keep the UI calm and non-intrusive
+- do not flood the workflow with giant walls of text
+
+Examples:
+- content-related guidance while in content sections
+- technical guidance while in technical sections
+- report-type-specific guidance when preparing QBS vs Bi-Weekly vs Monthly
+
+2. SURFACE RELEVANT GUIDANCE IN REPORT PAGES
+
+On active report pages (at minimum Bi-Weekly, Monthly, QBS, and QBR where appropriate), show relevant report-type guidance in a lightweight internal way.
+
+Requirements:
+- guidance should help the AM, not clutter the report
+- keep the experience internal-only
+- guidance should be clearly distinguishable from client-facing report content
+- preserve current report usability
+
+3. CHOOSE THE RIGHT UX PATTERN
+
+Use a practical, low-clutter pattern such as:
+- collapsible guidance panel
+- small guidance drawer
+- contextual guidance card
+- side-panel section
+
+Do not overbuild a full knowledge assistant in this prompt.
+
+4. KEEP GUIDANCE FILTERING SIMPLE AND CORRECT
+
+Use the existing metadata first:
+- reportType
+- workflowArea
+- status
+
+Support:
+- exact matches first
+- more general relevant guidance where appropriate
+- graceful empty state when no guidance applies
+
+Document the selection/filtering logic clearly.
+
+5. PRESERVE USER CONTROL
+
+Requirements:
+- AMs should be able to collapse or dismiss guidance for the current working session
+- do not auto-inject guidance text into report fields
+- guidance should inform the user, not overwrite their judgment
+
+6. REUSE / COMPATIBILITY RULES
+
+- reuse the existing adminGuidance table and API
+- reuse current workflow/report structures where possible
+- do not break current workflow steps
+- do not break current report save/load/generation behavior
+- do not overbuild final permissions/auth in this prompt
+
+7. DEFERRED ITEMS
+
+Do not build in this prompt:
+- full AI grounding from guidance documents
+- document upload parsing
+- final instruction-library mapping engine
+- guidance analytics
+- final admin rules engine
+
+This prompt is about surfacing leadership guidance where work happens.
+
+DELIVERABLES
+
+Build/refine:
+- workflow guidance surfacing
+- report-page guidance surfacing
+- relevant filtering logic
+- low-clutter guidance UX
+- internal-only behavior
+
+IMPLEMENTATION REPORT REQUIRED
+
+After building, provide a short implementation report including:
+- files changed
+- what was reused
+- what was refactored
+- what was newly added
+- exact guidance filtering/selection logic
+- where guidance now appears in workflow and report pages
+- any UX compromises
+- any risks or deferred items
+
+SUCCESS CONDITION
+
+An AM using SmartEO can see relevant active leadership guidance inside the workflow and report-prep experience at the right moments, making the new Admin Guidance Library operational and useful rather than just stored content.

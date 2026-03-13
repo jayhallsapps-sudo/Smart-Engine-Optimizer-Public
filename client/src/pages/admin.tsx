@@ -1,8 +1,17 @@
 import { Link } from "wouter";
-import { BookOpen, Layers, Shield, Zap, ChevronRight } from "lucide-react";
+import { BookOpen, Layers, Shield, Zap, ChevronRight, LayoutTemplate } from "lucide-react";
 import { loadProfile } from "@/lib/userProfile";
 
 const CARDS = [
+  {
+    href: "/admin/templates",
+    icon: LayoutTemplate,
+    title: "Template Controls",
+    description:
+      "Control report section labels, visibility, ordering, and AM helper notes for Bi-Weekly, Monthly, QBS, and QBR reports — without touching code.",
+    badge: "Editable",
+    badgeColor: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800",
+  },
   {
     href: "/admin/config",
     icon: Layers,
@@ -99,8 +108,9 @@ export default function AdminPage() {
           <p className="text-xs text-muted-foreground leading-relaxed">
             <span className="font-semibold text-foreground/70">Phase 1 admin layer.</span>{" "}
             Full WYSIWYG template editing, source-routing management, and the final rules
-            engine are deferred to later phases. What you see here is the first controlled
-            layer for inspecting and editing SmartEO governance without touching code.
+            engine are deferred to later phases. Template Controls covers safe surface-level
+            structure control for key report types — section labels, visibility, ordering,
+            and AM helper notes.
           </p>
         </div>
       </div>

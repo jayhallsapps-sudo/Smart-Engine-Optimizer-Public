@@ -12,6 +12,7 @@ import {
   reportComments,
   adminGuidance,
   adminConfigOverrides,
+  reportTemplateSections,
   type Client,
   type InsertClient,
   type QueryLog,
@@ -35,6 +36,8 @@ import {
   type UpdateAdminGuidance,
   type AdminConfigOverride,
   type InsertAdminConfigOverride,
+  type ReportTemplateSection,
+  type InsertReportTemplateSection,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -94,6 +97,11 @@ export interface IStorage {
   listConfigOverrides(namespace?: string): Promise<AdminConfigOverride[]>;
   upsertConfigOverride(data: InsertAdminConfigOverride): Promise<AdminConfigOverride>;
   deleteConfigOverride(id: number): Promise<boolean>;
+
+  // Report Template Sections
+  listTemplateSections(reportType?: string): Promise<ReportTemplateSection[]>;
+  upsertTemplateSection(data: InsertReportTemplateSection): Promise<ReportTemplateSection>;
+  deleteTemplateSection(id: number): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -424,6 +432,43 @@ export class DatabaseStorage implements IStorage {
   async deleteConfigOverride(id: number): Promise<boolean> {
     const result = await db.delete(adminConfigOverrides)
       .where(eq(adminConfigOverrides.id, id))
+      .returning();
+    return result.length > 0;
+  }
+
+  // ── Report Template Sections ───────────────────────────────────────────────
+
+  async listTemplateSections(reportType?: string): Promise<ReportTemplateSection[]> {
+    let query = db.select().from(reportTemplateSections).$dynamic();
+    if (reportType) query = query.where(eq(reportTemplateSections.reportType, reportType));
+    return query.orderBy(reportTemplateSections.reportType, reportTemplateSections.displayOrder, reportTemplateSections.sectionKey);
+  }
+
+  async upsertTemplateSection(data: InsertReportTemplateSection): Promise<ReportTemplateSection> {
+    const { reportType, sectionKey, ...fields } = data;
+    const [existing] = await db.select().from(reportTemplateSections)
+      .where(and(
+        eq(reportTemplateSections.reportType, reportType),
+        eq(reportTemplateSections.sectionKey, sectionKey),
+      )).limit(1);
+
+    if (existing) {
+      const [updated] = await db.update(reportTemplateSections)
+        .set({ ...fields, updatedAt: new Date() })
+        .where(eq(reportTemplateSections.id, existing.id))
+        .returning();
+      return updated;
+    } else {
+      const [inserted] = await db.insert(reportTemplateSections)
+        .values({ reportType, sectionKey, ...fields })
+        .returning();
+      return inserted;
+    }
+  }
+
+  async deleteTemplateSection(id: number): Promise<boolean> {
+    const result = await db.delete(reportTemplateSections)
+      .where(eq(reportTemplateSections.id, id))
       .returning();
     return result.length > 0;
   }

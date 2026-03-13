@@ -45,6 +45,7 @@ import {
 import { saveWorkflowContext } from "@/lib/workflowHandoff";
 import { GuidancePanel, areaIdToWorkflowGroup } from "@/components/GuidancePanel";
 import { useConfigOverrides } from "@/hooks/useConfigOverrides";
+import { useTemplateConfig } from "@/hooks/useTemplateConfig";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -817,6 +818,7 @@ function StepAssembly({
   clientName: string | null;
   sections: Record<StrategyAreaId, SectionState>;
 }) {
+  const { enabledSections } = useTemplateConfig(reportType?.id ?? null);
   const [phase, setPhase] = useState<"building" | "ready">("building");
 
   useEffect(() => {
@@ -864,7 +866,7 @@ function StepAssembly({
             </div>
             <div className="w-full max-w-md rounded-xl border border-border bg-card px-5 py-4">
               <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mb-3">
-                What's included
+                Strategy areas committed
               </p>
               <div className="flex flex-col gap-2">
                 {committed.map(area => (
@@ -879,6 +881,26 @@ function StepAssembly({
                 ))}
               </div>
             </div>
+
+            {enabledSections.length > 0 && (
+              <div className="w-full max-w-md rounded-xl border border-border bg-muted/30 px-5 py-4">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mb-3">
+                  Report sections
+                </p>
+                <div className="flex flex-col gap-1.5">
+                  {enabledSections.map((section, idx) => (
+                    <div key={section.sectionKey} className="flex items-center gap-2">
+                      <span className="text-[10px] text-muted-foreground/50 w-4 text-right shrink-0">{idx + 1}</span>
+                      <CircleDot className="w-2.5 h-2.5 text-[#1B3A6B]/40 dark:text-blue-400/40 shrink-0" />
+                      <span className="text-xs text-foreground">{section.label}</span>
+                      {!section.isDefault && (
+                        <span className="text-[9px] text-[#1B3A6B]/60 dark:text-blue-400/60 ml-auto">custom</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>

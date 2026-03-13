@@ -3216,6 +3216,32 @@ export async function registerRoutes(
     return res.json(items);
   });
 
+  // ── Report Template Sections ───────────────────────────────────────────────
+  // GET  — unprotected (runtime pages read section config)
+  // PUT  — requireAdmin (upsert a single section override)
+  // DELETE — requireAdmin (reset section to defaults by removing DB row)
+
+  app.get("/api/admin/template-sections", async (req, res) => {
+    const { reportType } = req.query as Record<string, string>;
+    const items = await storage.listTemplateSections(reportType || undefined);
+    return res.json(items);
+  });
+
+  app.put("/api/admin/template-sections", requireAdmin, async (req, res) => {
+    const { insertReportTemplateSectionSchema } = await import("@shared/schema");
+    const parsed = insertReportTemplateSectionSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    const item = await storage.upsertTemplateSection(parsed.data);
+    return res.json(item);
+  });
+
+  app.delete("/api/admin/template-sections/:id", requireAdmin, async (req, res) => {
+    const id = Number(req.params.id);
+    const deleted = await storage.deleteTemplateSection(id);
+    if (!deleted) return res.status(404).json({ error: "Not found" });
+    return res.status(204).end();
+  });
+
   app.put("/api/admin/config-overrides", requireAdmin, async (req, res) => {
     const { insertAdminConfigOverrideSchema } = await import("@shared/schema");
     const parsed = insertAdminConfigOverrideSchema.safeParse(req.body);

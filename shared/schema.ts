@@ -277,6 +277,36 @@ export const insertAdminConfigOverrideSchema = z.object({
 export type AdminConfigOverride = typeof adminConfigOverrides.$inferSelect;
 export type InsertAdminConfigOverride = z.infer<typeof insertAdminConfigOverrideSchema>;
 
+// ─── Report Template Sections ────────────────────────────────────────────────
+// Stores admin overrides for report section structure.
+// sectionKey is ALWAYS code-defined and immutable — only safe surface fields
+// (label, enabled, order, helperCopy) are stored here.
+// Null fields mean "use the code-defined default" — rows are only created when
+// an admin has explicitly overridden at least one field.
+
+export const reportTemplateSections = pgTable("report_template_sections", {
+  id: serial("id").primaryKey(),
+  reportType: varchar("report_type", { length: 32 }).notNull(),
+  sectionKey: varchar("section_key", { length: 64 }).notNull(),
+  sectionLabel: varchar("section_label", { length: 120 }),
+  enabled: boolean("enabled"),
+  displayOrder: integer("display_order"),
+  helperCopy: text("helper_copy"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertReportTemplateSectionSchema = z.object({
+  reportType: z.string().min(1).max(32),
+  sectionKey: z.string().min(1).max(64),
+  sectionLabel: z.string().max(120).nullable().optional(),
+  enabled: z.boolean().nullable().optional(),
+  displayOrder: z.number().int().nullable().optional(),
+  helperCopy: z.string().nullable().optional(),
+});
+
+export type ReportTemplateSection = typeof reportTemplateSections.$inferSelect;
+export type InsertReportTemplateSection = z.infer<typeof insertReportTemplateSectionSchema>;
+
 export const CLIENT_SENTIMENT_OPTIONS = ["Happy", "Neutral", "Concerned", "Frustrated"] as const;
 export type ClientSentiment = typeof CLIENT_SENTIMENT_OPTIONS[number];
 

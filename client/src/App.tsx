@@ -30,6 +30,7 @@ import WorkflowPage from "@/pages/workflow";
 import AdminPage from "@/pages/admin";
 import AdminConfigPage from "@/pages/admin-config";
 import AdminGuidancePage from "@/pages/admin-guidance";
+import AdminTemplatesPage from "@/pages/admin-templates";
 
 function RootRedirect() {
   const [, setLocation] = useLocation();
@@ -62,6 +63,7 @@ function Router() {
       <Route path="/admin" component={AdminPage} />
       <Route path="/admin/config" component={AdminConfigPage} />
       <Route path="/admin/guidance" component={AdminGuidancePage} />
+      <Route path="/admin/templates" component={AdminTemplatesPage} />
       <Route component={NotFound} />
     </Switch>
   );

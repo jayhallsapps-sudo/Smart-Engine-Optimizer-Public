@@ -1,0 +1,115 @@
+Build the first lightweight template-builder foundation for SmartEO so admins can begin controlling report structure in-app without turning this into an overbuilt WYSIWYG system.
+
+IMPORTANT CONTEXT
+
+SmartEO already has:
+- report registry
+- workflow/report mapping layers
+- QBS → QBR mapping
+- Governance Hub
+- admin guidance
+- admin config notes and safe config overrides
+- real server-enforced admin write permissions
+- existing report pages and preview infrastructure
+
+Do not rebuild the report system or attempt a full final template builder in one step.
+
+CORE OBJECTIVE
+
+Create the first controlled in-app template/configuration layer for report structure so leadership can begin shaping report composition without requiring code changes for every structural adjustment.
+
+PRIMARY GOALS
+
+1. CHOOSE A LIGHTWEIGHT TEMPLATE MODEL
+
+Do not build a giant freeform editor yet.
+
+Start with a structured template model that can safely represent things like:
+- section order
+- section visibility
+- section labels/titles
+- optional section descriptions or helper copy
+- whether a section is enabled/disabled for a given report type
+
+Keep the model controlled and constrained.
+
+2. START WITH THE MOST VALUABLE REPORT TYPES
+
+Focus first on the currently active/high-value internal report surfaces, such as:
+- QBS
+- Bi-Weekly Report
+- Monthly Report
+- optionally QBR if the current structure supports it cleanly
+
+Do not force all 7 report types into editable templates in one pass unless the architecture truly supports it.
+
+3. PRESERVE STRUCTURAL SAFETY
+
+Requirements:
+- keep compatibility-critical IDs and generation logic safe
+- do not let admins break routing, saved reports, or core rendering by renaming/internal-key edits
+- allow safe surface-level structure control, not deep unsafe mutation
+
+4. ADMIN UI EXPERIENCE
+
+Build this inside the existing Governance area.
+
+Requirements:
+- calm desktop-first admin UI
+- easy to understand
+- clear editable vs locked fields
+- support reordering and enable/disable where practical
+- keep it obviously safer/more constrained than a full document editor
+
+5. RUNTIME CONSUMPTION
+
+Requirements:
+- persisted template settings should actually affect the live report experience where appropriate
+- code-defined defaults must remain the fallback
+- if no template override exists, current report behavior should remain unchanged
+- do not break existing saved reports
+
+6. REUSE / COMPATIBILITY RULES
+
+- reuse current governance patterns where possible
+- reuse current report structure knowledge where possible
+- do not replace the existing report generation engine
+- do not overbuild a full drag-and-drop page builder unless a very constrained version is clearly safe
+
+7. DEFERRED ITEMS
+
+Do not build in this prompt:
+- full WYSIWYG template editor
+- arbitrary block insertion/removal
+- final source-routing manager
+- final enterprise approval workflows
+- slide-perfect visual layout editing
+
+This prompt is about safe template structure control, not full design freedom.
+
+DELIVERABLES
+
+Build/refine:
+- lightweight template data model
+- admin UI for safe template controls
+- persistence for template settings
+- runtime fallback-to-default behavior
+- live consumption for selected report types
+
+IMPLEMENTATION REPORT REQUIRED
+
+After building, provide a short implementation report including:
+- files changed
+- what was reused
+- what was refactored
+- what was newly added
+- which report types now support template controls
+- exactly which template properties are editable
+- exactly which structural values remain locked/code-only
+- how fallback behavior works
+- any UX compromises
+- any risks or deferred items
+
+SUCCESS CONDITION
+
+A SmartEO admin can safely control selected report-structure settings in-app for key report types, and SmartEO uses those persisted settings while still falling back cleanly to existing code-defined defaults where no override exists.

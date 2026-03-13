@@ -45,4 +45,4 @@ integrations = ["google-drive:1.0.0", "asana:1.0.0", "google-docs:1.0.0", "notio
 [userenv]
 
 [userenv.shared]
-ADMIN_TOKEN = "327d92bfbe1b0dbc404196de84085a5bc41faec30f4b34e9f55b70e34a6e65e5"
+ADMIN_TOKEN = "4f9c2b8d7e1a6c3f0b5d9a2e7c1f4b8d6a3e9f2c7b1d5a8e3f6c0b4d9a2e7c1"

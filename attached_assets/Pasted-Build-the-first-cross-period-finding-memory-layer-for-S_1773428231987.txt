@@ -1,0 +1,124 @@
+Build the first cross-period finding memory layer for SmartEO so recurring findings can carry forward useful context across reporting cycles.
+
+IMPORTANT CONTEXT
+
+The following already exist and must be extended, not replaced:
+- stable finding object model
+- heuristic priority engine
+- manual priority overrides
+- executionContext on findings
+- Airtable/Asana execution reference linking
+- workflow session persistence
+- workflow-to-report handoff
+- report save/load infrastructure
+
+Do not rebuild the workflow, priority engine, or execution model from scratch.
+
+CORE OBJECTIVE
+
+Give SmartEO the ability to recognize when a finding is meaningfully recurring across reporting periods and surface useful prior context to the AM.
+
+PRIMARY GOALS
+
+1. DEFINE A FIRST RECURRENCE MODEL
+
+Create a lightweight recurrence/memory model for findings.
+
+The model should help answer:
+- has a similar finding appeared before for this client?
+- when was it last seen?
+- what happened last time?
+- was it deferred, completed, or linked to execution?
+- how many times has it recurred?
+
+Do not overbuild a full knowledge graph.
+Keep it practical and explainable.
+
+2. MATCH CURRENT FINDINGS TO PRIOR FINDINGS
+
+Use a lightweight matching approach that is good enough for an internal first pass.
+
+Acceptable signals may include:
+- same workflow area
+- similar finding text / normalized body
+- same linked execution reference
+- same or similar revised body
+- same or similar semantic intent if a lightweight heuristic can support it
+
+Do not attempt final perfect matching in this prompt.
+
+3. SURFACE PRIOR CONTEXT IN WORKFLOW
+
+When a current finding appears to recur, surface a small amount of useful context, such as:
+- seen before
+- last seen date
+- prior execution status
+- prior priority bucket
+- prior linked reference if any
+- recurrence count
+
+Keep the UI calm and internal-facing.
+Do not overload every card with too much historical detail.
+
+4. KEEP THE HUMAN IN CONTROL
+
+Requirements:
+- recurrence should inform judgment, not auto-merge or auto-suppress findings
+- AM can still revise, accept, reject, override, and update execution state
+- if the match is uncertain, keep the signal lightweight
+
+5. PREPARE FOR FUTURE ACCOUNT MEMORY
+
+Structure this so later it can support:
+- better similarity logic
+- stronger recurrence confidence
+- account-level recommendation history
+- escalation rules for repeated deferrals
+- reporting on recurring issues
+
+Do not build the full long-term intelligence engine yet.
+
+6. REUSE / COMPATIBILITY RULES
+
+- preserve the current finding object model where practical
+- preserve workflow session persistence
+- preserve current priority/override/execution behavior
+- reuse existing saved report and handoff infrastructure where possible
+- do not break current report flows
+
+7. DEFERRED ITEMS
+
+Do not build in this prompt:
+- final semantic matching engine
+- full database-backed recommendation graph
+- automated escalation rules
+- account-wide analytics dashboard
+- automatic task creation from recurrence
+
+This prompt is about first-pass cross-period memory, not the final strategic brain.
+
+DELIVERABLES
+
+Build/refine:
+- recurrence model
+- lightweight matching logic
+- prior-context surfacing in workflow
+- minimal persistence or lookup path needed to support it
+
+IMPLEMENTATION REPORT REQUIRED
+
+After building, provide a short implementation report including:
+- files changed
+- what was reused
+- what was refactored
+- what was newly added
+- exact recurrence model
+- how current findings are matched to prior findings
+- what prior context is now surfaced
+- what remains heuristic/manual
+- any UX compromises
+- any risks or deferred items
+
+SUCCESS CONDITION
+
+A SmartEO user can see when a current finding likely recurs from earlier reporting cycles and can use that prior context to make better priority, execution, and reporting decisions without breaking the current workflow experience.

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo, createContext, useContext } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -22,6 +22,7 @@ import {
   CheckCircle2,
   X,
   Link2,
+  History,
 } from "lucide-react";
 import { FindingChatPanel } from "@/components/workflow/FindingChatPanel";
 import {
@@ -71,11 +72,25 @@ import { GuidancePanel, areaIdToWorkflowGroup } from "@/components/GuidancePanel
 import { useConfigOverrides } from "@/hooks/useConfigOverrides";
 import { useTemplateConfig } from "@/hooks/useTemplateConfig";
 import {
+  matchFindingsToPrior,
+  buildHistorySaveEntries,
+  type FindingHistoryEntry,
+  type PriorFindingContext,
+} from "@/lib/recurrence";
+import { apiRequest } from "@/lib/queryClient";
+import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+
+// ─── Recurrence context ───────────────────────────────────────────────────────
+// Provides prior-context lookups to nested finding card renders without prop
+// drilling. Set at WorkflowPage level; consumed in SectionMiniFlow and
+// StepFindingsReview via useContext(PriorContextCtx).
+
+const PriorContextCtx = createContext<Map<string, PriorFindingContext>>(new Map());
 
 // ─── Priority badge ───────────────────────────────────────────────────────────
 // Inline UI primitive — renders a small, calm priority pill with a tooltip
@@ -534,6 +549,7 @@ function SectionMiniFlow({
   onOpenChat: (finding: Finding) => void;
 }) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const priorCtxMap = useContext(PriorContextCtx);
 
   const startAnalysis = useCallback(() => {
     onChange({ phase: "analyzing" });
@@ -727,6 +743,20 @@ function SectionMiniFlow({
                       />
                     )}
                     <ExecutionChip ctx={finding.executionContext} />
+                    {(() => {
+                      const pc = priorCtxMap.get(finding.id);
+                      if (!pc || pc.matchConfidence === "possible") return null;
+                      return (
+                        <span
+                          className="inline-flex items-center gap-0.5 text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                          title={`Seen ${pc.recurrenceCount}× before${pc.periodLabel ? ` · ${pc.periodLabel}` : ""}`}
+                          data-testid={`badge-recurring-${finding.id}`}
+                        >
+                          <History className="w-2.5 h-2.5" />
+                          recurring
+                        </span>
+                      );
+                    })()}
                   </div>
                 </div>
 
@@ -910,6 +940,7 @@ function StepFindingsReview({
   onEdit: (id: StrategyAreaId) => void;
   onOpenChat: (finding: Finding) => void;
 }) {
+  const priorCtxMap = useContext(PriorContextCtx);
   const committed = DEFAULT_STRATEGY_AREAS.filter(a => sections[a.id].committed);
   const skipped = DEFAULT_STRATEGY_AREAS.filter(a => !sections[a.id].committed);
   const totalFindings = committed.reduce(
@@ -1002,6 +1033,20 @@ function StepFindingsReview({
                                 />
                               )}
                               <ExecutionChip ctx={finding.executionContext} />
+                              {(() => {
+                                const pc = priorCtxMap.get(finding.id);
+                                if (!pc || pc.matchConfidence === "possible") return null;
+                                return (
+                                  <span
+                                    className="inline-flex items-center gap-0.5 text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                                    title={`Seen ${pc.recurrenceCount}× before${pc.periodLabel ? ` · ${pc.periodLabel}` : ""}`}
+                                    data-testid={`badge-recurring-${finding.id}`}
+                                  >
+                                    <History className="w-2.5 h-2.5" />
+                                    recurring
+                                  </span>
+                                );
+                              })()}
                             </div>
                           </div>
                           <button
@@ -1333,6 +1378,32 @@ export default function WorkflowPage() {
 
   const reportType = state.reportTypeId ? (getReportDefinition(state.reportTypeId) ?? null) : null;
   const selectedClient = clients.find(c => c.id === state.clientId) ?? null;
+
+  // ─── Cross-period finding history ───────────────────────────────────────────
+  const [findingHistoryRows, setFindingHistoryRows] = useState<FindingHistoryEntry[]>([]);
+  const historyFetchedRef = useRef<string | null>(null); // tracks "clientId:reportTypeId" already fetched
+  const historyAlreadySavedRef = useRef(false);
+
+  // Fetch prior history once when we know client + reportType (step >= 3)
+  useEffect(() => {
+    if (state.step < 3 || !state.clientId || !state.reportTypeId) return;
+    const key = `${state.clientId}:${state.reportTypeId}`;
+    if (historyFetchedRef.current === key) return;
+    historyFetchedRef.current = key;
+    apiRequest("POST", `/api/clients/${state.clientId}/finding-history/query`, {
+      reportType: state.reportTypeId,
+    })
+      .then(r => r.json())
+      .then((rows: FindingHistoryEntry[]) => setFindingHistoryRows(rows))
+      .catch(() => {});
+  }, [state.step, state.clientId, state.reportTypeId]);
+
+  // Match current findings against history — recomputes whenever sections or history changes
+  const priorContextMap = useMemo(() => {
+    if (findingHistoryRows.length === 0) return new Map<string, PriorFindingContext>();
+    const allFindings = Object.values(state.sections).flatMap(s => s.findings);
+    return matchFindingsToPrior(allFindings, findingHistoryRows);
+  }, [findingHistoryRows, state.sections]);
   const numCommitted = committedCount(state.sections);
 
   const canAdvance =
@@ -1347,7 +1418,24 @@ export default function WorkflowPage() {
   const isLastStep = state.step === STEPS.length;
 
   const goNext = useCallback(() => {
-    setState(s => ({ ...s, step: Math.min(s.step + 1, STEPS.length) as StepId, chatFinding: null }));
+    setState(s => {
+      // On step 4→5 transition: save selected findings to history (fire-and-forget, once per session)
+      if (s.step === 4 && s.clientId && s.reportTypeId && !historyAlreadySavedRef.current) {
+        historyAlreadySavedRef.current = true;
+        const allSelected = Object.values(s.sections).flatMap(sec =>
+          sec.findings.filter(f => f.selected),
+        );
+        if (allSelected.length > 0) {
+          const periodLabel = `${getReportDefinition(s.reportTypeId!)?.displayName ?? s.reportTypeId} · ${new Date().toLocaleDateString("en-US", { month: "short", year: "numeric" })}`;
+          apiRequest("POST", `/api/clients/${s.clientId}/finding-history`, {
+            reportType: s.reportTypeId,
+            periodLabel,
+            findings: buildHistorySaveEntries(allSelected),
+          }).catch(() => {});
+        }
+      }
+      return { ...s, step: Math.min(s.step + 1, STEPS.length) as StepId, chatFinding: null };
+    });
   }, []);
 
   const goBack = useCallback(() => {
@@ -1507,6 +1595,7 @@ export default function WorkflowPage() {
         </div>
       )}
 
+      <PriorContextCtx.Provider value={priorContextMap}>
       <div className="flex-1 min-h-0 overflow-hidden">
         {state.step === 1 && (
           <StepSelectType
@@ -1567,6 +1656,7 @@ export default function WorkflowPage() {
           />
         )}
       </div>
+      </PriorContextCtx.Provider>
 
       {/* Finding AI chat panel — portal-style fixed overlay */}
       {state.chatFinding && (
@@ -1577,6 +1667,7 @@ export default function WorkflowPage() {
           onOverride={(override) => onOverrideFindingPriority(state.chatFinding!, override)}
           onUpdateExecution={(ctx) => onUpdateFindingExecution(state.chatFinding!, ctx)}
           clientId={state.clientId}
+          priorContext={priorContextMap.get(state.chatFinding.id)}
         />
       )}
 

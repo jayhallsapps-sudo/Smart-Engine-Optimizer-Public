@@ -876,6 +876,46 @@ export async function registerRoutes(
     res.json({ asana, airtable });
   });
 
+  app.post("/api/clients/:id/finding-history/query", async (req, res) => {
+    const clientId = Number(req.params.id);
+    const { reportType } = req.body as { reportType: string };
+    if (!reportType) return res.status(400).json({ error: "reportType required" });
+    const rows = await storage.queryFindingHistory(clientId, reportType);
+    res.json(rows);
+  });
+
+  app.post("/api/clients/:id/finding-history", async (req, res) => {
+    const clientId = Number(req.params.id);
+    const { reportType, periodLabel, findings } = req.body as {
+      reportType: string;
+      periodLabel: string;
+      findings: Array<{
+        areaId: string;
+        body: string;
+        bodyHash: string;
+        bucket: string | null;
+        executionStatus: string | null;
+        linkedRefTitle: string | null;
+      }>;
+    };
+    if (!reportType || !Array.isArray(findings)) {
+      return res.status(400).json({ error: "reportType and findings[] required" });
+    }
+    const rows = findings.map(f => ({
+      clientId,
+      reportType,
+      areaId: f.areaId,
+      bodyHash: f.bodyHash,
+      body: f.body,
+      bucket: f.bucket ?? null,
+      executionStatus: f.executionStatus ?? null,
+      linkedRefTitle: f.linkedRefTitle ?? null,
+      periodLabel: periodLabel ?? null,
+    }));
+    await storage.saveFindingHistoryBatch(rows);
+    res.json({ saved: rows.length });
+  });
+
   app.get("/api/query-logs", async (req, res) => {
     const clientId = req.query.clientId ? Number(req.query.clientId) : undefined;
     const logs = await storage.getQueryLogs(clientId);

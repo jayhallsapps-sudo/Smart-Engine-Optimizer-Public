@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { eq, and, desc, sql, isNull } from "drizzle-orm";
+import { eq, and, desc, sql, isNull, gte } from "drizzle-orm";
 import {
   clients,
   queryLogs,
@@ -12,7 +12,10 @@ import {
   reportComments,
   adminGuidance,
   adminConfigOverrides,
+  findingHistory,
   reportTemplateSections,
+  type FindingHistory,
+  type InsertFindingHistory,
   type Client,
   type InsertClient,
   type QueryLog,
@@ -102,6 +105,10 @@ export interface IStorage {
   listTemplateSections(reportType?: string): Promise<ReportTemplateSection[]>;
   upsertTemplateSection(data: InsertReportTemplateSection): Promise<ReportTemplateSection>;
   deleteTemplateSection(id: number): Promise<boolean>;
+
+  // Finding History (Cross-Period Memory)
+  saveFindingHistoryBatch(rows: InsertFindingHistory[]): Promise<void>;
+  queryFindingHistory(clientId: number, reportType: string): Promise<FindingHistory[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -471,6 +478,27 @@ export class DatabaseStorage implements IStorage {
       .where(eq(reportTemplateSections.id, id))
       .returning();
     return result.length > 0;
+  }
+
+  async saveFindingHistoryBatch(rows: InsertFindingHistory[]): Promise<void> {
+    if (rows.length === 0) return;
+    await db.insert(findingHistory).values(rows);
+  }
+
+  async queryFindingHistory(clientId: number, reportType: string): Promise<FindingHistory[]> {
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    return db
+      .select()
+      .from(findingHistory)
+      .where(
+        and(
+          eq(findingHistory.clientId, clientId),
+          eq(findingHistory.reportType, reportType),
+          gte(findingHistory.seenAt, sixMonthsAgo),
+        ),
+      )
+      .orderBy(desc(findingHistory.seenAt));
   }
 }
 

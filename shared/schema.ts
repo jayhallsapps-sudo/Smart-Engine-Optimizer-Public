@@ -448,6 +448,33 @@ export type GapAnalysisSession = typeof gapAnalysisSessions.$inferSelect;
 
 // ─── End Fill in the Gaps ────────────────────────────────────────────────────
 
+// ─── Finding History (Cross-Period Memory) ────────────────────────────────────
+
+export const findingHistory = pgTable("finding_history", {
+  id: serial("id").primaryKey(),
+  clientId: integer("client_id").notNull(),
+  reportType: varchar("report_type", { length: 50 }).notNull(),
+  areaId: varchar("area_id", { length: 100 }).notNull(),
+  bodyHash: varchar("body_hash", { length: 8 }).notNull(),
+  body: text("body").notNull(),
+  bucket: varchar("bucket", { length: 30 }),
+  executionStatus: varchar("execution_status", { length: 30 }),
+  linkedRefTitle: varchar("linked_ref_title", { length: 255 }),
+  periodLabel: varchar("period_label", { length: 200 }),
+  seenAt: timestamp("seen_at").defaultNow().notNull(),
+}, (t) => [
+  index("finding_history_client_type_idx").on(t.clientId, t.reportType),
+  index("finding_history_client_area_idx").on(t.clientId, t.reportType, t.areaId),
+]);
+
+export const insertFindingHistorySchema = createInsertSchema(findingHistory).omit({
+  id: true,
+  seenAt: true,
+});
+
+export type FindingHistory = typeof findingHistory.$inferSelect;
+export type InsertFindingHistory = z.infer<typeof insertFindingHistorySchema>;
+
 export const DATA_SERVICES = [
   "google_search_console",
   "google_analytics_4",

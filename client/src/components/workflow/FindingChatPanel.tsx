@@ -22,6 +22,8 @@ import { Badge } from "@/components/ui/badge";
 import { apiRequest } from "@/lib/queryClient";
 import { findingShortLabel } from "@/lib/findingTypes";
 import type { Finding, FindingStatus, FindingChatMessage } from "@/lib/findingTypes";
+import { formatPriorDate, PRIOR_BUCKET_LABELS } from "@/lib/recurrence";
+import type { PriorFindingContext } from "@/lib/recurrence";
 import {
   BUCKET_LABELS,
   BUCKET_BADGE_COLORS,
@@ -383,6 +385,8 @@ interface FindingChatPanelProps {
   onUpdateExecution: (ctx: ExecutionContext | null) => void;
   /** Client ID — enables live Asana/Airtable ref lookup. Optional for backward compat. */
   clientId?: number | null;
+  /** Cross-period recurrence context for this finding, if available. */
+  priorContext?: PriorFindingContext;
 }
 
 // All selectable buckets in display order for the override picker.
@@ -393,7 +397,7 @@ const BUCKET_OPTIONS: PriorityBucket[] = [
   "deprioritize",
 ];
 
-export function FindingChatPanel({ finding, onClose, onCommit, onOverride, onUpdateExecution, clientId }: FindingChatPanelProps) {
+export function FindingChatPanel({ finding, onClose, onCommit, onOverride, onUpdateExecution, clientId, priorContext }: FindingChatPanelProps) {
   const currentBody = finding.body;
   const shortTitle = findingShortLabel(finding.body);
 
@@ -728,6 +732,53 @@ export function FindingChatPanel({ finding, onClose, onCommit, onOverride, onUpd
             </div>
           )}
         </div>
+
+        {/* ── Prior context / recurrence banner ── */}
+        {priorContext && (
+          <div
+            className="mx-5 mt-3 rounded-lg border border-amber-400/30 bg-amber-500/8 px-3.5 py-2.5"
+            data-testid="prior-context-banner"
+          >
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <RotateCcw className="w-3 h-3 text-amber-600 dark:text-amber-400 shrink-0" />
+              <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wide">
+                Recurring finding
+              </span>
+              <Badge className="text-[8px] h-4 ml-auto bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-400/30 capitalize">
+                {priorContext.matchConfidence}
+              </Badge>
+            </div>
+            <div className="space-y-0.5 text-[10px] text-amber-800 dark:text-amber-300/80">
+              <p>
+                Seen{" "}
+                <strong>{priorContext.recurrenceCount}×</strong> before — last:{" "}
+                {priorContext.periodLabel ?? formatPriorDate(priorContext.lastSeenAt)}
+              </p>
+              {priorContext.priorBucket && (
+                <p>
+                  Prior bucket:{" "}
+                  <span className="font-medium">
+                    {PRIOR_BUCKET_LABELS[priorContext.priorBucket] ?? priorContext.priorBucket}
+                  </span>
+                </p>
+              )}
+              {priorContext.priorExecutionStatus && priorContext.priorExecutionStatus !== "not_tracked" && (
+                <p>
+                  Prior execution:{" "}
+                  <span className="font-medium capitalize">
+                    {priorContext.priorExecutionStatus.replace(/_/g, " ")}
+                  </span>
+                </p>
+              )}
+              {priorContext.priorLinkedRefTitle && (
+                <p>
+                  Prior ref:{" "}
+                  <span className="font-medium">{priorContext.priorLinkedRefTitle}</span>
+                </p>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* ── Priority override section ── */}
         {finding.priority && (

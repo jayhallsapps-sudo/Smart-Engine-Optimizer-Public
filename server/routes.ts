@@ -2925,16 +2925,34 @@ export async function registerRoutes(
   // the request/response contract or any frontend code.
 
   app.post("/api/workflow/finding-chat", (req, res) => {
-    const { findingBody, areaId, areaLabel, messages } = req.body as {
-      findingId: string;
-      findingBody: string;
+    // Accept full Finding object (new contract) or legacy flat fields for compat.
+    // New shape: { finding: Finding, messages[] }
+    // The finding object exposes: id, areaId, areaLabel, body, originalBody,
+    // status, selected, evidence?, confidence?, sourceMetadata?, notes?
+    const finding = req.body.finding as {
+      id?: string;
       areaId: string;
       areaLabel: string;
-      messages: Array<{ role: "user" | "assistant"; content: string }>;
-    };
+      body: string;
+      originalBody?: string;
+      status?: string;
+      confidence?: "low" | "medium" | "high";
+      evidence?: string;
+      sourceMetadata?: Record<string, unknown>;
+      notes?: string[];
+    } | undefined;
+
+    const messages: Array<{ role: "user" | "assistant"; content: string }> = req.body.messages ?? [];
+
+    // Support both new (finding.body) and legacy (findingBody) shapes
+    const findingBody: string = finding?.body ?? req.body.findingBody ?? "";
+    const areaId: string = finding?.areaId ?? req.body.areaId ?? "";
+    const areaLabel: string = finding?.areaLabel ?? req.body.areaLabel ?? "";
+    const confidence = finding?.confidence;
+    const evidence = finding?.evidence;
 
     if (!findingBody || !Array.isArray(messages) || messages.length === 0) {
-      return res.status(400).json({ message: "findingBody and messages are required" });
+      return res.status(400).json({ message: "finding body and messages are required" });
     }
 
     const lastUser = messages.filter(m => m.role === "user").pop()?.content?.toLowerCase() ?? "";
@@ -2942,7 +2960,12 @@ export async function registerRoutes(
     // ── Intent detection ──────────────────────────────────────────────────────
     const isExplain = /why|surface|trigger|signal|data|came from|how did/.test(lastUser);
     const isStrengthen = /strengthen|stronger|evidence|data.*support|support.*data|specific|validate|back/.test(lastUser);
-    const isRewrite = /rewrite|clearer|cleaner|better|improve|rephrase|simpler|concise/.test(lastUser);
+    const isRewrite = /rewrite|clearer|cleaner|better|improve|rephrase|simpler/.test(lastUser);
+    const isConcise = /concise|shorter|brief|tighten|trim|fewer words|compact/.test(lastUser);
+    const isClientFacing = /client.facing|client.ready|client language|client delivery|jargon|deliverable|client.friendly/.test(lastUser);
+    const isStrategic = /strategic|internal|am.*perspective|account.*direction|positioning|strategy/.test(lastUser);
+    const isDefend = /defend|matter|important|why.*care|pitch|convince|skeptic|case for/.test(lastUser);
+    const isUncertain = /uncertain|uncertainty|flag|validation|validate|caveat|unconfirmed|more evidence|weak signal/.test(lastUser);
     const isCautious = /cautious|hedge|careful|conditional|might|may|possibly|soften|weaker/.test(lastUser);
     const isDirect = /direct|decisive|action|strong|assertive|bold|firm|definitive/.test(lastUser);
     const isTechnical = /technical|infra|crawl|render|core web/.test(lastUser);
@@ -2975,12 +2998,21 @@ export async function registerRoutes(
     const recommendWord = findingBody.match(/recommend[a-z]*/i)?.[0] ?? "recommend";
 
     if (isExplain) {
+      const evidenceNote = evidence
+        ? `\n\nEvidence on file: ${evidence}`
+        : ``;
+      const confidenceNote = confidence === "low"
+        ? `\n\nNote: this finding is marked low confidence — the pattern is visible but the underlying data is directional. Treat the recommendation as a hypothesis that needs validation before committing.`
+        : confidence === "high"
+        ? `\n\nNote: this finding is marked high confidence — the underlying data pattern is clear and consistent.`
+        : "";
       reply = `This finding surfaced based on ${signals}.\n\n` +
         `The pattern it describes — ${findingBody.split("—")[0].trim().toLowerCase()} — typically emerges when the underlying data shows a measurable gap between current performance and expected outcome for an account at this stage.\n\n` +
         `In ${areaLabel} analysis, findings like this are flagged when the severity or frequency exceeds normal variance. ` +
         (hasNumbers
           ? `The specific numbers in this finding are indicative benchmarks drawn from the analysis data available — they should be verified against the client's actual live data before committing.`
-          : `The recommendation is based on pattern recognition across the relevant data sources — specific quantification would require pulling the client's live metrics.`);
+          : `The recommendation is based on pattern recognition across the relevant data sources — specific quantification would require pulling the client's live metrics.`) +
+        evidenceNote + confidenceNote;
     } else if (isStrengthen) {
       reply = `To strengthen this finding, consider adding:\n\n` +
         `1. **Specific URLs or pages** affected, not just a count estimate\n` +
@@ -2989,13 +3021,64 @@ export async function registerRoutes(
         `4. **Estimated impact** — if this were addressed, what outcome change is realistic?\n\n` +
         `For ${areaLabel} specifically, the strongest supporting evidence usually comes from ${signals}. Pulling explicit data points from those sources before the report session will let you make this recommendation with more precision.`;
     } else if (isRewrite) {
-      // Generate a revised version of the finding
       const revised = findingBody
-        .replace(/\d–\d/g, (m) => m) // preserve ranges
+        .replace(/\d–\d/g, (m) => m)
         .replace(/recommend[a-z]*/i, "Action required:")
         .replace(/^([^—]+)—\s*/, (_, lead) => lead.trim() + " — ");
       suggestedRevision = revised !== findingBody ? revised : findingBody.replace(/\.$/, "") + " — prioritize for Q2 sprint.";
       reply = `Here's a cleaner rewrite of this finding:\n\n"${suggestedRevision}"\n\nThe main changes: leading with the observed condition more directly, and ending with a more explicit action signal. You can accept this revision below or tweak it further.`;
+    } else if (isConcise) {
+      // Trim to the core action — drop qualifiers, shorten the sentence
+      const words = findingBody.split(/\s+/);
+      let concise = findingBody;
+      if (words.length > 20) {
+        // Remove parenthetical asides and trailing qualifiers
+        concise = findingBody
+          .replace(/\s*\([^)]+\)/g, "")
+          .replace(/\s*—\s*[^—.]+$/, "")
+          .replace(/\s*,\s*and\s+[^.]+$/, "")
+          .trim()
+          .replace(/[,;]$/, "");
+        concise = concise.charAt(0).toUpperCase() + concise.slice(1);
+        if (!concise.endsWith(".")) concise += ".";
+      }
+      suggestedRevision = concise !== findingBody ? concise : findingBody.replace(/\s+/g, " ").trim();
+      reply = `Here's a tighter version:\n\n"${suggestedRevision}"\n\nThis removes qualifiers and asides to get to the core recommendation in fewer words. If the removed context is important, add it back as a separate note.`;
+    } else if (isClientFacing) {
+      const clientVer = findingBody
+        .replace(/\brecommend\b/i, "We suggest")
+        .replace(/\binfrastructure\b/gi, "site performance")
+        .replace(/\bcrawl\b/gi, "site audit")
+        .replace(/\bGSC\b/g, "search data")
+        .replace(/\bCWV\b/g, "page speed")
+        .replace(/\bCTR\b/g, "click rate")
+        .replace(/\bSERP\b/g, "search results")
+        .replace(/\bcanonical\b/gi, "URL structure");
+      suggestedRevision = clientVer !== findingBody ? clientVer : "We recommend " + findingBody.charAt(0).toLowerCase() + findingBody.slice(1);
+      reply = `Here's a client-facing version:\n\n"${suggestedRevision}"\n\nThis swaps technical jargon for plain language suitable for client delivery. Check that no nuance is lost — some technical specifics may need to stay for accuracy.`;
+    } else if (isStrategic) {
+      const isTech = ["technical_infra", "technical_content", "advanced_technical"].includes(areaId);
+      const strategyAngle = isTech
+        ? `From a technical investment perspective, this finding signals a site health issue that is likely suppressing organic ceiling. Resolving it is a prerequisite for meaningful rankings growth — it's a foundation fix, not a nice-to-have.`
+        : `From an account positioning perspective, this finding gives you an editorial narrative to work with. Content-side momentum is visible in client reporting and easy to attribute — which makes this a strong "proof of strategy" talking point for the QBR.`;
+      reply = `Strategic lens for this ${areaLabel} finding:\n\n${strategyAngle}\n\nFor account direction: this should be framed as a compounding investment (fixing this now multiplies the value of other active work) rather than a one-off task. That framing tends to land well in strategic reviews.`;
+    } else if (isDefend) {
+      const impactCase = confidence === "high"
+        ? `The signal strength here is high — this is a data-backed recommendation, not a heuristic guess.`
+        : confidence === "low"
+        ? `The signal is early-stage, but the pattern is recognizable. Frame it as a proactive catch rather than a confirmed problem — "we're catching this before it becomes visible in ranking drops" is a strong client pitch.`
+        : `This recommendation is grounded in ${signals}. The evidence is directional — not necessarily pinpoint — but the pattern is consistent with what causes real ranking impact.`;
+      reply = `Here's how to defend this finding:\n\n${impactCase}\n\nThe pitch:\n1. What's happening: ${findingBody.split("—")[0].trim()}\n2. Why it matters: unaddressed, this type of issue typically compounds over 2–3 months and shows up as ranking stagnation or traffic ceiling\n3. What the fix unlocks: clearing this creates headroom for other active work to perform better\n\nIf challenged, the strongest counter is specificity — can you pull one concrete data point (a URL, a date range, a metric) to ground it?`;
+    } else if (isUncertain) {
+      const needsValidation = findingBody
+        .replace(/recommend[a-z]*/i, "may warrant")
+        .replace(/\bwill\b/g, "may")
+        .replace(/\bconfirmed\b/gi, "indicated")
+        .replace(/\brequired\b/g, "worth reviewing");
+      suggestedRevision = needsValidation !== findingBody
+        ? needsValidation + (needsValidation.includes("—") ? "" : " — pending data validation.")
+        : `Signal detected: ${findingBody.charAt(0).toLowerCase() + findingBody.slice(1).replace(/\.$/, "")} — confirm before including in final report.`;
+      reply = `Here's a version that flags this as needing validation:\n\n"${suggestedRevision}"\n\nThis is appropriate when the underlying data is directional but not conclusive — it keeps the finding in scope while signalling to the reviewer that a data check is needed before committing. If you accept this revision, consider also adding a note in the AM context field.`;
     } else if (isCautious) {
       const cautious = findingBody
         .replace(/recommend[a-z]*/i, "may warrant")

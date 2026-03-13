@@ -9,26 +9,27 @@ import {
   ChevronRight,
   Sparkles,
   MessageSquare,
+  ShieldAlert,
+  BarChart2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { apiRequest } from "@/lib/queryClient";
+import { findingShortLabel } from "@/lib/findingTypes";
 import type { Finding, FindingStatus, FindingChatMessage } from "@/lib/findingTypes";
 
-// ─── Quick action definitions ─────────────────────────────────────────────────
+// ─── Quick actions ────────────────────────────────────────────────────────────
 const QUICK_ACTIONS = [
   {
     id: "why",
     label: "Why did this surface?",
-    prompt:
-      "Why did this finding surface? What signals or data patterns typically indicate this issue?",
+    prompt: "Why did this finding surface? What signals or data patterns typically indicate this issue?",
   },
   {
     id: "strengthen",
     label: "Strengthen it",
-    prompt:
-      "What additional data or evidence would make this recommendation stronger? What specifics should I look for?",
+    prompt: "What additional data or evidence would make this recommendation stronger? What specifics should I look for?",
   },
   {
     id: "rewrite",
@@ -36,20 +37,43 @@ const QUICK_ACTIONS = [
     prompt: "Rewrite this finding to be clearer and more actionable. Suggest an improved version.",
   },
   {
+    id: "concise",
+    label: "Make concise",
+    prompt: "Make this finding more concise — same meaning, fewer words. Suggest a tightened version.",
+  },
+  {
+    id: "client_facing",
+    label: "Client-facing",
+    prompt: "Rewrite this finding in language suitable for direct client delivery — clear, jargon-light, and benefit-oriented. Suggest an improved version.",
+  },
+  {
+    id: "strategic",
+    label: "Strategic lens",
+    prompt: "Reframe this finding from an internal strategic perspective — what does it mean for the account direction and AM positioning? Suggest a version.",
+  },
+  {
+    id: "defend",
+    label: "Defend it",
+    prompt: "Why does this finding matter? How would you pitch its importance to a skeptical client or AM? Give me the strongest case.",
+  },
+  {
+    id: "uncertainty",
+    label: "Flag uncertainty",
+    prompt: "This finding may need more evidence before committing. Reframe it to clearly signal it needs validation before acting. Suggest a version.",
+  },
+  {
     id: "cautious",
     label: "Make cautious",
-    prompt:
-      "Rewrite this as a more cautious, conditional recommendation. Suggest an improved version.",
+    prompt: "Rewrite this as a more cautious, conditional recommendation. Suggest an improved version.",
   },
   {
     id: "direct",
     label: "Make direct",
-    prompt:
-      "Rewrite this as a more direct, decisive recommendation with a clear action. Suggest an improved version.",
+    prompt: "Rewrite this as a more direct, decisive recommendation with a clear action. Suggest an improved version.",
   },
 ] as const;
 
-// ─── Status display helpers ───────────────────────────────────────────────────
+// ─── Status display ───────────────────────────────────────────────────────────
 const STATUS_COLORS: Record<FindingStatus, string> = {
   draft: "bg-muted text-muted-foreground border-border/50",
   accepted: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-400/20",
@@ -64,6 +88,12 @@ const STATUS_LABELS: Record<FindingStatus, string> = {
   revised: "Revised",
 };
 
+const CONFIDENCE_COLORS = {
+  low: "text-[#C0392B] border-red-300/40 bg-red-500/5",
+  medium: "text-amber-600 border-amber-400/40 bg-amber-500/5",
+  high: "text-emerald-600 border-emerald-400/40 bg-emerald-500/5",
+};
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 interface FindingChatPanelProps {
@@ -73,8 +103,8 @@ interface FindingChatPanelProps {
 }
 
 export function FindingChatPanel({ finding, onClose, onCommit }: FindingChatPanelProps) {
-  // finding.body is always the current text (originalBody unless already revised in state)
   const currentBody = finding.body;
+  const shortTitle = findingShortLabel(finding.body);
 
   const [messages, setMessages] = useState<FindingChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -82,12 +112,10 @@ export function FindingChatPanel({ finding, onClose, onCommit }: FindingChatPane
   const [pendingRevision, setPendingRevision] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Scroll to bottom when messages update
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
 
-  // Close on Escape
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -110,11 +138,14 @@ export function FindingChatPanel({ finding, onClose, onCommit }: FindingChatPane
     setIsLoading(true);
 
     try {
+      // Send the full finding object — route extracts what it needs.
+      // pendingRevision is used as the "current body" if a draft revision is in flight.
+      const activeFinding: Finding = pendingRevision
+        ? { ...finding, body: pendingRevision }
+        : finding;
+
       const res = await apiRequest("POST", "/api/workflow/finding-chat", {
-        findingId: finding.id,
-        findingBody: pendingRevision ?? currentBody,
-        areaId: finding.areaId,
-        areaLabel: finding.areaLabel,
+        finding: activeFinding,
         messages: nextMessages,
       });
       const data = await res.json();
@@ -156,9 +187,10 @@ export function FindingChatPanel({ finding, onClose, onCommit }: FindingChatPane
       {/* Panel */}
       <div className="w-full max-w-[480px] h-full bg-background border-l border-border flex flex-col shadow-2xl">
 
-        {/* Header */}
+        {/* ── Header ── */}
         <div className="flex items-start justify-between px-5 pt-4 pb-3 border-b shrink-0">
           <div className="flex flex-col gap-1.5 pr-3 min-w-0">
+            {/* Identity row */}
             <div className="flex items-center gap-2 flex-wrap">
               <div className="flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-[#1B3A6B]" />
@@ -170,12 +202,30 @@ export function FindingChatPanel({ finding, onClose, onCommit }: FindingChatPane
               >
                 {STATUS_LABELS[displayStatus]}
               </Badge>
+              {finding.confidence && (
+                <Badge
+                  className={`text-[9px] h-4 px-1.5 border ${CONFIDENCE_COLORS[finding.confidence]}`}
+                  data-testid="finding-confidence-badge"
+                >
+                  {finding.confidence} confidence
+                </Badge>
+              )}
             </div>
+            {/* Area breadcrumb */}
             <Badge
               className="text-[9px] h-4 w-fit bg-[#1B3A6B]/8 text-[#1B3A6B] dark:text-blue-300 border border-[#1B3A6B]/15"
+              data-testid="finding-area-badge"
             >
               {finding.areaLabel}
             </Badge>
+            {/* Short finding title */}
+            <p
+              className="text-[11px] font-medium text-foreground/70 leading-snug mt-0.5 line-clamp-2"
+              data-testid="finding-short-title"
+              title={finding.body}
+            >
+              {shortTitle}
+            </p>
           </div>
           <button
             data-testid="finding-chat-close"
@@ -186,7 +236,7 @@ export function FindingChatPanel({ finding, onClose, onCommit }: FindingChatPane
           </button>
         </div>
 
-        {/* Finding body card */}
+        {/* ── Finding body card ── */}
         <div className="px-5 pt-4 shrink-0 space-y-2">
           <div
             className={[
@@ -216,6 +266,30 @@ export function FindingChatPanel({ finding, onClose, onCommit }: FindingChatPane
             )}
           </div>
 
+          {/* Evidence hint — shown if evidence is populated; slot renders for future wiring */}
+          {finding.evidence ? (
+            <div
+              className="flex items-start gap-2 rounded border border-[#1B3A6B]/15 bg-[#1B3A6B]/4 px-3 py-2"
+              data-testid="finding-evidence-block"
+            >
+              <BarChart2 className="w-3 h-3 text-[#1B3A6B] shrink-0 mt-0.5" />
+              <p className="text-[11px] text-[#1B3A6B]/80 leading-relaxed">{finding.evidence}</p>
+            </div>
+          ) : null}
+
+          {/* Uncertainty indicator — shown when confidence is low */}
+          {finding.confidence === "low" && (
+            <div
+              className="flex items-center gap-1.5 rounded border border-[#C0392B]/20 bg-red-500/5 px-3 py-1.5"
+              data-testid="finding-low-confidence-banner"
+            >
+              <ShieldAlert className="w-3 h-3 text-[#C0392B] shrink-0" />
+              <p className="text-[10px] text-[#C0392B]">
+                Low confidence — validate the underlying data before committing.
+              </p>
+            </div>
+          )}
+
           {/* Revision actions */}
           {pendingRevision && (
             <div className="flex items-center gap-2">
@@ -240,7 +314,7 @@ export function FindingChatPanel({ finding, onClose, onCommit }: FindingChatPane
           )}
         </div>
 
-        {/* Quick actions — shown only until first message */}
+        {/* ── Quick actions — shown only until first message ── */}
         {messages.length === 0 && !isLoading && (
           <div className="px-5 pt-3 shrink-0">
             <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mb-2">
@@ -261,7 +335,7 @@ export function FindingChatPanel({ finding, onClose, onCommit }: FindingChatPane
           </div>
         )}
 
-        {/* Messages area */}
+        {/* ── Messages area ── */}
         <div className="flex-1 min-h-0 overflow-y-auto px-5 py-3 space-y-3">
           {messages.length === 0 && !isLoading && (
             <div className="flex flex-col items-center justify-center h-full gap-2 text-center pb-4">
@@ -288,7 +362,7 @@ export function FindingChatPanel({ finding, onClose, onCommit }: FindingChatPane
                 {msg.content}
               </div>
 
-              {/* Inline revision adoption button */}
+              {/* Inline revision adoption */}
               {msg.role === "assistant" && msg.suggestedRevision && !pendingRevision && (
                 <button
                   className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-1 hover:underline ml-1 mt-0.5"
@@ -314,7 +388,7 @@ export function FindingChatPanel({ finding, onClose, onCommit }: FindingChatPane
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input */}
+        {/* ── Input ── */}
         <div className="px-5 pb-4 pt-2 border-t shrink-0 space-y-2">
           <div className="flex gap-2">
             <Textarea

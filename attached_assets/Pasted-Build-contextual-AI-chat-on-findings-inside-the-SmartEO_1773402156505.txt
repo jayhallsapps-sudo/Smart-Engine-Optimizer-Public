@@ -1,0 +1,135 @@
+Build contextual AI chat on findings inside the SmartEO Phase 2 workflow and report-review experience.
+
+IMPORTANT CONTEXT
+
+The following already exist and must be extended, not replaced:
+- Phase 2 workflow shell at /workflow
+- stable finding object model with durable IDs
+- finding status / selection / revision flow
+- mock AI finding chat route
+- native comments system with savedReportId scoping
+- existing report pages and preview/edit infrastructure
+
+Do not rebuild the workflow, findings model, or comments system from scratch.
+
+CORE OBJECTIVE
+
+Make SmartEO’s finding-level AI chat feel like a real contextual analyst attached to a specific recommendation, not a generic chatbot.
+
+The chat should help AMs understand:
+- why a finding was surfaced
+- what it means
+- what evidence or context supports it
+- how it could be revised
+- whether it should be accepted, rejected, or reworded
+
+PRIORITY GOALS
+
+1. STRENGTHEN THE FINDING-LEVEL CHAT EXPERIENCE
+
+The current route seam is good, but the product experience needs to be hardened.
+
+Requirements:
+- chat must remain tied to a single finding
+- chat must not feel like a general-purpose global assistant
+- the selected finding context should always be obvious in the UI
+- revisions committed from chat must continue updating the underlying finding object cleanly
+
+2. IMPROVE THE CHAT DATA CONTRACT
+
+Review the current input/output contract between the frontend and /api/workflow/finding-chat.
+
+Current contract:
+Input: { findingId, findingBody, areaId, areaLabel, messages[] }
+Output: { message: string, suggestedRevision?: string | null }
+
+Upgrade this only where it meaningfully improves future readiness.
+
+Preferred improvements:
+- allow the route to receive the full current Finding object, not just findingBody
+- preserve compatibility with the current mock implementation if practical
+- make sure the contract is ready for future evidence/confidence/sourceMetadata wiring
+
+Do not overbuild a full intelligence engine in this prompt.
+
+3. IMPROVE FINDING CONTEXT IN CHAT UI
+
+Requirements:
+- show the finding label/title context clearly
+- show area context clearly
+- make current status visible
+- make revised vs original text understandable where relevant
+- keep the panel clean and professional
+- preserve the calm command-center feel
+
+4. SUPPORT BETTER AI ASSISTANCE STATES
+
+The chat should support at least these interaction types cleanly:
+- explain the finding
+- suggest a stronger rewrite
+- make it more concise
+- make it more client-facing
+- make it more internal/strategic
+- defend why it matters
+- clarify uncertainty if the evidence is weak
+
+For this phase, these can still be backed by a mock route if needed, but the UX and contract should be ready for a real model later.
+
+5. INTEGRATE BETTER WITH WORKFLOW STATE
+
+Requirements:
+- committed revisions update the current finding object directly
+- status changes remain coherent after revision
+- moving between Step 3 and Step 4 still preserves all revisions correctly
+- chat state should clear/reset appropriately when changing finding, changing client, changing report type, or leaving the relevant step
+
+6. PREPARE FOR FUTURE EVIDENCE SUPPORT
+
+The Finding model already has placeholders for:
+- evidence
+- sourceMetadata
+- confidence
+- notes
+
+Do not fully implement the evidence engine here, but do make the chat architecture ready to display these fields later without major rework.
+
+7. OPTIONAL BUT HIGH-VALUE IMPROVEMENT
+
+If practical without overreaching:
+- allow the user to launch finding chat not only from Step 3 but also from Step 4 findings review
+- use the same contextual panel behavior consistently
+
+IMPLEMENTATION RULES
+
+- do not build a global chatbot
+- do not overbuild the final LLM/reasoning engine
+- preserve the current workflow structure
+- preserve the stable finding object model
+- preserve the current mock route seam unless a small contract improvement clearly helps
+- do not break existing Step 3 / Step 4 revision behavior
+- do not drift into presentation mode or template work in this prompt
+
+DELIVERABLES
+
+Build/refine:
+- contextual finding-level chat UX
+- improved request/response contract if justified
+- better finding context display in the chat panel
+- cleaner workflow-state integration
+- optional Step 4 launch support if practical
+
+IMPLEMENTATION REPORT REQUIRED
+
+After building, provide a short implementation report including:
+- files changed
+- what was reused
+- what was refactored
+- what was newly added
+- the exact final chat request/response shape
+- what future-ready evidence hooks now exist
+- any UX compromises
+- any risks or deferred items
+
+SUCCESS CONDITION
+
+A SmartEO user can open a contextual AI chat on a specific finding, understand why it exists, revise it intelligently, and commit changes back into the workflow in a way that feels clean, stable, and obviously ready for future real AI reasoning.

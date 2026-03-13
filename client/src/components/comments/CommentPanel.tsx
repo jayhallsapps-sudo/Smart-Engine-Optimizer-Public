@@ -296,6 +296,7 @@ export function CommentPanel({ reportType, clientId, savedReportId, anchors, onC
     mutationFn: async (data: {
       reportType: string;
       clientId: number | null;
+      savedReportId?: number | null;
       anchorId: string;
       anchorLabel: string | null;
       authorName: string;

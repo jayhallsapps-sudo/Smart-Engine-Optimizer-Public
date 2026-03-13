@@ -4,8 +4,14 @@
  * Shared hook for reading admin config overrides from /api/admin/config-overrides.
  * Used in both admin (edit mode) and runtime (read-only consumption) contexts.
  *
- * Falls back gracefully: if the request fails or returns no data, all `getNote`
- * calls return null and the calling code uses its code-defined defaults.
+ * Falls back gracefully: if the request fails or returns no data, all helpers
+ * return null / the supplied fallback and the calling code uses code-defined defaults.
+ *
+ * Supported fields per namespace
+ * ──────────────────────────────
+ *   reportType  →  note (annotation), description (override)
+ *   fieldMap    →  note (annotation), sourceHint (override)
+ *   qbsMap      →  note (annotation), sourceHint (override)
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
@@ -32,17 +38,22 @@ export function useConfigOverrides(namespace?: string) {
     staleTime: 60_000,
   });
 
-  function getNote(itemKey: string): string | null {
+  /** Get the value of any field override. Returns the override value or `fallback` (or empty string). */
+  function getValue(itemKey: string, field: string, fallback?: string): string {
     const ns = namespace;
     const entry = overrides.find(
-      o =>
-        (ns ? o.namespace === ns : true) &&
-        o.itemKey === itemKey &&
-        o.field === "note",
+      o => (ns ? o.namespace === ns : true) && o.itemKey === itemKey && o.field === field,
     );
-    return entry?.value ?? null;
+    return entry?.value ?? fallback ?? "";
   }
 
+  /** Shortcut for field === "note". Returns null when no note is saved. */
+  function getNote(itemKey: string): string | null {
+    const v = getValue(itemKey, "note");
+    return v || null;
+  }
+
+  /** Returns the full DB row for itemKey+field:"note", or null. */
   function getEntry(itemKey: string): AdminConfigOverride | null {
     const ns = namespace;
     return (
@@ -55,5 +66,18 @@ export function useConfigOverrides(namespace?: string) {
     );
   }
 
-  return { overrides, getNote, getEntry };
+  /** Returns the full DB row for any field, or null. */
+  function getFieldEntry(itemKey: string, field: string): AdminConfigOverride | null {
+    const ns = namespace;
+    return (
+      overrides.find(
+        o =>
+          (ns ? o.namespace === ns : true) &&
+          o.itemKey === itemKey &&
+          o.field === field,
+      ) ?? null
+    );
+  }
+
+  return { overrides, getValue, getNote, getEntry, getFieldEntry };
 }

@@ -10,6 +10,8 @@ import {
   Check,
   X,
   Info,
+  Lock,
+  FileText,
 } from "lucide-react";
 import { listReportTypes } from "@shared/reportRegistry";
 import { QBS_QBR_FIELD_MAP } from "@/lib/qbsQbrMapping";
@@ -74,7 +76,170 @@ function Chip({ label, color }: { label: string; color: string }) {
   );
 }
 
-// ─── Inline note editor ────────────────────────────────────────────────────────
+// ─── Legend ───────────────────────────────────────────────────────────────────
+
+function Legend() {
+  return (
+    <div className="flex items-center gap-5 text-[10px] text-muted-foreground">
+      <span className="flex items-center gap-1">
+        <Pencil className="w-2.5 h-2.5 text-[#1B3A6B]" />
+        <span className="text-foreground/70 font-medium">Editable</span>
+        <span className="text-muted-foreground/60">— persists to DB, falls back to code default</span>
+      </span>
+      <span className="flex items-center gap-1">
+        <FileText className="w-2.5 h-2.5 text-amber-500" />
+        <span className="text-foreground/70 font-medium">Note-only</span>
+        <span className="text-muted-foreground/60">— free annotation, not consumed by logic</span>
+      </span>
+      <span className="flex items-center gap-1">
+        <Lock className="w-2.5 h-2.5 text-muted-foreground/50" />
+        <span className="text-foreground/70 font-medium">Code-only</span>
+        <span className="text-muted-foreground/60">— structural, never editable in-app</span>
+      </span>
+    </div>
+  );
+}
+
+// ─── Column header badge ──────────────────────────────────────────────────────
+
+function ColHeader({ label, type }: { label: string; type: "editable" | "note" | "code" }) {
+  const icon =
+    type === "editable" ? <Pencil className="w-2 h-2 text-[#1B3A6B]" /> :
+    type === "note"     ? <FileText className="w-2 h-2 text-amber-500" /> :
+                          <Lock className="w-2 h-2 text-muted-foreground/40" />;
+  return (
+    <span className="flex items-center gap-1">
+      {icon}
+      <span>{label}</span>
+    </span>
+  );
+}
+
+// ─── Inline editable cell (for actual config values like description, sourceHint) ───
+
+interface InlineCellProps {
+  /** Current displayed value — override if set, code default otherwise */
+  displayValue: string;
+  /** The code-defined original value (used to show "↩ restore default") */
+  codeDefault: string;
+  /** Whether an override is currently active */
+  hasOverride: boolean;
+  /** Unique edit key for this cell (controls which cell is open) */
+  editKey: string;
+  activeEditKey: string | null;
+  editValue: string;
+  isSaving: boolean;
+  multiline?: boolean;
+  placeholder?: string;
+  onStartEdit: (key: string, current: string) => void;
+  onChangeValue: (v: string) => void;
+  onSave: () => void;
+  onCancel: () => void;
+  onClear: () => void;
+  testId?: string;
+}
+
+function InlineCell({
+  displayValue,
+  codeDefault,
+  hasOverride,
+  editKey,
+  activeEditKey,
+  editValue,
+  isSaving,
+  multiline = false,
+  placeholder,
+  onStartEdit,
+  onChangeValue,
+  onSave,
+  onCancel,
+  onClear,
+  testId,
+}: InlineCellProps) {
+  const isEditing = activeEditKey === editKey;
+
+  if (isEditing) {
+    return (
+      <div className="space-y-1.5 min-w-[180px]" data-testid={testId ? `cell-editor-${testId}` : undefined}>
+        {multiline ? (
+          <textarea
+            className="w-full text-[10px] rounded border border-[#1B3A6B]/30 px-1.5 py-1 resize-none focus:outline-none focus:ring-1 focus:ring-[#1B3A6B]/40 bg-background leading-relaxed"
+            rows={3}
+            value={editValue}
+            onChange={e => onChangeValue(e.target.value)}
+            placeholder={placeholder ?? "Enter value… (blank to restore code default)"}
+            autoFocus
+            data-testid={testId ? `input-cell-${testId}` : undefined}
+          />
+        ) : (
+          <input
+            type="text"
+            className="w-full text-[10px] rounded border border-[#1B3A6B]/30 px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-[#1B3A6B]/40 bg-background"
+            value={editValue}
+            onChange={e => onChangeValue(e.target.value)}
+            placeholder={placeholder ?? "Enter value… (blank to restore code default)"}
+            autoFocus
+            data-testid={testId ? `input-cell-${testId}` : undefined}
+          />
+        )}
+        <div className="text-[9px] text-muted-foreground/60 truncate">
+          Default: <span className="italic">{codeDefault.slice(0, 60)}{codeDefault.length > 60 ? "…" : ""}</span>
+        </div>
+        <div className="flex gap-1 flex-wrap">
+          <button
+            onClick={onSave}
+            disabled={isSaving}
+            className="flex items-center gap-0.5 text-[9px] px-2 py-1 rounded bg-[#1B3A6B] text-white hover:bg-[#1B3A6B]/85 transition-colors disabled:opacity-50"
+            data-testid={testId ? `btn-save-cell-${testId}` : undefined}
+          >
+            <Check className="w-2.5 h-2.5" /> Save
+          </button>
+          {hasOverride && (
+            <button
+              onClick={onClear}
+              className="text-[9px] px-2 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100 transition-colors dark:bg-red-950/30 dark:text-red-400"
+              data-testid={testId ? `btn-clear-cell-${testId}` : undefined}
+            >
+              ↩ Restore default
+            </button>
+          )}
+          <button
+            onClick={onCancel}
+            className="text-[9px] px-2 py-1 rounded bg-muted text-muted-foreground hover:bg-muted/70 transition-colors"
+            data-testid={testId ? `btn-cancel-cell-${testId}` : undefined}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="group flex items-start gap-1.5">
+      <div className="flex-1 min-w-0">
+        <p className={`text-[11px] leading-relaxed line-clamp-2 ${hasOverride ? "text-[#1B3A6B] font-medium" : "text-foreground/75"}`}>
+          {displayValue || <span className="text-muted-foreground/40 italic">—</span>}
+        </p>
+        {hasOverride && (
+          <span className="inline-block text-[9px] text-[#1B3A6B]/60 font-medium">
+            ↩ custom override
+          </span>
+        )}
+      </div>
+      <button
+        onClick={() => onStartEdit(editKey, hasOverride ? displayValue : "")}
+        className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-[#1B3A6B] mt-0.5"
+        title={hasOverride ? "Edit override" : "Add override"}
+        data-testid={testId ? `btn-edit-cell-${testId}` : undefined}
+      >
+        <Pencil className="w-2.5 h-2.5" />
+      </button>
+    </div>
+  );
+}
+
+// ─── Note editor (for free-form annotations) ──────────────────────────────────
 
 interface NoteEditorProps {
   note: string | null;
@@ -103,13 +268,13 @@ function NoteEditor({
 
   if (isEditing) {
     return (
-      <div className="space-y-1.5 min-w-[160px]" data-testid={`note-editor-${editKey}`}>
+      <div className="space-y-1.5 min-w-[140px]" data-testid={`note-editor-${editKey}`}>
         <textarea
-          className="w-full text-[10px] rounded border border-[#1B3A6B]/30 px-1.5 py-1 resize-none focus:outline-none focus:ring-1 focus:ring-[#1B3A6B]/40 bg-background"
+          className="w-full text-[10px] rounded border border-amber-300 px-1.5 py-1 resize-none focus:outline-none focus:ring-1 focus:ring-amber-400/40 bg-background"
           rows={3}
           value={editValue}
           onChange={e => onChangeValue(e.target.value)}
-          placeholder="Add a note for this item… (leave blank to clear)"
+          placeholder="Add annotation… (blank to clear)"
           autoFocus
           data-testid={`textarea-note-${editKey}`}
         />
@@ -117,7 +282,7 @@ function NoteEditor({
           <button
             onClick={onSave}
             disabled={isSaving}
-            className="flex items-center gap-0.5 text-[9px] px-2 py-1 rounded bg-[#1B3A6B] text-white hover:bg-[#1B3A6B]/85 transition-colors disabled:opacity-50"
+            className="flex items-center gap-0.5 text-[9px] px-2 py-1 rounded bg-amber-500 text-white hover:bg-amber-600 transition-colors disabled:opacity-50"
             data-testid={`button-save-note-${editKey}`}
           >
             <Check className="w-2.5 h-2.5" /> Save
@@ -137,13 +302,13 @@ function NoteEditor({
   if (note) {
     return (
       <div className="group flex items-start gap-1.5 min-w-[120px]">
-        <p className="text-[10px] text-foreground/75 leading-relaxed flex-1 italic">
+        <p className="text-[10px] text-amber-700 dark:text-amber-400 leading-relaxed flex-1 italic">
           {note}
         </p>
         <button
           onClick={() => onStartEdit(editKey, note)}
-          className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-[#1B3A6B]"
-          title="Edit note"
+          className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-amber-600"
+          title="Edit annotation"
           data-testid={`button-edit-note-${editKey}`}
         >
           <Pencil className="w-2.5 h-2.5" />
@@ -155,7 +320,7 @@ function NoteEditor({
   return (
     <button
       onClick={() => onStartEdit(editKey, "")}
-      className="flex items-center gap-0.5 text-[10px] text-muted-foreground/50 hover:text-[#1B3A6B] transition-colors"
+      className="flex items-center gap-0.5 text-[10px] text-muted-foreground/40 hover:text-amber-600 transition-colors"
       data-testid={`button-add-note-${editKey}`}
     >
       <Plus className="w-2.5 h-2.5" />
@@ -170,13 +335,11 @@ export default function AdminConfigPage() {
   const [tab, setTab] = useState<TabId>("registry");
   const allReports = listReportTypes();
 
-  // Inline edit state
+  // Shared inline edit state (one edit open at a time across all cells/notes)
   const [activeEditKey, setActiveEditKey] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
-  // For registry tab: track which report-type note row is expanded
-  const [expandedNote, setExpandedNote] = useState<string | null>(null);
 
-  // Fetch all config overrides
+  // Fetch ALL config overrides in one query (the page manages all namespaces)
   const { data: overrides = [] } = useQuery<AdminConfigOverride[]>({
     queryKey: ["/api/admin/config-overrides"],
     queryFn: async () => {
@@ -204,13 +367,18 @@ export default function AdminConfigPage() {
 
   const isSaving = upsertMutation.isPending || deleteMutation.isPending;
 
-  // Helpers
-  function getNote(namespace: string, itemKey: string): string | null {
-    return overrides.find(o => o.namespace === namespace && o.itemKey === itemKey && o.field === "note")?.value ?? null;
+  // ── Helpers ──────────────────────────────────────────────────────────────────
+
+  function getOverride(namespace: string, itemKey: string, field: string): AdminConfigOverride | null {
+    return overrides.find(o => o.namespace === namespace && o.itemKey === itemKey && o.field === field) ?? null;
   }
 
-  function getEntry(namespace: string, itemKey: string): AdminConfigOverride | null {
-    return overrides.find(o => o.namespace === namespace && o.itemKey === itemKey && o.field === "note") ?? null;
+  function getValueDisplay(namespace: string, itemKey: string, field: string, fallback: string): string {
+    return getOverride(namespace, itemKey, field)?.value ?? fallback;
+  }
+
+  function getNote(namespace: string, itemKey: string): string | null {
+    return getOverride(namespace, itemKey, "note")?.value ?? null;
   }
 
   function startEdit(key: string, current: string) {
@@ -223,29 +391,67 @@ export default function AdminConfigPage() {
     setEditValue("");
   }
 
-  function saveNote(namespace: string, itemKey: string) {
+  function saveValue(namespace: string, itemKey: string, field: string) {
     const trimmed = editValue.trim();
     if (!trimmed) {
-      const entry = getEntry(namespace, itemKey);
-      if (entry) deleteMutation.mutate(entry.id);
+      const existing = getOverride(namespace, itemKey, field);
+      if (existing) deleteMutation.mutate(existing.id);
     } else {
-      upsertMutation.mutate({ namespace, itemKey, field: "note", value: trimmed });
+      upsertMutation.mutate({ namespace, itemKey, field, value: trimmed });
     }
     setActiveEditKey(null);
     setEditValue("");
   }
 
-  // Shared NoteEditor props factory for reducing prop repetition
-  function noteEditorProps(editKey: string, namespace: string, itemKey: string) {
+  function clearValue(namespace: string, itemKey: string, field: string) {
+    const existing = getOverride(namespace, itemKey, field);
+    if (existing) deleteMutation.mutate(existing.id);
+    setActiveEditKey(null);
+    setEditValue("");
+  }
+
+  // Factory for InlineCell props (reduces repetition)
+  function inlineCellProps(
+    editKey: string,
+    namespace: string,
+    itemKey: string,
+    field: string,
+    codeDefault: string,
+    opts?: { multiline?: boolean; placeholder?: string },
+  ) {
+    const entry = getOverride(namespace, itemKey, field);
+    const hasOverride = Boolean(entry);
+    const displayValue = entry?.value ?? codeDefault;
+    return {
+      displayValue,
+      codeDefault,
+      hasOverride,
+      editKey,
+      activeEditKey,
+      editValue,
+      isSaving,
+      multiline: opts?.multiline ?? false,
+      placeholder: opts?.placeholder,
+      onStartEdit: startEdit,
+      onChangeValue: setEditValue,
+      onSave: () => saveValue(namespace, itemKey, field),
+      onCancel: cancelEdit,
+      onClear: () => clearValue(namespace, itemKey, field),
+      testId: editKey,
+    };
+  }
+
+  // Factory for NoteEditor props
+  function noteEditorProps(noteEditKey: string, namespace: string, itemKey: string) {
     return {
       note: getNote(namespace, itemKey),
-      editKey,
+      editKey: noteEditKey,
       activeEditKey,
       editValue,
       isSaving,
       onStartEdit: startEdit,
       onChangeValue: setEditValue,
-      onSave: () => saveNote(namespace, itemKey),
+      onSave: () => saveValue(namespace, itemKey, "note"),
       onCancel: cancelEdit,
     };
   }
@@ -254,27 +460,25 @@ export default function AdminConfigPage() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <div className="border-b border-border bg-background px-8 py-5">
-        <div className="max-w-5xl">
+        <div className="max-w-6xl">
           <Link href="/admin">
             <button className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors mb-3" data-testid="link-admin-back">
               <ChevronLeft className="w-3.5 h-3.5" /> Governance
             </button>
           </Link>
           <h1 className="text-xl font-bold text-foreground tracking-tight">Report Config</h1>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            Code-driven structures that define how SmartEO processes reports.{" "}
-            <span className="inline-flex items-center gap-0.5 text-[#1B3A6B]">
-              <Pencil className="w-2.5 h-2.5" />
-              <span>Admin notes are editable</span>
-            </span>
-            {" "}and surfaced to AMs at runtime. Structural fields (IDs, routes, field names) remain code-only.
+          <p className="mt-0.5 text-xs text-muted-foreground max-w-2xl">
+            Code-driven structures defining how SmartEO processes reports. Admins can override selected presentation values — editable overrides persist to the database and fall back to the code default when cleared.
           </p>
+          <div className="mt-3">
+            <Legend />
+          </div>
         </div>
       </div>
 
       {/* Tabs */}
       <div className="border-b border-border px-8">
-        <div className="flex gap-0 max-w-5xl">
+        <div className="flex gap-0 max-w-6xl">
           {TABS.map(t => (
             <button
               key={t.id}
@@ -293,108 +497,76 @@ export default function AdminConfigPage() {
       </div>
 
       {/* Content */}
-      <div className="px-8 py-6 max-w-5xl">
+      <div className="px-8 py-6 max-w-6xl">
 
         {/* ── Report Registry ─────────────────────────────────────────────────── */}
         {tab === "registry" && (
           <div>
-            <div className="flex items-start gap-3 mb-4">
-              <p className="text-xs text-muted-foreground flex-1">
-                All {allReports.length} report types in canonical lifecycle order. These definitions are code-driven.
-                Hover any row and click <Pencil className="inline w-2.5 h-2.5 mx-0.5" /> to add a note — notes appear in the workflow Report Type step.
-              </p>
-            </div>
+            <p className="text-xs text-muted-foreground mb-4 max-w-2xl">
+              All {allReports.length} report types in canonical lifecycle order. <strong>Description</strong> is editable — overrides appear on the workflow Report Type selection step for AMs. Structural fields (ID, route, family, exports) are code-only.
+            </p>
 
             <div className="rounded-lg border border-border overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
                   <tr className="bg-muted/50 border-b border-border">
-                    <th className="text-left px-4 py-2.5 font-semibold text-foreground/70">#</th>
-                    <th className="text-left px-4 py-2.5 font-semibold text-foreground/70">Name</th>
-                    <th className="text-left px-4 py-2.5 font-semibold text-foreground/70">ID</th>
-                    <th className="text-left px-4 py-2.5 font-semibold text-foreground/70">Family</th>
-                    <th className="text-left px-4 py-2.5 font-semibold text-foreground/70">Audience</th>
-                    <th className="text-left px-4 py-2.5 font-semibold text-foreground/70">Exports</th>
-                    <th className="text-left px-4 py-2.5 font-semibold text-foreground/70">Phase</th>
-                    <th className="text-left px-4 py-2.5 font-semibold text-foreground/70">Done</th>
-                    <th className="text-left px-4 py-2.5 font-semibold text-foreground/70">Route</th>
-                    <th className="text-left px-4 py-2.5 font-semibold text-foreground/70 whitespace-nowrap">
-                      Admin Note <span className="text-[#1B3A6B]/60 font-normal">(editable)</span>
+                    <th className="text-left px-3 py-2.5 font-semibold text-foreground/60 whitespace-nowrap">#</th>
+                    <th className="text-left px-3 py-2.5 font-semibold text-foreground/60 whitespace-nowrap">
+                      <ColHeader label="Name" type="code" />
+                    </th>
+                    <th className="text-left px-3 py-2.5 font-semibold text-foreground/60 whitespace-nowrap">
+                      <ColHeader label="ID" type="code" />
+                    </th>
+                    <th className="text-left px-3 py-2.5 font-semibold text-foreground/60 whitespace-nowrap">
+                      <ColHeader label="Family" type="code" />
+                    </th>
+                    <th className="text-left px-3 py-2.5 font-semibold text-foreground/60 whitespace-nowrap">
+                      <ColHeader label="Phase" type="code" />
+                    </th>
+                    <th className="text-left px-3 py-2.5 font-semibold text-foreground/60 whitespace-nowrap">
+                      <ColHeader label="Done" type="code" />
+                    </th>
+                    <th className="text-left px-3 py-2.5 font-semibold text-foreground/60 w-56">
+                      <ColHeader label="Description" type="editable" />
+                    </th>
+                    <th className="text-left px-3 py-2.5 font-semibold text-foreground/60 w-44">
+                      <ColHeader label="Admin Note" type="note" />
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   {allReports.map((r, i) => {
-                    const noteKey = `rt-${r.id}`;
-                    const isExpanded = expandedNote === r.id;
-                    const existingNote = getNote("reportType", r.id);
+                    const noteKey = `rt-note-${r.id}`;
+                    const descKey = `rt-desc-${r.id}`;
                     return (
-                      <>
-                        <tr
-                          key={r.id}
-                          className={`border-b border-border ${isExpanded ? "" : "last:border-0"} ${i % 2 === 0 ? "bg-background" : "bg-muted/20"}`}
-                          data-testid={`row-report-config-${r.id}`}
-                        >
-                          <td className="px-4 py-2.5 text-muted-foreground">{r.order}</td>
-                          <td className="px-4 py-2.5 font-medium text-foreground">{r.displayName}</td>
-                          <td className="px-4 py-2.5 font-mono text-[10px] text-muted-foreground">{r.id}</td>
-                          <td className="px-4 py-2.5">
-                            <Chip label={r.family} color={FAMILY_COLORS[r.family] ?? ""} />
-                          </td>
-                          <td className="px-4 py-2.5">
-                            <Chip label={r.audience} color={AUDIENCE_COLORS[r.audience] ?? ""} />
-                          </td>
-                          <td className="px-4 py-2.5 text-muted-foreground font-mono text-[10px]">
-                            {r.exportFormats.join(", ")}
-                          </td>
-                          <td className="px-4 py-2.5 text-muted-foreground">{r.phase}</td>
-                          <td className="px-4 py-2.5">
-                            {r.implemented ? (
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                            ) : (
-                              <XCircle className="w-3.5 h-3.5 text-muted-foreground/40" />
-                            )}
-                          </td>
-                          <td className="px-4 py-2.5 font-mono text-[10px] text-muted-foreground">
-                            {r.route ?? "—"}
-                          </td>
-                          <td className="px-4 py-2.5 min-w-[160px]">
-                            {activeEditKey === noteKey ? (
-                              <NoteEditor {...noteEditorProps(noteKey, "reportType", r.id)} />
-                            ) : existingNote ? (
-                              <div className="group flex items-start gap-1.5">
-                                <p className="text-[10px] text-foreground/75 leading-relaxed italic flex-1 line-clamp-2">
-                                  {existingNote}
-                                </p>
-                                <button
-                                  onClick={() => startEdit(noteKey, existingNote)}
-                                  className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-[#1B3A6B]"
-                                  title="Edit note"
-                                  data-testid={`button-edit-note-${noteKey}`}
-                                >
-                                  <Pencil className="w-2.5 h-2.5" />
-                                </button>
-                              </div>
-                            ) : (
-                              <button
-                                onClick={() => startEdit(noteKey, "")}
-                                className="flex items-center gap-0.5 text-[10px] text-muted-foreground/40 hover:text-[#1B3A6B] transition-colors"
-                                data-testid={`button-add-note-${noteKey}`}
-                              >
-                                <Plus className="w-2.5 h-2.5" />
-                                <span>Add note</span>
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                        {isExpanded && (
-                          <tr key={`${r.id}-note`} className="border-b border-border bg-[#1B3A6B]/5">
-                            <td colSpan={10} className="px-4 py-3">
-                              <NoteEditor {...noteEditorProps(noteKey, "reportType", r.id)} />
-                            </td>
-                          </tr>
-                        )}
-                      </>
+                      <tr
+                        key={r.id}
+                        className={`border-b border-border last:border-0 ${i % 2 === 0 ? "bg-background" : "bg-muted/15"}`}
+                        data-testid={`row-report-config-${r.id}`}
+                      >
+                        <td className="px-3 py-2.5 text-muted-foreground">{r.order}</td>
+                        <td className="px-3 py-2.5 font-medium text-foreground whitespace-nowrap">{r.displayName}</td>
+                        <td className="px-3 py-2.5 font-mono text-[10px] text-muted-foreground whitespace-nowrap">{r.id}</td>
+                        <td className="px-3 py-2.5 whitespace-nowrap">
+                          <Chip label={r.family} color={FAMILY_COLORS[r.family] ?? ""} />
+                        </td>
+                        <td className="px-3 py-2.5 text-muted-foreground">{r.phase}</td>
+                        <td className="px-3 py-2.5">
+                          {r.implemented ? (
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                          ) : (
+                            <XCircle className="w-3.5 h-3.5 text-muted-foreground/30" />
+                          )}
+                        </td>
+                        <td className="px-3 py-2.5 w-56">
+                          <InlineCell
+                            {...inlineCellProps(descKey, "reportType", r.id, "description", r.description, { multiline: true })}
+                          />
+                        </td>
+                        <td className="px-3 py-2.5 w-44">
+                          <NoteEditor {...noteEditorProps(noteKey, "reportType", r.id)} />
+                        </td>
+                      </tr>
                     );
                   })}
                 </tbody>
@@ -404,8 +576,7 @@ export default function AdminConfigPage() {
             <div className="mt-4 rounded-lg bg-muted/30 border border-border px-4 py-3 flex items-start gap-2">
               <Info className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-0.5" />
               <p className="text-[11px] text-muted-foreground">
-                <span className="font-semibold text-foreground/60">Code source:</span>{" "}
-                <code className="font-mono text-[10px]">shared/reportRegistry.ts</code> — structural fields (ID, route, family, exports) are code-only. Admin notes persist in the database and fall back to no note if unset.
+                <span className="font-semibold text-foreground/60">Runtime:</span> Description overrides appear on the workflow Report Type step (Step 1). Admin notes appear below the description on the same card. Code source: <code className="font-mono text-[10px]">shared/reportRegistry.ts</code>.
               </p>
             </div>
           </div>
@@ -414,9 +585,8 @@ export default function AdminConfigPage() {
         {/* ── Workflow → Report Mapping ────────────────────────────────────────── */}
         {tab === "workflow-mapping" && (
           <div className="space-y-6">
-            <p className="text-xs text-muted-foreground">
-              These mappings control which workflow findings and AM inputs are pre-populated into each report type.
-              Hover a field row and click <Pencil className="inline w-2.5 h-2.5 mx-0.5" /> to add an admin note on any field — notes are surfaced to AMs as helper guidance in the workflow.
+            <p className="text-xs text-muted-foreground max-w-2xl">
+              These mappings control which workflow findings and AM inputs are pre-populated into each report type. <strong>Workflow Source</strong> is editable — overrides explain to AMs exactly where data is being pulled from. Field IDs and mapping keys are code-only.
             </p>
             {WORKFLOW_FIELD_MAPS.map(map => (
               <div key={map.reportId} className="rounded-lg border border-border overflow-hidden">
@@ -427,26 +597,39 @@ export default function AdminConfigPage() {
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="border-b border-border bg-background">
-                      <th className="text-left px-4 py-2 font-semibold text-foreground/60">Field ID</th>
-                      <th className="text-left px-4 py-2 font-semibold text-foreground/60">Label</th>
-                      <th className="text-left px-4 py-2 font-semibold text-foreground/60">Workflow Source</th>
                       <th className="text-left px-4 py-2 font-semibold text-foreground/60 whitespace-nowrap">
-                        Admin Note <span className="text-[#1B3A6B]/60 font-normal">(editable)</span>
+                        <ColHeader label="Field ID" type="code" />
+                      </th>
+                      <th className="text-left px-4 py-2 font-semibold text-foreground/60 whitespace-nowrap">
+                        <ColHeader label="Label" type="code" />
+                      </th>
+                      <th className="text-left px-4 py-2 font-semibold text-foreground/60 w-64">
+                        <ColHeader label="Workflow Source" type="editable" />
+                      </th>
+                      <th className="text-left px-4 py-2 font-semibold text-foreground/60 w-44">
+                        <ColHeader label="Admin Note" type="note" />
                       </th>
                     </tr>
                   </thead>
                   <tbody>
                     {map.fields.map((f, i) => {
-                      const noteKey = `fm-${map.reportId}-${f.fieldId}`;
                       const itemKey = `${map.reportId}:${f.fieldId}`;
+                      const hintKey = `fm-hint-${map.reportId}-${f.fieldId}`;
+                      const noteKey = `fm-note-${map.reportId}-${f.fieldId}`;
                       return (
-                        <tr key={f.fieldId} className={`border-b border-border last:border-0 ${i % 2 === 0 ? "" : "bg-muted/10"}`}
+                        <tr
+                          key={f.fieldId}
+                          className={`border-b border-border last:border-0 ${i % 2 === 0 ? "" : "bg-muted/10"}`}
                           data-testid={`row-field-map-${map.reportId}-${f.fieldId}`}
                         >
-                          <td className="px-4 py-2 font-mono text-[10px] text-muted-foreground">{f.fieldId}</td>
-                          <td className="px-4 py-2 font-medium text-foreground">{f.fieldLabel}</td>
-                          <td className="px-4 py-2 text-muted-foreground">{f.sourceHint}</td>
-                          <td className="px-4 py-2 min-w-[160px]">
+                          <td className="px-4 py-2.5 font-mono text-[10px] text-muted-foreground whitespace-nowrap">{f.fieldId}</td>
+                          <td className="px-4 py-2.5 font-medium text-foreground whitespace-nowrap">{f.fieldLabel}</td>
+                          <td className="px-4 py-2.5 w-64">
+                            <InlineCell
+                              {...inlineCellProps(hintKey, "fieldMap", itemKey, "sourceHint", f.sourceHint)}
+                            />
+                          </td>
+                          <td className="px-4 py-2.5 w-44">
                             <NoteEditor {...noteEditorProps(noteKey, "fieldMap", itemKey)} />
                           </td>
                         </tr>
@@ -460,7 +643,7 @@ export default function AdminConfigPage() {
               <Info className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-0.5" />
               <p className="text-[11px] text-muted-foreground">
                 <span className="font-semibold text-foreground/60">Code source:</span>{" "}
-                <code className="font-mono text-[10px]">client/src/lib/workflowFieldMapping.ts</code> — field IDs and mapping logic are code-only. Admin notes persist in the database as editable metadata.
+                <code className="font-mono text-[10px]">client/src/lib/workflowFieldMapping.ts</code> — field IDs and mapping logic are code-only. Workflow Source overrides are annotation-only for now; field routing logic remains in code.
               </p>
             </div>
           </div>
@@ -469,9 +652,8 @@ export default function AdminConfigPage() {
         {/* ── QBS → QBR Mapping ───────────────────────────────────────────────── */}
         {tab === "qbs-qbr" && (
           <div className="space-y-4">
-            <p className="text-xs text-muted-foreground">
-              These mappings define how saved QBS fields are pre-populated into a QBR.
-              Hover a field row and click <Pencil className="inline w-2.5 h-2.5 mx-0.5" /> to add a note — notes appear in the QBS import banner on the QBR page.
+            <p className="text-xs text-muted-foreground max-w-2xl">
+              These mappings define how saved QBS fields are pre-populated into a QBR. <strong>QBS Source</strong> is editable — overrides appear in the QBS import banner on the QBR page, guiding AMs on what each field draws from. Field IDs and build logic are code-only.
             </p>
             <div className="rounded-lg border border-border overflow-hidden">
               <div className="px-4 py-2.5 bg-muted/50 border-b border-border">
@@ -480,25 +662,38 @@ export default function AdminConfigPage() {
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-border bg-background">
-                    <th className="text-left px-4 py-2 font-semibold text-foreground/60">QBR Field ID</th>
-                    <th className="text-left px-4 py-2 font-semibold text-foreground/60">QBR Label</th>
-                    <th className="text-left px-4 py-2 font-semibold text-foreground/60">QBS Source Description</th>
                     <th className="text-left px-4 py-2 font-semibold text-foreground/60 whitespace-nowrap">
-                      Admin Note <span className="text-[#1B3A6B]/60 font-normal">(editable)</span>
+                      <ColHeader label="QBR Field ID" type="code" />
+                    </th>
+                    <th className="text-left px-4 py-2 font-semibold text-foreground/60 whitespace-nowrap">
+                      <ColHeader label="QBR Label" type="code" />
+                    </th>
+                    <th className="text-left px-4 py-2 font-semibold text-foreground/60 w-64">
+                      <ColHeader label="QBS Source" type="editable" />
+                    </th>
+                    <th className="text-left px-4 py-2 font-semibold text-foreground/60 w-44">
+                      <ColHeader label="Admin Note" type="note" />
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   {QBS_QBR_FIELD_MAP.map((f, i) => {
-                    const noteKey = `qbs-${f.fieldId}`;
+                    const hintKey = `qbs-hint-${f.fieldId}`;
+                    const noteKey = `qbs-note-${f.fieldId}`;
                     return (
-                      <tr key={f.fieldId} className={`border-b border-border last:border-0 ${i % 2 === 0 ? "" : "bg-muted/10"}`}
+                      <tr
+                        key={f.fieldId}
+                        className={`border-b border-border last:border-0 ${i % 2 === 0 ? "" : "bg-muted/10"}`}
                         data-testid={`row-qbs-map-${f.fieldId}`}
                       >
-                        <td className="px-4 py-2 font-mono text-[10px] text-muted-foreground">{f.fieldId}</td>
-                        <td className="px-4 py-2 font-medium text-foreground">{f.fieldLabel}</td>
-                        <td className="px-4 py-2 text-muted-foreground">{f.sourceHint}</td>
-                        <td className="px-4 py-2 min-w-[160px]">
+                        <td className="px-4 py-2.5 font-mono text-[10px] text-muted-foreground whitespace-nowrap">{f.fieldId}</td>
+                        <td className="px-4 py-2.5 font-medium text-foreground whitespace-nowrap">{f.fieldLabel}</td>
+                        <td className="px-4 py-2.5 w-64">
+                          <InlineCell
+                            {...inlineCellProps(hintKey, "qbsMap", f.fieldId, "sourceHint", f.sourceHint)}
+                          />
+                        </td>
+                        <td className="px-4 py-2.5 w-44">
                           <NoteEditor {...noteEditorProps(noteKey, "qbsMap", f.fieldId)} />
                         </td>
                       </tr>
@@ -511,6 +706,9 @@ export default function AdminConfigPage() {
             <div className="rounded-lg border border-border overflow-hidden">
               <div className="px-4 py-2.5 bg-muted/50 border-b border-border">
                 <span className="text-xs font-semibold text-foreground">QBS Selection Priority</span>
+                <span className="ml-2 text-[10px] text-muted-foreground flex items-center gap-1 inline-flex">
+                  <Lock className="w-2.5 h-2.5" /> Code-only — tier logic is structural
+                </span>
               </div>
               <div className="divide-y divide-border">
                 {[
@@ -531,8 +729,7 @@ export default function AdminConfigPage() {
             <div className="rounded-lg bg-muted/30 border border-border px-4 py-3 flex items-start gap-2">
               <Info className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-0.5" />
               <p className="text-[11px] text-muted-foreground">
-                <span className="font-semibold text-foreground/60">Code source:</span>{" "}
-                <code className="font-mono text-[10px]">client/src/lib/qbsQbrMapping.ts</code> — field IDs, tier logic, and warning messages are code-only. Admin notes persist in the database.
+                <span className="font-semibold text-foreground/60">Runtime:</span> QBS Source overrides appear in the QBS import banner on the QBR page, below each field's source description. Code source: <code className="font-mono text-[10px]">client/src/lib/qbsQbrMapping.ts</code>.
               </p>
             </div>
           </div>

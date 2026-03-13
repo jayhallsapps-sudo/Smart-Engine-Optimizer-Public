@@ -1,0 +1,122 @@
+Expand SmartEO’s admin config override system from notes-only into safe editable config values that can change live behavior without risking core structural integrity.
+
+IMPORTANT CONTEXT
+
+The governance layer already exists and must be extended, not replaced.
+
+What already exists:
+- Governance Hub
+- Report Config Viewer
+- Guidance Library CRUD
+- admin config notes/overrides
+- workflow guidance surfacing
+- workflow-to-report field mapping
+- QBS → QBR mapping
+- workflow and report pages consuming admin notes in limited places
+
+Do not rebuild the governance system from scratch.
+
+CORE OBJECTIVE
+
+Allow admins to edit selected high-value, low-risk config values in-app so SmartEO behavior can be tuned by leadership without requiring code changes for every adjustment.
+
+PRIMARY GOALS
+
+1. CHOOSE SAFE FIRST-CLASS EDITABLE VALUES
+
+Start with the safest, most useful editable values inside existing config structures, such as:
+- field labels
+- source hints
+- helper text
+- descriptive notes that should affect runtime display
+- other low-risk presentation/config values
+
+Only include values that can be safely changed without breaking:
+- saved reports
+- routing
+- report IDs
+- registry keys
+- mapping keys
+- compatibility-critical logic
+
+2. PERSIST EDITABLE OVERRIDES CLEANLY
+
+Requirements:
+- editable config values should persist in the database
+- current code-defined defaults should remain the fallback
+- runtime should use override values when present
+- if an override is empty or removed, the code-defined default should display and behave as before
+
+3. EXTEND THE EXISTING CONFIG UI
+
+Requirements:
+- extend the current admin config experience rather than replacing it
+- make it obvious which fields are:
+  - editable
+  - note-only
+  - read-only / code-only
+- keep the UI calm and desktop-first
+- avoid turning the config screen into a cluttered spreadsheet
+
+4. APPLY OVERRIDES WHERE THEY MATTER
+
+At minimum, ensure the edited values show up in the live product where relevant, such as:
+- workflow report-type cards
+- workflow-to-report import banner
+- QBS → QBR import banner
+- config viewer itself
+
+Do not overreach into every surface unless it is already cleanly wired.
+
+5. PRESERVE STRUCTURAL SAFETY
+
+Requirements:
+- do not make report IDs editable
+- do not make mapping keys editable
+- do not make route identifiers editable
+- do not expose high-risk internal logic as freeform editable fields
+- keep compatibility-critical structure locked
+
+6. REUSE / COMPATIBILITY RULES
+
+- reuse the existing config viewer/admin overrides approach where possible
+- preserve current code-based config as the system of fallback truth
+- do not break current workflow/report behavior
+- do not overbuild a full template builder or rules engine in this prompt
+
+7. DEFERRED ITEMS
+
+Do not build in this prompt:
+- full WYSIWYG template builder
+- full report registry editor
+- full source-routing manager
+- final permissions/auth enforcement
+- large-scale config object editing beyond the selected safe values
+
+This prompt is about safe live configurability, not total admin freedom.
+
+DELIVERABLES
+
+Build/refine:
+- editable safe config values in admin
+- DB-backed override persistence
+- runtime fallback-to-code-default behavior
+- live usage of overrides in relevant product surfaces
+
+IMPLEMENTATION REPORT REQUIRED
+
+After building, provide a short implementation report including:
+- files changed
+- what was reused
+- what was refactored
+- what was newly added
+- exactly which values are now editable
+- exactly which values remain note-only
+- exactly which values remain code-only
+- how fallback behavior works
+- any UX compromises
+- any risks or deferred items
+
+SUCCESS CONDITION
+
+A SmartEO admin can safely edit selected config values in-app, SmartEO uses those persisted values where appropriate, and the product still falls back cleanly to the original code-defined defaults when no override exists.

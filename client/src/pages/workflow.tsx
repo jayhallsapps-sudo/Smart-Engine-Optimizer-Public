@@ -175,7 +175,7 @@ function StepSelectType({
   onSelect: (id: string) => void;
 }) {
   const allTypes = listReportTypes();
-  const { getNote: getAdminNote } = useConfigOverrides("reportType");
+  const { getNote: getAdminNote, getValue: getConfigValue } = useConfigOverrides("reportType");
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -228,7 +228,9 @@ function StepSelectType({
                       </span>
                     )}
                   </div>
-                  <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-2">{rt.description}</p>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-2">
+                    {getConfigValue(rt.id, "description", rt.description)}
+                  </p>
                   {(() => {
                     const adminNote = getAdminNote(rt.id);
                     return adminNote ? (

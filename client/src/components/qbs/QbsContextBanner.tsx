@@ -70,7 +70,7 @@ export function QbsContextBanner({
   onDismiss,
 }: QbsContextBannerProps) {
   const { tier, note, alternatives } = selection;
-  const { getNote: getAdminNote } = useConfigOverrides("qbsMap");
+  const { getNote: getAdminNote, getValue: getConfigValue } = useConfigOverrides("qbsMap");
 
   // Active source — starts as the auto-selected match, AM can change via picker
   const [activeReport, setActiveReport] = useState<SavedReport>(selection.match);
@@ -250,7 +250,7 @@ export function QbsContextBanner({
                       {entry.fieldLabel}
                     </div>
                     <div className="text-muted-foreground leading-snug truncate">
-                      {hasContent ? entry.sourceHint : "Not set in this QBS"}
+                      {hasContent ? getConfigValue(entry.fieldId, "sourceHint", entry.sourceHint) : "Not set in this QBS"}
                     </div>
                     {(() => {
                       const adminNote = getAdminNote(entry.fieldId);

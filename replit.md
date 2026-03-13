@@ -81,6 +81,33 @@ The NSM (North Star Metric) Tracker is a Google Sheets-based goal tracking syste
 - **Bi-weekly generator**: Performance Pulse section — NSM metrics displayed alongside GA4/GSC/CallRail data
 - **Dashboard**: Client Info tab — NSM quarter, goals, actuals, and on-track status
 
+## Guided Report Workflow (`/workflow`)
+
+A 6-step stepper-based report preparation flow at `/workflow`. Accessible from **Prepare a Report** (`/prepare`) — clicking any live report type now routes to `/workflow?type=<id>` instead of directly to the report page. The old direct report page routes (`/biweekly`, `/monthly`, etc.) remain fully intact.
+
+### Steps
+1. **Select Report Type** — Card grid from registry; Phase 2 stubs shown as disabled
+2. **Select Client** — Searchable client list from `/api/clients`
+3. **Strategy Areas** — 8 strategy areas with a nested mini-flow per section (Input → Analyzing 2.2s → Questions → Findings → Committed). Left panel = section list with status icons; Right panel = active section mini-flow
+4. **Findings Review** — Summary of all committed sections; individual sections editable (routes back to Step 3)
+5. **Report Assembly** — 2.4s building animation → list of committed areas + finding counts
+6. **Preview & Export** — Handoff screen with "Open Report Builder" link (to existing report page) and "View Past Reports"; note about future findings pre-population
+
+### Key files
+- `client/src/pages/workflow.tsx` — Self-contained page (all steps, all state in one file)
+- State is React-local only; no backend round-trips in the workflow shell
+- `window.location.search` used for URL param parsing (consistent with other print pages in this project)
+
+### Interaction model
+- Back/Next navigation in footer, gated per step (type required for Step 1, client for Step 2, ≥1 committed section for Step 3)
+- Each strategy area has 3 mock findings pre-selected; user can deselect before committing
+- The "Analyze" button triggers a 2.2s timer then shows clarifying questions
+- All 8 strategy areas have contextually relevant questions and findings for behavioral health SEO
+
+### Pre-seeding via URL
+- `/workflow?type=biweekly` → starts at Step 2 (type pre-selected)
+- `/workflow?type=biweekly&client=9` → starts at Step 3 (type + client pre-selected)
+
 ## Phase 2 Architecture Foundation
 
 SmartEO Phase 2 builds on the existing Phase 1 infrastructure without rebuilding it. The following systems were added in Phase 2 to create a clean extension point for new report types.

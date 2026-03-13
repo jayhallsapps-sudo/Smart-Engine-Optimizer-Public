@@ -26,6 +26,7 @@ import TemplateBuilderPage from "@/pages/template-builder";
 import SecurityPage from "@/pages/security";
 import CommandCenterPage from "@/pages/command-center";
 import PrepareReportPage from "@/pages/prepare-report";
+import WorkflowPage from "@/pages/workflow";
 
 function RootRedirect() {
   const [, setLocation] = useLocation();
@@ -41,6 +42,7 @@ function Router() {
       <Route path="/" component={RootRedirect} />
       <Route path="/command-center" component={CommandCenterPage} />
       <Route path="/prepare" component={PrepareReportPage} />
+      <Route path="/workflow" component={WorkflowPage} />
       <Route path="/dashboard" component={DashboardPage} />
       <Route path="/biweekly" component={BiweeklyPage} />
       <Route path="/monthly" component={MonthlyPage} />

@@ -76,9 +76,9 @@ function ReportRow({ rt }: { rt: ReportTypeDefinition }) {
     </div>
   );
 
-  if (isClickable && rt.route) {
+  if (isClickable) {
     return (
-      <Link href={rt.route} data-testid={`link-report-type-${rt.id.replace("_", "-")}`}>
+      <Link href={`/workflow?type=${rt.id}`} data-testid={`link-report-type-${rt.id.replace("_", "-")}`}>
         {inner}
       </Link>
     );

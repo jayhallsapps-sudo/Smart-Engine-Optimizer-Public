@@ -5,6 +5,10 @@
 // When real AI findings arrive with unique generated text, they will naturally
 // get unique IDs at creation time.
 
+import { scoreFinding, type PriorityMeta } from "./priorityEngine";
+
+export type { PriorityMeta };
+
 export type FindingStatus = "draft" | "accepted" | "rejected" | "revised";
 
 export interface Finding {
@@ -28,6 +32,11 @@ export interface Finding {
   sourceMetadata?: Record<string, unknown>;
   confidence?: "low" | "medium" | "high";
   notes?: string[];
+  /**
+   * First-pass priority metadata — computed at creation time by the Priority Engine.
+   * Heuristic, transparent, and non-binding. AMs remain fully in control.
+   */
+  priority?: PriorityMeta;
 }
 
 export interface FindingChatMessage {
@@ -48,6 +57,7 @@ function contentHash(s: string): string {
  * Create a new Finding from a source body string.
  * All findings start as selected + draft.
  * ID is content-addressed: same area + same text → same ID.
+ * Priority is auto-scored at creation time using the Priority Engine.
  * For real AI findings this is correct — different generated text → different ID.
  */
 export function makeFinding(
@@ -63,6 +73,7 @@ export function makeFinding(
     body: originalBody,
     status: "draft",
     selected: true,
+    priority: scoreFinding(areaId, originalBody),
   };
 }
 

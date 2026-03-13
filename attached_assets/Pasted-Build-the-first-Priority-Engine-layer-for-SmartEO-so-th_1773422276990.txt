@@ -1,0 +1,130 @@
+Build the first Priority Engine layer for SmartEO so the platform can begin ranking recommendations instead of only surfacing and transferring them.
+
+IMPORTANT CONTEXT
+
+SmartEO already has:
+- guided workflow shell
+- stable finding object model
+- contextual finding chat
+- workflow-to-report handoff
+- structured workflow-to-report field mapping
+- QBS → QBR bridge
+- admin guidance
+- safe config overrides
+- template controls
+- real admin write protection
+
+Do not rebuild existing workflow, report, governance, or mapping systems.
+
+CORE OBJECTIVE
+
+Introduce a practical first Priority Engine that helps SmartEO rank findings and recommendations by strategic importance, so the app can start guiding what should matter most now instead of only collecting notes and surfacing findings.
+
+PRIMARY GOALS
+
+1. DEFINE A FIRST PRIORITY MODEL
+
+Create a lightweight, explainable scoring model for findings/recommendations.
+
+Start with a practical set of factors such as:
+- impact
+- urgency
+- effort
+- confidence
+- implementation dependency
+- business relevance
+
+Do not overbuild a black-box system.
+Keep it understandable and inspectable.
+
+2. ADD PRIORITY DATA TO FINDINGS
+
+Extend the finding model or adjacent evaluation layer so findings can carry priority-related fields.
+
+Examples:
+- priority bucket
+- score
+- rationale
+- effort estimate
+- impact estimate
+- confidence contribution
+
+Do this in a way that preserves current workflow behavior.
+
+3. RANK FINDINGS INSIDE WORKFLOW
+
+In the workflow findings/review steps, allow findings to show a first-pass priority signal.
+
+Examples:
+- Must do now
+- Should do next
+- Worth doing later
+- Do not prioritize yet
+
+Keep the UI calm and useful.
+Do not make it noisy or over-pretend certainty.
+
+4. KEEP THE HUMAN IN CONTROL
+
+Requirements:
+- AM can still accept/reject/revise findings
+- priority should inform judgment, not replace it
+- if scoring is weak or partial, expose that clearly
+- do not auto-commit based on score
+
+5. PREPARE FOR FUTURE DATA INPUTS
+
+This first version can use mock/manual/default logic where needed, but structure it so later it can incorporate:
+- technical severity
+- workflow area
+- report type
+- confidence
+- guidance
+- historical account context
+- execution backlog status
+
+Do not try to solve the full intelligence engine in this prompt.
+
+6. REUSE / COMPATIBILITY RULES
+
+- preserve the current finding object model
+- preserve current chat/revision behavior
+- preserve current workflow shell
+- do not break workflow-to-report mapping
+- do not overbuild final analytics-weighted ranking yet
+
+7. DEFERRED ITEMS
+
+Do not build in this prompt:
+- full historical performance weighting
+- final account-level strategy engine
+- automatic task generation
+- final NSM forecasting integration
+- full multi-source scoring logic
+
+This prompt is about the first real priority layer, not the final intelligence system.
+
+DELIVERABLES
+
+Build/refine:
+- first priority/scoring model
+- finding-level priority metadata
+- workflow UI for ranked priority display
+- simple rationale/explanation layer where appropriate
+
+IMPLEMENTATION REPORT REQUIRED
+
+After building, provide a short implementation report including:
+- files changed
+- what was reused
+- what was refactored
+- what was newly added
+- exact scoring/prioritization model
+- how findings are now ranked/displayed
+- what remains manual or heuristic
+- any UX compromises
+- any risks or deferred items
+
+SUCCESS CONDITION
+
+A SmartEO user reviewing findings in workflow can see a first-pass, explainable priority ranking that helps distinguish what matters most now without breaking current workflow control or pretending to be more certain than the data supports.

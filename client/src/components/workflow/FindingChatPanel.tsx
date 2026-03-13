@@ -18,6 +18,13 @@ import { Badge } from "@/components/ui/badge";
 import { apiRequest } from "@/lib/queryClient";
 import { findingShortLabel } from "@/lib/findingTypes";
 import type { Finding, FindingStatus, FindingChatMessage } from "@/lib/findingTypes";
+import { BUCKET_LABELS, BUCKET_BADGE_COLORS, BUCKET_DOT_COLORS } from "@/lib/priorityEngine";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 // ─── Quick actions ────────────────────────────────────────────────────────────
 const QUICK_ACTIONS = [
@@ -209,6 +216,39 @@ export function FindingChatPanel({ finding, onClose, onCommit }: FindingChatPane
                 >
                   {finding.confidence} confidence
                 </Badge>
+              )}
+              {finding.priority && (
+                <TooltipProvider delayDuration={200}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span
+                        className={`inline-flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded border cursor-help ${BUCKET_BADGE_COLORS[finding.priority.bucket]}`}
+                        data-testid="finding-priority-badge"
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full ${BUCKET_DOT_COLORS[finding.priority.bucket]}`} />
+                        {BUCKET_LABELS[finding.priority.bucket]}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent
+                      side="bottom"
+                      className="max-w-[240px] text-[11px] leading-relaxed z-[9999]"
+                      data-testid="finding-priority-tooltip"
+                    >
+                      <p className="font-semibold mb-1">
+                        {BUCKET_LABELS[finding.priority.bucket]} · score {finding.priority.score.toFixed(1)}/10
+                      </p>
+                      <p className="text-muted-foreground leading-snug text-[10px]">{finding.priority.rationale}</p>
+                      {finding.priority.signals.length > 0 && (
+                        <p className="text-muted-foreground/80 mt-1 text-[10px]">
+                          Signals: {finding.priority.signals.join(", ")}
+                        </p>
+                      )}
+                      <p className="text-muted-foreground/60 mt-1 text-[10px] italic">
+                        First-pass heuristic — human judgment takes precedence.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               )}
             </div>
             {/* Area breadcrumb */}

@@ -27,6 +27,13 @@ import {
   type Finding,
   type FindingStatus,
 } from "@/lib/findingTypes";
+import {
+  BUCKET_LABELS,
+  BUCKET_BADGE_COLORS,
+  BUCKET_DOT_COLORS,
+  byPriorityDesc,
+  type PriorityBucket,
+} from "@/lib/priorityEngine";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -46,6 +53,74 @@ import { saveWorkflowContext } from "@/lib/workflowHandoff";
 import { GuidancePanel, areaIdToWorkflowGroup } from "@/components/GuidancePanel";
 import { useConfigOverrides } from "@/hooks/useConfigOverrides";
 import { useTemplateConfig } from "@/hooks/useTemplateConfig";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+
+// ─── Priority badge ───────────────────────────────────────────────────────────
+// Inline UI primitive — renders a small, calm priority pill with a tooltip
+// containing the full rationale. Intentionally compact and non-intrusive.
+
+function PriorityBadge({
+  bucket,
+  score,
+  rationale,
+  signals,
+  variant = "pill",
+}: {
+  bucket: PriorityBucket;
+  score: number;
+  rationale: string;
+  signals: string[];
+  /** pill = badge pill, dot = status dot only */
+  variant?: "pill" | "dot";
+}) {
+  const label = BUCKET_LABELS[bucket];
+  const pillCls = BUCKET_BADGE_COLORS[bucket];
+  const dotCls = BUCKET_DOT_COLORS[bucket];
+
+  return (
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          {variant === "dot" ? (
+            <span
+              className={`inline-block w-2 h-2 rounded-full shrink-0 cursor-help ${dotCls}`}
+              data-testid="priority-dot"
+            />
+          ) : (
+            <span
+              className={`inline-flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded border cursor-help ${pillCls}`}
+              data-testid="priority-badge"
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${dotCls}`} />
+              {label}
+            </span>
+          )}
+        </TooltipTrigger>
+        <TooltipContent
+          side="top"
+          className="max-w-[260px] text-[11px] leading-relaxed z-[9999]"
+          data-testid="priority-tooltip"
+        >
+          <p className="font-semibold mb-1">{label} · score {score.toFixed(1)}/10</p>
+          <p className="text-muted-foreground leading-snug">{rationale}</p>
+          {signals.length > 0 && (
+            <p className="text-muted-foreground mt-1.5 text-[10px]">
+              Signals: {signals.join(", ")}
+            </p>
+          )}
+          <p className="text-muted-foreground/70 mt-1.5 text-[10px] italic">
+            First-pass heuristic — use your judgment.
+          </p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -445,16 +520,18 @@ function SectionMiniFlow({
   }
 
   if (state.phase === "findings") {
+    const sortedFindings = [...state.findings].sort(byPriorityDesc);
     return (
       <div className="flex flex-col gap-4">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <ClipboardList className="w-4 h-4 text-[#C0392B]" />
           <p className="text-xs font-semibold text-foreground">Findings & Recommendations</p>
-          <span className="text-[10px] text-muted-foreground">Select what to include</span>
+          <span className="text-[10px] text-muted-foreground">Select what to include · sorted by priority signal</span>
         </div>
         <div className="flex flex-col gap-2">
-          {state.findings.map(finding => {
+          {sortedFindings.map(finding => {
             const isRevised = finding.body !== finding.originalBody;
+            const p = finding.priority;
             return (
               <div
                 key={finding.id}
@@ -485,7 +562,7 @@ function SectionMiniFlow({
                   {finding.selected && <Check className="w-2.5 h-2.5 text-white" />}
                 </button>
 
-                {/* Body + status */}
+                {/* Body + status + priority */}
                 <div className="flex-1 min-w-0">
                   <p className="text-xs text-foreground leading-relaxed">{finding.body}</p>
                   {isRevised && (
@@ -501,6 +578,14 @@ function SectionMiniFlow({
                       ].join(" ")}>
                         {finding.status}
                       </span>
+                    )}
+                    {p && (
+                      <PriorityBadge
+                        bucket={p.bucket}
+                        score={p.score}
+                        rationale={p.rationale}
+                        signals={p.signals}
+                      />
                     )}
                   </div>
                 </div>
@@ -730,8 +815,9 @@ function StepFindingsReview({
                     </button>
                   </div>
                   <div className="px-4 py-3 flex flex-col gap-2">
-                    {state.findings.filter(f => f.selected).map(finding => {
+                    {[...state.findings.filter(f => f.selected)].sort(byPriorityDesc).map(finding => {
                       const isRevised = finding.body !== finding.originalBody;
+                      const p = finding.priority;
                       return (
                         <div key={finding.id} className="flex items-start gap-2 group" data-testid={`review-finding-${finding.id}`}>
                           <div className={[
@@ -749,16 +835,26 @@ function StepFindingsReview({
                             {isRevised && (
                               <p className="text-[10px] text-muted-foreground line-through">{finding.originalBody}</p>
                             )}
-                            {finding.status !== "draft" && (
-                              <span className={[
-                                "inline-block text-[9px] font-semibold uppercase tracking-wide mt-0.5 px-1.5 py-0.5 rounded",
-                                finding.status === "accepted" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" :
-                                finding.status === "rejected" ? "bg-red-500/10 text-[#C0392B]" :
-                                "bg-amber-500/10 text-amber-700 dark:text-amber-400",
-                              ].join(" ")}>
-                                {finding.status}
-                              </span>
-                            )}
+                            <div className="flex items-center gap-2 mt-1 flex-wrap">
+                              {finding.status !== "draft" && (
+                                <span className={[
+                                  "inline-block text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded",
+                                  finding.status === "accepted" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" :
+                                  finding.status === "rejected" ? "bg-red-500/10 text-[#C0392B]" :
+                                  "bg-amber-500/10 text-amber-700 dark:text-amber-400",
+                                ].join(" ")}>
+                                  {finding.status}
+                                </span>
+                              )}
+                              {p && (
+                                <PriorityBadge
+                                  bucket={p.bucket}
+                                  score={p.score}
+                                  rationale={p.rationale}
+                                  signals={p.signals}
+                                />
+                              )}
+                            </div>
                           </div>
                           <button
                             onClick={() => onOpenChat(finding)}

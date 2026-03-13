@@ -31,6 +31,11 @@ import {
   familyColor,
   type ReportTypeDefinition,
 } from "@/lib/reportFamilyUtils";
+import {
+  DEFAULT_STRATEGY_AREAS,
+  getStrategyAreas,
+  type StrategyAreaId,
+} from "@/lib/workflowStrategyAreas";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -44,139 +49,6 @@ const STEPS = [
 ] as const;
 
 type StepId = (typeof STEPS)[number]["id"];
-
-const STRATEGY_AREAS = [
-  {
-    id: "content_refresh",
-    label: "Content Refresh",
-    description: "Existing pages that need updates, rewrites, or consolidation.",
-    inputPrompt:
-      "Which pages have you flagged for refresh? Any decline signals, keyword cannibalization, or content staleness to note?",
-    mockQuestions: [
-      "Are there specific URLs you've already identified as underperforming based on GSC position drops?",
-      "Has any content been refreshed in the past 6 months that we should avoid re-touching?",
-    ],
-    mockFindings: [
-      "3–5 informational pages showing 15–30% YoY click decline — recommend rewrites.",
-      "2 cluster pillar pages with thin body content — recommend depth expansion.",
-      "Keyword cannibalization detected in treatment-type taxonomy — consolidation recommended.",
-    ],
-  },
-  {
-    id: "new_content",
-    label: "New Content",
-    description: "Net-new pages targeting identified keyword gaps or service expansion.",
-    inputPrompt:
-      "What are the main content gaps or new service areas the client is trying to rank for? Any specific keyword clusters or competitor pages to target?",
-    mockQuestions: [
-      "Is the client open to cluster-style content (hub + spokes) or focused on single high-intent pages?",
-      "Are there geographic expansion targets or new service lines launching this quarter?",
-    ],
-    mockFindings: [
-      "Keyword gap analysis shows 12 mid-funnel queries with DR <40 competitors — opportunity for new cluster pages.",
-      "Client does not have a 'dual diagnosis' page — high-intent keyword with clear competitor foothold.",
-      "Recommended: 2–3 new location-modifier landing pages based on GSC impression data.",
-    ],
-  },
-  {
-    id: "cro_content",
-    label: "CRO Content",
-    description: "Conversion-focused edits: CTAs, page flow, trust signals, form optimization.",
-    inputPrompt:
-      "Which pages have the highest organic traffic but lowest conversion rates? Any specific friction points the team has observed?",
-    mockQuestions: [
-      "Are there specific form types or lead events we should prioritize improving?",
-      "Has the client expressed concerns about any specific page's bounce rate or exit rate?",
-    ],
-    mockFindings: [
-      "Homepage has no above-the-fold CTA — recommend adding a 'Verify Insurance' or 'Call Now' button.",
-      "Admissions page avg. time-on-page is 45s but conversion rate is <1% — CTA placement review needed.",
-      "3 money pages lack live chat or callback widget — recommend integration with existing CTM setup.",
-    ],
-  },
-  {
-    id: "technical_infra",
-    label: "Technical Infrastructure",
-    description: "Core Web Vitals, crawl budget, site architecture, indexability.",
-    inputPrompt:
-      "Any known technical issues from the Screaming Frog crawl, GSC coverage errors, or Core Web Vitals alerts? Any site migrations or CMS changes pending?",
-    mockQuestions: [
-      "Has there been any major site change (redesign, migration, CMS change) in the last 6 months?",
-      "Are there any known redirect chains or soft 404s that haven't been resolved?",
-    ],
-    mockFindings: [
-      "14 pages with non-canonical crawl paths — redirect logic review recommended.",
-      "LCP score averaging 4.2s on mobile — image optimization and render-blocking resource audit needed.",
-      "Crawl budget being consumed by faceted navigation parameters — robots.txt or noindex directives recommended.",
-    ],
-  },
-  {
-    id: "technical_content",
-    label: "Technical Content",
-    description: "On-page optimization, title/meta alignment, schema markup, internal linking.",
-    inputPrompt:
-      "Are there pages with missing or misaligned title tags, poor internal linking, or missing schema? Any structured data opportunities tied to client service types?",
-    mockQuestions: [
-      "Has the client implemented FAQ or HowTo schema anywhere? Should we expand it?",
-      "Are there any pages ranking in positions 8–15 that could benefit from on-page optimization alone?",
-    ],
-    mockFindings: [
-      "8 pages with title tags over 65 characters — truncation in SERP likely reducing CTR.",
-      "Internal linking structure is shallow — most conversion pages have fewer than 3 internal links pointing to them.",
-      "FAQ schema missing across informational cluster — quick win for featured snippet eligibility.",
-    ],
-  },
-  {
-    id: "advanced_technical",
-    label: "Advanced Technical",
-    description: "JavaScript rendering, log file analysis, international SEO, advanced crawl issues.",
-    inputPrompt:
-      "Any advanced technical flags: JS-rendered content, crawl anomalies from log analysis, hreflang issues, or international targeting concerns?",
-    mockQuestions: [
-      "Is the client's site React/Vue/Angular rendered? Have we validated Googlebot's rendering of key pages?",
-      "Do we have server log file access for crawl pattern analysis?",
-    ],
-    mockFindings: [
-      "Googlebot is not rendering testimonial and social proof sections — these are JS-rendered and may be invisible to search engines.",
-      "Log analysis shows Googlebot recrawl frequency drops after page 3 of blog pagination — paginated content may be under-indexed.",
-      "No advanced technical blockers identified outside the above — standard monitoring recommended.",
-    ],
-  },
-  {
-    id: "local_gbp",
-    label: "Local / GBP / Location",
-    description: "Google Business Profile health, local signals, map pack visibility, location pages.",
-    inputPrompt:
-      "What's the current state of the GBP profile? Any map pack visibility issues, review velocity concerns, or location page gaps?",
-    mockQuestions: [
-      "Is the client actively managing their GBP posts and Q&A section?",
-      "Are there any satellite location pages needed that don't currently exist on the site?",
-    ],
-    mockFindings: [
-      "GBP profile is complete but has 0 new posts in 60 days — recommend bi-weekly post cadence.",
-      "Map pack visibility is inconsistent for key service-modifier queries — citation audit may uncover NAP inconsistencies.",
-      "Location page for primary city ranks on page 2 — on-page and link building focus recommended.",
-    ],
-  },
-  {
-    id: "discoverability",
-    label: "Discoverability / AI Retrieval",
-    description: "Structured data, entity coverage, AI-readiness, topical authority signals.",
-    inputPrompt:
-      "Any observations about AI overview appearances, entity coverage, or topical authority gaps? Has the client been showing up in AI-generated answers?",
-    mockQuestions: [
-      "Has the client expressed interest in optimizing for AI overviews or Perplexity-style citations?",
-      "Is there an entity definition page (About, brand page) that clearly defines the organization for knowledge graph purposes?",
-    ],
-    mockFindings: [
-      "Client lacks a structured 'About' or brand entity page — limits knowledge graph recognition.",
-      "No Organization or MedicalOrganization schema on the homepage — recommend implementation for AI retrieval signals.",
-      "Topical authority coverage is strong in 'addiction treatment' but thin in 'co-occurring disorders' — content cluster opportunity.",
-    ],
-  },
-] as const;
-
-type StrategyAreaId = (typeof STRATEGY_AREAS)[number]["id"];
 
 // ─── State types ──────────────────────────────────────────────────────────────
 
@@ -212,7 +84,7 @@ function getUrlParams(): { type?: string; client?: string } {
 
 function makeDefaultSections(): Record<StrategyAreaId, SectionState> {
   const result = {} as Record<StrategyAreaId, SectionState>;
-  for (const area of STRATEGY_AREAS) {
+  for (const area of DEFAULT_STRATEGY_AREAS) {
     result[area.id] = {
       phase: "idle",
       amInput: "",
@@ -431,7 +303,7 @@ function SectionMiniFlow({
   state,
   onChange,
 }: {
-  area: (typeof STRATEGY_AREAS)[number];
+  area: typeof DEFAULT_STRATEGY_AREAS[number];
   state: SectionState;
   onChange: (next: Partial<SectionState>) => void;
 }) {
@@ -646,7 +518,10 @@ function StepStrategyAreas({
   onActivate: (id: StrategyAreaId) => void;
   onSectionChange: (id: StrategyAreaId, next: Partial<SectionState>) => void;
 }) {
-  const activeArea = STRATEGY_AREAS.find(a => a.id === activeSectionId) ?? STRATEGY_AREAS[0];
+  // DIVERGENCE POINT (Step 3): replace getStrategyAreas() with getStrategyAreas(reportFamily)
+  // when per-family section sets are needed. Section state keys are typed to DEFAULT_STRATEGY_AREAS ids.
+  const areas = getStrategyAreas();
+  const activeArea = areas.find(a => a.id === activeSectionId) ?? areas[0];
   const activeState = sections[activeArea.id];
 
   return (
@@ -657,12 +532,12 @@ function StepStrategyAreas({
             Strategy Areas
           </p>
           <p className="text-[10px] text-muted-foreground mt-0.5">
-            {committedCount(sections)}/{STRATEGY_AREAS.length} committed
+            {committedCount(sections)}/{areas.length} committed
           </p>
         </div>
         <ScrollArea className="flex-1">
           <div className="flex flex-col gap-0.5 p-2">
-            {STRATEGY_AREAS.map(area => {
+            {areas.map(area => {
               const status = sectionStatus(sections[area.id]);
               const isActive = activeSectionId === area.id;
               return (
@@ -740,8 +615,8 @@ function StepFindingsReview({
   sections: Record<StrategyAreaId, SectionState>;
   onEdit: (id: StrategyAreaId) => void;
 }) {
-  const committed = STRATEGY_AREAS.filter(a => sections[a.id].committed);
-  const skipped = STRATEGY_AREAS.filter(a => !sections[a.id].committed);
+  const committed = DEFAULT_STRATEGY_AREAS.filter(a => sections[a.id].committed);
+  const skipped = DEFAULT_STRATEGY_AREAS.filter(a => !sections[a.id].committed);
   const totalFindings = committed.reduce((acc, a) => acc + sections[a.id].selectedFindings.size, 0);
 
   return (
@@ -843,7 +718,9 @@ function StepAssembly({
     return () => clearTimeout(timer);
   }, []);
 
-  const committed = STRATEGY_AREAS.filter(a => sections[a.id].committed);
+  // DIVERGENCE POINT (Step 5): deck vs. document assembly could show different previews.
+  // When ready, branch on reportType.family here to show slide-count estimate vs. page-count estimate.
+  const committed = DEFAULT_STRATEGY_AREAS.filter(a => sections[a.id].committed);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -908,12 +785,21 @@ function StepAssembly({
 function StepHandoff({
   reportType,
   clientName,
+  clientId,
 }: {
   reportType: ReportTypeDefinition | null;
   clientName: string | null;
+  clientId: number | null;
 }) {
   const color = reportType ? familyColor(reportType.family) : "#1B3A6B";
-  const route = reportType?.route ?? null;
+  const baseRoute = reportType?.route ?? null;
+  // Pass the selected client into the report builder so it can pre-select on load.
+  // DIVERGENCE POINT (Step 6): deck reports may eventually open a slide preview instead.
+  const route = baseRoute
+    ? clientId
+      ? `${baseRoute}?client=${clientId}`
+      : baseRoute
+    : null;
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -941,8 +827,8 @@ function StepHandoff({
             {reportType?.displayName ?? "Report"} — ready to build
           </p>
           <p className="text-xs text-muted-foreground mt-1">
-            {clientName ? `For ${clientName}. ` : ""}The report builder has all your strategy context.
-            Open it to generate, preview, and export.
+            {clientName ? `For ${clientName}. ` : ""}Open the report builder to generate, review, and export.
+            {clientName ? " Your selected client will be pre-loaded." : ""}
           </p>
         </div>
 
@@ -1002,7 +888,7 @@ export default function WorkflowPage() {
       step: initialStep,
       reportTypeId: urlParams.type ?? null,
       clientId: urlParams.client ? parseInt(urlParams.client, 10) : null,
-      activeSectionId: STRATEGY_AREAS[0].id,
+      activeSectionId: DEFAULT_STRATEGY_AREAS[0].id,
       sections: makeDefaultSections(),
     };
   });
@@ -1082,6 +968,7 @@ export default function WorkflowPage() {
           <StepHandoff
             reportType={reportType}
             clientName={selectedClient?.name ?? null}
+            clientId={state.clientId}
           />
         )}
       </div>
@@ -1104,7 +991,7 @@ export default function WorkflowPage() {
           </span>
           {state.step === 3 && (
             <span className="text-[10px] text-muted-foreground hidden sm:block">
-              · {numCommitted}/{STRATEGY_AREAS.length} committed
+              · {numCommitted}/{DEFAULT_STRATEGY_AREAS.length} committed
             </span>
           )}
           {!canAdvance && state.step === 1 && (

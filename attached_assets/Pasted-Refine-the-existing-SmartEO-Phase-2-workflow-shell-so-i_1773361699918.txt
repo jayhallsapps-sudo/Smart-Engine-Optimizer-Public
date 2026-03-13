@@ -1,0 +1,105 @@
+Refine the existing SmartEO Phase 2 workflow shell so it is more reusable, less hardcoded, and better integrated with the existing report builders.
+
+IMPORTANT CONTEXT
+
+The current /workflow implementation is being kept. Do not replace it from scratch.
+
+Keep and extend:
+- the current stepper workflow shell
+- the current nested mini-flow state model
+- the current reuse of registry-based report data
+- the current overall interaction pattern
+
+This is a cleanup and hardening pass, not a redesign.
+
+CORE OBJECTIVE
+
+Make the workflow foundation more scalable and better aligned with the real SmartEO product by removing hardcoded domain assumptions, improving handoff, and reducing friction for power users.
+
+PRIORITY FIXES
+
+1. MOVE STRATEGY AREAS INTO CONFIG
+
+The 8 strategy areas are currently hardcoded inline in workflow.tsx.
+Refactor them into a reusable config-driven structure.
+
+Requirements:
+- move strategy area definitions out of workflow.tsx into a shared config/module
+- preserve the current 8 strategy areas
+- preserve the existing workflow behavior
+- structure the config so future per-report-type or per-industry variants can be added cleanly
+- do not overengineer a full CMS/admin system yet
+
+2. REMOVE BEHAVIORAL-HEALTH-SPECIFIC HARDCODING FROM PLACEHOLDER COPY
+
+The current placeholder prompts, questions, and findings are written in behavioral health SEO language.
+Replace them with more neutral/flexible placeholder content that can work across clients and report types.
+
+Requirements:
+- remove highly specific behavioral-health terms from the default placeholder workflow copy
+- keep the copy realistic and SEO-strategy-oriented
+- do not make it vague or useless
+- allow the workflow to feel generally applicable across SmartEO clients
+
+3. IMPROVE HANDOFF TO EXISTING REPORT BUILDERS
+
+Right now Step 6 opens the report builder as a plain link with no meaningful handoff.
+Improve this without rebuilding the existing report pages.
+
+Requirements:
+- pass at minimum the selected report type and selected client into the destination report page using the least disruptive approach
+- prefer URL params or another lightweight compatible method if that fits the existing architecture
+- do not rewrite existing report pages from scratch
+- if a target report page can read incoming client/report context with a light change, do that
+- document clearly what is now passed and what is still deferred
+
+Important:
+You do not need to pass full findings into the report builder yet.
+You do need to reduce the disconnect between workflow and report page.
+
+4. RESTORE A QUICK-LAUNCH OPTION FROM /prepare
+
+The guided workflow should remain the main path from /prepare, but experienced users should not be forced through it every time.
+
+Requirements:
+- keep the guided workflow path as the primary action
+- add a secondary “Quick Launch” style action from /prepare that opens the existing report builder directly
+- make the distinction clear and intentional
+- do not clutter the UI
+
+5. PREPARE FOR FAMILY-SPECIFIC DIVERGENCE
+
+Deck vs document behavior is currently almost identical inside the workflow.
+Do not fully branch the workflow yet, but prepare it more cleanly.
+
+Requirements:
+- keep current shared workflow behavior
+- structure the code so family-specific step content or section variations can be added later without major rewrite
+- document where those divergence points now live
+
+IMPLEMENTATION RULES
+
+- do not replace the existing workflow shell
+- do not overbuild the intelligence engine
+- do not add comments, presentation mode, or full admin logic in this prompt
+- reuse the current registry, routes, and report infrastructure where possible
+- preserve current user-visible workflow behavior unless the change directly improves one of the priorities above
+
+DELIVERABLES
+
+- strategy area config extracted from workflow.tsx
+- generalized placeholder content replacing behavioral-health-specific copy
+- improved workflow-to-report-builder handoff
+- quick-launch option added to /prepare
+- cleaner family-divergence extension points
+- short implementation report including:
+  - files changed
+  - what was reused
+  - what was refactored
+  - what was newly added
+  - what remains deferred
+  - any risks or compromises
+
+SUCCESS CONDITION
+
+The existing workflow shell remains intact but becomes more reusable, less industry-hardcoded, better connected to the current report builders, and less frustrating for power users.

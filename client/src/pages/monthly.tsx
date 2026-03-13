@@ -48,7 +48,7 @@ export default function MonthlyPage() {
   const { toast } = useToast();
   const now = new Date();
 
-  const [clientId, setClientId] = useState("");
+  const [clientId, setClientId] = useState(() => new URLSearchParams(window.location.search).get("client") ?? "");
   const [month, setMonth] = useState(String(now.getMonth() + 1));
   const [year, setYear] = useState(String(THIS_YEAR));
   const [report, setReport] = useState<any>(null);

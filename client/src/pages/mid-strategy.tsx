@@ -60,7 +60,7 @@ function ConfidenceLabel({ confidence }: { confidence?: string }) {
 export default function MidStrategyPage() {
   const { toast } = useToast();
 
-  const [clientId, setClientId] = useState("");
+  const [clientId, setClientId] = useState(() => new URLSearchParams(window.location.search).get("client") ?? "");
   const [report, setReport] = useState<any>(null);
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [isUploading, setIsUploading] = useState(false);

@@ -46,7 +46,7 @@ function currentQuarter(): number {
 export default function QbrFullPage() {
   const { toast } = useToast();
 
-  const [clientId, setClientId] = useState("");
+  const [clientId, setClientId] = useState(() => new URLSearchParams(window.location.search).get("client") ?? "");
   const [quarter, setQuarter] = useState(String(currentQuarter()));
   const [year, setYear] = useState(String(THIS_YEAR));
   const [report, setReport] = useState<any>(null);

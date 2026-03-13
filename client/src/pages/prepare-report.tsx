@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Users,
   User,
+  Zap,
 } from "lucide-react";
 import { listReportTypes, familyColor, familyLabel, type ReportTypeDefinition } from "@/lib/reportFamilyUtils";
 
@@ -150,6 +151,25 @@ export default function PrepareReportPage() {
               The <span className="font-semibold">QBR</span> deck is built from QBS content
               plus ADR and Director of SEO adjustments before the client presentation.
             </p>
+          </div>
+        </div>
+
+        <div className="mt-4 flex items-start gap-2.5 px-1">
+          <Zap className="w-3.5 h-3.5 text-muted-foreground mt-0.5 shrink-0" />
+          <div>
+            <span className="text-[11px] text-muted-foreground font-medium">Quick launch — skip the guided workflow: </span>
+            {ALL_REPORT_TYPES.filter(rt => rt.implemented && rt.route).map((rt, i, arr) => (
+              <span key={rt.id}>
+                <a
+                  href={rt.route!}
+                  className="text-[11px] text-muted-foreground hover:text-foreground underline underline-offset-2 decoration-muted-foreground/40 transition-colors"
+                  data-testid={`link-quicklaunch-${rt.id.replace("_", "-")}`}
+                >
+                  {rt.displayName}
+                </a>
+                {i < arr.length - 1 && <span className="text-muted-foreground/40 mx-1">·</span>}
+              </span>
+            ))}
           </div>
         </div>
 

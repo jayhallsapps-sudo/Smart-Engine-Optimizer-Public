@@ -150,7 +150,7 @@ export default function QbrPrepPage() {
   const { toast } = useToast();
   const rqClient = useQueryClient();
 
-  const [clientId, setClientId] = useState<string>("");
+  const [clientId, setClientId] = useState<string>(() => new URLSearchParams(window.location.search).get("client") ?? "");
   const [generationDate, setGenerationDate] = useState(new Date().toISOString().split("T")[0]);
   const [sentiment, setSentiment] = useState<string>("");
   const [amThoughts, setAmThoughts] = useState("");

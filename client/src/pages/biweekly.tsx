@@ -59,7 +59,7 @@ function formatWindowLabel(start: string, end: string): string {
 export default function BiweeklyPage() {
   const { toast } = useToast();
 
-  const [clientId, setClientId] = useState<string>("");
+  const [clientId, setClientId] = useState<string>(() => new URLSearchParams(window.location.search).get("client") ?? "");
   const [datePreset, setDatePreset] = useState<"7" | "14" | "30" | "custom">("14");
   const [customStart, setCustomStart] = useState<string>("");
   const [customEnd, setCustomEnd] = useState<string>("");

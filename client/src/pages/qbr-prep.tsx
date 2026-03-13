@@ -949,6 +949,7 @@ export default function QbrPrepPage() {
         <CommentPanel
           reportType="qbs"
           clientId={clientId || null}
+          savedReportId={reportSave.savedReportId}
           anchors={[
             { id: "section:goals", label: "Goals" },
             { id: "section:conversions", label: "Conversions" },

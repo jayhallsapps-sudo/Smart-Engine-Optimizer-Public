@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { X, MessageSquare, ChevronDown, ChevronRight, Check, CornerDownRight, Plus, Loader2 } from "lucide-react";
+import { X, MessageSquare, ChevronDown, ChevronRight, Check, CornerDownRight, Plus, Loader2, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -252,12 +252,13 @@ function CommentItem({ comment, replies, anchors, onResolve, onDelete, onAddRepl
 interface CommentPanelProps {
   reportType: string;
   clientId: string | null;
+  savedReportId: number | null;
   anchors: CommentAnchor[];
   onClose: () => void;
   className?: string;
 }
 
-export function CommentPanel({ reportType, clientId, anchors, onClose, className }: CommentPanelProps) {
+export function CommentPanel({ reportType, clientId, savedReportId, anchors, onClose, className }: CommentPanelProps) {
   const [showResolved, setShowResolved] = useState(false);
   const [composing, setComposing] = useState(false);
 
@@ -266,10 +267,11 @@ export function CommentPanel({ reportType, clientId, anchors, onClose, className
     ...anchors,
   ];
 
-  const qKey = `/api/comments?reportType=${reportType}&clientId=${clientId ?? "null"}`;
+  const qKey = `/api/comments?reportType=${reportType}&clientId=${clientId ?? "null"}&savedReportId=${savedReportId ?? "null"}`;
 
   const { data: comments = [], isLoading } = useQuery<ReportComment[]>({
     queryKey: [qKey],
+    enabled: savedReportId !== null,
   });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: [qKey] });
@@ -325,6 +327,7 @@ export function CommentPanel({ reportType, clientId, anchors, onClose, className
     createMut.mutate({
       reportType,
       clientId: clientId ? Number(clientId) : null,
+      savedReportId,
       anchorId: data.anchorId,
       anchorLabel: data.anchorLabel,
       authorName: data.authorName,
@@ -339,6 +342,7 @@ export function CommentPanel({ reportType, clientId, anchors, onClose, className
     createMut.mutate({
       reportType,
       clientId: clientId ? Number(clientId) : null,
+      savedReportId,
       anchorId: parent?.anchorId ?? "report",
       anchorLabel: parent?.anchorLabel ?? null,
       authorName: data.authorName,
@@ -383,8 +387,10 @@ export function CommentPanel({ reportType, clientId, anchors, onClose, className
           data-testid="comment-add-btn"
           variant="outline"
           size="sm"
-          className="h-7 text-xs gap-1 border-[#1B3A6B] text-[#1B3A6B] hover:bg-[#1B3A6B]/5"
+          className="h-7 text-xs gap-1 border-[#1B3A6B] text-[#1B3A6B] hover:bg-[#1B3A6B]/5 disabled:opacity-40 disabled:cursor-not-allowed"
           onClick={() => setComposing(!composing)}
+          disabled={savedReportId === null}
+          title={savedReportId === null ? "Save the report first to add comments" : undefined}
         >
           <Plus className="h-3 w-3" />
           Add comment
@@ -401,8 +407,8 @@ export function CommentPanel({ reportType, clientId, anchors, onClose, className
         </label>
       </div>
 
-      {/* Compose form */}
-      {composing && (
+      {/* Compose form — only when saved */}
+      {composing && savedReportId !== null && (
         <div className="px-3 pt-3">
           <AddCommentForm
             anchors={allAnchors}
@@ -415,7 +421,14 @@ export function CommentPanel({ reportType, clientId, anchors, onClose, className
 
       {/* Comments list */}
       <div className="flex-1 overflow-y-auto p-3 space-y-3">
-        {isLoading ? (
+        {savedReportId === null ? (
+          <div className="flex flex-col items-center justify-center py-10 gap-3 px-4">
+            <Lock className="h-7 w-7 text-gray-300" />
+            <p className="text-xs text-center text-gray-500 leading-relaxed">
+              Comments are tied to saved report instances. Generate and save a report first, then return here to review and annotate.
+            </p>
+          </div>
+        ) : isLoading ? (
           <div className="flex items-center justify-center py-8 text-gray-400">
             <Loader2 className="h-5 w-5 animate-spin" />
           </div>

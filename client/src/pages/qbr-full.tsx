@@ -286,7 +286,7 @@ export default function QbrFullPage() {
           <div className="flex items-center gap-2">
             <TrendingUp className="w-5 h-5 text-primary" />
             <div className="flex-1 min-w-0">
-              <h1 className="font-semibold text-sm">QBR Full Report</h1>
+              <h1 className="font-semibold text-sm">QBR</h1>
               <p className="text-xs text-muted-foreground">Quarterly Business Review Deck (PPTX)</p>
             </div>
             <Button
@@ -632,7 +632,7 @@ export default function QbrFullPage() {
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center space-y-3 max-w-sm">
               <TrendingUp className="w-12 h-12 text-muted-foreground mx-auto" />
-              <h2 className="font-semibold text-lg">QBR Full Report</h2>
+              <h2 className="font-semibold text-lg">QBR</h2>
               <p className="text-sm text-muted-foreground">
                 Select a client and quarter, then click Generate to build your 20-slide quarterly SEO deck.
                 True calendar quarter windows, QoQ comparisons, inline editing, and PPTX export.
@@ -669,8 +669,9 @@ export default function QbrFullPage() {
 
       {showCommentPanel && (
         <CommentPanel
-          reportType="qbr"
+          reportType="qbr_full"
           clientId={clientId || null}
+          savedReportId={reportSave.savedReportId}
           anchors={(report?.slides ?? []).map((s: any, i: number) => ({ id: `slide:${i}`, label: s.title ?? `Slide ${i + 1}` }))}
           onClose={() => setShowCommentPanel(false)}
           className="h-full"

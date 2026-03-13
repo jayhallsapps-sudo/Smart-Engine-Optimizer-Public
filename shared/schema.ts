@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { pgTable, text, varchar, timestamp, jsonb, integer, serial, index, boolean } from "drizzle-orm/pg-core";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -190,14 +191,16 @@ export const reportComments = pgTable("report_comments", {
   id: serial("id").primaryKey(),
   reportType: text("report_type").notNull(),
   clientId: integer("client_id").references(() => clients.id, { onDelete: "cascade" }),
+  savedReportId: integer("saved_report_id").references(() => savedReports.id, { onDelete: "cascade" }),
   anchorId: text("anchor_id").notNull().default("report"),
   anchorLabel: text("anchor_label"),
   authorName: text("author_name").notNull(),
   body: text("body").notNull(),
-  parentId: integer("parent_id"),
+  parentId: integer("parent_id").references((): AnyPgColumn => reportComments.id, { onDelete: "cascade" }),
   resolved: boolean("resolved").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => [
+  index("report_comments_saved_idx").on(t.savedReportId),
   index("report_comments_type_client_idx").on(t.reportType, t.clientId),
   index("report_comments_parent_idx").on(t.parentId),
 ]);

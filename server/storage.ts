@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc, sql, isNull } from "drizzle-orm";
 import {
   clients,
   queryLogs,
@@ -72,7 +72,7 @@ export interface IStorage {
   getGapSession(id: number): Promise<GapAnalysisSession | undefined>;
   getGapSessionsByClient(clientId: number): Promise<GapAnalysisSession[]>;
 
-  getReportComments(reportType: string, clientId: number | null): Promise<ReportComment[]>;
+  getReportComments(reportType: string, clientId: number | null, savedReportId: number | null): Promise<ReportComment[]>;
   createReportComment(data: InsertReportComment): Promise<ReportComment>;
   updateReportComment(id: number, data: { body?: string; resolved?: boolean }): Promise<ReportComment | undefined>;
   deleteReportComment(id: number): Promise<boolean>;
@@ -297,8 +297,18 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(gapAnalysisSessions.createdAt));
   }
 
-  async getReportComments(reportType: string, clientId: number | null): Promise<ReportComment[]> {
-    const conditions = [eq(reportComments.reportType, reportType)];
+  async getReportComments(reportType: string, clientId: number | null, savedReportId: number | null): Promise<ReportComment[]> {
+    if (savedReportId !== null) {
+      return db
+        .select()
+        .from(reportComments)
+        .where(eq(reportComments.savedReportId, savedReportId))
+        .orderBy(reportComments.createdAt);
+    }
+    const conditions = [
+      eq(reportComments.reportType, reportType),
+      isNull(reportComments.savedReportId),
+    ];
     if (clientId !== null) {
       conditions.push(eq(reportComments.clientId, clientId));
     }

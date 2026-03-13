@@ -648,6 +648,7 @@ export default function MonthlyPage() {
         <CommentPanel
           reportType="monthly"
           clientId={clientId || null}
+          savedReportId={reportSave.savedReportId}
           anchors={(report?.slides ?? []).map((s: any, i: number) => ({ id: `slide:${i}`, label: s.title ?? `Slide ${i + 1}` }))}
           onClose={() => setShowCommentPanel(false)}
           className="h-full"

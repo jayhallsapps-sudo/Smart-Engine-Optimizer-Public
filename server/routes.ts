@@ -2865,12 +2865,13 @@ export async function registerRoutes(
 
   app.get("/api/comments", async (req, res) => {
     try {
-      const { reportType, clientId } = req.query;
+      const { reportType, clientId, savedReportId } = req.query;
       if (!reportType || typeof reportType !== "string") {
         return res.status(400).json({ message: "reportType is required" });
       }
       const cid = clientId && clientId !== "null" ? Number(clientId) : null;
-      const comments = await storage.getReportComments(reportType, cid);
+      const sid = savedReportId && savedReportId !== "null" ? Number(savedReportId) : null;
+      const comments = await storage.getReportComments(reportType, cid, sid);
       res.json(comments);
     } catch (err: any) {
       res.status(500).json({ message: err.message });

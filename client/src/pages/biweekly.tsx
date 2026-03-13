@@ -625,6 +625,7 @@ export default function BiweeklyPage() {
         <CommentPanel
           reportType="biweekly"
           clientId={clientId || null}
+          savedReportId={reportSave.savedReportId}
           anchors={(report?.sections ?? []).map((s: any) => ({ id: s.id, label: s.title }))}
           onClose={() => setShowCommentPanel(false)}
           className="h-full"

@@ -104,3 +104,25 @@ export function groupAsanaTasks(tasks: AsanaTask[]): Record<string, AsanaTask[]>
   }
   return groups;
 }
+
+/**
+ * Returns all open (incomplete) tasks for a project — no date filter.
+ * Used by the execution ref picker to let AMs link findings to real Asana tasks.
+ */
+export async function fetchAsanaOpenTasks(
+  projectGid: string,
+): Promise<{ gid: string; name: string; url: string }[]> {
+  try {
+    const raw = await fetchAllTasks(projectGid);
+    return raw
+      .filter((t: any) => !t.completed && t.name?.trim())
+      .map((t: any) => ({
+        gid: t.gid as string,
+        name: (t.name as string).trim(),
+        url: `https://app.asana.com/0/${projectGid}/${t.gid}`,
+      }))
+      .slice(0, 100);
+  } catch {
+    return [];
+  }
+}

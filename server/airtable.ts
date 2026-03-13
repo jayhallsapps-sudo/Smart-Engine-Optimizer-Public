@@ -240,3 +240,54 @@ function buildFilterFormula(startDate: string, endDate: string): string {
   if (!startDate || !endDate) return "";
   return `AND(IS_AFTER({Due}, "${startDate}"), IS_BEFORE({Due}, "${endDate}"))`;
 }
+
+/**
+ * Fetches recent records from the client's production Airtable view without a date filter.
+ * Used by the execution ref picker to let AMs link findings to real Airtable work items.
+ * Returns id + title pairs only — lightweight for quick search.
+ */
+export async function fetchAirtableTaskItems(
+  clientId: number,
+): Promise<{ id: string; title: string }[]> {
+  const client = await storage.getClient(clientId);
+  if (!client) return [];
+
+  const baseId = (client as any).airtableBaseId as string | null;
+  const tableName = (client as any).airtableTableName as string | null;
+  const viewName = (client as any).airtableProductionView as string | null;
+
+  if (!baseId || !tableName) return [];
+
+  const creds = await storage.getApiCredentialsByService("airtable");
+  if (!creds.length) return [];
+
+  const pat = decrypt(creds[0].encryptedValue);
+
+  let viewParam: string | null = viewName;
+  if (viewName) {
+    const viewId = await resolveViewId(baseId, tableName, viewName, pat);
+    if (viewId) viewParam = viewId;
+  }
+
+  const params = new URLSearchParams({ maxRecords: "100" });
+  if (viewParam) params.set("view", viewParam);
+
+  const url = `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(tableName)}?${params}`;
+  try {
+    const resp = await fetch(url, {
+      headers: { Authorization: `Bearer ${pat}` },
+    });
+    if (!resp.ok) return [];
+    const data = await resp.json() as any;
+    return (data.records ?? [])
+      .map((r: any) => ({
+        id: r.id as string,
+        title: String(
+          r.fields?.["Name"] ?? r.fields?.["Task"] ?? r.fields?.["Description"] ?? ""
+        ).trim(),
+      }))
+      .filter((item: { id: string; title: string }) => item.title.length > 0);
+  } catch {
+    return [];
+  }
+}

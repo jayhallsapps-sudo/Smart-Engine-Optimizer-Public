@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import {
   X,
   Send,
@@ -11,6 +11,10 @@ import {
   MessageSquare,
   ShieldAlert,
   BarChart2,
+  Link2,
+  Search,
+  ExternalLink,
+  Pencil,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -31,6 +35,7 @@ import {
   type PriorityOverride,
   type ExecutionStatus,
   type ExecutionContext,
+  type ExecutionRef,
 } from "@/lib/priorityEngine";
 import {
   Tooltip,
@@ -121,6 +126,240 @@ const CONFIDENCE_COLORS = {
   high: "text-emerald-600 border-emerald-400/40 bg-emerald-500/5",
 };
 
+// ─── Execution ref source metadata ───────────────────────────────────────────
+const REF_SOURCE_LABELS: Record<ExecutionRef["type"], string> = {
+  asana:   "Asana",
+  airtable: "Airtable",
+  manual:  "Manual",
+};
+
+const REF_SOURCE_COLORS: Record<ExecutionRef["type"], string> = {
+  asana:   "text-emerald-600 dark:text-emerald-400 bg-emerald-500/8 border-emerald-400/25",
+  airtable: "text-purple-600 dark:text-purple-400 bg-purple-500/8 border-purple-400/25",
+  manual:  "text-muted-foreground bg-muted border-border/50",
+};
+
+// ─── ExecutionRefPicker ───────────────────────────────────────────────────────
+// Inline search-and-select component for linking a finding to a real work item.
+
+interface ExecutionRefPickerProps {
+  allRefs: ExecutionRef[];
+  refsStatus: "idle" | "loading" | "loaded" | "error";
+  selectedRef: ExecutionRef | null;
+  legacyRef: string;
+  onSelectRef: (ref: ExecutionRef | null) => void;
+  onLegacyChange: (text: string) => void;
+  onLoadRefs: () => void;
+}
+
+function ExecutionRefPicker({
+  allRefs,
+  refsStatus,
+  selectedRef,
+  legacyRef,
+  onSelectRef,
+  onLegacyChange,
+  onLoadRefs,
+}: ExecutionRefPickerProps) {
+  const [searchText, setSearchText] = useState("");
+  const [isOpen, setIsOpen] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const filtered = allRefs.filter(r =>
+    r.title.toLowerCase().includes(searchText.toLowerCase())
+  ).slice(0, 8);
+
+  const showManualOption = searchText.trim().length > 0;
+
+  const allDropdownItems = [
+    ...filtered,
+    ...(showManualOption ? [{ type: "manual" as const, ref: searchText, title: searchText }] : []),
+  ];
+
+  function handleFocus() {
+    setIsOpen(true);
+    if (refsStatus === "idle") onLoadRefs();
+  }
+
+  function handleSelect(ref: ExecutionRef) {
+    if (ref.type === "manual") {
+      onSelectRef(null);
+      onLegacyChange(ref.title);
+      setSearchText(ref.title);
+    } else {
+      onSelectRef(ref);
+      onLegacyChange("");
+      setSearchText("");
+    }
+    setIsOpen(false);
+    setHighlightedIndex(-1);
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (!isOpen) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setHighlightedIndex(i => Math.min(i + 1, allDropdownItems.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlightedIndex(i => Math.max(i - 1, 0));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (highlightedIndex >= 0 && allDropdownItems[highlightedIndex]) {
+        handleSelect(allDropdownItems[highlightedIndex]);
+      } else if (searchText.trim()) {
+        handleSelect({ type: "manual", ref: searchText.trim(), title: searchText.trim() });
+      }
+    } else if (e.key === "Escape") {
+      setIsOpen(false);
+    }
+  }
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (
+        inputRef.current && !inputRef.current.contains(e.target as Node) &&
+        dropdownRef.current && !dropdownRef.current.contains(e.target as Node)
+      ) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Linked state — show the selected ref with unlink button.
+  if (selectedRef && selectedRef.type !== "manual") {
+    return (
+      <div
+        className="mt-2 flex items-center gap-2 rounded border border-border bg-background px-2.5 py-1.5"
+        data-testid="execution-ref-linked"
+      >
+        <Link2 className="w-3 h-3 text-muted-foreground shrink-0" />
+        <span
+          className={`text-[9px] font-semibold uppercase tracking-wide px-1 py-0.5 rounded border ${REF_SOURCE_COLORS[selectedRef.type]}`}
+          data-testid="execution-ref-source-badge"
+        >
+          {REF_SOURCE_LABELS[selectedRef.type]}
+        </span>
+        <span className="flex-1 text-[11px] text-foreground truncate" data-testid="execution-ref-title">
+          {selectedRef.title}
+        </span>
+        {selectedRef.url && (
+          <a
+            href={selectedRef.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+            data-testid="execution-ref-external-link"
+          >
+            <ExternalLink className="w-3 h-3" />
+          </a>
+        )}
+        <button
+          onClick={() => { onSelectRef(null); setSearchText(""); }}
+          className="text-muted-foreground hover:text-foreground transition-colors shrink-0 ml-0.5"
+          data-testid="btn-unlink-ref"
+          title="Unlink task"
+        >
+          <X className="w-3 h-3" />
+        </button>
+      </div>
+    );
+  }
+
+  // Manual legacy ref display.
+  if (!selectedRef && legacyRef && !searchText) {
+    return (
+      <div
+        className="mt-2 flex items-center gap-2 rounded border border-border bg-background px-2.5 py-1.5"
+        data-testid="execution-ref-manual"
+      >
+        <Pencil className="w-3 h-3 text-muted-foreground shrink-0" />
+        <span className="flex-1 text-[11px] text-foreground truncate">{legacyRef}</span>
+        <span className="text-[9px] text-muted-foreground italic">(manual)</span>
+        <button
+          onClick={() => { onLegacyChange(""); setSearchText(""); setIsOpen(true); setTimeout(() => inputRef.current?.focus(), 50); }}
+          className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+          data-testid="btn-clear-manual-ref"
+          title="Clear manual ref"
+        >
+          <X className="w-3 h-3" />
+        </button>
+      </div>
+    );
+  }
+
+  // Search input + dropdown.
+  return (
+    <div className="mt-2 relative">
+      <div className="flex items-center gap-1.5 rounded border border-border bg-background px-2 py-1">
+        {refsStatus === "loading"
+          ? <Loader2 className="w-3 h-3 text-muted-foreground shrink-0 animate-spin" />
+          : <Search className="w-3 h-3 text-muted-foreground shrink-0" />
+        }
+        <input
+          ref={inputRef}
+          data-testid="input-execution-ref"
+          type="text"
+          value={searchText}
+          onChange={e => { setSearchText(e.target.value); setHighlightedIndex(-1); }}
+          onFocus={handleFocus}
+          onKeyDown={handleKeyDown}
+          placeholder={
+            refsStatus === "loaded" && allRefs.length === 0
+              ? "No tasks found — type to add manual ref…"
+              : "Search Asana / Airtable tasks…"
+          }
+          className="flex-1 bg-transparent text-[11px] text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
+        />
+      </div>
+
+      {isOpen && (allDropdownItems.length > 0 || refsStatus === "loading") && (
+        <div
+          ref={dropdownRef}
+          className="absolute z-50 top-full left-0 right-0 mt-0.5 rounded-md border border-border bg-popover shadow-lg overflow-hidden"
+          data-testid="execution-ref-dropdown"
+        >
+          {refsStatus === "loading" && (
+            <div className="flex items-center gap-2 px-3 py-2 text-[11px] text-muted-foreground">
+              <Loader2 className="w-3 h-3 animate-spin" /> Loading tasks…
+            </div>
+          )}
+          {refsStatus !== "loading" && allDropdownItems.map((item, idx) => {
+            const isManual = item.type === "manual";
+            const isHighlighted = idx === highlightedIndex;
+            return (
+              <button
+                key={`${item.type}-${item.ref}`}
+                className={[
+                  "w-full flex items-center gap-2 px-3 py-1.5 text-left transition-colors",
+                  isHighlighted ? "bg-[#1B3A6B]/8 text-foreground" : "hover:bg-muted/50 text-foreground",
+                ].join(" ")}
+                data-testid={`execution-ref-option-${idx}`}
+                onMouseDown={e => { e.preventDefault(); handleSelect(item); }}
+                onMouseEnter={() => setHighlightedIndex(idx)}
+              >
+                {isManual
+                  ? <Pencil className="w-3 h-3 text-muted-foreground shrink-0" />
+                  : <span className={`text-[8px] font-bold uppercase tracking-wide px-1 py-0.5 rounded border shrink-0 ${REF_SOURCE_COLORS[item.type]}`}>
+                      {REF_SOURCE_LABELS[item.type]}
+                    </span>
+                }
+                <span className="text-[11px] truncate flex-1">
+                  {isManual ? `Use "${item.title}" as manual ref` : item.title}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 // All selectable execution statuses in display order.
@@ -142,6 +381,8 @@ interface FindingChatPanelProps {
   onOverride: (override: PriorityOverride | null) => void;
   /** Called when the AM updates the execution context. Pass null to clear. */
   onUpdateExecution: (ctx: ExecutionContext | null) => void;
+  /** Client ID — enables live Asana/Airtable ref lookup. Optional for backward compat. */
+  clientId?: number | null;
 }
 
 // All selectable buckets in display order for the override picker.
@@ -152,7 +393,7 @@ const BUCKET_OPTIONS: PriorityBucket[] = [
   "deprioritize",
 ];
 
-export function FindingChatPanel({ finding, onClose, onCommit, onOverride, onUpdateExecution }: FindingChatPanelProps) {
+export function FindingChatPanel({ finding, onClose, onCommit, onOverride, onUpdateExecution, clientId }: FindingChatPanelProps) {
   const currentBody = finding.body;
   const shortTitle = findingShortLabel(finding.body);
 
@@ -163,7 +404,6 @@ export function FindingChatPanel({ finding, onClose, onCommit, onOverride, onUpd
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // ── Local override state — mirrors the finding's current override (if any) ──
-  // Seeded from `finding.priorityOverride` so the panel reflects current state.
   const [overrideBucket, setOverrideBucket] = useState<PriorityBucket | "">(
     finding.priorityOverride?.bucket ?? "",
   );
@@ -178,9 +418,32 @@ export function FindingChatPanel({ finding, onClose, onCommit, onOverride, onUpd
   const [execNote, setExecNote] = useState<string>(
     finding.executionContext?.note ?? "",
   );
+  // Legacy free-text ref (pre-linkedRefData sessions).
   const [execRef, setExecRef] = useState<string>(
     finding.executionContext?.linkedRef ?? "",
   );
+  // Structured ref — set when AM picks from Asana/Airtable picker.
+  const [execRefData, setExecRefData] = useState<ExecutionRef | null>(
+    finding.executionContext?.linkedRefData ?? null,
+  );
+
+  // ── Execution refs fetch state (per-panel, lazy-loaded on first picker focus) ──
+  const [allRefs, setAllRefs] = useState<ExecutionRef[]>([]);
+  const [refsStatus, setRefsStatus] = useState<"idle" | "loading" | "loaded" | "error">("idle");
+
+  const loadRefs = useCallback(async () => {
+    if (!clientId || refsStatus !== "idle") return;
+    setRefsStatus("loading");
+    try {
+      const res = await apiRequest("GET", `/api/clients/${clientId}/execution-refs`);
+      const data = await res.json() as { asana: ExecutionRef[]; airtable: ExecutionRef[] };
+      setAllRefs([...data.asana, ...data.airtable]);
+      setRefsStatus("loaded");
+    } catch {
+      setRefsStatus("error");
+      setAllRefs([]);
+    }
+  }, [clientId, refsStatus]);
 
   // Sync all local state if the finding prop changes (AM opened a different finding).
   useEffect(() => {
@@ -189,6 +452,7 @@ export function FindingChatPanel({ finding, onClose, onCommit, onOverride, onUpd
     setExecStatus(finding.executionContext?.status ?? "not_tracked");
     setExecNote(finding.executionContext?.note ?? "");
     setExecRef(finding.executionContext?.linkedRef ?? "");
+    setExecRefData(finding.executionContext?.linkedRefData ?? null);
   }, [finding.id]);
 
   function applyOverride(bucket: PriorityBucket, reason: string) {
@@ -201,8 +465,8 @@ export function FindingChatPanel({ finding, onClose, onCommit, onOverride, onUpd
     onOverride(null);
   }
 
-  function applyExecution(status: ExecutionStatus, note: string, ref: string) {
-    if (status === "not_tracked" && !note.trim() && !ref.trim()) {
+  function applyExecution(status: ExecutionStatus, note: string, ref: string, refData: ExecutionRef | null) {
+    if (status === "not_tracked" && !note.trim() && !ref.trim() && !refData) {
       onUpdateExecution(null);
     } else {
       const prevCtx = finding.executionContext;
@@ -213,7 +477,9 @@ export function FindingChatPanel({ finding, onClose, onCommit, onOverride, onUpd
       onUpdateExecution({
         status,
         note: note.trim() || undefined,
-        linkedRef: ref.trim() || undefined,
+        // When a structured ref is set, legacy linkedRef is cleared.
+        linkedRef: refData ? undefined : (ref.trim() || undefined),
+        linkedRefData: refData ?? undefined,
         deferCount,
         updatedAt: Date.now(),
       });
@@ -224,6 +490,7 @@ export function FindingChatPanel({ finding, onClose, onCommit, onOverride, onUpd
     setExecStatus("not_tracked");
     setExecNote("");
     setExecRef("");
+    setExecRefData(null);
     onUpdateExecution(null);
   }
 
@@ -588,7 +855,7 @@ export function FindingChatPanel({ finding, onClose, onCommit, onOverride, onUpd
             onValueChange={(val) => {
               const status = val as ExecutionStatus;
               setExecStatus(status);
-              applyExecution(status, execNote, execRef);
+              applyExecution(status, execNote, execRef, execRefData);
             }}
           >
             <SelectTrigger
@@ -617,21 +884,47 @@ export function FindingChatPanel({ finding, onClose, onCommit, onOverride, onUpd
                 type="text"
                 value={execNote}
                 onChange={e => setExecNote(e.target.value)}
-                onBlur={() => applyExecution(execStatus, execNote, execRef)}
-                onKeyDown={e => { if (e.key === "Enter") applyExecution(execStatus, execNote, execRef); }}
+                onBlur={() => applyExecution(execStatus, execNote, execRef, execRefData)}
+                onKeyDown={e => { if (e.key === "Enter") applyExecution(execStatus, execNote, execRef, execRefData); }}
                 placeholder="Note (optional)…"
                 className="mt-2 w-full rounded border border-border bg-background text-[11px] text-foreground px-2 py-1 placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-[#1B3A6B]/40"
               />
-              <input
-                data-testid="input-execution-ref"
-                type="text"
-                value={execRef}
-                onChange={e => setExecRef(e.target.value)}
-                onBlur={() => applyExecution(execStatus, execNote, execRef)}
-                onKeyDown={e => { if (e.key === "Enter") applyExecution(execStatus, execNote, execRef); }}
-                placeholder="Task ref (Asana / Airtable ID)…"
-                className="mt-1.5 w-full rounded border border-border bg-background text-[11px] text-foreground px-2 py-1 placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-[#1B3A6B]/40"
+              {/* Ref picker — replaces the old free-text input */}
+              <ExecutionRefPicker
+                allRefs={allRefs}
+                refsStatus={refsStatus}
+                selectedRef={execRefData}
+                legacyRef={execRef}
+                onSelectRef={(ref) => {
+                  setExecRefData(ref);
+                  if (ref) setExecRef("");
+                  applyExecution(execStatus, execNote, ref ? "" : execRef, ref);
+                }}
+                onLegacyChange={(text) => {
+                  setExecRef(text);
+                  applyExecution(execStatus, execNote, text, null);
+                }}
+                onLoadRefs={loadRefs}
               />
+              {/* Link confidence indicator */}
+              <p className="mt-1.5 text-[9px] text-muted-foreground/60 leading-relaxed flex items-center gap-1">
+                {execRefData && execRefData.type !== "manual" ? (
+                  <>
+                    <Link2 className="w-2.5 h-2.5 shrink-0" />
+                    Linked to a real {REF_SOURCE_LABELS[execRefData.type]} task — execution is grounded.
+                  </>
+                ) : execRef ? (
+                  <>
+                    <Pencil className="w-2.5 h-2.5 shrink-0" />
+                    Manual reference — not linked to a real task.
+                  </>
+                ) : clientId ? (
+                  <>
+                    <Search className="w-2.5 h-2.5 shrink-0" />
+                    Search to link a real Asana or Airtable task.
+                  </>
+                ) : null}
+              </p>
             </>
           )}
 
@@ -641,11 +934,6 @@ export function FindingChatPanel({ finding, onClose, onCommit, onOverride, onUpd
               {getExecutionStatusHint(finding.executionContext)}
             </p>
           )}
-
-          {/* Future integration hint */}
-          <p className="mt-2 text-[9px] text-muted-foreground/50 leading-relaxed">
-            Future: will sync to Asana tasks and Airtable backlog.
-          </p>
         </div>
 
         {/* ── Quick actions — shown only until first message ── */}

@@ -21,6 +21,7 @@ import {
   Circle,
   CheckCircle2,
   X,
+  Link2,
 } from "lucide-react";
 import { FindingChatPanel } from "@/components/workflow/FindingChatPanel";
 import {
@@ -178,12 +179,26 @@ function PriorityBadge({
 
 // ─── Execution chip ───────────────────────────────────────────────────────────
 
+const CHIP_REF_SOURCE_LABELS: Record<string, string> = {
+  asana:   "Asana",
+  airtable: "Airtable",
+  manual:  "Manual",
+};
+
+const CHIP_REF_SOURCE_COLORS: Record<string, string> = {
+  asana:   "text-emerald-600 dark:text-emerald-400",
+  airtable: "text-purple-600 dark:text-purple-400",
+  manual:  "text-muted-foreground",
+};
+
 function ExecutionChip({ ctx }: { ctx: ExecutionContext | undefined }) {
   if (!ctx || ctx.status === "not_tracked") return null;
   const label = EXECUTION_STATUS_LABELS[ctx.status];
   const chipColors = EXECUTION_STATUS_CHIP_COLORS[ctx.status];
   const dotColor = EXECUTION_STATUS_DOT_COLORS[ctx.status];
   const hint = getExecutionStatusHint(ctx);
+  const linkedRefData = ctx.linkedRefData;
+  const isGrounded = linkedRefData && linkedRefData.type !== "manual";
   return (
     <TooltipProvider delayDuration={300}>
       <Tooltip>
@@ -194,16 +209,38 @@ function ExecutionChip({ ctx }: { ctx: ExecutionContext | undefined }) {
           >
             <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotColor}`} />
             {label}
+            {isGrounded && (
+              <Link2 className="w-2 h-2 shrink-0 ml-0.5" />
+            )}
           </span>
         </TooltipTrigger>
-        <TooltipContent side="top" className="max-w-[220px] text-[11px] leading-relaxed z-[9999]">
+        <TooltipContent side="top" className="max-w-[240px] text-[11px] leading-relaxed z-[9999]">
           <p className="font-semibold mb-1">{label}</p>
           <p className="text-muted-foreground text-[10px] leading-snug">{hint}</p>
           {ctx.note && (
             <p className="text-foreground mt-1 text-[10px]">{ctx.note}</p>
           )}
-          {ctx.linkedRef && (
-            <p className="text-muted-foreground mt-1 text-[10px]">Ref: {ctx.linkedRef}</p>
+          {linkedRefData && (
+            <div className="mt-1.5 flex items-center gap-1.5">
+              <span className={`text-[8px] font-bold uppercase tracking-wide ${CHIP_REF_SOURCE_COLORS[linkedRefData.type] ?? "text-muted-foreground"}`}>
+                {CHIP_REF_SOURCE_LABELS[linkedRefData.type] ?? linkedRefData.type}
+              </span>
+              {linkedRefData.url ? (
+                <a
+                  href={linkedRefData.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[10px] text-foreground hover:underline truncate flex-1"
+                >
+                  {linkedRefData.title}
+                </a>
+              ) : (
+                <span className="text-[10px] text-foreground truncate flex-1">{linkedRefData.title}</span>
+              )}
+            </div>
+          )}
+          {!linkedRefData && ctx.linkedRef && (
+            <p className="text-muted-foreground mt-1 text-[10px] italic">Ref: {ctx.linkedRef}</p>
           )}
         </TooltipContent>
       </Tooltip>
@@ -1539,6 +1576,7 @@ export default function WorkflowPage() {
           onCommit={(newBody, status) => onCommitFindingRevision(state.chatFinding!, newBody, status)}
           onOverride={(override) => onOverrideFindingPriority(state.chatFinding!, override)}
           onUpdateExecution={(ctx) => onUpdateFindingExecution(state.chatFinding!, ctx)}
+          clientId={state.clientId}
         />
       )}
 

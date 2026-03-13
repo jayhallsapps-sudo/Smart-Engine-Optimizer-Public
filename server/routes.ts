@@ -25,7 +25,8 @@ import {
   deleteCrawlAsset,
 } from "./crawlAssetService";
 import { parseNaturalQuery, getCommandDescription, getDateRangeLabel } from "./nlRouter";
-import { fetchAirtableWorkLog } from "./airtable";
+import { fetchAirtableWorkLog, fetchAirtableTaskItems } from "./airtable";
+import { fetchAsanaOpenTasks } from "./asanaClient";
 import { seedDatabase } from "./seed";
 import { encrypt, decrypt, deriveInternalToken } from "./encryption";
 import { buildGoogleAuthUrl, exchangeCodeForToken, callbackHtml, isGoogleConfigured } from "./googleAuth";
@@ -838,6 +839,41 @@ export async function registerRoutes(
       return res.status(result.setupRequired ? 422 : 500).json({ message: result.error, setupRequired: result.setupRequired });
     }
     res.json(result.data);
+  });
+
+  /**
+   * Execution reference picker — returns open Asana tasks + Airtable production records for a client.
+   * Used by the FindingChatPanel to let AMs link findings to real work items.
+   * Gracefully returns empty arrays when credentials/config are missing.
+   */
+  app.get("/api/clients/:id/execution-refs", async (req, res) => {
+    const clientId = Number(req.params.id);
+    const client = await storage.getClient(clientId);
+    if (!client) return res.status(404).json({ error: "Client not found" });
+
+    const asanaProjectId = (client as any).asanaProjectId as string | null;
+
+    const [asanaTasks, airtableItems] = await Promise.all([
+      asanaProjectId
+        ? fetchAsanaOpenTasks(asanaProjectId).catch(() => [])
+        : Promise.resolve([] as { gid: string; name: string; url: string }[]),
+      fetchAirtableTaskItems(clientId).catch(() => []),
+    ]);
+
+    const asana = asanaTasks.map(t => ({
+      type: "asana" as const,
+      ref: t.gid,
+      title: t.name,
+      url: t.url,
+    }));
+
+    const airtable = airtableItems.map(item => ({
+      type: "airtable" as const,
+      ref: item.id,
+      title: item.title,
+    }));
+
+    res.json({ asana, airtable });
   });
 
   app.get("/api/query-logs", async (req, res) => {

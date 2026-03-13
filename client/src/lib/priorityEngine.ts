@@ -342,11 +342,29 @@ export type ExecutionStatus =
   | "completed"
   | "deferred";
 
+/**
+ * A structured reference connecting a finding to a real Asana task or Airtable record.
+ * When present, it supersedes the legacy free-text `linkedRef` for display purposes.
+ */
+export interface ExecutionRef {
+  /** Origin system — informs badge color and icon. */
+  type: "asana" | "airtable" | "manual";
+  /** System-native ID: Asana GID, Airtable record ID, or the raw text for manual. */
+  ref: string;
+  /** Human-readable title for display in the chip and panel. */
+  title: string;
+  /** Deep link to the task/record in the external system (if available). */
+  url?: string;
+}
+
 export interface ExecutionContext {
   status: ExecutionStatus;
   note?: string;
   deferCount?: number;
+  /** Legacy free-text reference — retained for backward compat and manual entry. */
   linkedRef?: string;
+  /** Structured reference to a real Asana task or Airtable record. Supersedes linkedRef when present. */
+  linkedRefData?: ExecutionRef;
   updatedAt: number;
 }
 

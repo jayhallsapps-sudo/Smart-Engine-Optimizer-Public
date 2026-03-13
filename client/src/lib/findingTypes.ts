@@ -11,9 +11,10 @@ import {
   type PriorityOverride,
   type ExecutionStatus,
   type ExecutionContext,
+  type ExecutionRef,
 } from "./priorityEngine";
 
-export type { PriorityMeta, PriorityOverride, ExecutionStatus, ExecutionContext };
+export type { PriorityMeta, PriorityOverride, ExecutionStatus, ExecutionContext, ExecutionRef };
 
 export type FindingStatus = "draft" | "accepted" | "rejected" | "revised";
 

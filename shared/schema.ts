@@ -218,6 +218,34 @@ export const updateReportCommentSchema = z.object({
 export type ReportComment = typeof reportComments.$inferSelect;
 export type InsertReportComment = z.infer<typeof insertReportCommentSchema>;
 
+// ─── Admin Guidance ───────────────────────────────────────────────────────────
+
+export const GUIDANCE_STATUSES = ["draft", "active", "archived"] as const;
+export type GuidanceStatus = (typeof GUIDANCE_STATUSES)[number];
+
+export const adminGuidance = pgTable("admin_guidance", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  body: text("body").notNull().default(""),
+  reportType: varchar("report_type", { length: 64 }),
+  workflowArea: varchar("workflow_area", { length: 64 }),
+  status: varchar("status", { length: 32 }).notNull().default("active"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertAdminGuidanceSchema = createInsertSchema(adminGuidance).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const updateAdminGuidanceSchema = insertAdminGuidanceSchema.partial();
+
+export type AdminGuidance = typeof adminGuidance.$inferSelect;
+export type InsertAdminGuidance = z.infer<typeof insertAdminGuidanceSchema>;
+export type UpdateAdminGuidance = z.infer<typeof updateAdminGuidanceSchema>;
+
 export const CLIENT_SENTIMENT_OPTIONS = ["Happy", "Neutral", "Concerned", "Frustrated"] as const;
 export type ClientSentiment = typeof CLIENT_SENTIMENT_OPTIONS[number];
 

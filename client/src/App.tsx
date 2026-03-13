@@ -27,6 +27,9 @@ import SecurityPage from "@/pages/security";
 import CommandCenterPage from "@/pages/command-center";
 import PrepareReportPage from "@/pages/prepare-report";
 import WorkflowPage from "@/pages/workflow";
+import AdminPage from "@/pages/admin";
+import AdminConfigPage from "@/pages/admin-config";
+import AdminGuidancePage from "@/pages/admin-guidance";
 
 function RootRedirect() {
   const [, setLocation] = useLocation();
@@ -56,6 +59,9 @@ function Router() {
       <Route path="/security" component={SecurityPage} />
       <Route path="/sample-reports" component={SampleReportsPage} />
       <Route path="/template-builder" component={TemplateBuilderPage} />
+      <Route path="/admin" component={AdminPage} />
+      <Route path="/admin/config" component={AdminConfigPage} />
+      <Route path="/admin/guidance" component={AdminGuidancePage} />
       <Route component={NotFound} />
     </Switch>
   );

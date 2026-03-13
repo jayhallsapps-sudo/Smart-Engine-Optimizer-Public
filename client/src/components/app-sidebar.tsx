@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Zap, ExternalLink, Settings, LogOut, Shield, User, ChevronDown, Check } from "lucide-react";
+import { Zap, ExternalLink, Settings, LogOut, Shield, User, ChevronDown, Check, BookOpen, Layers } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -32,7 +32,7 @@ interface UserProfile {
 const PROFILE_KEY = "smarteo_user_profile";
 const DEFAULT_PROFILE: UserProfile = { name: "Your Name", role: "Account Manager" };
 
-function loadProfile(): UserProfile {
+export function loadProfile(): UserProfile {
   try {
     const raw = localStorage.getItem(PROFILE_KEY);
     if (raw) return JSON.parse(raw) as UserProfile;
@@ -318,6 +318,22 @@ export function AppSidebar() {
             {!collapsed && (
               <div className="px-1 py-1">
                 <Link
+                  href="/admin"
+                  className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition-colors"
+                  data-testid="link-admin-governance"
+                >
+                  <Layers className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                  <span className="text-xs text-foreground">Governance</span>
+                </Link>
+                <Link
+                  href="/admin/guidance"
+                  className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition-colors"
+                  data-testid="link-admin-guidance"
+                >
+                  <BookOpen className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                  <span className="text-xs text-foreground">Guidance Library</span>
+                </Link>
+                <Link
                   href="/clients"
                   className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition-colors"
                   data-testid="link-admin-clients"
@@ -337,6 +353,16 @@ export function AppSidebar() {
             )}
             {collapsed && (
               <div className="flex flex-col items-center gap-1 py-1">
+                <Link href="/admin" title="Governance">
+                  <button className="p-1.5 rounded hover:bg-muted transition-colors" data-testid="link-admin-governance-collapsed">
+                    <Layers className="w-4 h-4 text-muted-foreground" />
+                  </button>
+                </Link>
+                <Link href="/admin/guidance" title="Guidance Library">
+                  <button className="p-1.5 rounded hover:bg-muted transition-colors" data-testid="link-admin-guidance-collapsed">
+                    <BookOpen className="w-4 h-4 text-muted-foreground" />
+                  </button>
+                </Link>
                 <Link href="/clients" title="Manage Clients">
                   <button className="p-1.5 rounded hover:bg-muted transition-colors" data-testid="link-admin-clients-collapsed">
                     <Shield className="w-4 h-4 text-muted-foreground" />

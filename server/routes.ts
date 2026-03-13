@@ -3125,5 +3125,49 @@ export async function registerRoutes(
     return res.json({ reply, suggestedRevision });
   });
 
+  // ─── Admin Guidance ────────────────────────────────────────────────────────
+
+  app.get("/api/admin/guidance", async (req, res) => {
+    const { reportType, workflowArea, status } = req.query as Record<string, string>;
+    const items = await storage.listAdminGuidance({
+      reportType: reportType || undefined,
+      workflowArea: workflowArea || undefined,
+      status: status || undefined,
+    });
+    res.json(items);
+  });
+
+  app.get("/api/admin/guidance/:id", async (req, res) => {
+    const id = Number(req.params.id);
+    const item = await storage.getAdminGuidance(id);
+    if (!item) return res.status(404).json({ error: "Not found" });
+    return res.json(item);
+  });
+
+  app.post("/api/admin/guidance", async (req, res) => {
+    const { insertAdminGuidanceSchema } = await import("@shared/schema");
+    const parsed = insertAdminGuidanceSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    const created = await storage.createAdminGuidance(parsed.data);
+    return res.status(201).json(created);
+  });
+
+  app.patch("/api/admin/guidance/:id", async (req, res) => {
+    const id = Number(req.params.id);
+    const { updateAdminGuidanceSchema } = await import("@shared/schema");
+    const parsed = updateAdminGuidanceSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    const updated = await storage.updateAdminGuidance(id, parsed.data);
+    if (!updated) return res.status(404).json({ error: "Not found" });
+    return res.json(updated);
+  });
+
+  app.delete("/api/admin/guidance/:id", async (req, res) => {
+    const id = Number(req.params.id);
+    const deleted = await storage.deleteAdminGuidance(id);
+    if (!deleted) return res.status(404).json({ error: "Not found" });
+    return res.status(204).end();
+  });
+
   return httpServer;
 }

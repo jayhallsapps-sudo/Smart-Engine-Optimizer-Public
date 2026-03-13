@@ -10,6 +10,7 @@ import {
   qbrPrepReports,
   gapAnalysisSessions,
   reportComments,
+  adminGuidance,
   type Client,
   type InsertClient,
   type QueryLog,
@@ -28,6 +29,9 @@ import {
   type GapAnswer,
   type ReportComment,
   type InsertReportComment,
+  type AdminGuidance,
+  type InsertAdminGuidance,
+  type UpdateAdminGuidance,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -76,6 +80,12 @@ export interface IStorage {
   createReportComment(data: InsertReportComment): Promise<ReportComment>;
   updateReportComment(id: number, data: { body?: string; resolved?: boolean }): Promise<ReportComment | undefined>;
   deleteReportComment(id: number): Promise<boolean>;
+
+  listAdminGuidance(filters?: { reportType?: string; workflowArea?: string; status?: string }): Promise<AdminGuidance[]>;
+  getAdminGuidance(id: number): Promise<AdminGuidance | undefined>;
+  createAdminGuidance(data: InsertAdminGuidance): Promise<AdminGuidance>;
+  updateAdminGuidance(id: number, data: UpdateAdminGuidance): Promise<AdminGuidance | undefined>;
+  deleteAdminGuidance(id: number): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -335,6 +345,40 @@ export class DatabaseStorage implements IStorage {
 
   async deleteReportComment(id: number): Promise<boolean> {
     const result = await db.delete(reportComments).where(eq(reportComments.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async listAdminGuidance(filters?: { reportType?: string; workflowArea?: string; status?: string }): Promise<AdminGuidance[]> {
+    let query = db.select().from(adminGuidance).$dynamic();
+    const conditions = [];
+    if (filters?.reportType) conditions.push(eq(adminGuidance.reportType, filters.reportType));
+    if (filters?.workflowArea) conditions.push(eq(adminGuidance.workflowArea, filters.workflowArea));
+    if (filters?.status) conditions.push(eq(adminGuidance.status, filters.status));
+    if (conditions.length > 0) query = query.where(and(...conditions));
+    return query.orderBy(desc(adminGuidance.updatedAt));
+  }
+
+  async getAdminGuidance(id: number): Promise<AdminGuidance | undefined> {
+    const [row] = await db.select().from(adminGuidance).where(eq(adminGuidance.id, id));
+    return row;
+  }
+
+  async createAdminGuidance(data: InsertAdminGuidance): Promise<AdminGuidance> {
+    const [created] = await db.insert(adminGuidance).values(data).returning();
+    return created;
+  }
+
+  async updateAdminGuidance(id: number, data: UpdateAdminGuidance): Promise<AdminGuidance | undefined> {
+    const [updated] = await db
+      .update(adminGuidance)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(adminGuidance.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteAdminGuidance(id: number): Promise<boolean> {
+    const result = await db.delete(adminGuidance).where(eq(adminGuidance.id, id)).returning();
     return result.length > 0;
   }
 }

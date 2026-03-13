@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import {
@@ -45,6 +45,11 @@ function InlineTextCell({
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
+
+  // Sync draft when value changes from outside (e.g., DB reload), but only when not actively editing
+  useEffect(() => {
+    if (!editing) setDraft(value);
+  }, [value, editing]);
 
   function commit() {
     const trimmed = draft.trim();
@@ -97,6 +102,11 @@ function HelperCopyCell({
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value ?? "");
+
+  // Sync draft when value changes from outside (e.g., DB reload), but only when not actively editing
+  useEffect(() => {
+    if (!editing) setDraft(value ?? "");
+  }, [value, editing]);
 
   function commit() {
     const trimmed = draft.trim();

@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Zap, ExternalLink, Settings, LogOut, Shield, User, ChevronDown, Check,
-  BookOpen, Layers, Lock, Unlock, KeyRound, Eye, EyeOff,
+  BookOpen, Layers, Lock, Unlock, KeyRound, Eye, EyeOff, LayoutTemplate,
 } from "lucide-react";
 import {
   Sidebar,
@@ -424,6 +424,14 @@ export function AppSidebar() {
                       <span className="text-xs text-foreground">Guidance Library</span>
                     </Link>
                     <Link
+                      href="/admin/templates"
+                      className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition-colors"
+                      data-testid="link-admin-templates"
+                    >
+                      <LayoutTemplate className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                      <span className="text-xs text-foreground">Template Controls</span>
+                    </Link>
+                    <Link
                       href="/clients"
                       className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition-colors"
                       data-testid="link-admin-clients"
@@ -463,6 +471,11 @@ export function AppSidebar() {
                     <Link href="/admin/guidance" title="Guidance Library">
                       <button className="p-1.5 rounded hover:bg-muted transition-colors" data-testid="link-admin-guidance-collapsed">
                         <BookOpen className="w-4 h-4 text-muted-foreground" />
+                      </button>
+                    </Link>
+                    <Link href="/admin/templates" title="Template Controls">
+                      <button className="p-1.5 rounded hover:bg-muted transition-colors" data-testid="link-admin-templates-collapsed">
+                        <LayoutTemplate className="w-4 h-4 text-muted-foreground" />
                       </button>
                     </Link>
                     <Link href="/clients" title="Manage Clients">

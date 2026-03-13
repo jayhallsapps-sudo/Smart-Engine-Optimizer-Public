@@ -11,6 +11,7 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import type { ReportTemplateSection } from "@shared/schema";
 import { getSectionDefaults } from "@shared/templateDefaults";
 
@@ -43,13 +44,13 @@ export function useTemplateConfig(reportType: string | null) {
     queryKey: ["/api/admin/template-sections", reportType],
     queryFn: async () => {
       if (!reportType) return [];
-      const res = await fetch(
-        `/api/admin/template-sections?reportType=${encodeURIComponent(reportType)}`,
-        { credentials: "include" },
-      );
-      if (!res.ok) return [];
-      const json = await res.json();
-      return Array.isArray(json) ? json : [];
+      try {
+        const res = await apiRequest("GET", `/api/admin/template-sections?reportType=${encodeURIComponent(reportType)}`);
+        const json = await res.json();
+        return Array.isArray(json) ? json : [];
+      } catch {
+        return [];
+      }
     },
     enabled: !!reportType,
     staleTime: 60_000,

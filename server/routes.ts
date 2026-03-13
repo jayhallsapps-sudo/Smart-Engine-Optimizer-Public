@@ -293,8 +293,7 @@ export async function registerRoutes(
   /** Middleware: require a valid X-Admin-Token header for admin write routes. */
   function requireAdmin(req: Request, res: Response, next: NextFunction) {
     if (!ADMIN_TOKEN) {
-      console.warn("[SmartEO] requireAdmin called but ADMIN_TOKEN is not set — allowing (degraded mode)");
-      return next();
+      return res.status(503).json({ message: "Admin auth not configured — ADMIN_TOKEN env var is missing." });
     }
     const provided = req.headers["x-admin-token"] as string | undefined;
     if (!provided || provided !== ADMIN_TOKEN) {
@@ -3231,6 +3230,17 @@ export async function registerRoutes(
     const { insertReportTemplateSectionSchema } = await import("@shared/schema");
     const parsed = insertReportTemplateSectionSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+    // Guard: reject attempts to disable an alwaysEnabled section
+    if (parsed.data.enabled === false) {
+      const { TEMPLATE_DEFAULTS } = await import("@shared/templateDefaults");
+      const defs = TEMPLATE_DEFAULTS[parsed.data.reportType] ?? [];
+      const def = defs.find(d => d.sectionKey === parsed.data.sectionKey);
+      if (def?.alwaysEnabled) {
+        return res.status(400).json({ error: `Section '${parsed.data.sectionKey}' is structurally required and cannot be disabled.` });
+      }
+    }
+
     const item = await storage.upsertTemplateSection(parsed.data);
     return res.json(item);
   });

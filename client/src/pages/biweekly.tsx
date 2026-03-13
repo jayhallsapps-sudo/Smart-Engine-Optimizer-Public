@@ -325,7 +325,10 @@ export default function BiweeklyPage() {
         {workflowCtx && (
           <WorkflowContextBanner
             context={workflowCtx}
-            onApply={(amT, pc) => { setAmThoughts(amT); setPriorityChecks(pc); }}
+            onApply={(fields) => {
+              if (fields.amThoughts) setAmThoughts(fields.amThoughts);
+              if (fields.priorityChecks) setPriorityChecks(fields.priorityChecks);
+            }}
             onDismiss={() => setWorkflowCtx(null)}
           />
         )}

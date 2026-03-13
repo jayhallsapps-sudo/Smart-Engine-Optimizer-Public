@@ -514,7 +514,11 @@ export default function QbrPrepPage() {
         {workflowCtx && (
           <WorkflowContextBanner
             context={workflowCtx}
-            onApply={(amT, pc) => { setAmThoughts(amT); setPriorityChecks(pc); }}
+            onApply={(fields) => {
+              if (fields.amThoughts) setAmThoughts(fields.amThoughts);
+              if (fields.priorityChecks) setPriorityChecks(fields.priorityChecks);
+              if (fields.prevQtrAssessment) setPrevQtrAssessment(fields.prevQtrAssessment);
+            }}
             onDismiss={() => setWorkflowCtx(null)}
           />
         )}

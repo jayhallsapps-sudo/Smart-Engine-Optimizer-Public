@@ -313,7 +313,12 @@ export default function MonthlyPage() {
         {workflowCtx && (
           <WorkflowContextBanner
             context={workflowCtx}
-            onApply={(amT, pc) => { setAmThoughts(amT); setPriorityChecks(pc); }}
+            onApply={(fields) => {
+              if (fields.amThoughts) setAmThoughts(fields.amThoughts);
+              if (fields.priorityChecks) setPriorityChecks(fields.priorityChecks);
+              if (fields.amContextAnomalies) setAmContextAnomalies(fields.amContextAnomalies);
+              if (fields.amFocusNextMonth) setAmFocusNextMonth(fields.amFocusNextMonth);
+            }}
             onDismiss={() => setWorkflowCtx(null)}
           />
         )}

@@ -103,7 +103,7 @@ export const ALL_ROLES: UserRole[] = [
 ];
 
 /** Roles that have access to admin features. */
-const ADMIN_ROLES: UserRole[] = ["Director of SEO", "Owner"];
+const ADMIN_ROLES: UserRole[] = ["ADR", "Director of SEO", "Owner"];
 
 export function isAdminRole(role: UserRole | string): boolean {
   return ADMIN_ROLES.includes(role as UserRole);

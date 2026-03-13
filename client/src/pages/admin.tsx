@@ -1,6 +1,6 @@
 import { Link } from "wouter";
 import { BookOpen, Layers, Shield, Zap, ChevronRight } from "lucide-react";
-import { loadProfile } from "@/components/app-sidebar";
+import { loadProfile } from "@/lib/userProfile";
 
 const CARDS = [
   {

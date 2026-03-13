@@ -253,6 +253,7 @@ export async function registerRoutes(
 
   const AUTH_PUBLIC_PATHS = [
     "/auth/bootstrap",
+    "/auth/admin-verify",
     "/auth/google/start",
     "/auth/google/callback",
     "/auth/google/configured",
@@ -266,6 +267,41 @@ export async function registerRoutes(
     }
     next();
   });
+
+  // ─── Admin auth ───────────────────────────────────────────────────────────────
+  // ADMIN_TOKEN lives only in the server environment.  The client calls
+  // POST /api/auth/admin-verify (public) to validate a code; on success the
+  // client stores the raw token in sessionStorage and sends it as X-Admin-Token
+  // on all subsequent admin write requests.
+
+  const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? "";
+  if (!ADMIN_TOKEN) {
+    console.warn("[SmartEO] ADMIN_TOKEN env var is not set — admin write endpoints are unprotected!");
+  }
+
+  app.post("/api/auth/admin-verify", (req: Request, res: Response) => {
+    const { token } = req.body as { token?: string };
+    if (!ADMIN_TOKEN) {
+      return res.status(503).json({ message: "Admin auth not configured (ADMIN_TOKEN missing)." });
+    }
+    if (!token || token.trim() !== ADMIN_TOKEN) {
+      return res.status(403).json({ ok: false, message: "Invalid admin code." });
+    }
+    return res.json({ ok: true });
+  });
+
+  /** Middleware: require a valid X-Admin-Token header for admin write routes. */
+  function requireAdmin(req: Request, res: Response, next: NextFunction) {
+    if (!ADMIN_TOKEN) {
+      console.warn("[SmartEO] requireAdmin called but ADMIN_TOKEN is not set — allowing (degraded mode)");
+      return next();
+    }
+    const provided = req.headers["x-admin-token"] as string | undefined;
+    if (!provided || provided !== ADMIN_TOKEN) {
+      return res.status(403).json({ message: "Admin access required. Please unlock admin features in the app." });
+    }
+    next();
+  }
 
   app.use("/api/reports", heavyLimiter);
 
@@ -3144,7 +3180,7 @@ export async function registerRoutes(
     return res.json(item);
   });
 
-  app.post("/api/admin/guidance", async (req, res) => {
+  app.post("/api/admin/guidance", requireAdmin, async (req, res) => {
     const { insertAdminGuidanceSchema } = await import("@shared/schema");
     const parsed = insertAdminGuidanceSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
@@ -3152,7 +3188,7 @@ export async function registerRoutes(
     return res.status(201).json(created);
   });
 
-  app.patch("/api/admin/guidance/:id", async (req, res) => {
+  app.patch("/api/admin/guidance/:id", requireAdmin, async (req, res) => {
     const id = Number(req.params.id);
     const { updateAdminGuidanceSchema } = await import("@shared/schema");
     const parsed = updateAdminGuidanceSchema.safeParse(req.body);
@@ -3162,7 +3198,7 @@ export async function registerRoutes(
     return res.json(updated);
   });
 
-  app.delete("/api/admin/guidance/:id", async (req, res) => {
+  app.delete("/api/admin/guidance/:id", requireAdmin, async (req, res) => {
     const id = Number(req.params.id);
     const deleted = await storage.deleteAdminGuidance(id);
     if (!deleted) return res.status(404).json({ error: "Not found" });
@@ -3170,9 +3206,9 @@ export async function registerRoutes(
   });
 
   // ── Admin Config Overrides ──────────────────────────────────────────────────
-  // GET  /api/admin/config-overrides?namespace=X  → list all (or by namespace)
-  // PUT  /api/admin/config-overrides              → upsert (body: {namespace, itemKey, field, value})
-  // DELETE /api/admin/config-overrides/:id        → delete by id
+  // GET  /api/admin/config-overrides?namespace=X  → list all (or by namespace) — unprotected (read-only, used by AM workflow pages)
+  // PUT  /api/admin/config-overrides              → upsert (body: {namespace, itemKey, field, value}) — admin write
+  // DELETE /api/admin/config-overrides/:id        → delete by id — admin write
 
   app.get("/api/admin/config-overrides", async (req, res) => {
     const { namespace } = req.query as Record<string, string>;
@@ -3180,7 +3216,7 @@ export async function registerRoutes(
     return res.json(items);
   });
 
-  app.put("/api/admin/config-overrides", async (req, res) => {
+  app.put("/api/admin/config-overrides", requireAdmin, async (req, res) => {
     const { insertAdminConfigOverrideSchema } = await import("@shared/schema");
     const parsed = insertAdminConfigOverrideSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
@@ -3188,7 +3224,7 @@ export async function registerRoutes(
     return res.json(item);
   });
 
-  app.delete("/api/admin/config-overrides/:id", async (req, res) => {
+  app.delete("/api/admin/config-overrides/:id", requireAdmin, async (req, res) => {
     const id = Number(req.params.id);
     const deleted = await storage.deleteConfigOverride(id);
     if (!deleted) return res.status(404).json({ error: "Not found" });

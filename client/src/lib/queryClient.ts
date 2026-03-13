@@ -1,4 +1,5 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { getAdminToken } from "@/lib/adminAuth";
 
 let internalToken: string | null = null;
 
@@ -15,6 +16,12 @@ async function getToken(): Promise<string> {
 export async function getAuthHeaders(): Promise<Record<string, string>> {
   const token = await getToken();
   return { "X-Internal-Token": token };
+}
+
+/** Include X-Admin-Token when an admin session is active. */
+function getAdminHeaders(): Record<string, string> {
+  const adminToken = getAdminToken();
+  return adminToken ? { "X-Admin-Token": adminToken } : {};
 }
 
 async function throwIfResNotOk(res: Response) {
@@ -35,6 +42,7 @@ export async function apiRequest(
     headers: {
       ...(data ? { "Content-Type": "application/json" } : {}),
       "X-Internal-Token": token,
+      ...getAdminHeaders(),
     },
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
@@ -53,7 +61,7 @@ export const getQueryFn: <T>(options: {
     const token = await getToken();
     const res = await fetch(queryKey.join("/") as string, {
       credentials: "include",
-      headers: { "X-Internal-Token": token },
+      headers: { "X-Internal-Token": token, ...getAdminHeaders() },
     });
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {

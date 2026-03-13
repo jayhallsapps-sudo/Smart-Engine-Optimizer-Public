@@ -41,3 +41,8 @@ waitForPort = 5000
 
 [agent]
 integrations = ["google-drive:1.0.0", "asana:1.0.0", "google-docs:1.0.0", "notion:1.0.0"]
+
+[userenv]
+
+[userenv.shared]
+ADMIN_TOKEN = "327d92bfbe1b0dbc404196de84085a5bc41faec30f4b34e9f55b70e34a6e65e5"

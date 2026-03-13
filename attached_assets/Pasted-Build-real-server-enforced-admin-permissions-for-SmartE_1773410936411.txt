@@ -1,0 +1,107 @@
+Build real server-enforced admin permissions for SmartEO so governance/config tools are no longer protected only by localStorage-based role display.
+
+IMPORTANT CONTEXT
+
+SmartEO already has:
+- Governance Hub
+- Guidance Library CRUD
+- admin config notes/overrides
+- editable safe config values
+- runtime consumption of config overrides
+- sidebar/admin UI gating via localStorage role display
+
+Do not rebuild the app shell, governance pages, or config systems from scratch.
+
+CORE OBJECTIVE
+
+Replace fake admin protection with real server-enforced access control for governance/config endpoints and admin-only pages.
+
+PRIMARY GOALS
+
+1. DEFINE REAL ADMIN-AUTHORIZED ROLES
+
+Start with the current intended admin-capable roles:
+- ADR
+- Director of SEO
+- Owner
+
+Non-admin:
+- Account Manager
+
+Requirements:
+- preserve current role language in the UI
+- implement real permission checks on the server side
+- do not rely on localStorage role values for actual authorization
+
+2. PROTECT ADMIN API ROUTES
+
+Apply server-side authorization to admin-sensitive endpoints, including at minimum:
+- admin guidance CRUD
+- admin config overrides endpoints
+- any other governance/config endpoints that should not be writable by non-admin users
+
+Requirements:
+- unauthorized users should not be able to create/update/delete admin content even if they call the API directly
+- read access vs write access can be decided pragmatically, but write access must be protected
+
+3. ALIGN FRONTEND WITH REAL PERMISSIONS
+
+Requirements:
+- keep the current UI role-awareness where useful
+- but make the frontend reflect actual server-authorized access where possible
+- avoid showing broken admin actions to non-admin users
+- preserve the current in-app admin entry pattern
+
+4. CHOOSE THE LIGHTEST SENSIBLE AUTH MODEL
+
+Do not overbuild enterprise auth if the current product does not need it yet.
+
+Use the cleanest path that fits current SmartEO architecture, such as:
+- real user/session role from backend
+- trusted session/user object
+- another lightweight but real server-backed role source
+
+Do not keep localStorage as the source of truth for permissions.
+
+5. PRESERVE CURRENT PRODUCT FLOW
+
+Requirements:
+- do not break existing workflow/report functionality
+- do not rebuild login/account systems unnecessarily
+- extend the current system in the least disruptive way
+- keep internal use smooth
+
+6. DEFERRED ITEMS
+
+Do not build in this prompt:
+- full enterprise SSO
+- complex permission matrix beyond admin vs non-admin
+- audit logs
+- advanced approval workflows
+
+This prompt is about real authorization, not the entire future security stack.
+
+DELIVERABLES
+
+Build/refine:
+- real server-backed role/permission source
+- protected admin endpoints
+- frontend alignment with actual permissions
+- graceful unauthorized handling
+
+IMPLEMENTATION REPORT REQUIRED
+
+After building, provide a short implementation report including:
+- files changed
+- what was reused
+- what was refactored
+- what was newly added
+- exact role model now enforced
+- which routes/endpoints are now protected
+- how frontend access aligns with backend authorization
+- any UX compromises
+- any risks or deferred items
+
+SUCCESS CONDITION
+
+A SmartEO non-admin user can no longer modify governance/config data through API calls or UI tricks, and admin tools are backed by real server-enforced permissions instead of localStorage-only role display.

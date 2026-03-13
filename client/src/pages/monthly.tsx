@@ -37,6 +37,8 @@ import { FillInTheGapsModal } from "@/components/FillInTheGapsModal";
 import { ClarificationTrail } from "@/components/ClarificationTrail";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CommentPanel } from "@/components/comments/CommentPanel";
+import { WorkflowContextBanner } from "@/components/workflow/WorkflowContextBanner";
+import { loadWorkflowContext, type WorkflowHandoffContext } from "@/lib/workflowHandoff";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -72,6 +74,9 @@ export default function MonthlyPage() {
   const [amFocusNextMonth, setAmFocusNextMonth] = useState("");
 
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [workflowCtx, setWorkflowCtx] = useState<WorkflowHandoffContext | null>(() =>
+    loadWorkflowContext("monthly", clientId ? Number(clientId) : null),
+  );
 
   const { data: clients = [] } = useQuery<Client[]>({ queryKey: ["/api/clients"] });
 
@@ -304,6 +309,14 @@ export default function MonthlyPage() {
             </div>
           )}
         </div>
+
+        {workflowCtx && (
+          <WorkflowContextBanner
+            context={workflowCtx}
+            onApply={(amT, pc) => { setAmThoughts(amT); setPriorityChecks(pc); }}
+            onDismiss={() => setWorkflowCtx(null)}
+          />
+        )}
 
         <div className="flex-1 p-4 space-y-4">
           {/* Client */}

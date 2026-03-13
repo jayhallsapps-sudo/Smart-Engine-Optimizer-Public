@@ -40,6 +40,8 @@ import { CrawlAssetSelector } from "@/components/reports/CrawlAssetSelector";
 import { useFillInTheGaps } from "@/hooks/useFillInTheGaps";
 import { FillInTheGapsModal } from "@/components/FillInTheGapsModal";
 import { CommentPanel } from "@/components/comments/CommentPanel";
+import { WorkflowContextBanner } from "@/components/workflow/WorkflowContextBanner";
+import { loadWorkflowContext, type WorkflowHandoffContext } from "@/lib/workflowHandoff";
 import { ClarificationTrail } from "@/components/ClarificationTrail";
 import { Checkbox } from "@/components/ui/checkbox";
 
@@ -168,6 +170,9 @@ export default function QbrPrepPage() {
   const [amValidationErrors, setAmValidationErrors] = useState<Record<string, string>>({});
   const [showCommentPanel, setShowCommentPanel] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
+  const [workflowCtx, setWorkflowCtx] = useState<WorkflowHandoffContext | null>(() =>
+    loadWorkflowContext("qbr_prep", clientId ? Number(clientId) : null),
+  );
 
   const [reportData, setReportData] = useState<any>(null);
   const [edits, setEdits] = useState<Record<string, string>>({});
@@ -505,6 +510,14 @@ export default function QbrPrepPage() {
           </div>
           {clientId && <div className="mt-1"><SaveStatusIndicator status={reportSave.saveStatus} /></div>}
         </div>
+
+        {workflowCtx && (
+          <WorkflowContextBanner
+            context={workflowCtx}
+            onApply={(amT, pc) => { setAmThoughts(amT); setPriorityChecks(pc); }}
+            onDismiss={() => setWorkflowCtx(null)}
+          />
+        )}
 
         <div className="flex-1 p-4 space-y-4 overflow-y-auto">
           <div className="space-y-3">

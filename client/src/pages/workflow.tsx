@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -42,6 +42,7 @@ import {
   getStrategyAreas,
   type StrategyAreaId,
 } from "@/lib/workflowStrategyAreas";
+import { saveWorkflowContext } from "@/lib/workflowHandoff";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -871,12 +872,36 @@ function StepHandoff({
   reportType,
   clientName,
   clientId,
+  sections,
 }: {
   reportType: ReportTypeDefinition | null;
   clientName: string | null;
   clientId: number | null;
+  sections: Record<StrategyAreaId, SectionState>;
 }) {
   const color = reportType ? familyColor(reportType.family) : "#1B3A6B";
+
+  useEffect(() => {
+    if (!reportType || !clientId) return;
+    const strategyAreas = getStrategyAreas(reportType.family);
+    const committedAreas = (Object.entries(sections) as [StrategyAreaId, SectionState][])
+      .filter(([, s]) => s.committed)
+      .map(([areaId, s]) => {
+        const areaDef = strategyAreas.find(a => a.id === areaId);
+        return {
+          areaId,
+          areaLabel: areaDef?.label ?? areaId,
+          amInput: s.amInput,
+          findings: s.findings,
+        };
+      });
+    saveWorkflowContext({
+      reportTypeId: reportType.id,
+      clientId,
+      clientName: clientName ?? "",
+      committedAreas,
+    });
+  }, []); 
   const baseRoute = reportType?.route ?? null;
   // Pass the selected client into the report builder so it can pre-select on load.
   // DIVERGENCE POINT (Step 6): deck reports may eventually open a slide preview instead.
@@ -1103,6 +1128,7 @@ export default function WorkflowPage() {
             reportType={reportType}
             clientName={selectedClient?.name ?? null}
             clientId={state.clientId}
+            sections={state.sections}
           />
         )}
       </div>

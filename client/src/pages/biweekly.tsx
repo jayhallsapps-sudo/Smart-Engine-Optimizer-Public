@@ -35,6 +35,8 @@ import { FillInTheGapsModal } from "@/components/FillInTheGapsModal";
 import { ClarificationTrail } from "@/components/ClarificationTrail";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CommentPanel } from "@/components/comments/CommentPanel";
+import { WorkflowContextBanner } from "@/components/workflow/WorkflowContextBanner";
+import { loadWorkflowContext, type WorkflowHandoffContext } from "@/lib/workflowHandoff";
 
 function toYMD(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -79,6 +81,9 @@ export default function BiweeklyPage() {
 
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [showCommentPanel, setShowCommentPanel] = useState(false);
+  const [workflowCtx, setWorkflowCtx] = useState<WorkflowHandoffContext | null>(() =>
+    loadWorkflowContext("biweekly", clientId ? Number(clientId) : null),
+  );
 
   const { data: clients = [] } = useQuery<Client[]>({ queryKey: ["/api/clients"] });
 
@@ -316,6 +321,14 @@ export default function BiweeklyPage() {
           </div>
           {clientId && <div className="mt-1"><SaveStatusIndicator status={reportSave.saveStatus} /></div>}
         </div>
+
+        {workflowCtx && (
+          <WorkflowContextBanner
+            context={workflowCtx}
+            onApply={(amT, pc) => { setAmThoughts(amT); setPriorityChecks(pc); }}
+            onDismiss={() => setWorkflowCtx(null)}
+          />
+        )}
 
         <div className="flex-1 p-4 space-y-5">
           <div className="space-y-2">

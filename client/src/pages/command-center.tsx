@@ -11,6 +11,7 @@ import {
   Newspaper,
   ArrowRight,
   Lock,
+  Sparkles,
 } from "lucide-react";
 
 interface ModuleCard {
@@ -25,6 +26,16 @@ interface ModuleCard {
 }
 
 const MODULES: ModuleCard[] = [
+  {
+    id: "aca",
+    icon: Sparkles,
+    label: "Ask Claude Anything",
+    description: "Chat with Claude about any client data, integration, or metric. Pull live insights from all connected sources.",
+    href: "/aca",
+    status: "live",
+    accentColor: "#D97706",
+    group: "primary",
+  },
   {
     id: "prepare",
     icon: FileText,

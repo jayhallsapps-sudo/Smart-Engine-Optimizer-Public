@@ -657,6 +657,51 @@ export async function registerRoutes(
     res.json({ success: true });
   });
 
+  // ─── ACA: Ask Claude Anything ───────────────────────────────────────────────
+
+  app.post("/api/aca/chat", heavyLimiter, async (req: Request, res: Response) => {
+    const { messages, clientId } = req.body as {
+      messages?: { role: string; content: string }[];
+      clientId?: number | null;
+    };
+    if (!messages || !Array.isArray(messages) || messages.length === 0) {
+      return res.status(400).json({ message: "messages array is required" });
+    }
+
+    try {
+      const { runAcaChat } = await import("./claudeService");
+
+      const acaMessages = messages.map((m) => ({
+        role: m.role as "user" | "assistant",
+        content: m.content,
+      }));
+
+      // Resolve client context if a client is selected
+      let clientContext: { id: number; name: string } | undefined;
+      if (clientId) {
+        const client = await storage.getClient(clientId);
+        if (client) {
+          clientContext = { id: client.id, name: client.name };
+        }
+      }
+
+      const toolCalls: string[] = [];
+      const response = await runAcaChat(acaMessages, clientContext, (toolName) => {
+        toolCalls.push(toolName);
+      });
+
+      res.json({ response, toolCalls });
+    } catch (err: any) {
+      console.error("[ACA] Chat error:", err);
+      if (err.message?.includes("ANTHROPIC_API_KEY")) {
+        return res.status(503).json({
+          message: "Claude API key not configured. Add ANTHROPIC_API_KEY to your Replit Secrets.",
+        });
+      }
+      res.status(500).json({ message: err.message || "ACA request failed" });
+    }
+  });
+
   app.post("/api/query", async (req, res) => {
     const { query, clientId } = req.body;
     if (!query) return res.status(400).json({ message: "Query is required" });

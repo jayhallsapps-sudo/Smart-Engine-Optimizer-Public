@@ -37,20 +37,16 @@ function makeWindowLabel(start: string, end: string): string {
   return `${fmtDate(parseDateStr(start))} – ${fmtDate(parseDateStr(end))}`;
 }
 
-function isCroItem(item: WorkLogItem): boolean {
-  return item.creditType === "CRO Update" || item.task.toLowerCase().includes("cro");
-}
-
 function isOptimizationItem(item: WorkLogItem): boolean {
-  if (isCroItem(item)) return false;
   return (
     item.task.toLowerCase().includes("optimization") ||
-    item.creditType === "Optimization"
+    item.creditType === "Optimization" ||
+    item.creditType === "CRO Update"
   );
 }
 
 function isNewContentItem(item: WorkLogItem): boolean {
-  return !isOptimizationItem(item) && !isCroItem(item);
+  return !isOptimizationItem(item);
 }
 
 function parseSfCanonicalIssues(headers: string[], data: Record<string, any>[]): number {
@@ -163,13 +159,12 @@ function buildInternalAmNotes(params: {
   newContentDid: BulletItem[];
   newContentNext: BulletItem[];
   optDid: BulletItem[];
-  croDid: BulletItem[];
   sfPriorities: string[];
   hasSf: boolean;
   noAirtable: boolean;
   windowLabel: string;
 }): InternalAmNotes {
-  const { clientName, nsmGoals, newContentDid, newContentNext, optDid, croDid, sfPriorities, hasSf, noAirtable, windowLabel } = params;
+  const { clientName, nsmGoals, newContentDid, newContentNext, optDid, sfPriorities, hasSf, noAirtable, windowLabel } = params;
 
   const missingInputs: string[] = [];
   if (noAirtable) missingInputs.push("Airtable not connected — content rows will be empty");
@@ -182,7 +177,6 @@ function buildInternalAmNotes(params: {
   }
   if (newContentDid.length > 0) talkingPoints.push(`${newContentDid.length} content item${newContentDid.length !== 1 ? "s" : ""} published/completed this period`);
   if (optDid.length > 0) talkingPoints.push(`${optDid.length} optimization item${optDid.length !== 1 ? "s" : ""} completed`);
-  if (croDid.length > 0) talkingPoints.push(`${croDid.length} CRO/UX item${croDid.length !== 1 ? "s" : ""} completed`);
   if (sfPriorities.length > 0 && hasSf) talkingPoints.push(`Top technical issue: ${sfPriorities[0]}`);
   if (newContentNext.length > 0) talkingPoints.push(`${newContentNext.length} content item${newContentNext.length !== 1 ? "s" : ""} planned for the next 2 weeks`);
 
@@ -257,17 +251,17 @@ export async function generateBiweekly(input: {
   }> = [];
 
   if (nsmGoals && nsmHasData) {
-    const mvpLabel = nsmGoals.mvpType && nsmGoals.mvpType !== "—" ? nsmGoals.mvpType : "MVP";
+    const mvpType = nsmGoals.mvpType && nsmGoals.mvpType !== "—" ? nsmGoals.mvpType : "MVP";
     pulseMetrics.push(
-      { label: "NSM Quarter",              current: nsmGoals.quarter,         source: "NSM Sheet" },
-      { label: "Organic Sessions — Goal",  current: nsmGoals.sessionsGoal,    source: "NSM Sheet" },
-      { label: "Organic Sessions — Actual",current: nsmGoals.sessionsActual,  source: "NSM Sheet" },
-      { label: "Sessions %",               current: nsmGoals.sessionsPercent, source: "NSM Sheet" },
-      { label: "Sessions Status",          current: nsmGoals.sessionsOnTrack, source: "NSM Sheet" },
-      { label: `${mvpLabel} — Goal`,       current: nsmGoals.mvpGoal,         source: "NSM Sheet" },
-      { label: `${mvpLabel} — Actual`,     current: nsmGoals.mvpActual,       source: "NSM Sheet" },
-      { label: `${mvpLabel} %`,            current: nsmGoals.mvpPercent,      source: "NSM Sheet" },
-      { label: `${mvpLabel} Status`,       current: nsmGoals.mvpOnTrack,      source: "NSM Sheet" },
+      { label: "NSM Quarter",                     current: nsmGoals.quarter,         source: "NSM Sheet" },
+      { label: "NSM Sessions Goal",               current: nsmGoals.sessionsGoal,    source: "NSM Sheet" },
+      { label: "NSM Sessions Actual",             current: nsmGoals.sessionsActual,  source: "NSM Sheet" },
+      { label: "NSM Sessions %",                  current: nsmGoals.sessionsPercent, source: "NSM Sheet" },
+      { label: "NSM Sessions On Track",           current: nsmGoals.sessionsOnTrack, source: "NSM Sheet" },
+      { label: `NSM MVP ${mvpType} Goal`,         current: nsmGoals.mvpGoal,         source: "NSM Sheet" },
+      { label: `NSM MVP ${mvpType} Actual`,       current: nsmGoals.mvpActual,       source: "NSM Sheet" },
+      { label: `NSM MVP ${mvpType} %`,            current: nsmGoals.mvpPercent,      source: "NSM Sheet" },
+      { label: `NSM MVP ${mvpType} On Track`,     current: nsmGoals.mvpOnTrack,      source: "NSM Sheet" },
     );
   }
 
@@ -287,10 +281,8 @@ export async function generateBiweekly(input: {
 
   const publishedContent = publishedItems.filter(i => isNewContentItem(i));
   const publishedOptimization = publishedItems.filter(i => isOptimizationItem(i));
-  const publishedCro = publishedItems.filter(i => isCroItem(i));
   const productionContent = productionItems.filter(i => isNewContentItem(i));
   const productionOptimization = productionItems.filter(i => isOptimizationItem(i));
-  const productionCro = productionItems.filter(i => isCroItem(i));
 
   const asanaData = asanaResult.status === "fulfilled" && asanaResult.value && (asanaResult.value as any).success
     ? (asanaResult.value as { success: true; completed: import("./asanaClient").AsanaTask[]; upcoming: import("./asanaClient").AsanaTask[] })
@@ -377,8 +369,6 @@ export async function generateBiweekly(input: {
   ];
   const optDid: BulletItem[] = noAirtable ? [] : publishedOptimization.map(i => ({ text: i.task, url: i.url ?? undefined, source: "Airtable" }));
   const optNext: BulletItem[] = noAirtable ? [] : productionOptimization.map(i => ({ text: i.task, source: "Airtable" }));
-  const croDid: BulletItem[] = noAirtable ? [] : publishedCro.map(i => ({ text: i.task, url: i.url ?? undefined, source: "Airtable" }));
-  const croNext: BulletItem[] = noAirtable ? [] : productionCro.map(i => ({ text: i.task, source: "Airtable" }));
 
   const techDid: BulletItem[] = [...sfDidItems, ...asanaTechDid];
   const sfPrioritiesRich: BulletItem[] = sfPriorities.map(t => ({ text: t, source: hasSf ? "Screaming Frog" : undefined }));
@@ -396,7 +386,7 @@ export async function generateBiweekly(input: {
       noAirtable && !asanaData ? "Connect Airtable or Asana in Setup to pull upcoming content." : ""
     ),
     makeRow(
-      "Optimization / Updated Content",
+      "Optimization",
       noAirtable ? [] : optDid,
       noAirtable ? [] : optNext,
       "Add optimization or refresh work completed this period.",
@@ -410,14 +400,7 @@ export async function generateBiweekly(input: {
       techNext[0]?.text ?? "Review Core Web Vitals for top landing pages."
     ),
     makeRow(
-      "CRO / UX",
-      noAirtable ? [] : croDid,
-      noAirtable ? [] : croNext,
-      "Add CRO or UX work completed this period.",
-      "Add upcoming CRO or UX priorities."
-    ),
-    makeRow(
-      "Local SEO / GBP",
+      "Local SEO",
       localDid,
       localNext,
       "Add local SEO / GBP progress from the last two weeks.",
@@ -452,7 +435,6 @@ export async function generateBiweekly(input: {
     newContentDid,
     newContentNext,
     optDid,
-    croDid,
     sfPriorities,
     hasSf,
     noAirtable,

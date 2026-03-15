@@ -21,6 +21,53 @@ import {
   MicOff,
 } from "lucide-react";
 
+// ─── SpeechRecognition browser API types ─────────────────────────────────────
+
+interface SpeechRecognitionResult {
+  readonly isFinal: boolean;
+  readonly length: number;
+  item(index: number): SpeechRecognitionAlternative;
+  [index: number]: SpeechRecognitionAlternative;
+}
+
+interface SpeechRecognitionAlternative {
+  readonly transcript: string;
+  readonly confidence: number;
+}
+
+interface SpeechRecognitionResultList {
+  readonly length: number;
+  item(index: number): SpeechRecognitionResult;
+  [index: number]: SpeechRecognitionResult;
+}
+
+interface SpeechRecognitionEvent extends Event {
+  readonly results: SpeechRecognitionResultList;
+}
+
+interface SpeechRecognitionInstance extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onresult: ((event: SpeechRecognitionEvent) => void) | null;
+  onerror: ((event: Event) => void) | null;
+  onend: (() => void) | null;
+  start(): void;
+  stop(): void;
+  abort(): void;
+}
+
+interface SpeechRecognitionConstructor {
+  new(): SpeechRecognitionInstance;
+}
+
+declare global {
+  interface Window {
+    SpeechRecognition?: SpeechRecognitionConstructor;
+    webkitSpeechRecognition?: SpeechRecognitionConstructor;
+  }
+}
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 interface ChatMessage {
@@ -209,7 +256,7 @@ export default function AcaPage() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
 
   // Fetch clients
   const { data: clients = [] } = useQuery<AcaClient[]>({
@@ -229,38 +276,61 @@ export default function AcaPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const speechSupported = typeof window !== "undefined" && ("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
+  const SpeechRecognitionClass = typeof window !== "undefined" ? (window.SpeechRecognition || window.webkitSpeechRecognition) : undefined;
+  const speechSupported = !!SpeechRecognitionClass;
 
   const preVoiceInputRef = useRef("");
 
-  const toggleVoiceInput = useCallback(() => {
-    if (isListening && recognitionRef.current) {
+  const stopRecognition = useCallback(() => {
+    if (recognitionRef.current) {
+      recognitionRef.current.onresult = null;
+      recognitionRef.current.onerror = null;
+      recognitionRef.current.onend = null;
       recognitionRef.current.stop();
-      setIsListening(false);
+      recognitionRef.current = null;
+    }
+    setIsListening(false);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.onresult = null;
+        recognitionRef.current.onerror = null;
+        recognitionRef.current.onend = null;
+        recognitionRef.current.abort();
+        recognitionRef.current = null;
+      }
+    };
+  }, []);
+
+  const toggleVoiceInput = useCallback(() => {
+    if (isListening) {
+      stopRecognition();
       return;
     }
 
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) return;
+    if (!SpeechRecognitionClass) return;
 
     preVoiceInputRef.current = input;
 
-    const recognition = new SpeechRecognition();
+    const recognition = new SpeechRecognitionClass();
     recognition.continuous = true;
     recognition.interimResults = true;
 
-    recognition.onresult = (event: any) => {
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
       let interim = "";
-      let final = "";
+      let finalText = "";
       for (let i = 0; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          final += transcript;
+        const result = event.results[i];
+        const transcript = result[0].transcript;
+        if (result.isFinal) {
+          finalText += transcript;
         } else {
           interim += transcript;
         }
       }
-      const combined = final + interim;
+      const combined = finalText + interim;
       const base = preVoiceInputRef.current;
       setInput(base ? base + " " + combined : combined);
       if (inputRef.current) {
@@ -270,18 +340,19 @@ export default function AcaPage() {
     };
 
     recognition.onerror = () => {
-      setIsListening(false);
+      stopRecognition();
     };
 
     recognition.onend = () => {
       setIsListening(false);
+      recognitionRef.current = null;
       if (inputRef.current) inputRef.current.focus();
     };
 
     recognitionRef.current = recognition;
     recognition.start();
     setIsListening(true);
-  }, [isListening, input]);
+  }, [isListening, input, SpeechRecognitionClass, stopRecognition]);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -301,6 +372,7 @@ export default function AcaPage() {
     const messageText = text || input.trim();
     if (!messageText || loading) return;
 
+    stopRecognition();
     setInput("");
     setError(null);
     if (inputRef.current) inputRef.current.style.height = "auto";

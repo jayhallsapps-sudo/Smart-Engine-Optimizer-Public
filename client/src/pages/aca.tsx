@@ -561,7 +561,7 @@ export default function AcaPage() {
               <Sparkles className="w-4.5 h-4.5 text-white" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-foreground tracking-tight">/ACA/</h1>
+              <h1 className="text-lg font-bold tracking-tight" style={{ color: "#D97706" }}>/ACA/</h1>
               <p className="text-[11px] text-muted-foreground">
                 Query any data source, analyze client performance, explore integrations.
               </p>

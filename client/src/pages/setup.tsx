@@ -506,7 +506,7 @@ export default function SetupPage() {
     <div className="h-full overflow-y-auto">
     <div className="p-6 max-w-3xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-xl font-semibold" data-testid="text-setup-title">Integrations</h1>
+        <h1 className="text-xl font-semibold" style={{ color: "#0891B2" }} data-testid="text-setup-title">Integrations</h1>
         <p className="text-sm text-muted-foreground">
           Connect your data sources and reporting tools. Each service supports multiple accounts for managing different clients. Use the Available Commands section at the bottom to see what each integration powers inside SmartEO.
         </p>

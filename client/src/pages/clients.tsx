@@ -1185,7 +1185,7 @@ export default function ClientsPage() {
     <div className="p-6 max-w-5xl mx-auto">
       <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
         <div>
-          <h1 className="text-xl font-semibold" data-testid="text-clients-title">Clients</h1>
+          <h1 className="text-xl font-semibold" style={{ color: "#0369A1" }} data-testid="text-clients-title">Client Dashboards</h1>
           <p className="text-sm text-muted-foreground">Manage your recovery & addiction centre clients and their data source configurations.</p>
         </div>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

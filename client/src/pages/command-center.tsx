@@ -53,7 +53,7 @@ const MODULES: ModuleCard[] = [
     description: "Browse, load, edit, and export previously generated reports.",
     href: "/reports",
     status: "live",
-    accentColor: "#1B3A6B",
+    accentColor: "#7C3AED",
     group: "primary",
   },
   {
@@ -63,7 +63,7 @@ const MODULES: ModuleCard[] = [
     description: "Live cross-client performance metrics from GSC, GA4, CallRail, and more.",
     href: "/dashboard",
     status: "live",
-    accentColor: "#1B3A6B",
+    accentColor: "#059669",
     group: "primary",
   },
   {
@@ -73,7 +73,7 @@ const MODULES: ModuleCard[] = [
     description: "Manage client configurations, connected data sources, and account details.",
     href: "/clients",
     status: "live",
-    accentColor: "#1B3A6B",
+    accentColor: "#0369A1",
     group: "primary",
   },
   {
@@ -83,7 +83,7 @@ const MODULES: ModuleCard[] = [
     description: "Configure API credentials, OAuth connections, and data source settings.",
     href: "/integrations",
     status: "live",
-    accentColor: "#1B3A6B",
+    accentColor: "#0891B2",
     group: "primary",
   },
   {
@@ -167,7 +167,12 @@ function ModuleCardItem({ mod }: { mod: ModuleCard }) {
       </div>
 
       <div className="flex-1">
-        <h3 className="text-sm font-semibold text-foreground mb-1.5 leading-snug">{mod.label}</h3>
+        <h3
+          className="text-sm font-semibold mb-1.5 leading-snug"
+          style={{ color: isLive ? mod.accentColor : undefined }}
+        >
+          {mod.label}
+        </h3>
         <p className="text-xs text-muted-foreground leading-relaxed">{mod.description}</p>
       </div>
 

@@ -1004,9 +1004,9 @@ export default function DashboardPage() {
     <div className="flex flex-col h-full overflow-hidden">
       <div className="shrink-0 border-b px-6 py-3 flex items-center justify-between gap-4">
         <div className="flex items-center gap-2">
-          <LayoutDashboard className="w-5 h-5 text-primary" />
-          <h1 className="text-base font-semibold leading-tight" data-testid="text-page-title">
-            Dashboard
+          <LayoutDashboard className="w-5 h-5" style={{ color: "#059669" }} />
+          <h1 className="text-base font-semibold leading-tight" style={{ color: "#059669" }} data-testid="text-page-title">
+            Client Signals
           </h1>
         </div>
         <div className="flex items-center gap-2">

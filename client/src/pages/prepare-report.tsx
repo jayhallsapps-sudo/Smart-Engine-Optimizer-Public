@@ -109,7 +109,7 @@ export default function PrepareReportPage() {
               <FileText className="w-4 h-4 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-foreground tracking-tight">Prepare a Report</h1>
+              <h1 className="text-xl font-bold tracking-tight" style={{ color: "#C0392B" }}>Prepare a Report</h1>
               <p className="text-sm text-muted-foreground">Select a report type to get started.</p>
             </div>
           </div>

@@ -62,6 +62,7 @@ import {
   Loader2,
   Pencil,
   Play,
+  History,
 } from "lucide-react";
 import {
   Popover,
@@ -1778,6 +1779,10 @@ export default function ReportsPage() {
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-3 px-4 py-3 border-b bg-background">
+        <div className="flex items-center gap-2 shrink-0 mr-1">
+          <History className="w-4 h-4" style={{ color: "#7C3AED" }} />
+          <span className="text-sm font-semibold" style={{ color: "#7C3AED" }}>Past Reports</span>
+        </div>
         <Button
           size="icon"
           variant="ghost"

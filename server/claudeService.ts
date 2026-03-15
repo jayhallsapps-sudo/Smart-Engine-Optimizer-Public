@@ -96,7 +96,20 @@ async function runAcaWithGroq(
     const assistantMsg = choice.message;
 
     if (!assistantMsg.tool_calls || assistantMsg.tool_calls.length === 0) {
-      return assistantMsg.content || "I wasn't able to generate a response. Please try again.";
+      const content = assistantMsg.content || "";
+      const toolCallMatch = content.match(/\{\s*"type"\s*:\s*"function"\s*,\s*"name"\s*:\s*"(\w+)"\s*,\s*"parameters"\s*:\s*(\{[^}]*\})\s*\}/);
+      if (toolCallMatch) {
+        const toolName = toolCallMatch[1];
+        let toolInput: Record<string, any> = {};
+        try { toolInput = JSON.parse(toolCallMatch[2]); } catch {}
+        if (onToolCall) onToolCall(toolName, toolInput);
+        console.log(`[ACA/Groq] Calling tool (text-extracted): ${toolName}`, JSON.stringify(toolInput).slice(0, 200));
+        const result = await executeTool(toolName, toolInput);
+        apiMessages.push({ role: "assistant", content });
+        apiMessages.push({ role: "user", content: `Tool "${toolName}" returned: ${result}\n\nPlease provide a natural language response based on this data.` });
+        continue;
+      }
+      return content || "I wasn't able to generate a response. Please try again.";
     }
 
     apiMessages.push({

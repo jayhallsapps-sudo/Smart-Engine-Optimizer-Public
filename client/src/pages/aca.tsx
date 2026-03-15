@@ -231,6 +231,8 @@ export default function AcaPage() {
 
   const speechSupported = typeof window !== "undefined" && ("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
 
+  const preVoiceInputRef = useRef("");
+
   const toggleVoiceInput = useCallback(() => {
     if (isListening && recognitionRef.current) {
       recognitionRef.current.stop();
@@ -241,23 +243,29 @@ export default function AcaPage() {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) return;
 
+    preVoiceInputRef.current = input;
+
     const recognition = new SpeechRecognition();
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.lang = "en-US";
+    recognition.continuous = true;
+    recognition.interimResults = true;
 
     recognition.onresult = (event: any) => {
-      const transcript = event.results[0][0].transcript;
-      setInput((prev) => (prev ? prev + " " + transcript : transcript));
-      setIsListening(false);
+      let interim = "";
+      let final = "";
+      for (let i = 0; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          final += transcript;
+        } else {
+          interim += transcript;
+        }
+      }
+      const combined = final + interim;
+      const base = preVoiceInputRef.current;
+      setInput(base ? base + " " + combined : combined);
       if (inputRef.current) {
-        inputRef.current.focus();
-        setTimeout(() => {
-          if (inputRef.current) {
-            inputRef.current.style.height = "auto";
-            inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 200) + "px";
-          }
-        }, 0);
+        inputRef.current.style.height = "auto";
+        inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 200) + "px";
       }
     };
 
@@ -267,12 +275,13 @@ export default function AcaPage() {
 
     recognition.onend = () => {
       setIsListening(false);
+      if (inputRef.current) inputRef.current.focus();
     };
 
     recognitionRef.current = recognition;
     recognition.start();
     setIsListening(true);
-  }, [isListening]);
+  }, [isListening, input]);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -598,7 +607,7 @@ export default function AcaPage() {
                 disabled={loading}
                 className={`flex items-center justify-center w-8 h-8 rounded-lg transition-colors shrink-0 ${
                   isListening
-                    ? "bg-red-500 hover:bg-red-600 text-white"
+                    ? "bg-red-500 hover:bg-red-600 text-white animate-pulse"
                     : "bg-muted hover:bg-muted/80 text-muted-foreground"
                 } disabled:opacity-40 disabled:cursor-not-allowed`}
                 data-testid="button-aca-voice"

@@ -369,15 +369,15 @@ export async function generateBiweekly(input: {
       "Content",
       newContentDid,
       newContentNext,
-      "Connect Airtable in Setup to pull live published content.",
-      "Connect Airtable in Setup to pull upcoming content."
+      "No content published this period.",
+      "No upcoming content scheduled yet."
     ),
     makeRow(
       "Optimization",
-      noAirtable ? [] : optDid,
-      noAirtable ? [] : optNext,
-      "Add optimization or refresh work completed this period.",
-      "Add upcoming optimization or page refresh priorities."
+      optDid,
+      optNext,
+      "No optimization work completed this period.",
+      "No upcoming optimization work scheduled yet."
     ),
     makeRow(
       "Technical SEO",

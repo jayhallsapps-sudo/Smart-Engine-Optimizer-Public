@@ -352,21 +352,11 @@ export async function generateBiweekly(input: {
     if (resolved.missingMeta > 0) sfDidItems.push({ text: `Added meta descriptions to ${resolved.missingMeta} priority pages`, source: "Screaming Frog" });
   }
 
-  const asanaContentDid: BulletItem[] = (asanaCompletedByCategory["New Content"] ?? []).map(t => ({ text: t.name, source: "Asana" }));
-  const asanaContentNext: BulletItem[] = (asanaUpcomingByCategory["New Content"] ?? []).map(t => ({ text: t.name, source: "Asana" }));
   const asanaTechDid: BulletItem[] = (asanaCompletedByCategory["Technical SEO"] ?? []).map(t => ({ text: t.name, source: "Asana" }));
   const asanaTechNext: BulletItem[] = (asanaUpcomingByCategory["Technical SEO"] ?? []).map(t => ({ text: t.name, source: "Asana" }));
-  const asanaLocalDid: BulletItem[] = (asanaCompletedByCategory["Local SEO"] ?? []).map(t => ({ text: t.name, source: "Asana" }));
-  const asanaLocalNext: BulletItem[] = (asanaUpcomingByCategory["Local SEO"] ?? []).map(t => ({ text: t.name, source: "Asana" }));
 
-  const newContentDid: BulletItem[] = [
-    ...(noAirtable ? [] : publishedContent.map(i => ({ text: i.task, url: i.url ?? undefined, source: "Airtable" }))),
-    ...asanaContentDid,
-  ];
-  const newContentNext: BulletItem[] = [
-    ...(noAirtable ? [] : productionContent.map(i => ({ text: i.task, source: "Airtable" }))),
-    ...asanaContentNext,
-  ];
+  const newContentDid: BulletItem[] = noAirtable ? [] : publishedContent.map(i => ({ text: i.task, url: i.url ?? undefined, source: "Airtable" }));
+  const newContentNext: BulletItem[] = noAirtable ? [] : productionContent.map(i => ({ text: i.task, source: "Airtable" }));
   const optDid: BulletItem[] = noAirtable ? [] : publishedOptimization.map(i => ({ text: i.task, url: i.url ?? undefined, source: "Airtable" }));
   const optNext: BulletItem[] = noAirtable ? [] : productionOptimization.map(i => ({ text: i.task, source: "Airtable" }));
 
@@ -374,16 +364,13 @@ export async function generateBiweekly(input: {
   const sfPrioritiesRich: BulletItem[] = sfPriorities.map(t => ({ text: t, source: hasSf ? "Screaming Frog" : undefined }));
   const techNext: BulletItem[] = sfPrioritiesRich.length > 0 ? sfPrioritiesRich : [...asanaTechNext];
 
-  const localDid: BulletItem[] = [...asanaLocalDid];
-  const localNext: BulletItem[] = asanaLocalNext.length > 0 ? asanaLocalNext : [];
-
   const workLog: NonNullable<DocxSection["workLog"]> = [
     makeRow(
-      "New Content",
-      noAirtable && !asanaData ? [] : newContentDid,
-      noAirtable && !asanaData ? [] : newContentNext,
-      "Connect Airtable or Asana in Setup to pull live published content.",
-      noAirtable && !asanaData ? "Connect Airtable or Asana in Setup to pull upcoming content." : ""
+      "Content",
+      newContentDid,
+      newContentNext,
+      "Connect Airtable in Setup to pull live published content.",
+      "Connect Airtable in Setup to pull upcoming content."
     ),
     makeRow(
       "Optimization",
@@ -401,8 +388,8 @@ export async function generateBiweekly(input: {
     ),
     makeRow(
       "Local SEO",
-      localDid,
-      localNext,
+      [],
+      [],
       "Add local SEO / GBP progress from the last two weeks.",
       "Add upcoming GBP / local SEO priorities."
     ),

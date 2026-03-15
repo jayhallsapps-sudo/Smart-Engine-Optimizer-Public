@@ -44,16 +44,11 @@ function getGroqClient(): Groq | null {
 function isClaudeBillingError(err: any): boolean {
   const msg = (err?.message || "").toLowerCase();
   const status = err?.status || err?.statusCode || 0;
-  return (
-    msg.includes("credit") ||
-    msg.includes("billing") ||
-    msg.includes("quota") ||
-    msg.includes("insufficient") ||
-    msg.includes("balance is too low") ||
-    msg.includes("rate_limit") ||
-    status === 429 ||
-    (status === 400 && (msg.includes("credit") || msg.includes("billing")))
-  );
+  if (status === 429) return true;
+  const billingTerms = ["credit", "billing", "quota", "insufficient", "balance is too low", "rate_limit", "overloaded", "capacity"];
+  if (billingTerms.some((t) => msg.includes(t))) return true;
+  if (status === 400 || status === 402 || status === 503 || status === 529) return true;
+  return false;
 }
 
 function convertToolsToGroqFormat(): Groq.Chat.CompletionCreateParams.Tool[] {

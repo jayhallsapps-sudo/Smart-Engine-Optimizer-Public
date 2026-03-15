@@ -693,17 +693,12 @@ export async function registerRoutes(
       res.json({ response, toolCalls });
     } catch (err: any) {
       console.error("[ACA] Chat error:", err);
-      if (err.message?.includes("ANTHROPIC_API_KEY")) {
+      if (err.message?.includes("ANTHROPIC_API_KEY") || err.message?.includes("GROQ_API_KEY")) {
         return res.status(503).json({
-          message: "API key not configured. Please contact your administrator.",
+          message: "The AI service is not configured. Please contact your administrator.",
         });
       }
-      if (err.message?.includes("GROQ_API_KEY")) {
-        return res.status(503).json({
-          message: "The AI service is temporarily unavailable. Please try again later.",
-        });
-      }
-      res.status(500).json({ message: err.message || "ACA request failed" });
+      res.status(500).json({ message: "Something went wrong processing your request. Please try again." });
     }
   });
 

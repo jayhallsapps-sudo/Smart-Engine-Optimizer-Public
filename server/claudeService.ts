@@ -69,83 +69,98 @@ function getFilteredTools(integrations?: string[]): Anthropic.Tool[] {
   return ACA_TOOLS.filter((t) => allowed.has(t.name));
 }
 
-// ─── OpenAI-compatible fallback (Groq or OpenAI) ────────────────────────────
+// ─── OpenAI-compatible tool definitions ─────────────────────────────────────
+// Converts ACA_TOOLS (Anthropic format) to OpenAI function-calling format.
+
+function toOpenAITools(tools: Anthropic.Tool[]): OpenAI.Chat.ChatCompletionTool[] {
+  return tools.map((t) => ({
+    type: "function" as const,
+    function: {
+      name: t.name,
+      description: t.description,
+      parameters: t.input_schema as Record<string, unknown>,
+    },
+  }));
+}
+
+// ─── OpenAI-compatible agentic loop (Groq or OpenAI) ────────────────────────
 
 async function runWithOpenAICompatible(
   provider: "groq" | "openai",
   messages: AcaMessage[],
   clientContext?: ClientContext,
-  integrations?: string[]
+  integrations?: string[],
+  onToolCall?: (toolName: string, toolInput: Record<string, any>) => void
 ): Promise<string> {
-  let client: OpenAI;
+  let oaiClient: OpenAI;
   let model: string;
 
   if (provider === "groq") {
     const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) throw new Error("GROQ_API_KEY not configured");
-    client = new OpenAI({ apiKey, baseURL: "https://api.groq.com/openai/v1" });
+    oaiClient = new OpenAI({ apiKey, baseURL: "https://api.groq.com/openai/v1" });
     model = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
   } else {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) throw new Error("OPENAI_API_KEY not configured");
-    client = new OpenAI({ apiKey });
+    oaiClient = new OpenAI({ apiKey });
     model = process.env.OPENAI_MODEL || "gpt-4o";
   }
 
-  // Pre-fetch data for selected integrations and bake it into the system prompt.
-  // This avoids tool-use compatibility issues with non-Claude providers.
-  let dataContext = "";
-  if (clientContext && integrations && integrations.length > 0) {
-    const dataBlocks: string[] = [];
-    const defaultCommands: Record<string, string> = {
-      query_google_search_console: "gsc_top_queries",
-      query_google_analytics: "ga4_combined_funnel",
-      query_callrail: "callrail_summary",
-      query_ctm: "ctm_qoq_organic_calls",
-      query_semrush: "semrush_organic_overview",
-      query_ahrefs: "ahrefs_backlink_overview",
-      query_screaming_frog: "technical_health_summary",
-    };
+  const systemPrompt = buildSystemPrompt(clientContext, integrations);
+  const filteredTools = getFilteredTools(integrations);
+  const oaiTools = toOpenAITools(filteredTools);
 
-    for (const integration of integrations) {
-      const toolNames = INTEGRATION_TO_TOOLS[integration];
-      if (!toolNames) continue;
-      for (const toolName of toolNames) {
-        try {
-          const toolInput: Record<string, any> = { client_id: clientContext.id };
-          if (integration === "nsm_goals") {
-            toolInput.client_name = clientContext.name;
-            delete toolInput.client_id;
-          }
-          if (defaultCommands[toolName]) toolInput.command = defaultCommands[toolName];
-          console.log(`[ACA/${provider}] Pre-fetching: ${toolName}`);
-          const result = await executeTool(toolName, toolInput);
-          dataBlocks.push(`### ${toolName}\n${result}`);
-        } catch (err: any) {
-          dataBlocks.push(`### ${toolName}\nError: ${err.message}`);
-        }
-      }
-    }
-    if (dataBlocks.length > 0) {
-      dataContext =
-        "\n\nDATA CONTEXT (pre-fetched from selected integrations):\n" +
-        dataBlocks.join("\n\n");
-    }
-  }
-
-  const systemPrompt = buildSystemPrompt(clientContext, integrations) + dataContext;
-  const apiMessages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
+  type OAIMessage = OpenAI.Chat.ChatCompletionMessageParam;
+  const apiMessages: OAIMessage[] = [
     { role: "system", content: systemPrompt },
     ...messages.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
   ];
 
-  const completion = await client.chat.completions.create({
-    model,
-    messages: apiMessages,
-    max_tokens: 4096,
-  });
+  for (let i = 0; i < 15; i++) {
+    const completion = await oaiClient.chat.completions.create({
+      model,
+      messages: apiMessages,
+      tools: oaiTools,
+      tool_choice: "auto",
+      max_tokens: 4096,
+    });
 
-  return completion.choices[0]?.message?.content || "No response generated.";
+    const choice = completion.choices[0];
+    if (!choice) throw new Error("No response from provider");
+
+    const msg = choice.message;
+    apiMessages.push(msg as OAIMessage);
+
+    // No tool calls — we have a final answer
+    if (choice.finish_reason !== "tool_calls" || !msg.tool_calls || msg.tool_calls.length === 0) {
+      return msg.content || "No response generated.";
+    }
+
+    // Execute each requested tool call
+    for (const toolCall of msg.tool_calls) {
+      const toolName = toolCall.function.name;
+      let toolInput: Record<string, any> = {};
+      try {
+        toolInput = JSON.parse(toolCall.function.arguments || "{}");
+      } catch {
+        toolInput = {};
+      }
+
+      if (onToolCall) onToolCall(toolName, toolInput);
+      console.log(`[ACA/${provider}] Calling tool: ${toolName}`, JSON.stringify(toolInput).slice(0, 200));
+
+      const result = await executeTool(toolName, toolInput);
+
+      apiMessages.push({
+        role: "tool",
+        tool_call_id: toolCall.id,
+        content: result,
+      } as OAIMessage);
+    }
+  }
+
+  return "I ran into an issue processing your request — too many data lookups were needed. Try asking a more specific question.";
 }
 
 // ─── Tool definitions ────────────────────────────────────────────────────────
@@ -185,8 +200,7 @@ const ACA_TOOLS: Anthropic.Tool[] = [
         },
         date_range: {
           type: "string",
-          description: "Date range for comparison. Default: last_90_vs_prev_90",
-          enum: ["last_14_vs_prev_14", "last_30_vs_prev_30", "last_90_vs_prev_90", "last_365_vs_prev_365", "qtd"],
+          description: "Date range. Presets: last_14_vs_prev_14, last_30_vs_prev_30, last_90_vs_prev_90 (default), last_365_vs_prev_365, qtd. Custom: custom:YYYY-MM-DD:YYYY-MM-DD (e.g. custom:2026-01-01:2026-03-15). Use custom when user specifies exact dates.",
         },
       },
       required: ["client_id", "command"],
@@ -206,8 +220,7 @@ const ACA_TOOLS: Anthropic.Tool[] = [
         },
         date_range: {
           type: "string",
-          description: "Date range for comparison. Default: last_90_vs_prev_90",
-          enum: ["last_14_vs_prev_14", "last_30_vs_prev_30", "last_90_vs_prev_90", "last_365_vs_prev_365", "qtd"],
+          description: "Date range. Presets: last_14_vs_prev_14, last_30_vs_prev_30, last_90_vs_prev_90 (default), last_365_vs_prev_365, qtd. Custom: custom:YYYY-MM-DD:YYYY-MM-DD (e.g. custom:2026-01-01:2026-03-15). Use custom when user specifies exact dates.",
         },
       },
       required: ["client_id", "command"],
@@ -227,8 +240,7 @@ const ACA_TOOLS: Anthropic.Tool[] = [
         },
         date_range: {
           type: "string",
-          description: "Date range for comparison. MUST be one of these exact values only — do NOT invent others: last_14_vs_prev_14 (14 days), last_30_vs_prev_30 (30 days / monthly), last_90_vs_prev_90 (90 days / quarterly — use this for quarter questions), last_365_vs_prev_365 (annual). Default: last_90_vs_prev_90",
-          enum: ["last_14_vs_prev_14", "last_30_vs_prev_30", "last_90_vs_prev_90", "last_365_vs_prev_365"],
+          description: "Date range. Presets: last_14_vs_prev_14, last_30_vs_prev_30, last_90_vs_prev_90 (default, use for 'this quarter'), last_365_vs_prev_365. Custom: custom:YYYY-MM-DD:YYYY-MM-DD (e.g. custom:2026-01-01:2026-03-15). Use custom when user asks for specific start/end dates.",
         },
       },
       required: ["client_id", "command"],
@@ -248,8 +260,7 @@ const ACA_TOOLS: Anthropic.Tool[] = [
         },
         date_range: {
           type: "string",
-          description: "Date range for comparison. MUST be one of these exact values only — do NOT invent others: last_14_vs_prev_14, last_30_vs_prev_30, last_90_vs_prev_90 (use for quarter questions), last_365_vs_prev_365. Default: last_90_vs_prev_90",
-          enum: ["last_14_vs_prev_14", "last_30_vs_prev_30", "last_90_vs_prev_90", "last_365_vs_prev_365"],
+          description: "Date range. Presets: last_14_vs_prev_14, last_30_vs_prev_30, last_90_vs_prev_90 (default), last_365_vs_prev_365. Custom: custom:YYYY-MM-DD:YYYY-MM-DD. Use custom when user specifies exact dates.",
         },
       },
       required: ["client_id", "command"],
@@ -269,8 +280,7 @@ const ACA_TOOLS: Anthropic.Tool[] = [
         },
         date_range: {
           type: "string",
-          description: "Date range. Default: last_90_vs_prev_90",
-          enum: ["last_30_vs_prev_30", "last_90_vs_prev_90", "last_365_vs_prev_365"],
+          description: "Date range. Presets: last_30_vs_prev_30, last_90_vs_prev_90 (default), last_365_vs_prev_365. Custom: custom:YYYY-MM-DD:YYYY-MM-DD. Use custom when user specifies exact dates.",
         },
       },
       required: ["client_id", "command"],
@@ -290,8 +300,7 @@ const ACA_TOOLS: Anthropic.Tool[] = [
         },
         date_range: {
           type: "string",
-          description: "Date range. Default: last_90_vs_prev_90",
-          enum: ["last_30_vs_prev_30", "last_90_vs_prev_90", "last_365_vs_prev_365"],
+          description: "Date range. Presets: last_30_vs_prev_30, last_90_vs_prev_90 (default), last_365_vs_prev_365. Custom: custom:YYYY-MM-DD:YYYY-MM-DD. Use custom when user specifies exact dates.",
         },
       },
       required: ["client_id", "command"],
@@ -306,8 +315,7 @@ const ACA_TOOLS: Anthropic.Tool[] = [
         client_id: { type: "number", description: "The client ID" },
         date_range: {
           type: "string",
-          description: "Date range. Default: last_90_vs_prev_90",
-          enum: ["last_30_vs_prev_30", "last_90_vs_prev_90", "last_365_vs_prev_365"],
+          description: "Date range. Presets: last_30_vs_prev_30, last_90_vs_prev_90 (default), last_365_vs_prev_365. Custom: custom:YYYY-MM-DD:YYYY-MM-DD. Use custom when user specifies exact dates.",
         },
       },
       required: ["client_id"],
@@ -718,7 +726,7 @@ You have access to live data from all connected integrations:
 - Notion (Strategy Bank): strategy recommendations, playbooks, service offerings
 
 IMPORTANT RULES:
-1. When a user asks about a client, fetch the relevant data using tools before answering. Never guess or make up numbers.
+1. ALWAYS call the appropriate tool(s) before answering any data question. Never guess or make up numbers.
 2. Present data clearly — use actual numbers, deltas, and percentages from the tool results.
 3. When comparing periods, explain whether metrics are up or down and by how much.
 4. If a data source isn't configured for a client, say so clearly rather than failing silently.
@@ -726,7 +734,9 @@ IMPORTANT RULES:
 6. When asked about "calls" or "admits" or "conversions", check both CallRail and CTM — use whichever is configured.
 7. For quarter performance, use the ga4_qtd_totals or ga4_qoq_organic_funnel commands.
 8. For historical context, pull data across multiple date ranges to show trends.
-9. Be direct, specific, and actionable. You're talking to SEO professionals at an agency.`;
+9. Be direct, specific, and actionable. You're talking to SEO professionals at an agency.
+10. DATE RANGES: Use preset values (last_90_vs_prev_90, etc.) for general queries. When the user specifies exact dates (e.g. "from January 1 to today"), use the custom format: custom:YYYY-MM-DD:YYYY-MM-DD (e.g. custom:2026-01-01:2026-03-15). NEVER invent non-standard date range strings.
+11. Do NOT output placeholder text like "assuming the query is successful" or "let me fetch that" — just call the tool and report actual results.`;
 
 export interface ClientContext {
   id: number;
@@ -801,7 +811,7 @@ export async function runAcaChat(
   if (process.env.GROQ_API_KEY) {
     try {
       console.log("[ACA] Trying provider: groq");
-      const response = await runWithOpenAICompatible("groq", messages, clientContext, integrations);
+      const response = await runWithOpenAICompatible("groq", messages, clientContext, integrations, onToolCall);
       return { response, provider: "groq" };
     } catch (err: any) {
       console.error("[ACA] Groq failed:", err?.status, err?.message?.slice(0, 200));
@@ -810,7 +820,7 @@ export async function runAcaChat(
   if (process.env.OPENAI_API_KEY) {
     try {
       console.log("[ACA] Trying provider: openai");
-      const response = await runWithOpenAICompatible("openai", messages, clientContext, integrations);
+      const response = await runWithOpenAICompatible("openai", messages, clientContext, integrations, onToolCall);
       return { response, provider: "openai" };
     } catch (err: any) {
       console.error("[ACA] OpenAI failed:", err?.status, err?.message?.slice(0, 200));

@@ -6,6 +6,7 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
+import Groq from "groq-sdk";
 import { storage } from "./storage";
 import { queryGsc, handlesGscCommand } from "./gscClient";
 import { queryGa4, handlesGa4Command } from "./ga4Client";
@@ -30,6 +31,105 @@ function getAnthropicClient(): Anthropic {
     throw new Error("ANTHROPIC_API_KEY environment variable is not set. Add it in Replit Secrets.");
   }
   return new Anthropic({ apiKey });
+}
+
+// ─── Groq client (fallback) ─────────────────────────────────────────────────
+
+function getGroqClient(): Groq | null {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) return null;
+  return new Groq({ apiKey });
+}
+
+function isClaudeBillingError(err: any): boolean {
+  const msg = (err?.message || "").toLowerCase();
+  const status = err?.status || err?.statusCode || 0;
+  return (
+    msg.includes("credit") ||
+    msg.includes("billing") ||
+    msg.includes("quota") ||
+    msg.includes("insufficient") ||
+    msg.includes("balance is too low") ||
+    msg.includes("rate_limit") ||
+    status === 429 ||
+    (status === 400 && (msg.includes("credit") || msg.includes("billing")))
+  );
+}
+
+function convertToolsToGroqFormat(): Groq.Chat.CompletionCreateParams.Tool[] {
+  return ACA_TOOLS.map((tool) => ({
+    type: "function" as const,
+    function: {
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.input_schema as Record<string, unknown>,
+    },
+  }));
+}
+
+async function runAcaWithGroq(
+  messages: AcaMessage[],
+  clientContext?: ClientContext,
+  onToolCall?: (toolName: string, toolInput: Record<string, any>) => void
+): Promise<string> {
+  const groq = getGroqClient();
+  if (!groq) throw new Error("GROQ_API_KEY is not configured — no fallback available.");
+
+  const systemPrompt = buildSystemPrompt(clientContext);
+  const groqTools = convertToolsToGroqFormat();
+
+  const apiMessages: Groq.Chat.CompletionCreateParams.Message[] = [
+    { role: "system", content: systemPrompt },
+    ...messages.map((m) => ({
+      role: m.role as "user" | "assistant",
+      content: m.content,
+    })),
+  ];
+
+  for (let i = 0; i < 15; i++) {
+    const response = await groq.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
+      max_tokens: 4096,
+      messages: apiMessages,
+      tools: groqTools,
+      tool_choice: "auto",
+    });
+
+    const choice = response.choices[0];
+    if (!choice) throw new Error("No response from the AI service.");
+
+    const assistantMsg = choice.message;
+
+    if (!assistantMsg.tool_calls || assistantMsg.tool_calls.length === 0) {
+      return assistantMsg.content || "I wasn't able to generate a response. Please try again.";
+    }
+
+    apiMessages.push({
+      role: "assistant",
+      content: assistantMsg.content || "",
+      tool_calls: assistantMsg.tool_calls,
+    });
+
+    for (const toolCall of assistantMsg.tool_calls) {
+      const toolName = toolCall.function.name;
+      let toolInput: Record<string, any> = {};
+      try {
+        toolInput = JSON.parse(toolCall.function.arguments || "{}");
+      } catch {}
+
+      if (onToolCall) onToolCall(toolName, toolInput);
+      console.log(`[ACA/Groq] Calling tool: ${toolName}`, JSON.stringify(toolInput).slice(0, 200));
+
+      const result = await executeTool(toolName, toolInput);
+      apiMessages.push({
+        role: "tool",
+        tool_call_id: toolCall.id,
+        content: result,
+      });
+    }
+  }
+
+  return "I ran into an issue processing your request — too many data lookups were needed. Try asking a more specific question.";
 }
 
 // ─── Tool definitions ────────────────────────────────────────────────────────
@@ -591,16 +691,30 @@ export async function runAcaChat(
   clientContext?: ClientContext,
   onToolCall?: (toolName: string, toolInput: Record<string, any>) => void
 ): Promise<string> {
+  try {
+    return await runAcaWithClaude(messages, clientContext, onToolCall);
+  } catch (err: any) {
+    if (isClaudeBillingError(err)) {
+      console.warn("[ACA] Claude unavailable (billing/quota), falling back to Groq:", err.message);
+      return await runAcaWithGroq(messages, clientContext, onToolCall);
+    }
+    throw err;
+  }
+}
+
+async function runAcaWithClaude(
+  messages: AcaMessage[],
+  clientContext?: ClientContext,
+  onToolCall?: (toolName: string, toolInput: Record<string, any>) => void
+): Promise<string> {
   const anthropic = getAnthropicClient();
   const systemPrompt = buildSystemPrompt(clientContext);
 
-  // Convert to Anthropic message format
   const apiMessages: Anthropic.MessageParam[] = messages.map((m) => ({
     role: m.role,
     content: m.content,
   }));
 
-  // Tool-use loop (max 15 iterations to prevent infinite loops)
   for (let i = 0; i < 15; i++) {
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-20250514",
@@ -610,7 +724,6 @@ export async function runAcaChat(
       messages: apiMessages,
     });
 
-    // If Claude's done (no more tool use), extract the text response
     if (response.stop_reason === "end_turn") {
       const textBlocks = response.content.filter(
         (b): b is Anthropic.TextBlock => b.type === "text"
@@ -618,12 +731,9 @@ export async function runAcaChat(
       return textBlocks.map((b) => b.text).join("\n\n");
     }
 
-    // If Claude wants to use tools, execute them
     if (response.stop_reason === "tool_use") {
-      // Add Claude's response (with tool_use blocks) to the conversation
       apiMessages.push({ role: "assistant", content: response.content });
 
-      // Execute each tool call and collect results
       const toolResults: Anthropic.ToolResultBlockParam[] = [];
       for (const block of response.content) {
         if (block.type === "tool_use") {
@@ -638,7 +748,6 @@ export async function runAcaChat(
         }
       }
 
-      // Feed tool results back to Claude
       apiMessages.push({ role: "user", content: toolResults });
     }
   }

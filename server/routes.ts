@@ -695,7 +695,12 @@ export async function registerRoutes(
       console.error("[ACA] Chat error:", err);
       if (err.message?.includes("ANTHROPIC_API_KEY")) {
         return res.status(503).json({
-          message: "Claude API key not configured. Add ANTHROPIC_API_KEY to your Replit Secrets.",
+          message: "API key not configured. Please contact your administrator.",
+        });
+      }
+      if (err.message?.includes("GROQ_API_KEY")) {
+        return res.status(503).json({
+          message: "The AI service is temporarily unavailable. Please try again later.",
         });
       }
       res.status(500).json({ message: err.message || "ACA request failed" });

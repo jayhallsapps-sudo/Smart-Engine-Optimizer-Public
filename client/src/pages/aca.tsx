@@ -17,6 +17,8 @@ import {
   Layers,
   ChevronDown,
   Users,
+  Mic,
+  MicOff,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -203,9 +205,11 @@ export default function AcaPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedClientId, setSelectedClientId] = useState<number | null>(null);
   const [clientDropdownOpen, setClientDropdownOpen] = useState(false);
+  const [isListening, setIsListening] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<any>(null);
 
   // Fetch clients
   const { data: clients = [] } = useQuery<AcaClient[]>({
@@ -224,6 +228,51 @@ export default function AcaPage() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  const speechSupported = typeof window !== "undefined" && ("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
+
+  const toggleVoiceInput = useCallback(() => {
+    if (isListening && recognitionRef.current) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+      return;
+    }
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = "en-US";
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setInput((prev) => (prev ? prev + " " + transcript : transcript));
+      setIsListening(false);
+      if (inputRef.current) {
+        inputRef.current.focus();
+        setTimeout(() => {
+          if (inputRef.current) {
+            inputRef.current.style.height = "auto";
+            inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 200) + "px";
+          }
+        }, 0);
+      }
+    };
+
+    recognition.onerror = () => {
+      setIsListening(false);
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+    setIsListening(true);
+  }, [isListening]);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -521,7 +570,7 @@ export default function AcaPage() {
             </div>
             {selectedClient && (
               <span className="text-[10px] text-muted-foreground">
-                Claude will only query data for {selectedClient.name}
+                Scoped to {selectedClient.name} data only
               </span>
             )}
           </div>
@@ -543,6 +592,21 @@ export default function AcaPage() {
               className="flex-1 text-sm bg-transparent border-none outline-none resize-none placeholder:text-muted-foreground/60 min-h-[24px] max-h-[200px] py-1"
               data-testid="input-aca-message"
             />
+            {speechSupported && (
+              <button
+                onClick={toggleVoiceInput}
+                disabled={loading}
+                className={`flex items-center justify-center w-8 h-8 rounded-lg transition-colors shrink-0 ${
+                  isListening
+                    ? "bg-red-500 hover:bg-red-600 text-white"
+                    : "bg-muted hover:bg-muted/80 text-muted-foreground"
+                } disabled:opacity-40 disabled:cursor-not-allowed`}
+                data-testid="button-aca-voice"
+                title={isListening ? "Stop listening" : "Voice input"}
+              >
+                {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+              </button>
+            )}
             <button
               onClick={() => sendMessage()}
               disabled={!input.trim() || loading}
@@ -557,7 +621,7 @@ export default function AcaPage() {
             </button>
           </div>
           <p className="text-[10px] text-muted-foreground mt-2 text-center">
-            Claude reads live data from your connected integrations. Responses may take a moment when pulling from multiple sources.
+            /ACA/ reads live data from your connected integrations. Responses may take a moment when pulling from multiple sources.
           </p>
         </div>
       </div>

@@ -289,10 +289,20 @@ export default function AcaPage() {
       const errorText = err.message || "Something went wrong";
       let displayError = errorText;
       try {
-        const match = errorText.match(/\d+:\s*(.+)/);
+        const match = errorText.match(/^(\d+):\s*(.+)/);
         if (match) {
-          const parsed = JSON.parse(match[1]);
-          displayError = parsed.message || errorText;
+          const statusCode = match[1];
+          const body = match[2];
+          if (body.trimStart().startsWith("<") || body.trimStart().startsWith("<!")) {
+            displayError = `Server error (${statusCode}). Please try again.`;
+          } else {
+            try {
+              const parsed = JSON.parse(body);
+              displayError = parsed.message || errorText;
+            } catch {
+              displayError = `Server error (${statusCode}). Please try again.`;
+            }
+          }
         }
       } catch {}
       setError(displayError);

@@ -1,0 +1,552 @@
+You are working inside the SmartEO codebase.
+
+Your task is to COMPLETELY REBUILD the bi-weekly report interface and generation logic so it matches the intended Webserv bi-weekly workflow again.
+
+This is a targeted rebuild. Do not “improve” the report by adding extra insight blocks, extra required analysis, extra strategy sections, or anything borrowed from the monthly / QBR flows. The current version drifted away from the intended use case and is asking for too many inputs and too many insights. Fix that.
+
+CORE OBJECTIVE
+
+Restore the bi-weekly report to a SIMPLE FLOW:
+
+1. User selects client
+2. User enters “Prepared by”
+3. System generates report automatically
+4. AM edits any section inline
+5. AM can use side ACA chat to ask questions against live data and fill gaps
+6. Report can be saved/exported as before
+
+Use the standing design / existing visual language for the report. Do NOT redesign the report from scratch. Reuse the prior look and feel of the bi-weekly report before the big update. The current styling should visually match the previously generated SmartEO bi-weekly report template, especially:
+- title block
+- date/prepared-by lines
+- red section headers
+- simple KPI table
+- simple progress / quick wins table
+- partnership / alignment section
+- clean, minimal, client-facing visual style
+
+IMPORTANT PRODUCT RULES
+
+- All report fields must remain editable after generation.
+- Any section populated from data must include source tags.
+- Any section intended for manual entry must render editable blank/default text, not AI filler pretending to know the answer.
+- Do not require the AM to manually input data that SmartEO can already infer or fetch.
+- Do not pull in monthly-report-only logic.
+- Do not pull in QBR-only logic.
+- Do not ask for “deep insights” where the SOP/report structure does not require them.
+- Keep the report fast, lightweight, and conversational in spirit.
+
+==================================================
+TARGET REPORT STRUCTURE
+==================================================
+
+The report should generate exactly this structure:
+
+TITLE AREA
+- Title: "SEO Bi-weekly Meeting: [CLIENT NAME]"
+- Reporting Period: auto-calculated bi-weekly period
+- Prepared by: user-entered
+- Reporting Date: system current date when report is generated
+
+SECTION 1. PURPOSE
+- Static copy, same every time:
+  "To review recent SEO progress, share quick wins, and align on upcoming priorities that support your business goals."
+
+SECTION 2. PERFORMANCE PULSE
+- Pull data from the NSM sheet
+- Keep a simple KPI snapshot table, matching the spirit of the sample
+- This section should stay concise and client-friendly
+- Include source tags
+- Keep “Performance Pulse & Key Insights” tone, but do NOT overbuild it into a long narrative section
+- If needed, allow a very short AI-generated insight line below the KPI table, but keep it optional/editable and restrained
+
+SECTION 3. PROGRESS & QUICK WINS
+This is the main table, with rows / areas:
+- New Content
+- Optimization / Updated Content
+- Technical SEO
+- CRO / UX
+- Local SEO / GBP
+
+Columns:
+- Area
+- What We Did / Learned
+- What’s Next
+
+Detailed logic by row:
+
+A) NEW CONTENT
+What We Did / Learned:
+- Pull from Airtable
+- Only include relevant content work from the LAST 2 WEEKS for the selected client
+- Include completed / published / updated items that belong in this area
+- Add source tags per item or per grouped block
+
+What’s Next:
+- Pull from Airtable
+- Only include upcoming/planned items from the NEXT 2 WEEKS for the selected client
+- Add source tags
+
+What We Learned:
+- The system should infer a concise learning from available data
+- This should not be its own giant section; it belongs naturally inside “What We Did / Learned”
+- Example style: “Early traction is forming around X topic cluster” or “Recent publishing volume is supporting Y priority”
+- Keep it brief, editable, and grounded in actual data
+
+B) OPTIMIZATION / UPDATED CONTENT
+What We Did / Learned:
+- Pull relevant optimization / refresh work from Airtable for the LAST 2 WEEKS
+- Include source tags
+
+What’s Next:
+- Pull upcoming optimization work from Airtable for the NEXT 2 WEEKS
+- Include source tags
+
+What We Learned:
+- Infer from available data, concise only
+- Editable
+
+C) TECHNICAL SEO
+What We Did / Learned:
+- DO NOT force AI to fabricate this
+- Leave this as a manual editable field by default
+- It can have placeholder helper text like:
+  "Add technical maintenance completed during this period."
+- This placeholder should disappear on edit
+- No fake data here
+
+What’s Next:
+- Pull from the latest Screaming Frog upload / parsed crawl data
+- Pick the TWO most important technical issues to prioritize next
+- Selection should be based on severity + likely SEO impact
+- Prefer issues tied to crawlability, indexation, metadata, duplication, major page-level hygiene, etc.
+- Keep phrasing simple and action-oriented
+- Include Screaming Frog source tags
+
+D) CRO / UX
+What We Did / Learned:
+- Pull from Airtable for the LAST 2 WEEKS
+- Include source tags
+
+What’s Next:
+- Pull from Airtable for the NEXT 2 WEEKS
+- Include source tags
+
+What We Learned:
+- Infer concise learning if possible
+- Editable
+
+E) LOCAL SEO / GBP
+What We Did / Learned:
+- Leave blank/editable for manual input at current stage
+- Can use helper text:
+  "Add local SEO / GBP progress from the last two weeks."
+
+What’s Next:
+- Leave blank/editable for manual input
+- Can use helper text:
+  "Add upcoming GBP / local SEO priorities."
+
+Do not hallucinate local SEO updates if there is no reliable source.
+
+SECTION 4. PARTNERSHIP & ALIGNMENT
+Keep this simple and consistent with the current intended structure.
+Use editable bullets, seeded with:
+- Open discussion: feedback, lead quality, new initiatives, or observations.
+- Confirm next steps, responsibilities, and upcoming deliverables.
+
+This section should remain editable and lightweight.
+
+==================================================
+INPUT FLOW / UX REQUIREMENTS
+==================================================
+
+Rebuild the report generation flow to follow this order:
+
+STEP 1: CLIENT SELECTION
+- First required action
+- User must select the client before anything else
+- Use the existing client selector infrastructure if available
+- On client selection, bind all downstream data queries to that client
+
+STEP 2: PREPARED BY
+- Simple text field or user selector
+- Required before generation
+- This value populates the report header
+
+STEP 3: REPORT GENERATION
+- System generates report using:
+  - selected client
+  - current date
+  - computed bi-weekly reporting period
+  - NSM sheet data
+  - Airtable data
+  - latest Screaming Frog crawl data
+  - previous bi-weekly report context
+
+STEP 4: AM EDIT MODE
+- Every content block and row must be editable inline
+- Preserve current editable-cell patterns if they exist
+- Any generated copy can be modified by AM
+- Any manual sections start editable immediately
+
+==================================================
+CRITICAL LOGIC: PREVIOUS BI-WEEKLY REPORT MEMORY
+==================================================
+
+This is a KEY FEATURE and must be implemented properly.
+
+Each newly generated bi-weekly report should look at:
+1. The previous bi-weekly report for that same client
+2. The latest Screaming Frog crawl
+3. Current Airtable status / task state
+4. Current NSM performance pulse data
+
+The system should use that prior context to infer:
+- what the previous “What’s Next” priorities were
+- what appears to have actually been completed
+- what remains open / unresolved
+- what the next logical priorities should be now
+
+In other words:
+- Previous report says goals
+- Current data says what got done
+- System decides what carries forward and what is next
+
+Implement this carefully.
+
+Suggested logic:
+- Parse previous report sections into normalized structured objects
+- Compare prior “What’s Next” items against:
+  - Airtable statuses
+  - content publication/update timestamps
+  - current Screaming Frog issues
+  - any tracked completion indicators
+- Mark items internally as:
+  - completed
+  - partially completed
+  - still pending
+  - no longer relevant
+- Use that to influence new “What’s Next” generation
+- Never blindly repeat the last report’s next steps
+- Never ignore the last report entirely
+
+If a prior report is missing, the system should gracefully fall back to current-source-only generation.
+
+==================================================
+SOURCE TAGGING REQUIREMENTS
+==================================================
+
+Any section or line item that is data-driven must include visible source tags.
+
+Examples:
+- Airtable
+- NSM Sheet
+- Screaming Frog
+- Previous Report
+
+Requirements:
+- Source tags must be compact and visually consistent
+- Source tags should appear inline or at the end of each generated bullet / item
+- Multiple tags allowed if the line is synthesized from multiple sources
+- Manual-only fields should NOT show fake source tags
+
+Examples:
+- “Published / refreshed X page ... [Airtable]”
+- “Organic Sessions pacing behind target ... [NSM Sheet]”
+- “Write missing meta descriptions for top service pages ... [Screaming Frog]”
+- “Carry forward unresolved redirect cleanup ... [Previous Report] [Screaming Frog]”
+
+==================================================
+ACA SIDE CHAT
+==================================================
+
+Add or restore a side chat panel with ACA that can answer questions against the live report data context.
+
+Purpose:
+The AM should be able to ask questions like:
+- “What did we learn from content in the last two weeks?”
+- “What are the most urgent technical issues right now?”
+- “Which of last report’s priorities appear unfinished?”
+- “What should I write in the Local SEO section?”
+- “Summarize performance pulse in one sentence.”
+
+Requirements:
+- ACA must have access to current report context, selected client context, live data sources used for the report, and previous report context
+- ACA should answer conversationally, but grounded only in available data
+- ACA should reference sources in its answers
+- ACA should not overwrite the report automatically unless explicitly told to insert text
+- Support simple insert actions:
+  - “Insert into Technical SEO -> What We Did / Learned”
+  - “Replace CRO / UX What’s Next with this summary”
+- If confidence is low, ACA should say what source is missing instead of guessing
+
+==================================================
+DATA SOURCE MAPPING
+==================================================
+
+Map the report sections to sources as follows:
+
+1. Header
+- Client: selected client
+- Prepared by: user input
+- Reporting Date: system date
+- Reporting Period: computed based on today or selected generation date
+
+2. Purpose
+- static text
+
+3. Performance Pulse
+- NSM sheet
+
+4. New Content / Optimization / CRO-UX
+- Airtable
+- filtered by client
+- filtered by date windows:
+  - last 14 days for “What We Did / Learned”
+  - next 14 days for “What’s Next”
+
+5. Technical SEO
+- Manual editable field for “What We Did / Learned”
+- Latest Screaming Frog crawl for “What’s Next”
+
+6. Local SEO / GBP
+- Manual editable fields for now
+
+7. Cross-period logic
+- Previous bi-weekly report + current sources
+
+==================================================
+DATE / PERIOD LOGIC
+==================================================
+
+Implement clean date handling.
+
+Requirements:
+- Reporting Date = current system date at generation time
+- Reporting Period should represent the current bi-weekly window being reviewed
+- “What We Did / Learned” = previous 14 days relative to reporting date
+- “What’s Next” = next 14 days relative to reporting date
+
+Make the time windows explicit in code and reusable. Do not hardcode display strings.
+
+==================================================
+EDITABILITY REQUIREMENTS
+==================================================
+
+Everything the AM sees in the generated report must be editable.
+
+At minimum:
+- Title client text if needed
+- Prepared by
+- Reporting date display if admin override is needed
+- Purpose
+- Performance insight line
+- Every cell in the Progress & Quick Wins table
+- Partnership & Alignment bullets
+- Internal AM notes
+
+Use the existing editable component system wherever possible.
+Do not regress existing inline editing patterns.
+Do not break PDF/export rendering.
+
+==================================================
+INTERNAL AM NOTES
+==================================================
+
+The system should also generate INTERNAL AM NOTES that are NOT client-facing.
+
+These notes should be AI-created from the combined data and should help the AM prepare for the call.
+
+They should include:
+- likely story of the last two weeks
+- any gaps or missing info to manually fill
+- anything from prior report that appears unfinished
+- any notable performance caution
+- any relationship / alignment prompts if inferable from data
+- any places where the AM should verify facts before speaking
+
+Requirements:
+- clearly separated from client-facing report
+- editable
+- source-aware
+- concise and practical
+- no fluff
+
+Suggested sections:
+- Story to tell
+- Possible talking points
+- Missing inputs / manual fill items
+- Risks / carry-forwards
+- Questions to ask client
+
+==================================================
+TECHNICAL IMPLEMENTATION GUIDANCE
+==================================================
+
+Perform a proper rebuild, not a patchwork hack.
+
+1. AUDIT CURRENT BI-WEEKLY CODE PATH
+- Find the current bi-weekly report route, components, prompt logic, data mappers, and generation pipeline
+- Identify where the big update introduced over-scoped logic
+- Remove / isolate logic that does not belong in bi-weekly
+
+2. SEPARATE BI-WEEKLY FROM MONTHLY / QBR LOGIC
+- If shared abstractions are causing contamination, split them
+- Bi-weekly should have its own schema / config / generator profile
+- Do not let monthly insight requirements bleed into bi-weekly
+
+3. CREATE A CLEAR REPORT SCHEMA
+Suggested shape:
+
+BiweeklyReport {
+  clientId
+  clientName
+  preparedBy
+  reportingDate
+  reportingPeriodStart
+  reportingPeriodEnd
+  purpose
+  performancePulse
+  progressQuickWins
+  partnershipAlignment
+  internalAmNotes
+  metadata
+}
+
+performancePulse {
+  metrics: []
+  summaryInsight
+  sources: []
+}
+
+progressQuickWins {
+  rows: [
+    {
+      areaKey
+      areaLabel
+      whatWeDidLearned
+      whatsNext
+      sources
+      editMeta
+    }
+  ]
+}
+
+internalAmNotes {
+  storyToTell
+  talkingPoints
+  missingInputs
+  risksCarryForwards
+  clientQuestions
+  sources
+}
+
+4. CREATE SOURCE-AWARE CONTENT BLOCKS
+Every generated block should preserve:
+- content
+- sources
+- confidence if useful
+- editable state
+- provenance metadata
+
+5. CREATE A “PREVIOUS REPORT RESOLVER”
+Build a reusable service that:
+- finds previous bi-weekly report for selected client
+- parses its structured content
+- compares prior next steps against latest data
+- returns carry-forward recommendations
+
+6. PRESERVE EXPORT COMPATIBILITY
+- Ensure report still renders cleanly in export / PDF
+- Ensure source tags render properly
+- Ensure blank manual sections don’t break layout
+
+==================================================
+UI / DESIGN REQUIREMENTS
+==================================================
+
+Use the standing design for the report.
+Do not introduce a new UI style.
+Keep the report looking like the prior SmartEO bi-weekly template:
+- minimal
+- clean
+- Webserv-style
+- client-facing
+- strong section hierarchy
+- no clutter
+- no dense dashboards
+- no giant insight cards everywhere
+
+Desired page structure:
+- top controls bar or setup card
+- main report preview / edit pane
+- right-side ACA chat panel
+- optional internal AM notes drawer or tab
+
+Keep report reading experience simple.
+
+==================================================
+PROMPT / AI BEHAVIOR REQUIREMENTS
+==================================================
+
+Any AI used in generation must follow these rules:
+- be concise
+- be grounded in available data only
+- do not invent completed work
+- do not invent local SEO updates
+- do not over-explain
+- do not turn bi-weekly into a strategic essay
+- prefer practical, client-safe wording
+- preserve the trusted-advisor tone
+- all generated text must remain editable
+
+==================================================
+ACCEPTANCE CRITERIA
+==================================================
+
+The rebuild is complete only when all of the following are true:
+
+1. The first step is selecting a client.
+2. The second step is entering Prepared By.
+3. The report auto-generates with current date and bi-weekly period.
+4. Purpose remains static and correct.
+5. Performance Pulse pulls from NSM sheet only.
+6. New Content pulls last-2-weeks + next-2-weeks from Airtable.
+7. Optimization pulls last-2-weeks + next-2-weeks from Airtable.
+8. CRO / UX pulls last-2-weeks + next-2-weeks from Airtable.
+9. Technical SEO “What We Did / Learned” is manual editable.
+10. Technical SEO “What’s Next” pulls the top 2 priority issues from Screaming Frog.
+11. Local SEO / GBP remains manual editable.
+12. Previous bi-weekly report influences the next one.
+13. Source tags appear on all generated data-driven sections.
+14. All visible fields are editable inline.
+15. ACA side chat can answer questions from live report context.
+16. Internal AM notes are generated separately.
+17. Visual design matches the standing bi-weekly report style, not a new design.
+18. No extra bloated insight sections remain.
+19. No monthly/QBR logic leaks into this report.
+20. Export / PDF still works.
+
+==================================================
+DELIVERABLES
+==================================================
+
+When you finish, provide:
+
+1. A summary of what was changed
+2. The files/components/services touched
+3. Any schema changes
+4. Any migration/backfill notes
+5. Any assumptions made
+6. A short QA checklist
+7. A note calling out anything that still needs real data wiring if blocked by source access
+
+Before making changes, inspect the existing bi-weekly report implementation carefully so you preserve anything that already works:
+- editability
+- standing design
+- export behavior
+- source tag rendering
+- prior bi-weekly layout patterns
+
+Do the rebuild carefully and surgically.
+Do not overshoot the scope.

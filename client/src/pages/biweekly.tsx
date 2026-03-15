@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -12,154 +12,272 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
 import {
   CalendarDays,
   Download,
   CloudUpload,
   Loader2,
   RefreshCw,
-  MessageSquare,
-  CheckCircle2,
+  Send,
+  Bot,
+  User,
+  ChevronRight,
+  FileText,
+  NotebookPen,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { DocxPreview } from "@/components/report-preview/docx-preview";
 import type { Client } from "@shared/schema";
-import { CLIENT_SENTIMENT_OPTIONS } from "@shared/schema";
 import { useReportSave } from "@/hooks/useReportSave";
 import { SaveStatusIndicator } from "@/components/reports/SaveStatusIndicator";
 import { ReportSaveSelector } from "@/components/reports/ReportSaveSelector";
 import { CrawlAssetSelector } from "@/components/reports/CrawlAssetSelector";
-import { useFillInTheGaps } from "@/hooks/useFillInTheGaps";
-import { FillInTheGapsModal } from "@/components/FillInTheGapsModal";
-import { ClarificationTrail } from "@/components/ClarificationTrail";
-import { Checkbox } from "@/components/ui/checkbox";
-import { CommentPanel } from "@/components/comments/CommentPanel";
-import { WorkflowContextBanner } from "@/components/workflow/WorkflowContextBanner";
-import { loadWorkflowContext, type WorkflowHandoffContext } from "@/lib/workflowHandoff";
-import { GuidancePanel } from "@/components/GuidancePanel";
 
 function toYMD(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-function get14DayWindow() {
+function getBiweeklyWindow() {
   const end = new Date();
   end.setDate(end.getDate() - 1);
   const start = new Date(end);
   start.setDate(start.getDate() - 13);
-  return { start: toYMD(start), end: toYMD(end) };
+  return { startDate: toYMD(start), endDate: toYMD(end) };
 }
 
-function formatWindowLabel(start: string, end: string): string {
+function fmtWindowLabel(start: string, end: string): string {
   const fmt = (s: string) =>
-    new Date(s + "T12:00:00").toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
+    new Date(s + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   return `${fmt(start)} – ${fmt(end)}`;
+}
+
+interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+function AcaChatPanel({ clientId, clientName, report, edits }: {
+  clientId: string;
+  clientName: string | undefined;
+  report: any;
+  edits: Record<string, string>;
+}) {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  async function send() {
+    const text = input.trim();
+    if (!text || loading) return;
+    setInput("");
+    const next: ChatMessage[] = [...messages, { role: "user", content: text }];
+    setMessages(next);
+    setLoading(true);
+    try {
+      const reportContext = report ? JSON.stringify({ ...report, edits }) : null;
+      const res = await apiRequest("POST", "/api/aca/chat", {
+        messages: next,
+        clientId: clientId ? Number(clientId) : undefined,
+        integrations: [],
+        systemContext: reportContext
+          ? `You are helping an SEO account manager prepare for a biweekly client call.\n\nCurrent report context (JSON):\n${reportContext}\n\nAnswer questions about the report, help fill gaps, suggest talking points, and reference sources when available. Be concise and practical. Do not overwrite the report unless explicitly asked.`
+          : `You are helping an SEO account manager prepare a biweekly report for ${clientName ?? "the selected client"}. Answer questions about SEO performance, content, and technical priorities. Be concise and practical.`,
+      });
+      const data = await res.json();
+      const reply = data.response ?? data.message ?? "No response.";
+      setMessages(prev => [...prev, { role: "assistant", content: reply }]);
+    } catch (err: any) {
+      setMessages(prev => [...prev, { role: "assistant", content: "Error: " + (err.message ?? "Request failed.") }]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handleKey(e: React.KeyboardEvent) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      send();
+    }
+  }
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="px-3 py-2 border-b flex items-center gap-2 shrink-0">
+        <Bot className="w-4 h-4 text-[#D97706]" />
+        <span className="text-xs font-semibold">/ACA/ Chat</span>
+        <span className="text-[10px] text-muted-foreground ml-auto">Ask about this report</span>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-3 space-y-3 min-h-0">
+        {messages.length === 0 && (
+          <div className="space-y-2 mt-2">
+            <p className="text-[11px] text-muted-foreground text-center">Ask anything about the report or live data.</p>
+            {[
+              "Summarize performance pulse in one sentence.",
+              "Which priorities look unfinished from last report?",
+              "What should I write in the Local SEO section?",
+              "What are the most urgent technical issues?",
+            ].map(prompt => (
+              <button
+                key={prompt}
+                onClick={() => { setInput(prompt); }}
+                className="w-full text-left text-[11px] px-2 py-1.5 rounded border border-border hover:bg-muted transition-colors text-muted-foreground"
+              >
+                <ChevronRight className="inline w-3 h-3 mr-1 opacity-50" />
+                {prompt}
+              </button>
+            ))}
+          </div>
+        )}
+        {messages.map((m, i) => (
+          <div key={i} className={`flex gap-2 ${m.role === "user" ? "flex-row-reverse" : ""}`}>
+            <div className={`shrink-0 w-5 h-5 rounded-full flex items-center justify-center mt-0.5 ${m.role === "user" ? "bg-primary" : "bg-[#D97706]"}`}>
+              {m.role === "user" ? <User className="w-3 h-3 text-primary-foreground" /> : <Bot className="w-3 h-3 text-white" />}
+            </div>
+            <div className={`text-[12px] leading-relaxed rounded-lg px-3 py-2 max-w-[85%] whitespace-pre-wrap ${m.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
+              {m.content}
+            </div>
+          </div>
+        ))}
+        {loading && (
+          <div className="flex gap-2">
+            <div className="shrink-0 w-5 h-5 rounded-full bg-[#D97706] flex items-center justify-center mt-0.5">
+              <Bot className="w-3 h-3 text-white" />
+            </div>
+            <div className="bg-muted rounded-lg px-3 py-2 text-[12px]">
+              <Loader2 className="w-3 h-3 animate-spin inline" />
+            </div>
+          </div>
+        )}
+        <div ref={bottomRef} />
+      </div>
+
+      <div className="p-2 border-t shrink-0 flex gap-2">
+        <Textarea
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={handleKey}
+          placeholder="Ask about this report…"
+          className="resize-none text-xs h-9 min-h-0 py-2"
+          data-testid="input-aca-chat"
+        />
+        <Button size="sm" className="h-9 px-2 shrink-0" onClick={send} disabled={loading || !input.trim()} data-testid="button-aca-send">
+          <Send className="w-3.5 h-3.5" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function InternalAmNotesPanel({ notes }: { notes: any }) {
+  if (!notes) return (
+    <div className="p-4 text-sm text-muted-foreground">Generate a report to see internal AM notes.</div>
+  );
+
+  return (
+    <div className="p-4 space-y-4 overflow-y-auto h-full">
+      <div className="rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-800 px-3 py-2">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400 mb-1">Internal — Not Client-Facing</p>
+        <p className="text-xs text-amber-800 dark:text-amber-300">{notes.storyToTell}</p>
+      </div>
+
+      {notes.talkingPoints?.length > 0 && (
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Talking Points</p>
+          <ul className="space-y-1">
+            {notes.talkingPoints.map((tp: string, i: number) => (
+              <li key={i} className="text-xs text-foreground flex gap-1.5">
+                <span className="text-muted-foreground shrink-0">•</span>{tp}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {notes.missingInputs?.length > 0 && (
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Missing / Manual Fill</p>
+          <ul className="space-y-1">
+            {notes.missingInputs.map((m: string, i: number) => (
+              <li key={i} className="text-xs text-destructive flex gap-1.5">
+                <span className="shrink-0">⚠</span>{m}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {notes.risksCarryForwards?.length > 0 && (
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Risks / Carry-Forwards</p>
+          <ul className="space-y-1">
+            {notes.risksCarryForwards.map((r: string, i: number) => (
+              <li key={i} className="text-xs text-foreground flex gap-1.5">
+                <span className="text-muted-foreground shrink-0">→</span>{r}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {notes.clientQuestions?.length > 0 && (
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Questions to Ask Client</p>
+          <ul className="space-y-1">
+            {notes.clientQuestions.map((q: string, i: number) => (
+              <li key={i} className="text-xs text-foreground flex gap-1.5">
+                <span className="text-muted-foreground shrink-0">?</span>{q}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function BiweeklyPage() {
   const { toast } = useToast();
 
   const [clientId, setClientId] = useState<string>(() => new URLSearchParams(window.location.search).get("client") ?? "");
-  const [datePreset, setDatePreset] = useState<"7" | "14" | "30" | "custom">("14");
-  const [customStart, setCustomStart] = useState<string>("");
-  const [customEnd, setCustomEnd] = useState<string>("");
   const [preparedBy, setPreparedBy] = useState("JAY HALL");
   const [report, setReport] = useState<any>(null);
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [isUploading, setIsUploading] = useState(false);
   const [currentCrawlId, setCurrentCrawlId] = useState<number | null>(null);
   const [comparisonCrawlId, setComparisonCrawlId] = useState<number | null>(null);
-
-  const [clientSentiment, setClientSentiment] = useState<string>("");
-  const [amThoughts, setAmThoughts] = useState("");
-  const [priorityChecks, setPriorityChecks] = useState("");
-  const [clientNotes, setClientNotes] = useState("");
-
-  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
-  const [showCommentPanel, setShowCommentPanel] = useState(false);
-  const [workflowCtx, setWorkflowCtx] = useState<WorkflowHandoffContext | null>(() =>
-    loadWorkflowContext("biweekly", clientId ? Number(clientId) : null),
-  );
+  const [rightTab, setRightTab] = useState<"aca" | "notes">("aca");
 
   const { data: clients = [] } = useQuery<Client[]>({ queryKey: ["/api/clients"] });
-
   const clientName = clients.find(c => String(c.id) === clientId)?.name;
+
+  const { startDate, endDate } = getBiweeklyWindow();
+  const windowLabel = fmtWindowLabel(startDate, endDate);
 
   const reportSave = useReportSave({
     reportType: "biweekly",
     clientId: clientId ? Number(clientId) : null,
   });
 
-  const {
-    fillInGapsEnabled,
-    setFillInGapsEnabled,
-    isAnalyzing,
-    showModal,
-    questions,
-    runGapAnalysis,
-    submitAnswers,
-    sessionId,
-    seoHqLoadStatus,
-    answers,
-    closeModal,
-    draftAnswers,
-    handleAnswersChange,
-    answerUsage,
-    fetchAnswerUsage,
-  } = useFillInTheGaps({ reportType: "biweekly" });
-
-  function getDateRange(): { startDate: string; endDate: string } {
-    if (datePreset === "custom" && customStart && customEnd) {
-      return { startDate: customStart, endDate: customEnd };
-    }
-    const days = datePreset === "7" ? 7 : datePreset === "30" ? 30 : 14;
-    const end = new Date();
-    end.setDate(end.getDate() - 1);
-    const start = new Date(end);
-    start.setDate(start.getDate() - (days - 1));
-    return { startDate: toYMD(start), endDate: toYMD(end) };
-  }
-
-  const { startDate, endDate } = getDateRange();
-  const windowLabel =
-    datePreset === "custom" && customStart && customEnd
-      ? formatWindowLabel(customStart, customEnd)
-      : formatWindowLabel(startDate, endDate);
-
-  function validateAmInputs(): boolean {
-    const errors: Record<string, string> = {};
-    if (!clientSentiment) errors.clientSentiment = "Client Sentiment is required";
-    if (!amThoughts.trim()) errors.amThoughts = "AM's Hypothesis is required";
-    if (!priorityChecks.trim()) errors.priorityChecks = "Priority Checks is required";
-    setValidationErrors(errors);
-    return Object.keys(errors).length === 0;
-  }
-
-  const requiredFieldsMissing = !clientSentiment || !amThoughts.trim() || !priorityChecks.trim();
-
   const generateMut = useMutation({
-    mutationFn: async (params?: { gapAnswers?: any[]; gapSessionId?: number }) => {
+    mutationFn: async () => {
       if (!clientId) throw new Error("Select a client first");
-      if (!validateAmInputs()) throw new Error("Please fill in all required AM Inputs fields");
-      const range = getDateRange();
       const res = await apiRequest("POST", "/api/reports/biweekly/generate", {
         clientId: Number(clientId),
-        startDate: range.startDate,
-        endDate: range.endDate,
+        startDate,
+        endDate,
         preparedBy: preparedBy || "JAY HALL",
-        amInputs: {
-          clientSentiment,
-          amThoughts,
-          priorityChecks,
-          clientNotes: clientNotes || undefined,
-        },
-        gapAnswers: params?.gapAnswers,
-        gapSessionId: params?.gapSessionId,
       });
       return res.json();
     },
@@ -176,10 +294,7 @@ export default function BiweeklyPage() {
       };
       reportSave.pendingPayloadRef.current = { reportData: data, edits: {}, meta };
       reportSave.save(data, {}, meta);
-      toast({ title: "Report generated", description: "Preview ready — click any text to edit." });
-    },
-    onSettled: (_data, _err, _vars) => {
-      if (sessionId) fetchAnswerUsage(sessionId);
+      toast({ title: "Report generated", description: "Click any text to edit." });
     },
     onError: (err: any) => {
       toast({ title: "Generation failed", description: err.message, variant: "destructive" });
@@ -257,51 +372,18 @@ export default function BiweeklyPage() {
       reportSave.pendingPayloadRef.current = {
         reportData: report,
         edits: next,
-        meta: {
-          reportPeriodLabel: windowLabel,
-          analysisWindowStart: startDate,
-          analysisWindowEnd: endDate,
-          currentCrawlAssetId: currentCrawlId,
-          comparisonCrawlAssetId: comparisonCrawlId,
-        },
+        meta: { reportPeriodLabel: windowLabel, analysisWindowStart: startDate, analysisWindowEnd: endDate, currentCrawlAssetId: currentCrawlId, comparisonCrawlAssetId: comparisonCrawlId },
       };
       return next;
     });
     reportSave.markDirty();
   }
 
-  const handleGenerateClick = async () => {
-    if (!clientId) return;
-    if (!validateAmInputs()) return;
-
-    if (fillInGapsEnabled) {
-      const result = await runGapAnalysis(Number(clientId), {
-        clientSentiment: clientSentiment as any,
-        amThoughts,
-        priorityChecks,
-        clientNotes,
-      });
-      if (result && !result.hasQuestions) {
-        generateMut.mutate();
-      }
-    } else {
-      generateMut.mutate();
-    }
-  };
-
-  const handleGapComplete = async (answers: any[]) => {
-    try {
-      const sid = await submitAnswers(Number(clientId), answers);
-      generateMut.mutate({ gapAnswers: answers, gapSessionId: sid });
-      closeModal();
-    } catch (err) {
-      // Error handled in hook
-    }
-  };
-
   return (
     <div className="flex h-full min-h-0" data-testid="biweekly-page">
-      <div className="w-72 shrink-0 border-r bg-card flex flex-col overflow-y-auto">
+
+      {/* LEFT SIDEBAR — Setup */}
+      <div className="w-64 shrink-0 border-r bg-card flex flex-col overflow-y-auto">
         <div className="p-4 border-b">
           <div className="flex items-center gap-2">
             <CalendarDays className="w-5 h-5 text-primary" />
@@ -309,36 +391,14 @@ export default function BiweeklyPage() {
               <h1 className="font-semibold text-sm">Bi-Weekly Report</h1>
               <p className="text-xs text-muted-foreground">Live data · click to edit</p>
             </div>
-            <Button
-              data-testid="toggle-comment-panel"
-              variant={showCommentPanel ? "secondary" : "ghost"}
-              size="sm"
-              className="h-7 w-7 p-0 shrink-0"
-              onClick={() => setShowCommentPanel(v => !v)}
-              title="Comments"
-            >
-              <MessageSquare className="h-4 w-4" />
-            </Button>
           </div>
           {clientId && <div className="mt-1"><SaveStatusIndicator status={reportSave.saveStatus} /></div>}
         </div>
 
-        {workflowCtx && (
-          <WorkflowContextBanner
-            context={workflowCtx}
-            onApply={(fields) => {
-              if (fields.amThoughts) setAmThoughts(fields.amThoughts);
-              if (fields.priorityChecks) setPriorityChecks(fields.priorityChecks);
-            }}
-            onDismiss={() => setWorkflowCtx(null)}
-          />
-        )}
-
-        <GuidancePanel reportType="biweekly" sessionKey="biweekly" />
-
-        <div className="flex-1 p-4 space-y-5">
-          <div className="space-y-2">
-            <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Client</Label>
+        <div className="flex-1 p-4 space-y-4">
+          {/* Step 1 — Client */}
+          <div className="space-y-1.5">
+            <Label className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">1 · Client</Label>
             <Select value={clientId} onValueChange={(v) => { setClientId(v); setReport(null); reportSave.setSavedReportId(null); }}>
               <SelectTrigger data-testid="select-client">
                 <SelectValue placeholder="Select client…" />
@@ -353,66 +413,9 @@ export default function BiweeklyPage() {
             </Select>
           </div>
 
-          <div className="space-y-2">
-            <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Date Window</Label>
-            <div className="flex gap-1">
-              {(["7", "14", "30"] as const).map(d => (
-                <button
-                  key={d}
-                  onClick={() => setDatePreset(d)}
-                  className={`flex-1 text-xs py-1 rounded border transition-colors ${
-                    datePreset === d
-                      ? "bg-primary text-primary-foreground border-primary"
-                      : "bg-background border-border text-muted-foreground hover:bg-muted"
-                  }`}
-                  data-testid={`preset-${d}d`}
-                >
-                  {d}d
-                </button>
-              ))}
-              <button
-                onClick={() => setDatePreset("custom")}
-                className={`flex-1 text-xs py-1 rounded border transition-colors ${
-                  datePreset === "custom"
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "bg-background border-border text-muted-foreground hover:bg-muted"
-                }`}
-                data-testid="preset-custom"
-              >
-                Custom
-              </button>
-            </div>
-            {datePreset === "custom" && (
-              <div className="space-y-1.5">
-                <div className="flex gap-1.5 items-center">
-                  <label className="text-[10px] text-muted-foreground w-8 shrink-0">From</label>
-                  <Input
-                    type="date"
-                    value={customStart}
-                    onChange={e => setCustomStart(e.target.value)}
-                    className="text-xs h-7"
-                    data-testid="input-custom-start"
-                  />
-                </div>
-                <div className="flex gap-1.5 items-center">
-                  <label className="text-[10px] text-muted-foreground w-8 shrink-0">To</label>
-                  <Input
-                    type="date"
-                    value={customEnd}
-                    onChange={e => setCustomEnd(e.target.value)}
-                    className="text-xs h-7"
-                    data-testid="input-custom-end"
-                  />
-                </div>
-              </div>
-            )}
-            <div className="text-[10px] text-muted-foreground bg-muted rounded px-2 py-1 font-mono">
-              {windowLabel}
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Prepared by</Label>
+          {/* Step 2 — Prepared by */}
+          <div className="space-y-1.5">
+            <Label className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">2 · Prepared by</Label>
             <Input
               placeholder="e.g. JAY HALL"
               value={preparedBy}
@@ -422,9 +425,16 @@ export default function BiweeklyPage() {
             />
           </div>
 
+          {/* Reporting period */}
+          <div className="rounded-md bg-muted/60 px-3 py-2 space-y-0.5">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Reporting Period</p>
+            <p className="text-xs font-mono text-foreground">{windowLabel}</p>
+          </div>
+
+          {/* Optional crawl */}
           {clientId && (
-            <div className="space-y-2">
-              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Multi-source</Label>
+            <div className="space-y-1.5">
+              <Label className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Screaming Frog Crawl</Label>
               <CrawlAssetSelector
                 clientId={clientId ? Number(clientId) : null}
                 clientName={clientName}
@@ -432,14 +442,15 @@ export default function BiweeklyPage() {
                 comparisonCrawlId={comparisonCrawlId}
                 onCurrentChange={setCurrentCrawlId}
                 onComparisonChange={setComparisonCrawlId}
-                showComparison
+                showComparison={false}
               />
             </div>
           )}
 
+          {/* Load saved */}
           {clientId && (
-            <div className="space-y-1">
-              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Load Saved</Label>
+            <div className="space-y-1.5">
+              <Label className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Load Saved</Label>
               <ReportSaveSelector
                 clientId={clientId ? Number(clientId) : null}
                 reportType="biweekly"
@@ -458,144 +469,35 @@ export default function BiweeklyPage() {
             </div>
           )}
 
-          <Separator />
-
-          {/* AM Inputs — Required */}
-          <div className="space-y-3">
-            <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">AM Inputs</Label>
-
-            <div className="space-y-1">
-              <Label className="text-[11px] text-muted-foreground">
-                Client Sentiment <span className="text-destructive">*</span>
-              </Label>
-              <Select value={clientSentiment} onValueChange={(v) => { setClientSentiment(v); setValidationErrors(prev => { const n = {...prev}; delete n.clientSentiment; return n; }); }}>
-                <SelectTrigger data-testid="select-client-sentiment" className={validationErrors.clientSentiment ? "border-destructive" : ""}>
-                  <SelectValue placeholder="Select sentiment…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {CLIENT_SENTIMENT_OPTIONS.map(opt => (
-                    <SelectItem key={opt} value={opt} data-testid={`option-sentiment-${opt.toLowerCase()}`}>{opt}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {validationErrors.clientSentiment && <p className="text-[10px] text-destructive" data-testid="error-client-sentiment">{validationErrors.clientSentiment}</p>}
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-[11px] text-muted-foreground">
-                AM's Hypothesis <span className="text-destructive">*</span>
-              </Label>
-              <Textarea
-                placeholder="Your hypothesis, focus areas, strategy thoughts…"
-                value={amThoughts}
-                onChange={e => { setAmThoughts(e.target.value); setValidationErrors(prev => { const n = {...prev}; delete n.amThoughts; return n; }); }}
-                className={`text-xs resize-none h-14 ${validationErrors.amThoughts ? "border-destructive" : ""}`}
-                data-testid="input-am-thoughts"
-              />
-              {validationErrors.amThoughts && <p className="text-[10px] text-destructive" data-testid="error-am-thoughts">{validationErrors.amThoughts}</p>}
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-[11px] text-muted-foreground">
-                Priority Checks <span className="text-destructive">*</span>
-              </Label>
-              <Textarea
-                placeholder="Site observations, audit findings, priorities…"
-                value={priorityChecks}
-                onChange={e => { setPriorityChecks(e.target.value); setValidationErrors(prev => { const n = {...prev}; delete n.priorityChecks; return n; }); }}
-                className={`text-xs resize-none h-14 ${validationErrors.priorityChecks ? "border-destructive" : ""}`}
-                data-testid="input-priority-checks"
-              />
-              {validationErrors.priorityChecks && <p className="text-[10px] text-destructive" data-testid="error-priority-checks">{validationErrors.priorityChecks}</p>}
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-[11px] text-muted-foreground">Client Insights</Label>
-              <Textarea
-                placeholder="Optional notes from or about the client…"
-                value={clientNotes}
-                onChange={e => setClientNotes(e.target.value)}
-                className="text-xs resize-none h-14"
-                data-testid="input-client-notes"
-              />
-            </div>
-          </div>
-
-          <Separator />
-
-          <div className="space-y-3">
-            <div className="flex items-start space-x-2">
-              <Checkbox
-                id="fill-gaps"
-                checked={fillInGapsEnabled}
-                onCheckedChange={(checked) => setFillInGapsEnabled(!!checked)}
-                data-testid="checkbox-fill-gaps"
-                className="mt-1"
-              />
-              <div className="grid gap-1.5 leading-none">
-                <Label
-                  htmlFor="fill-gaps"
-                  className="text-xs font-semibold uppercase tracking-wide text-muted-foreground cursor-pointer"
-                >
-                  Fill in the gaps
-                </Label>
-                <p className="text-[10px] text-muted-foreground">
-                  Ask follow-up questions before generating if the system detects missing context.
-                </p>
-              </div>
-            </div>
-          </div>
-
+          {/* Generate */}
           <Button
             className="w-full"
-            onClick={handleGenerateClick}
-            disabled={!clientId || generateMut.isPending || isAnalyzing || requiredFieldsMissing}
+            onClick={() => generateMut.mutate()}
+            disabled={!clientId || generateMut.isPending}
             data-testid="button-generate"
           >
-            {generateMut.isPending || isAnalyzing ? (
-              <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {isAnalyzing ? "Analyzing Gaps…" : "Generating…"}</>
+            {generateMut.isPending ? (
+              <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Generating…</>
             ) : report ? (
               <><RefreshCw className="w-4 h-4 mr-2" /> Regenerate</>
             ) : (
               "Generate Report"
             )}
           </Button>
-
-          {requiredFieldsMissing && clientId && (
-            <p className="text-[10px] text-destructive text-center" data-testid="text-validation-warning">
-              Fill in all required AM Inputs to generate
-            </p>
-          )}
         </div>
 
+        {/* Export actions */}
         {report && (
           <div className="p-4 border-t space-y-2">
-            <Button
-              className="w-full text-xs"
-              onClick={downloadPdf}
-              disabled={downloadDocxMut.isPending}
-              data-testid="button-download-pdf"
-            >
+            <Button className="w-full text-xs" onClick={downloadPdf} disabled={downloadDocxMut.isPending} data-testid="button-download-pdf">
               <Download className="w-3 h-3 mr-1.5" />
               Download PDF
             </Button>
-            <Button
-              variant="outline"
-              className="w-full text-xs"
-              onClick={() => downloadDocxMut.mutate()}
-              disabled={downloadDocxMut.isPending}
-              data-testid="button-download-docx"
-            >
+            <Button variant="outline" className="w-full text-xs" onClick={() => downloadDocxMut.mutate()} disabled={downloadDocxMut.isPending} data-testid="button-download-docx">
               {downloadDocxMut.isPending ? <Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> : <Download className="w-3 h-3 mr-1.5" />}
               Download DOCX
             </Button>
-            <Button
-              variant="outline"
-              className="w-full text-xs"
-              onClick={uploadToDrive}
-              disabled={isUploading}
-              data-testid="button-save-drive"
-            >
+            <Button variant="outline" className="w-full text-xs" onClick={uploadToDrive} disabled={isUploading} data-testid="button-save-drive">
               {isUploading ? <Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> : <CloudUpload className="w-3 h-3 mr-1.5" />}
               Save to Drive (PDF)
             </Button>
@@ -603,6 +505,7 @@ export default function BiweeklyPage() {
         )}
       </div>
 
+      {/* CENTER — Report Preview */}
       <div className="flex-1 min-w-0 overflow-auto">
         {!report && !generateMut.isPending && (
           <div className="h-full flex items-center justify-center">
@@ -610,7 +513,7 @@ export default function BiweeklyPage() {
               <CalendarDays className="w-12 h-12 text-muted-foreground mx-auto" />
               <h2 className="font-semibold text-lg">Bi-Weekly Report</h2>
               <p className="text-sm text-muted-foreground">
-                Select a client, choose your date window, and click Generate. The report will appear here — click any text to edit before downloading.
+                Select a client, enter Prepared by, and click Generate. The report will appear here — click any text to edit.
               </p>
             </div>
           </div>
@@ -640,38 +543,30 @@ export default function BiweeklyPage() {
         )}
       </div>
 
-      {showCommentPanel && (
-        <CommentPanel
-          reportType="biweekly"
-          clientId={clientId || null}
-          savedReportId={reportSave.savedReportId}
-          anchors={(report?.sections ?? []).map((s: any) => ({ id: s.id, label: s.title }))}
-          onClose={() => setShowCommentPanel(false)}
-          className="h-full"
-        />
-      )}
-
-      {/* ClarificationTrail hidden — gap answers still saved to DB via answerUsage */}
-      {/* {fillInGapsEnabled && sessionId && questions.length > 0 && (
-        <ClarificationTrail
-          questions={questions}
-          answers={answers}
-          seoHqLoadStatus={seoHqLoadStatus}
-          enabled={fillInGapsEnabled}
-          answerUsage={answerUsage}
-        />
-      )} */}
-
-      {showModal && (
-        <FillInTheGapsModal
-          questions={questions}
-          onComplete={handleGapComplete}
-          onCancel={closeModal}
-          isGenerating={generateMut.isPending}
-          initialAnswers={draftAnswers}
-          onAnswersChange={handleAnswersChange}
-        />
-      )}
+      {/* RIGHT — ACA Chat + AM Notes */}
+      <div className="w-72 shrink-0 border-l bg-card flex flex-col min-h-0">
+        <Tabs value={rightTab} onValueChange={v => setRightTab(v as any)} className="flex flex-col h-full min-h-0">
+          <TabsList className="w-full rounded-none border-b bg-card shrink-0 h-9">
+            <TabsTrigger value="aca" className="flex-1 text-xs gap-1" data-testid="tab-aca">
+              <Bot className="w-3 h-3" /> /ACA/
+            </TabsTrigger>
+            <TabsTrigger value="notes" className="flex-1 text-xs gap-1" data-testid="tab-notes">
+              <NotebookPen className="w-3 h-3" /> AM Notes
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="aca" className="flex-1 min-h-0 mt-0 data-[state=active]:flex data-[state=active]:flex-col">
+            <AcaChatPanel
+              clientId={clientId}
+              clientName={clientName}
+              report={report}
+              edits={edits}
+            />
+          </TabsContent>
+          <TabsContent value="notes" className="flex-1 min-h-0 overflow-y-auto mt-0">
+            <InternalAmNotesPanel notes={report?.internalAmNotes} />
+          </TabsContent>
+        </Tabs>
+      </div>
     </div>
   );
 }

@@ -1,21 +1,9 @@
 import { storage } from "./storage";
-import { queryGsc, handlesGscCommand } from "./gscClient";
-import { queryGa4, handlesGa4Command } from "./ga4Client";
-import { queryCallRail, handlesCallRailCommand } from "./callrailClient";
-import { queryCtm, handlesCtmCommand } from "./ctmClient";
 import { fetchAirtableWorkLog } from "./airtable";
 import { fetchNsmGoals } from "./sheetsClient";
 import { fetchAsanaWorkLog, asanaSectionToCategory, groupAsanaTasks } from "./asanaClient";
 import type { WorkLogItem } from "./airtable";
 import type { DocxSection } from "../client/src/components/report-preview/docx-preview";
-import { type GapContext, gapContextToString } from "./gapAnswerContext";
-
-export interface BiweeklyAmInputs {
-  clientSentiment?: string;
-  amThoughts?: string;
-  priorityChecks?: string;
-  clientNotes?: string;
-}
 
 export interface BiweeklyReportJson {
   report_title: string;
@@ -25,6 +13,15 @@ export interface BiweeklyReportJson {
   preparedBy: string;
   generated_at: string;
   sections: DocxSection[];
+  internalAmNotes?: InternalAmNotes;
+}
+
+export interface InternalAmNotes {
+  storyToTell: string;
+  talkingPoints: string[];
+  missingInputs: string[];
+  risksCarryForwards: string[];
+  clientQuestions: string[];
 }
 
 function fmtDate(d: Date) {
@@ -40,18 +37,23 @@ function makeWindowLabel(start: string, end: string): string {
   return `${fmtDate(parseDateStr(start))} – ${fmtDate(parseDateStr(end))}`;
 }
 
+function isCroItem(item: WorkLogItem): boolean {
+  return item.creditType === "CRO Update" || item.task.toLowerCase().includes("cro");
+}
+
 function isOptimizationItem(item: WorkLogItem): boolean {
+  if (isCroItem(item)) return false;
   return (
     item.task.toLowerCase().includes("optimization") ||
-    item.creditType === "Optimization" ||
-    item.creditType === "CRO Update"
+    item.creditType === "Optimization"
   );
 }
 
-function parseSfCanonicalIssues(
-  headers: string[],
-  data: Record<string, any>[]
-): number {
+function isNewContentItem(item: WorkLogItem): boolean {
+  return !isOptimizationItem(item) && !isCroItem(item);
+}
+
+function parseSfCanonicalIssues(headers: string[], data: Record<string, any>[]): number {
   const addrCol = headers.find(h => /^address$/i.test(h) || /^url$/i.test(h)) ?? "Address";
   const canonCol = headers.find(h => /canonical/i.test(h));
   if (!canonCol) return 0;
@@ -93,33 +95,21 @@ interface SfIssueCounts {
 
 function getSfTopPriorities(counts: SfIssueCounts): string[] {
   const issues: Array<{ count: number; label: string }> = [];
-
-  if (counts.canonical > 0) {
-    issues.push({ count: counts.canonical, label: `Fix canonical tag conflicts — ${counts.canonical} page${counts.canonical !== 1 ? "s" : ""} with mismatched or non-self-referencing canonicals` });
-  }
-  if (counts.errors404 > 0) {
-    issues.push({ count: counts.errors404, label: `Resolve ${counts.errors404} broken internal link${counts.errors404 !== 1 ? "s" : ""} — implement 301 redirects or update destination URLs` });
-  }
-  if (counts.images > 0) {
-    issues.push({ count: counts.images, label: `Compress ${counts.images} oversized image${counts.images !== 1 ? "s" : ""} (>150 KB) — prioritize images on service and location pages` });
-  }
-  if (counts.missingMeta > 0) {
-    issues.push({ count: counts.missingMeta, label: `Write missing meta descriptions for service and location pages — prioritize by organic traffic volume` });
-  }
-
+  if (counts.canonical > 0) issues.push({ count: counts.canonical, label: `Fix canonical tag conflicts — ${counts.canonical} page${counts.canonical !== 1 ? "s" : ""} with mismatched or non-self-referencing canonicals` });
+  if (counts.errors404 > 0) issues.push({ count: counts.errors404, label: `Resolve ${counts.errors404} broken internal link${counts.errors404 !== 1 ? "s" : ""} — implement 301 redirects or update destination URLs` });
+  if (counts.images > 0) issues.push({ count: counts.images, label: `Compress ${counts.images} oversized image${counts.images !== 1 ? "s" : ""} (>150 KB) — prioritize images on service and location pages` });
+  if (counts.missingMeta > 0) issues.push({ count: counts.missingMeta, label: `Write missing meta descriptions for service and location pages — prioritize by organic traffic volume` });
   issues.sort((a, b) => b.count - a.count);
-  const top3 = issues.slice(0, 3).map(i => i.label);
-
+  const top2 = issues.slice(0, 2).map(i => i.label);
   const fallbacks = [
-    "Audit redirect chains and broken internal links in crawl data",
     "Review Core Web Vitals for top service and location landing pages",
     "Identify and consolidate duplicate content across location pages",
+    "Audit redirect chains and broken internal links in crawl data",
   ];
-  while (top3.length < 3) {
-    top3.push(fallbacks[top3.length] ?? "Review crawl report for additional technical issues");
+  while (top2.length < 2) {
+    top2.push(fallbacks[top2.length] ?? "Review crawl report for additional technical issues");
   }
-
-  return top3;
+  return top2;
 }
 
 function aggregateSfCounts(reports: any[]): SfIssueCounts {
@@ -167,60 +157,77 @@ function makeRow(
   };
 }
 
+function buildInternalAmNotes(params: {
+  clientName: string;
+  nsmGoals: any;
+  newContentDid: BulletItem[];
+  newContentNext: BulletItem[];
+  optDid: BulletItem[];
+  croDid: BulletItem[];
+  sfPriorities: string[];
+  hasSf: boolean;
+  noAirtable: boolean;
+  windowLabel: string;
+}): InternalAmNotes {
+  const { clientName, nsmGoals, newContentDid, newContentNext, optDid, croDid, sfPriorities, hasSf, noAirtable, windowLabel } = params;
+
+  const missingInputs: string[] = [];
+  if (noAirtable) missingInputs.push("Airtable not connected — content rows will be empty");
+  if (!hasSf) missingInputs.push("No Screaming Frog crawl uploaded — technical priorities are estimated");
+  if (!nsmGoals || (!nsmGoals.sessionsGoal || nsmGoals.sessionsGoal === "—")) missingInputs.push("NSM sheet data not found — verify Google Sheets connection");
+
+  const talkingPoints: string[] = [];
+  if (nsmGoals && nsmGoals.sessionsActual && nsmGoals.sessionsGoal && nsmGoals.sessionsActual !== "—" && nsmGoals.sessionsGoal !== "—") {
+    talkingPoints.push(`Organic sessions pacing: ${nsmGoals.sessionsActual} vs ${nsmGoals.sessionsGoal} goal (${nsmGoals.sessionsPercent ?? "?"}%)`);
+  }
+  if (newContentDid.length > 0) talkingPoints.push(`${newContentDid.length} content item${newContentDid.length !== 1 ? "s" : ""} published/completed this period`);
+  if (optDid.length > 0) talkingPoints.push(`${optDid.length} optimization item${optDid.length !== 1 ? "s" : ""} completed`);
+  if (croDid.length > 0) talkingPoints.push(`${croDid.length} CRO/UX item${croDid.length !== 1 ? "s" : ""} completed`);
+  if (sfPriorities.length > 0 && hasSf) talkingPoints.push(`Top technical issue: ${sfPriorities[0]}`);
+  if (newContentNext.length > 0) talkingPoints.push(`${newContentNext.length} content item${newContentNext.length !== 1 ? "s" : ""} planned for the next 2 weeks`);
+
+  const risksCarryForwards: string[] = [];
+  if (!hasSf) risksCarryForwards.push("Technical SEO 'What's Next' uses estimated priorities — upload a fresh Screaming Frog crawl to confirm");
+  if (noAirtable) risksCarryForwards.push("Content rows are empty until Airtable is connected");
+
+  const clientQuestions = [
+    "Any changes to lead quality or intake volume this period?",
+    "Any new campaigns, service lines, or locations to factor in?",
+    "Any client feedback on content topics or the website experience?",
+  ];
+
+  const storyToTell = `This biweekly covers ${windowLabel} for ${clientName}. ` +
+    (talkingPoints.length > 0 ? `Key points to lead with: ${talkingPoints[0]}.` : "Review all sections with the client before the call.");
+
+  return { storyToTell, talkingPoints, missingInputs, risksCarryForwards, clientQuestions };
+}
+
 export async function generateBiweekly(input: {
   clientId: number;
   startDate: string;
   endDate: string;
   preparedBy: string;
-  amInputs?: BiweeklyAmInputs;
-  gapContext?: GapContext;
 }): Promise<BiweeklyReportJson> {
-  const { clientId, startDate, endDate, preparedBy, gapContext } = input;
+  const { clientId, startDate, endDate, preparedBy } = input;
   const client = await storage.getClient(clientId);
   if (!client) throw new Error("Client not found: " + clientId);
 
   const windowLabel = makeWindowLabel(startDate, endDate);
   const now = new Date();
-  const customDateRange = `custom:${startDate}:${endDate}`;
 
   const asanaProjectId = (client as any).asanaProjectId as string | null | undefined;
 
-  const [gscResult, ga4Result, callTrackingResult, publishedResult, productionResult, sfReportsResult, nsmResult, asanaResult] =
+  const nextStart = endDate;
+  const nextEndDate = new Date(parseDateStr(endDate).getTime() + 14 * 24 * 60 * 60 * 1000);
+  const nextEnd = `${nextEndDate.getFullYear()}-${String(nextEndDate.getMonth() + 1).padStart(2, "0")}-${String(nextEndDate.getDate()).padStart(2, "0")}`;
+
+  const [publishedResult, productionResult, sfReportsResult, nsmResult, asanaResult] =
     await Promise.allSettled([
-      (async () => {
-        if (handlesGscCommand("gsc_qoq_queries" as any)) {
-          return queryGsc("gsc_qoq_queries" as any, client, customDateRange);
-        }
-        return null;
-      })(),
-      (async () => {
-        if (handlesGa4Command("ga4_qoq_organic_funnel" as any)) {
-          return queryGa4("ga4_qoq_organic_funnel" as any, client, customDateRange);
-        }
-        return null;
-      })(),
-      (async () => {
-        if (handlesCallRailCommand("callrail_qoq_organic_calls" as any)) {
-          return queryCallRail("callrail_qoq_organic_calls" as any, client, customDateRange);
-        }
-        if (handlesCtmCommand("ctm_calls_summary" as any)) {
-          return queryCtm("ctm_calls_summary" as any, client, customDateRange);
-        }
-        return null;
-      })(),
-      (async () => fetchAirtableWorkLog(clientId, startDate, endDate, "published"))(),
-      (async () => {
-        const prodStart = endDate;
-        const prodEndDate = new Date(parseDateStr(endDate).getTime() + 14 * 24 * 60 * 60 * 1000);
-        const prodEnd = `${prodEndDate.getFullYear()}-${String(prodEndDate.getMonth() + 1).padStart(2, "0")}-${String(prodEndDate.getDate()).padStart(2, "0")}`;
-        return fetchAirtableWorkLog(clientId, prodStart, prodEnd, "production");
-      })(),
-      (async () => storage.getSfReports(clientId))(),
-      (async () => fetchNsmGoals(client.name))(),
-      (async () => {
-        if (!asanaProjectId) return null;
-        return fetchAsanaWorkLog(asanaProjectId, startDate, endDate);
-      })(),
+      fetchAirtableWorkLog(clientId, startDate, endDate, "published"),
+      fetchAirtableWorkLog(clientId, nextStart, nextEnd, "production"),
+      storage.getSfReports(clientId),
+      fetchNsmGoals(client.name),
+      asanaProjectId ? fetchAsanaWorkLog(asanaProjectId, startDate, endDate) : Promise.resolve(null),
     ]);
 
   const sections: DocxSection[] = [];
@@ -234,6 +241,12 @@ export async function generateBiweekly(input: {
     ],
   });
 
+  const nsmGoals = nsmResult.status === "fulfilled" ? nsmResult.value : null;
+  const nsmHasData = nsmGoals && (
+    (nsmGoals.sessionsGoal && nsmGoals.sessionsGoal !== "—") ||
+    (nsmGoals.mvpGoal && nsmGoals.mvpGoal !== "—")
+  );
+
   const pulseMetrics: Array<{
     label: string;
     current: string;
@@ -243,51 +256,18 @@ export async function generateBiweekly(input: {
     source?: string;
   }> = [];
 
-  if (ga4Result.status === "fulfilled" && ga4Result.value) {
-    const summary = (ga4Result.value as any).summary ?? [];
-    for (const s of summary) {
-      pulseMetrics.push({ label: s.label, current: s.current, source: "GA4" });
-    }
-  }
-
-  const EXCLUDED_PULSE_LABELS = new Set(["Total Clicks", "Total Calls"]);
-
-  if (gscResult.status === "fulfilled" && gscResult.value) {
-    const summary = (gscResult.value as any).summary ?? [];
-    for (const s of summary.slice(0, 3)) {
-      if (!EXCLUDED_PULSE_LABELS.has(s.label)) {
-        pulseMetrics.push({ label: s.label, current: s.current, source: "GSC" });
-      }
-    }
-  }
-
-  if (callTrackingResult.status === "fulfilled" && callTrackingResult.value) {
-    const callSource = (client as any).callrailCompanyId ? "CallRail" : (client as any).ctmAccountId ? "CTM" : "Call Tracking";
-    const summary = (callTrackingResult.value as any).summary ?? [];
-    for (const s of summary.slice(0, 2)) {
-      if (!EXCLUDED_PULSE_LABELS.has(s.label)) {
-        pulseMetrics.push({ label: s.label, current: s.current, source: callSource });
-      }
-    }
-  }
-
-  const nsmGoals = nsmResult.status === "fulfilled" ? nsmResult.value : null;
-  const nsmHasData = nsmGoals && (
-    (nsmGoals.sessionsGoal && nsmGoals.sessionsGoal !== "—") ||
-    (nsmGoals.mvpGoal && nsmGoals.mvpGoal !== "—")
-  );
   if (nsmGoals && nsmHasData) {
     const mvpLabel = nsmGoals.mvpType && nsmGoals.mvpType !== "—" ? nsmGoals.mvpType : "MVP";
     pulseMetrics.push(
-      { label: "NSM Quarter",          current: nsmGoals.quarter, source: "NSM" },
-      { label: "NSM Sessions Goal",     current: nsmGoals.sessionsGoal, source: "NSM" },
-      { label: "NSM Sessions Actual",   current: nsmGoals.sessionsActual, source: "NSM" },
-      { label: "NSM Sessions %",        current: nsmGoals.sessionsPercent, source: "NSM" },
-      { label: "NSM Sessions On Track", current: nsmGoals.sessionsOnTrack, source: "NSM" },
-      { label: `NSM ${mvpLabel} Goal`,    current: nsmGoals.mvpGoal, source: "NSM" },
-      { label: `NSM ${mvpLabel} Actual`,  current: nsmGoals.mvpActual, source: "NSM" },
-      { label: `NSM ${mvpLabel} %`,       current: nsmGoals.mvpPercent, source: "NSM" },
-      { label: `NSM ${mvpLabel} On Track`,current: nsmGoals.mvpOnTrack, source: "NSM" },
+      { label: "NSM Quarter",              current: nsmGoals.quarter,         source: "NSM Sheet" },
+      { label: "Organic Sessions — Goal",  current: nsmGoals.sessionsGoal,    source: "NSM Sheet" },
+      { label: "Organic Sessions — Actual",current: nsmGoals.sessionsActual,  source: "NSM Sheet" },
+      { label: "Sessions %",               current: nsmGoals.sessionsPercent, source: "NSM Sheet" },
+      { label: "Sessions Status",          current: nsmGoals.sessionsOnTrack, source: "NSM Sheet" },
+      { label: `${mvpLabel} — Goal`,       current: nsmGoals.mvpGoal,         source: "NSM Sheet" },
+      { label: `${mvpLabel} — Actual`,     current: nsmGoals.mvpActual,       source: "NSM Sheet" },
+      { label: `${mvpLabel} %`,            current: nsmGoals.mvpPercent,      source: "NSM Sheet" },
+      { label: `${mvpLabel} Status`,       current: nsmGoals.mvpOnTrack,      source: "NSM Sheet" },
     );
   }
 
@@ -305,10 +285,12 @@ export async function generateBiweekly(input: {
     publishedResult.status === "rejected";
   const noAirtable = airtableNotConfigured;
 
-  const publishedContent = publishedItems.filter(i => !isOptimizationItem(i));
+  const publishedContent = publishedItems.filter(i => isNewContentItem(i));
   const publishedOptimization = publishedItems.filter(i => isOptimizationItem(i));
-  const productionContent = productionItems.filter(i => !isOptimizationItem(i));
+  const publishedCro = publishedItems.filter(i => isCroItem(i));
+  const productionContent = productionItems.filter(i => isNewContentItem(i));
   const productionOptimization = productionItems.filter(i => isOptimizationItem(i));
+  const productionCro = productionItems.filter(i => isCroItem(i));
 
   const asanaData = asanaResult.status === "fulfilled" && asanaResult.value && (asanaResult.value as any).success
     ? (asanaResult.value as { success: true; completed: import("./asanaClient").AsanaTask[]; upcoming: import("./asanaClient").AsanaTask[] })
@@ -323,7 +305,6 @@ export async function generateBiweekly(input: {
   const hasSf = crawlReports.length > 0;
   const sfCounts = hasSf ? aggregateSfCounts(crawlReports) : null;
 
-  // Build techNext from Issues Report if available, otherwise fall back to crawl-computed priorities
   let sfPriorities: string[];
   if (issuesReport) {
     const iHeaders: string[] = issuesReport.headers ?? [];
@@ -344,31 +325,26 @@ export async function generateBiweekly(input: {
       const pb = PRIO[String(b[priorityCol ?? ""] ?? "").toLowerCase().trim()] ?? 4;
       return pa !== pb ? pa - pb : (Number(b[countCol ?? ""] ?? 0) - Number(a[countCol ?? ""] ?? 0));
     });
-    const topIssues = sorted.slice(0, 3);
+    const topIssues = sorted.slice(0, 2);
     sfPriorities = topIssues.map(r => {
       const name = String(r[issueCol] ?? "").trim() || "Unknown issue";
       const priority = priorityCol ? String(r[priorityCol] ?? "").trim() : "";
       const count = countCol ? Number(String(r[countCol] ?? "0").replace(/[^0-9.]/g, "")) || 0 : 0;
       return `${name}${priority ? ` [${priority}]` : ""}${count > 0 ? ` — ${count} occurrence${count !== 1 ? "s" : ""}` : ""}`;
     });
-    if (sfPriorities.length === 0) {
-      sfPriorities = ["No active issues found in latest Screaming Frog Issues Report"];
-    }
+    if (sfPriorities.length === 0) sfPriorities = ["No active issues found in latest Screaming Frog Issues Report"];
   } else if (sfCounts) {
     sfPriorities = getSfTopPriorities(sfCounts);
   } else {
     sfPriorities = [
       "Upload a Screaming Frog crawl or Issues Report CSV to generate technical priorities",
-      "Audit Core Web Vitals for top landing pages",
-      "Review internal link structure for crawl efficiency",
+      "Review Core Web Vitals for top service and location landing pages",
     ];
   }
 
   const snapshotKey = `sf_snapshot_${clientId}`;
   const prevSnapshotRaw = await storage.getSetting(snapshotKey);
-  const prevSnapshot: SfIssueCounts & { date?: string } | null = prevSnapshotRaw
-    ? JSON.parse(prevSnapshotRaw)
-    : null;
+  const prevSnapshot: SfIssueCounts & { date?: string } | null = prevSnapshotRaw ? JSON.parse(prevSnapshotRaw) : null;
 
   const sfDidItems: BulletItem[] = [];
   if (sfCounts && prevSnapshot) {
@@ -378,36 +354,18 @@ export async function generateBiweekly(input: {
       errors404: Math.max(0, prevSnapshot.errors404 - sfCounts.errors404),
       missingMeta: Math.max(0, prevSnapshot.missingMeta - sfCounts.missingMeta),
     };
-    if (resolved.canonical > 0) sfDidItems.push({ text: `Resolved ${resolved.canonical} canonical mismatches` });
-    if (resolved.errors404 > 0) sfDidItems.push({ text: `Fixed ${resolved.errors404} broken links (404s)` });
-    if (resolved.images > 0) sfDidItems.push({ text: `Optimized ${resolved.images} oversized images` });
-    if (resolved.missingMeta > 0) sfDidItems.push({ text: `Added meta descriptions to ${resolved.missingMeta} priority pages` });
+    if (resolved.canonical > 0) sfDidItems.push({ text: `Resolved ${resolved.canonical} canonical mismatches`, source: "Screaming Frog" });
+    if (resolved.errors404 > 0) sfDidItems.push({ text: `Fixed ${resolved.errors404} broken links (404s)`, source: "Screaming Frog" });
+    if (resolved.images > 0) sfDidItems.push({ text: `Optimized ${resolved.images} oversized images`, source: "Screaming Frog" });
+    if (resolved.missingMeta > 0) sfDidItems.push({ text: `Added meta descriptions to ${resolved.missingMeta} priority pages`, source: "Screaming Frog" });
   }
 
-  const asanaContentDid: BulletItem[] = (asanaCompletedByCategory["New Content"] ?? []).map(t => ({
-    text: asanaSectionToCategory(t.section).italicize ? `*${t.name}*` : t.name,
-    source: "Asana",
-  }));
-  const asanaContentNext: BulletItem[] = (asanaUpcomingByCategory["New Content"] ?? []).map(t => ({
-    text: t.name,
-    source: "Asana",
-  }));
-  const asanaTechDid: BulletItem[] = (asanaCompletedByCategory["Technical SEO"] ?? []).map(t => ({
-    text: asanaSectionToCategory(t.section).italicize ? `*${t.name}*` : t.name,
-    source: "Asana",
-  }));
-  const asanaTechNext: BulletItem[] = (asanaUpcomingByCategory["Technical SEO"] ?? []).map(t => ({
-    text: t.name,
-    source: "Asana",
-  }));
-  const asanaLocalDid: BulletItem[] = (asanaCompletedByCategory["Local SEO"] ?? []).map(t => ({
-    text: asanaSectionToCategory(t.section).italicize ? `*${t.name}*` : t.name,
-    source: "Asana",
-  }));
-  const asanaLocalNext: BulletItem[] = (asanaUpcomingByCategory["Local SEO"] ?? []).map(t => ({
-    text: t.name,
-    source: "Asana",
-  }));
+  const asanaContentDid: BulletItem[] = (asanaCompletedByCategory["New Content"] ?? []).map(t => ({ text: t.name, source: "Asana" }));
+  const asanaContentNext: BulletItem[] = (asanaUpcomingByCategory["New Content"] ?? []).map(t => ({ text: t.name, source: "Asana" }));
+  const asanaTechDid: BulletItem[] = (asanaCompletedByCategory["Technical SEO"] ?? []).map(t => ({ text: t.name, source: "Asana" }));
+  const asanaTechNext: BulletItem[] = (asanaUpcomingByCategory["Technical SEO"] ?? []).map(t => ({ text: t.name, source: "Asana" }));
+  const asanaLocalDid: BulletItem[] = (asanaCompletedByCategory["Local SEO"] ?? []).map(t => ({ text: t.name, source: "Asana" }));
+  const asanaLocalNext: BulletItem[] = (asanaUpcomingByCategory["Local SEO"] ?? []).map(t => ({ text: t.name, source: "Asana" }));
 
   const newContentDid: BulletItem[] = [
     ...(noAirtable ? [] : publishedContent.map(i => ({ text: i.task, url: i.url ?? undefined, source: "Airtable" }))),
@@ -417,28 +375,17 @@ export async function generateBiweekly(input: {
     ...(noAirtable ? [] : productionContent.map(i => ({ text: i.task, source: "Airtable" }))),
     ...asanaContentNext,
   ];
-  const optDid: BulletItem[] = [
-    ...(noAirtable ? [] : publishedOptimization.map(i => ({ text: i.task, url: i.url ?? undefined, source: "Airtable" }))),
-  ];
-  const optNext: BulletItem[] = [
-    ...(noAirtable ? [] : productionOptimization.map(i => ({ text: i.task, source: "Airtable" }))),
-  ];
+  const optDid: BulletItem[] = noAirtable ? [] : publishedOptimization.map(i => ({ text: i.task, url: i.url ?? undefined, source: "Airtable" }));
+  const optNext: BulletItem[] = noAirtable ? [] : productionOptimization.map(i => ({ text: i.task, source: "Airtable" }));
+  const croDid: BulletItem[] = noAirtable ? [] : publishedCro.map(i => ({ text: i.task, url: i.url ?? undefined, source: "Airtable" }));
+  const croNext: BulletItem[] = noAirtable ? [] : productionCro.map(i => ({ text: i.task, source: "Airtable" }));
 
-  const sfDidItemsTagged: BulletItem[] = sfDidItems.map(i => ({ ...i, source: "Multi-source" }));
-  const techDid: BulletItem[] = [...sfDidItemsTagged, ...asanaTechDid];
+  const techDid: BulletItem[] = [...sfDidItems, ...asanaTechDid];
+  const sfPrioritiesRich: BulletItem[] = sfPriorities.map(t => ({ text: t, source: hasSf ? "Screaming Frog" : undefined }));
+  const techNext: BulletItem[] = sfPrioritiesRich.length > 0 ? sfPrioritiesRich : [...asanaTechNext];
+
   const localDid: BulletItem[] = [...asanaLocalDid];
-  const localNext: BulletItem[] = asanaLocalNext.length > 0 ? asanaLocalNext : [
-    { text: "Optimize GBP photos and posts for active campaigns." },
-    { text: "Monitor and respond to new Google reviews." },
-  ];
-
-  const sfPrioritiesRich: BulletItem[] = sfPriorities.map(t => ({
-    text: t,
-    source: hasSf ? "Multi-source" : undefined,
-  }));
-  const techNext: BulletItem[] = sfPrioritiesRich.length > 0
-    ? sfPrioritiesRich
-    : [...asanaTechNext, { text: "Review Core Web Vitals for top landing pages." }];
+  const localNext: BulletItem[] = asanaLocalNext.length > 0 ? asanaLocalNext : [];
 
   const workLog: NonNullable<DocxSection["workLog"]> = [
     makeRow(
@@ -449,25 +396,32 @@ export async function generateBiweekly(input: {
       noAirtable && !asanaData ? "Connect Airtable or Asana in Setup to pull upcoming content." : ""
     ),
     makeRow(
-      "Optimization",
+      "Optimization / Updated Content",
       noAirtable ? [] : optDid,
       noAirtable ? [] : optNext,
-      "Connect Airtable in Setup to pull live optimization work.",
-      noAirtable ? "Connect Airtable in Setup to pull upcoming optimization tasks." : ""
+      "Add optimization or refresh work completed this period.",
+      "Add upcoming optimization or page refresh priorities."
     ),
     makeRow(
       "Technical SEO",
       techDid,
       techNext,
-      "Enter technical SEO tasks completed this period.",
+      "Add technical maintenance completed during this period.",
       techNext[0]?.text ?? "Review Core Web Vitals for top landing pages."
     ),
     makeRow(
-      "Local SEO",
+      "CRO / UX",
+      noAirtable ? [] : croDid,
+      noAirtable ? [] : croNext,
+      "Add CRO or UX work completed this period.",
+      "Add upcoming CRO or UX priorities."
+    ),
+    makeRow(
+      "Local SEO / GBP",
       localDid,
       localNext,
-      "Review GBP for content published or updated this period.",
-      localNext[0]?.text ?? "Optimize GBP photos and posts for active campaigns."
+      "Add local SEO / GBP progress from the last two weeks.",
+      "Add upcoming GBP / local SEO priorities."
     ),
   ];
 
@@ -478,37 +432,32 @@ export async function generateBiweekly(input: {
     workLog,
   });
 
-  // SF technical data already feeds into the Technical SEO row's nextItems (sfPriorities above).
-  // No separate Technical Maintenance section — matches the 3-section template structure.
-
-  const bwAm = input.amInputs ?? {};
-
-  // AM inputs woven into Partnership & Alignment so they appear alongside the report,
-  // not as a standalone pre-read section. Gap analysis insights follow the same pattern.
-  const partnershipBullets: string[] = [];
-  if (bwAm.clientSentiment) partnershipBullets.push(`Client sentiment: ${bwAm.clientSentiment}`);
-  if (bwAm.amThoughts?.trim()) partnershipBullets.push(`AM focus: ${bwAm.amThoughts.trim()}`);
-  if (bwAm.priorityChecks?.trim()) partnershipBullets.push(`Priority checks: ${bwAm.priorityChecks.trim()}`);
-  if (bwAm.clientNotes?.trim()) partnershipBullets.push(`Client notes: ${bwAm.clientNotes.trim()}`);
-  if (gapContext && gapContext.hasAnswers) {
-    if (gapContext.sentimentContext) partnershipBullets.push(`Context: ${gapContext.sentimentContext}`);
-    if (gapContext.businessChanges) partnershipBullets.push(`Business context: ${gapContext.businessChanges}`);
-    if (gapContext.blockers) partnershipBullets.push(`Blockers: ${gapContext.blockers}`);
-    if (gapContext.narrativeNotes) partnershipBullets.push(`Notes: ${gapContext.narrativeNotes}`);
-  }
-  partnershipBullets.push("Open discussion: feedback, lead quality, new initiatives, or observations.");
-  partnershipBullets.push("Confirm next steps, responsibilities, and upcoming deliverables.");
-
   sections.push({
     id: "bw_partnership",
     type: "bullets",
     title: "Partnership & Alignment",
-    bullets: partnershipBullets,
+    bullets: [
+      "Open discussion: feedback, lead quality, new initiatives, or observations.",
+      "Confirm next steps, responsibilities, and upcoming deliverables.",
+    ],
   });
 
   if (sfCounts) {
     await storage.setSetting(snapshotKey, JSON.stringify({ ...sfCounts, date: now.toISOString() }));
   }
+
+  const internalAmNotes = buildInternalAmNotes({
+    clientName: client.name,
+    nsmGoals,
+    newContentDid,
+    newContentNext,
+    optDid,
+    croDid,
+    sfPriorities,
+    hasSf,
+    noAirtable,
+    windowLabel,
+  });
 
   return {
     report_title: "SEO Bi-weekly Meeting",
@@ -518,5 +467,6 @@ export async function generateBiweekly(input: {
     preparedBy: preparedBy || "JAY HALL",
     generated_at: now.toISOString(),
     sections,
+    internalAmNotes,
   };
 }

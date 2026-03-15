@@ -1799,11 +1799,8 @@ export async function registerRoutes(
   });
 
   app.post("/api/reports/biweekly/generate", async (req, res) => {
-    const { clientId, startDate, endDate, preparedBy, gapAnswers, gapSessionId } = req.body;
+    const { clientId, startDate, endDate, preparedBy } = req.body;
     if (!clientId) return res.status(400).json({ message: "clientId is required" });
-
-    const amValidation = validateAmInputs(req.body);
-    if ("error" in amValidation) return res.status(400).json({ message: amValidation.error });
 
     const fmt = (d: Date) => d.toISOString().slice(0, 10);
     const sub = (d: Date, n: number) => { const r = new Date(d); r.setDate(r.getDate() - n); return r; };
@@ -1816,12 +1813,7 @@ export async function registerRoutes(
         startDate: resolvedStart,
         endDate: resolvedEnd,
         preparedBy: preparedBy ?? "JAY HALL",
-        amInputs: ("error" in amValidation) ? {} : amValidation.amInputs,
-        gapContext: gapAnswers ? buildGapContext(gapAnswers) : undefined,
       });
-      if (gapAnswers?.length && gapSessionId) {
-        storage.updateGapSession(Number(gapSessionId), { answerUsage: getAnswerUsageMap(gapAnswers) }).catch(() => {});
-      }
       res.json(output);
     } catch (err: any) {
       console.error("Biweekly generation error:", err);

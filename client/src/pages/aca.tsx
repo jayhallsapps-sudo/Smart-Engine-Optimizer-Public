@@ -293,6 +293,7 @@ export default function AcaPage() {
       clearTimeout(maxTimeoutRef.current);
       maxTimeoutRef.current = null;
     }
+    setIsListening(false);
     if (recognitionRef.current) {
       recognitionRef.current.stop();
     }

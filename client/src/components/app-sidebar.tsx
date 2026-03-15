@@ -363,7 +363,7 @@ export function AppSidebar() {
           className="flex items-center gap-2 group-data-[collapsible=icon]:justify-center"
           data-testid="link-sidebar-logo"
         >
-          <img src={smarteoIconPath} alt="SmartEO" className="w-8 h-8 rounded-md shrink-0" />
+          <img src={smarteoIconPath} alt="SmartEO" className="w-8 h-8 aspect-square rounded-md shrink-0 object-cover" />
           {!collapsed && (
             <div>
               <h1 className="text-sm font-semibold tracking-tight" data-testid="text-app-name">SmartEO</h1>

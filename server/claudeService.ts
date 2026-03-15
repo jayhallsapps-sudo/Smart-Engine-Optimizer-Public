@@ -82,13 +82,32 @@ async function runAcaWithGroq(
   ];
 
   for (let i = 0; i < 15; i++) {
-    const response = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
-      max_tokens: 4096,
-      messages: apiMessages,
-      tools: groqTools,
-      tool_choice: "auto",
-    });
+    let response: Awaited<ReturnType<typeof groq.chat.completions.create>>;
+    try {
+      response = await groq.chat.completions.create({
+        model: "llama-3.3-70b-versatile",
+        max_tokens: 4096,
+        messages: apiMessages,
+        tools: groqTools,
+        tool_choice: "auto",
+      });
+    } catch (groqErr: any) {
+      const code = groqErr?.error?.error?.code || "";
+      const msg = groqErr?.error?.error?.message || groqErr?.message || "";
+      if (code === "tool_use_failed" || msg.includes("tool call") || msg.includes("function")) {
+        console.warn("[ACA/Groq] Tool call validation failed, retrying without tools:", msg.slice(0, 200));
+        const plainResponse = await groq.chat.completions.create({
+          model: "llama-3.3-70b-versatile",
+          max_tokens: 4096,
+          messages: [
+            ...apiMessages,
+            { role: "user", content: "Please answer based on general knowledge. Do not call any tools." },
+          ],
+        });
+        return plainResponse.choices[0]?.message?.content || "I wasn't able to look that up right now. Try rephrasing your question with specific time periods like 'last 30 days' or 'last quarter'.";
+      }
+      throw groqErr;
+    }
 
     const choice = response.choices[0];
     if (!choice) throw new Error("No response from the AI service.");
@@ -219,7 +238,7 @@ const ACA_TOOLS: Anthropic.Tool[] = [
         },
         date_range: {
           type: "string",
-          description: "Date range. Default: last_90_vs_prev_90",
+          description: "Date range for comparison. MUST be one of these exact values only — do NOT invent others: last_14_vs_prev_14 (14 days), last_30_vs_prev_30 (30 days / monthly), last_90_vs_prev_90 (90 days / quarterly — use this for quarter questions), last_365_vs_prev_365 (annual). Default: last_90_vs_prev_90",
           enum: ["last_14_vs_prev_14", "last_30_vs_prev_30", "last_90_vs_prev_90", "last_365_vs_prev_365"],
         },
       },
@@ -240,7 +259,7 @@ const ACA_TOOLS: Anthropic.Tool[] = [
         },
         date_range: {
           type: "string",
-          description: "Date range. Default: last_90_vs_prev_90",
+          description: "Date range for comparison. MUST be one of these exact values only — do NOT invent others: last_14_vs_prev_14, last_30_vs_prev_30, last_90_vs_prev_90 (use for quarter questions), last_365_vs_prev_365. Default: last_90_vs_prev_90",
           enum: ["last_14_vs_prev_14", "last_30_vs_prev_30", "last_90_vs_prev_90", "last_365_vs_prev_365"],
         },
       },

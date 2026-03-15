@@ -283,13 +283,8 @@ export default function AcaPage() {
 
   const stopRecognition = useCallback(() => {
     if (recognitionRef.current) {
-      recognitionRef.current.onresult = null;
-      recognitionRef.current.onerror = null;
-      recognitionRef.current.onend = null;
       recognitionRef.current.stop();
-      recognitionRef.current = null;
     }
-    setIsListening(false);
   }, []);
 
   useEffect(() => {
@@ -333,24 +328,23 @@ export default function AcaPage() {
       const combined = finalText + interim;
       const base = preVoiceInputRef.current;
       setInput(base ? base + " " + combined : combined);
-      if (inputRef.current) {
-        inputRef.current.style.height = "auto";
-        inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 200) + "px";
-      }
     };
 
-    recognition.onerror = (event: Event) => {
-      const srEvent = event as Event & { error?: string };
-      if (srEvent.error === "not-allowed") {
-        setError("Microphone access denied. Please allow microphone permissions to use voice input.");
-      }
-      stopRecognition();
+    recognition.onerror = () => {
+      setIsListening(false);
+      recognitionRef.current = null;
     };
 
     recognition.onend = () => {
       setIsListening(false);
       recognitionRef.current = null;
-      if (inputRef.current) inputRef.current.focus();
+      setTimeout(() => {
+        if (inputRef.current) {
+          inputRef.current.focus();
+          inputRef.current.style.height = "auto";
+          inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 200) + "px";
+        }
+      }, 0);
     };
 
     recognitionRef.current = recognition;
@@ -358,7 +352,6 @@ export default function AcaPage() {
       recognition.start();
       setIsListening(true);
     } catch {
-      setError("Could not start voice input. Please check your microphone permissions.");
       recognitionRef.current = null;
     }
   }, [isListening, input, SpeechRecognitionClass, stopRecognition]);
@@ -666,29 +659,48 @@ export default function AcaPage() {
           </div>
 
           {/* Input row */}
-          <div className="flex items-end gap-2 bg-card border border-border rounded-xl px-3 py-2 focus-within:ring-2 focus-within:ring-ring/20 focus-within:border-ring transition-all">
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={handleInputChange}
-              onKeyDown={handleKeyDown}
-              placeholder={
-                selectedClient
-                  ? `Ask anything about ${selectedClient.name}...`
-                  : "Ask anything about your clients, data, or integrations..."
-              }
-              rows={1}
-              disabled={loading}
-              className="flex-1 text-sm bg-transparent border-none outline-none resize-none placeholder:text-muted-foreground/60 min-h-[24px] max-h-[200px] py-1"
-              data-testid="input-aca-message"
-            />
+          <div className={`flex items-end gap-2 bg-card border rounded-xl px-3 py-2 transition-all ${
+            isListening
+              ? "border-red-400 dark:border-red-600 ring-2 ring-red-400/20"
+              : "border-border focus-within:ring-2 focus-within:ring-ring/20 focus-within:border-ring"
+          }`}>
+            {isListening ? (
+              <div className="flex-1 flex items-center gap-3 min-h-[30px] py-1 overflow-hidden">
+                {/* Animated waveform bars */}
+                <div className="flex items-end gap-[3px] h-5 shrink-0 text-red-500">
+                  {[0, 0.12, 0.24, 0.36, 0.48, 0.36, 0.24].map((delay, i) => (
+                    <span key={i} className="aca-bar" style={{ animationDelay: `${delay}s` }} />
+                  ))}
+                </div>
+                {/* Interim transcript or "Listening..." */}
+                <span className="text-sm text-muted-foreground/70 truncate">
+                  {input || "Listening\u2026"}
+                </span>
+              </div>
+            ) : (
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={handleInputChange}
+                onKeyDown={handleKeyDown}
+                placeholder={
+                  selectedClient
+                    ? `Ask anything about ${selectedClient.name}...`
+                    : "Ask anything about your clients, data, or integrations..."
+                }
+                rows={1}
+                disabled={loading}
+                className="flex-1 text-sm bg-transparent border-none outline-none resize-none placeholder:text-muted-foreground/60 min-h-[24px] max-h-[200px] py-1"
+                data-testid="input-aca-message"
+              />
+            )}
             {speechSupported && (
               <button
                 onClick={toggleVoiceInput}
                 disabled={loading}
                 className={`flex items-center justify-center w-8 h-8 rounded-lg transition-colors shrink-0 ${
                   isListening
-                    ? "bg-red-500 hover:bg-red-600 text-white animate-pulse"
+                    ? "bg-red-500 hover:bg-red-600 text-white"
                     : "bg-muted hover:bg-muted/80 text-muted-foreground"
                 } disabled:opacity-40 disabled:cursor-not-allowed`}
                 data-testid="button-aca-voice"
@@ -699,7 +711,7 @@ export default function AcaPage() {
             )}
             <button
               onClick={() => sendMessage()}
-              disabled={!input.trim() || loading}
+              disabled={(!input.trim() && !isListening) || loading}
               className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
               data-testid="button-aca-send"
             >

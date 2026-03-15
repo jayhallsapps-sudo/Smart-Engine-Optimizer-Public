@@ -698,6 +698,12 @@ export async function registerRoutes(
           message: "The AI service is not configured. Please contact your administrator.",
         });
       }
+      const errMsg = (err.message || "").toLowerCase();
+      if (err.status === 429 || errMsg.includes("rate limit") || errMsg.includes("token") && errMsg.includes("limit")) {
+        return res.status(503).json({
+          message: "The AI service is temporarily at capacity. Please wait a moment and try again.",
+        });
+      }
       res.status(500).json({ message: "Something went wrong processing your request. Please try again." });
     }
   });

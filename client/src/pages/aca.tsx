@@ -268,6 +268,12 @@ export default function AcaPage() {
         messages: apiMessages,
         clientId: selectedClientId,
       });
+
+      const contentType = res.headers.get("content-type") || "";
+      if (!contentType.includes("application/json")) {
+        throw new Error("Received an unexpected response from the server. Please try again.");
+      }
+
       const data = await res.json();
 
       const assistantMessage: ChatMessage = {
@@ -281,7 +287,6 @@ export default function AcaPage() {
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (err: any) {
       const errorText = err.message || "Something went wrong";
-      // Try to extract JSON error message
       let displayError = errorText;
       try {
         const match = errorText.match(/\d+:\s*(.+)/);
@@ -320,7 +325,7 @@ export default function AcaPage() {
               <Sparkles className="w-4.5 h-4.5 text-white" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-foreground tracking-tight">Ask Claude Anything</h1>
+              <h1 className="text-lg font-bold text-foreground tracking-tight">/ACA/</h1>
               <p className="text-[11px] text-muted-foreground">
                 Query any data source, analyze client performance, explore integrations.
               </p>

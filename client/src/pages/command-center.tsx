@@ -29,7 +29,7 @@ const MODULES: ModuleCard[] = [
   {
     id: "aca",
     icon: Sparkles,
-    label: "Ask Claude Anything",
+    label: "/ACA/",
     description: "Chat with Claude about any client data, integration, or metric. Pull live insights from all connected sources.",
     href: "/aca",
     status: "live",

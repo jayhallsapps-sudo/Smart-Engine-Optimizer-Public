@@ -339,7 +339,11 @@ export default function AcaPage() {
       }
     };
 
-    recognition.onerror = () => {
+    recognition.onerror = (event: Event) => {
+      const srEvent = event as Event & { error?: string };
+      if (srEvent.error === "not-allowed") {
+        setError("Microphone access denied. Please allow microphone permissions to use voice input.");
+      }
       stopRecognition();
     };
 
@@ -350,8 +354,13 @@ export default function AcaPage() {
     };
 
     recognitionRef.current = recognition;
-    recognition.start();
-    setIsListening(true);
+    try {
+      recognition.start();
+      setIsListening(true);
+    } catch {
+      setError("Could not start voice input. Please check your microphone permissions.");
+      recognitionRef.current = null;
+    }
   }, [isListening, input, SpeechRecognitionClass, stopRecognition]);
 
   // Auto-scroll to bottom on new messages

@@ -1,4 +1,5 @@
 import { Link } from "wouter";
+import smarteoIconPath from "@assets/SmartEO-Icon_1773606395230.png";
 import {
   FileText,
   History,
@@ -206,9 +207,7 @@ export default function CommandCenterPage() {
 
         <div className="mb-7">
           <div className="flex items-center gap-3 mb-1">
-            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-[#C0392B] shrink-0">
-              <Zap className="w-4 h-4 text-white" />
-            </div>
+            <img src={smarteoIconPath} alt="SmartEO" className="w-8 h-8 rounded-lg shrink-0" />
             <h1 className="text-xl font-bold text-foreground tracking-tight">SmartEO Command Center</h1>
           </div>
           <p className="text-sm text-muted-foreground ml-11">

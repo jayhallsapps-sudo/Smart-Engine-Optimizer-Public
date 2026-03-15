@@ -1,7 +1,8 @@
 import { useState, useCallback } from "react";
+import smarteoIconPath from "@assets/SmartEO-Icon_1773606395230.png";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Zap, ExternalLink, Settings, LogOut, Shield, User, ChevronDown, Check,
+  ExternalLink, Settings, LogOut, Shield, User, ChevronDown, Check,
   BookOpen, Layers, Lock, Unlock, KeyRound, Eye, EyeOff, LayoutTemplate,
 } from "lucide-react";
 import {
@@ -362,9 +363,7 @@ export function AppSidebar() {
           className="flex items-center gap-2 group-data-[collapsible=icon]:justify-center"
           data-testid="link-sidebar-logo"
         >
-          <div className="flex items-center justify-center w-8 h-8 rounded-md bg-primary shrink-0">
-            <Zap className="w-4 h-4 text-primary-foreground" />
-          </div>
+          <img src={smarteoIconPath} alt="SmartEO" className="w-8 h-8 rounded-md shrink-0" />
           {!collapsed && (
             <div>
               <h1 className="text-sm font-semibold tracking-tight" data-testid="text-app-name">SmartEO</h1>

@@ -280,8 +280,19 @@ export default function AcaPage() {
   const speechSupported = !!SpeechRecognitionClass;
 
   const preVoiceInputRef = useRef("");
+  const inputValueRef = useRef("");
+  const manualStopRef = useRef(false);
+  const maxTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const startSessionRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => { inputValueRef.current = input; }, [input]);
 
   const stopRecognition = useCallback(() => {
+    manualStopRef.current = true;
+    if (maxTimeoutRef.current) {
+      clearTimeout(maxTimeoutRef.current);
+      maxTimeoutRef.current = null;
+    }
     if (recognitionRef.current) {
       recognitionRef.current.stop();
     }
@@ -289,6 +300,8 @@ export default function AcaPage() {
 
   useEffect(() => {
     return () => {
+      manualStopRef.current = true;
+      if (maxTimeoutRef.current) clearTimeout(maxTimeoutRef.current);
       if (recognitionRef.current) {
         recognitionRef.current.onresult = null;
         recognitionRef.current.onerror = null;
@@ -299,15 +312,8 @@ export default function AcaPage() {
     };
   }, []);
 
-  const toggleVoiceInput = useCallback(() => {
-    if (isListening) {
-      stopRecognition();
-      return;
-    }
-
-    if (!SpeechRecognitionClass) return;
-
-    preVoiceInputRef.current = input;
+  const buildAndStartSession = useCallback(() => {
+    if (!SpeechRecognitionClass || manualStopRef.current) return;
 
     const recognition = new SpeechRecognitionClass();
     recognition.continuous = true;
@@ -317,44 +323,80 @@ export default function AcaPage() {
       let interim = "";
       let finalText = "";
       for (let i = 0; i < event.results.length; i++) {
-        const result = event.results[i];
-        const transcript = result[0].transcript;
-        if (result.isFinal) {
-          finalText += transcript;
-        } else {
-          interim += transcript;
-        }
+        const r = event.results[i];
+        const t = r[0].transcript;
+        if (r.isFinal) finalText += t;
+        else interim += t;
       }
       const combined = finalText + interim;
       const base = preVoiceInputRef.current;
-      setInput(base ? base + " " + combined : combined);
+      const newVal = base ? base + " " + combined.trim() : combined.trim();
+      setInput(newVal);
+      inputValueRef.current = newVal;
     };
 
     recognition.onerror = () => {
-      setIsListening(false);
       recognitionRef.current = null;
+      if (!manualStopRef.current) {
+        setTimeout(() => startSessionRef.current?.(), 300);
+      } else {
+        setIsListening(false);
+      }
     };
 
     recognition.onend = () => {
-      setIsListening(false);
       recognitionRef.current = null;
-      setTimeout(() => {
-        if (inputRef.current) {
-          inputRef.current.focus();
-          inputRef.current.style.height = "auto";
-          inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 200) + "px";
-        }
-      }, 0);
+      if (!manualStopRef.current) {
+        preVoiceInputRef.current = inputValueRef.current;
+        setTimeout(() => startSessionRef.current?.(), 150);
+      } else {
+        setIsListening(false);
+        setTimeout(() => {
+          if (inputRef.current) {
+            inputRef.current.focus();
+            inputRef.current.style.height = "auto";
+            inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 200) + "px";
+          }
+        }, 0);
+      }
     };
 
     recognitionRef.current = recognition;
     try {
       recognition.start();
-      setIsListening(true);
     } catch {
       recognitionRef.current = null;
+      if (!manualStopRef.current) {
+        setTimeout(() => startSessionRef.current?.(), 500);
+      } else {
+        setIsListening(false);
+      }
     }
-  }, [isListening, input, SpeechRecognitionClass, stopRecognition]);
+  }, [SpeechRecognitionClass]);
+
+  useEffect(() => {
+    startSessionRef.current = buildAndStartSession;
+  }, [buildAndStartSession]);
+
+  const toggleVoiceInput = useCallback(() => {
+    if (isListening) {
+      stopRecognition();
+      return;
+    }
+
+    if (!SpeechRecognitionClass) return;
+
+    manualStopRef.current = false;
+    preVoiceInputRef.current = input;
+    inputValueRef.current = input;
+    setIsListening(true);
+
+    maxTimeoutRef.current = setTimeout(() => {
+      stopRecognition();
+    }, 10 * 60 * 1000);
+
+    buildAndStartSession();
+  }, [isListening, input, SpeechRecognitionClass, stopRecognition, buildAndStartSession]);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {

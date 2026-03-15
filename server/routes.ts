@@ -660,9 +660,10 @@ export async function registerRoutes(
   // ─── ACA: Ask Claude Anything ───────────────────────────────────────────────
 
   app.post("/api/aca/chat", heavyLimiter, async (req: Request, res: Response) => {
-    const { messages, clientId } = req.body as {
+    const { messages, clientId, integrations } = req.body as {
       messages?: { role: string; content: string }[];
       clientId?: number | null;
+      integrations?: string[];
     };
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return res.status(400).json({ message: "messages array is required" });
@@ -686,20 +687,23 @@ export async function registerRoutes(
       }
 
       const toolCalls: string[] = [];
-      const response = await runAcaChat(acaMessages, clientContext, (toolName) => {
-        toolCalls.push(toolName);
-      });
+      const { response, provider } = await runAcaChat(
+        acaMessages,
+        clientContext,
+        integrations || [],
+        (toolName) => { toolCalls.push(toolName); }
+      );
 
-      res.json({ response, toolCalls });
+      res.json({ response, provider, toolCalls });
     } catch (err: any) {
       console.error("[ACA] Chat error:", err);
-      if (err.message?.includes("ANTHROPIC_API_KEY") || err.message?.includes("GROQ_API_KEY")) {
+      if (err.message?.includes("unconfigured") || err.message?.includes("API key")) {
         return res.status(503).json({
           message: "The AI service is not configured. Please contact your administrator.",
         });
       }
       const errMsg = (err.message || "").toLowerCase();
-      if (err.status === 429 || errMsg.includes("rate limit") || errMsg.includes("token") && errMsg.includes("limit")) {
+      if (err.status === 429 || errMsg.includes("rate limit") || (errMsg.includes("token") && errMsg.includes("limit"))) {
         return res.status(503).json({
           message: "The AI service is temporarily at capacity. Please wait a moment and try again.",
         });

@@ -19,6 +19,9 @@ import {
   Users,
   Mic,
   MicOff,
+  Check,
+  X,
+  Filter,
 } from "lucide-react";
 
 // ─── SpeechRecognition browser API types ─────────────────────────────────────
@@ -97,6 +100,7 @@ const TOOL_ICONS: Record<string, React.ElementType> = {
   get_notion_strategy_bank: FileText,
   get_saved_reports: FileText,
   get_query_history: FileText,
+  query_website: Globe,
 };
 
 const TOOL_LABELS: Record<string, string> = {
@@ -116,6 +120,7 @@ const TOOL_LABELS: Record<string, string> = {
   get_notion_strategy_bank: "Fetching Notion Strategy Bank",
   get_saved_reports: "Loading saved reports",
   get_query_history: "Loading query history",
+  query_website: "Analyzing website",
 };
 
 function ToolCallBadge({ toolName }: { toolName: string }) {
@@ -241,7 +246,38 @@ const SUGGESTED_PROMPTS = [
 interface AcaClient {
   id: number;
   name: string;
+  gscSiteUrl?: string | null;
+  ga4PropertyId?: string | null;
+  callrailCompanyId?: string | null;
+  ctmAccountId?: string | null;
+  semrushProjectId?: string | null;
+  ahrefsProjectUrl?: string | null;
+  gbpLocationName?: string | null;
+  airtableBaseId?: string | null;
+  asanaProjectId?: string | null;
 }
+
+// ─── Integration config ──────────────────────────────────────────────────────
+
+const INTEGRATION_CONFIG: Array<{
+  key: string;
+  label: string;
+  check: (c: AcaClient) => boolean;
+}> = [
+  { key: "gsc", label: "Google Search Console", check: (c) => !!c.gscSiteUrl },
+  { key: "ga4", label: "Google Analytics", check: (c) => !!c.ga4PropertyId },
+  { key: "callrail", label: "CallRail", check: (c) => !!c.callrailCompanyId },
+  { key: "ctm", label: "CallTrackingMetrics", check: (c) => !!c.ctmAccountId },
+  { key: "semrush", label: "SEMrush", check: (c) => !!c.semrushProjectId },
+  { key: "ahrefs", label: "Ahrefs", check: (c) => !!c.ahrefsProjectUrl },
+  { key: "gbp", label: "Google Business Profile", check: (c) => !!c.gbpLocationName },
+  { key: "screaming_frog", label: "Screaming Frog", check: () => true },
+  { key: "airtable", label: "Airtable", check: (c) => !!c.airtableBaseId },
+  { key: "asana", label: "Asana", check: (c) => !!c.asanaProjectId },
+  { key: "nsm_goals", label: "NSM Goals", check: () => true },
+  { key: "strategy_bank", label: "Strategy Bank", check: () => true },
+  { key: "website", label: "Website", check: () => true },
+];
 
 // ─── Main component ──────────────────────────────────────────────────────────
 
@@ -252,10 +288,13 @@ export default function AcaPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedClientId, setSelectedClientId] = useState<number | null>(null);
   const [clientDropdownOpen, setClientDropdownOpen] = useState(false);
+  const [selectedIntegrations, setSelectedIntegrations] = useState<string[]>([]);
+  const [integrationDropdownOpen, setIntegrationDropdownOpen] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const integrationDropdownRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
 
   // Fetch clients
@@ -264,12 +303,23 @@ export default function AcaPage() {
   });
 
   const selectedClient = clients.find((c) => c.id === selectedClientId) || null;
+  const availableIntegrations = selectedClient
+    ? INTEGRATION_CONFIG.filter((cfg) => cfg.check(selectedClient))
+    : [];
 
-  // Close dropdown on outside click
+  // Reset integrations when client changes
+  useEffect(() => {
+    setSelectedIntegrations([]);
+  }, [selectedClientId]);
+
+  // Close dropdowns on outside click
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setClientDropdownOpen(false);
+      }
+      if (integrationDropdownRef.current && !integrationDropdownRef.current.contains(e.target as Node)) {
+        setIntegrationDropdownOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -442,6 +492,7 @@ export default function AcaPage() {
       const res = await apiRequest("POST", "/api/aca/chat", {
         messages: apiMessages,
         clientId: selectedClientId,
+        integrations: selectedIntegrations,
       });
 
       const contentType = res.headers.get("content-type") || "";
@@ -694,10 +745,84 @@ export default function AcaPage() {
                 </div>
               )}
             </div>
-            {selectedClient && (
-              <span className="text-[10px] text-muted-foreground">
-                Scoped to {selectedClient.name} data only
-              </span>
+
+            {/* Integration selector */}
+            <div className="relative" ref={integrationDropdownRef}>
+              <button
+                onClick={() => {
+                  if (!selectedClient) return;
+                  setIntegrationDropdownOpen((o) => !o);
+                }}
+                disabled={!selectedClient}
+                className={[
+                  "flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors",
+                  selectedIntegrations.length > 0
+                    ? "bg-blue-50 border-blue-300 text-blue-700 dark:bg-blue-950/30 dark:border-blue-700 dark:text-blue-400"
+                    : "bg-muted/50 border-border text-muted-foreground",
+                  !selectedClient ? "opacity-40 cursor-not-allowed" : "hover:bg-muted hover:text-foreground",
+                ].join(" ")}
+                data-testid="button-integration-selector"
+                title={!selectedClient ? "Select a client first" : undefined}
+              >
+                <Filter className="w-3.5 h-3.5" />
+                {selectedIntegrations.length > 0 ? `Sources (${selectedIntegrations.length})` : "Sources"}
+                <ChevronDown className="w-3 h-3 ml-0.5" />
+              </button>
+
+              {integrationDropdownOpen && selectedClient && (
+                <div className="absolute bottom-full mb-1 left-0 z-50 w-[220px] bg-popover border border-border rounded-lg shadow-lg py-1">
+                  {/* Select All / Deselect All */}
+                  <div className="flex items-center justify-between px-3 py-1.5 border-b border-border">
+                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Data Sources</span>
+                    <button
+                      onClick={() => {
+                        if (selectedIntegrations.length === availableIntegrations.length) {
+                          setSelectedIntegrations([]);
+                        } else {
+                          setSelectedIntegrations(availableIntegrations.map((a) => a.key));
+                        }
+                      }}
+                      className="text-[10px] text-blue-600 dark:text-blue-400 hover:underline"
+                    >
+                      {selectedIntegrations.length === availableIntegrations.length ? "Deselect all" : "Select all"}
+                    </button>
+                  </div>
+                  {availableIntegrations.length === 0 ? (
+                    <p className="text-xs text-muted-foreground px-3 py-2">No integrations configured</p>
+                  ) : (
+                    availableIntegrations.map((cfg) => {
+                      const checked = selectedIntegrations.includes(cfg.key);
+                      return (
+                        <button
+                          key={cfg.key}
+                          onClick={() => {
+                            setSelectedIntegrations((prev) =>
+                              checked ? prev.filter((k) => k !== cfg.key) : [...prev, cfg.key]
+                            );
+                          }}
+                          className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-foreground hover:bg-muted transition-colors"
+                        >
+                          <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${checked ? "bg-blue-600 border-blue-600" : "border-border bg-background"}`}>
+                            {checked && <Check className="w-2.5 h-2.5 text-white" />}
+                          </div>
+                          {cfg.label}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+            </div>
+
+            {selectedIntegrations.length > 0 && (
+              <button
+                onClick={() => setSelectedIntegrations([])}
+                className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                title="Clear source filters"
+              >
+                <X className="w-3 h-3" />
+                Clear
+              </button>
             )}
           </div>
 

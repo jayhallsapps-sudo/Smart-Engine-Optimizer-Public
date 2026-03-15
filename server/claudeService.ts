@@ -6,7 +6,8 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
-import Groq from "groq-sdk";
+import OpenAI from "openai";
+import * as cheerio from "cheerio";
 import { storage } from "./storage";
 import { queryGsc, handlesGscCommand } from "./gscClient";
 import { queryGa4, handlesGa4Command } from "./ga4Client";
@@ -33,130 +34,118 @@ function getAnthropicClient(): Anthropic {
   return new Anthropic({ apiKey });
 }
 
-// ─── Groq client (fallback) ─────────────────────────────────────────────────
+// ─── Integration → tool mapping ──────────────────────────────────────────────
 
-function getGroqClient(): Groq | null {
-  const apiKey = process.env.GROQ_API_KEY;
-  if (!apiKey) return null;
-  return new Groq({ apiKey });
+const INTEGRATION_TO_TOOLS: Record<string, string[]> = {
+  gsc: ["query_google_search_console"],
+  ga4: ["query_google_analytics"],
+  callrail: ["query_callrail"],
+  ctm: ["query_ctm"],
+  semrush: ["query_semrush"],
+  ahrefs: ["query_ahrefs"],
+  gbp: ["query_gbp"],
+  screaming_frog: ["query_screaming_frog"],
+  airtable: ["get_airtable_work_log"],
+  asana: ["get_asana_tasks"],
+  nsm_goals: ["get_nsm_goals"],
+  strategy_bank: ["get_notion_strategy_bank"],
+  website: ["query_website"],
+};
+
+const ALWAYS_AVAILABLE_TOOLS = [
+  "list_clients",
+  "get_client_details",
+  "get_saved_reports",
+  "get_query_history",
+];
+
+function getFilteredTools(integrations?: string[]): Anthropic.Tool[] {
+  if (!integrations || integrations.length === 0) return ACA_TOOLS;
+  const allowed = new Set(ALWAYS_AVAILABLE_TOOLS);
+  for (const key of integrations) {
+    const tools = INTEGRATION_TO_TOOLS[key];
+    if (tools) tools.forEach((t) => allowed.add(t));
+  }
+  return ACA_TOOLS.filter((t) => allowed.has(t.name));
 }
 
-function isClaudeBillingError(err: any): boolean {
-  const msg = (err?.message || "").toLowerCase();
-  const status = err?.status || err?.statusCode || 0;
-  if (status === 429) return true;
-  const billingTerms = ["credit", "billing", "quota", "insufficient", "balance is too low", "rate_limit", "overloaded", "capacity"];
-  if (billingTerms.some((t) => msg.includes(t))) return true;
-  if (status === 400 || status === 402 || status === 503 || status === 529) return true;
-  return false;
-}
+// ─── OpenAI-compatible fallback (Groq or OpenAI) ────────────────────────────
 
-function convertToolsToGroqFormat(): Groq.Chat.CompletionCreateParams.Tool[] {
-  return ACA_TOOLS.map((tool) => ({
-    type: "function" as const,
-    function: {
-      name: tool.name,
-      description: tool.description,
-      parameters: tool.input_schema as Record<string, unknown>,
-    },
-  }));
-}
-
-async function runAcaWithGroq(
+async function runWithOpenAICompatible(
+  provider: "groq" | "openai",
   messages: AcaMessage[],
   clientContext?: ClientContext,
-  onToolCall?: (toolName: string, toolInput: Record<string, any>) => void
+  integrations?: string[]
 ): Promise<string> {
-  const groq = getGroqClient();
-  if (!groq) throw new Error("GROQ_API_KEY is not configured — no fallback available.");
+  let client: OpenAI;
+  let model: string;
 
-  const systemPrompt = buildSystemPrompt(clientContext);
-  const groqTools = convertToolsToGroqFormat();
+  if (provider === "groq") {
+    const apiKey = process.env.GROQ_API_KEY;
+    if (!apiKey) throw new Error("GROQ_API_KEY not configured");
+    client = new OpenAI({ apiKey, baseURL: "https://api.groq.com/openai/v1" });
+    model = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+  } else {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) throw new Error("OPENAI_API_KEY not configured");
+    client = new OpenAI({ apiKey });
+    model = process.env.OPENAI_MODEL || "gpt-4o";
+  }
 
-  const apiMessages: Groq.Chat.CompletionCreateParams.Message[] = [
-    { role: "system", content: systemPrompt },
-    ...messages.map((m) => ({
-      role: m.role as "user" | "assistant",
-      content: m.content,
-    })),
-  ];
+  // Pre-fetch data for selected integrations and bake it into the system prompt.
+  // This avoids tool-use compatibility issues with non-Claude providers.
+  let dataContext = "";
+  if (clientContext && integrations && integrations.length > 0) {
+    const dataBlocks: string[] = [];
+    const defaultCommands: Record<string, string> = {
+      query_google_search_console: "gsc_top_queries",
+      query_google_analytics: "ga4_combined_funnel",
+      query_callrail: "callrail_summary",
+      query_ctm: "ctm_qoq_organic_calls",
+      query_semrush: "semrush_organic_overview",
+      query_ahrefs: "ahrefs_backlink_overview",
+      query_screaming_frog: "technical_health_summary",
+    };
 
-  for (let i = 0; i < 15; i++) {
-    let response: Awaited<ReturnType<typeof groq.chat.completions.create>>;
-    try {
-      response = await groq.chat.completions.create({
-        model: "llama-3.3-70b-versatile",
-        max_tokens: 4096,
-        messages: apiMessages,
-        tools: groqTools,
-        tool_choice: "auto",
-      });
-    } catch (groqErr: any) {
-      const code = groqErr?.error?.error?.code || "";
-      const msg = groqErr?.error?.error?.message || groqErr?.message || "";
-      if (code === "tool_use_failed" || msg.includes("tool call") || msg.includes("function")) {
-        console.warn("[ACA/Groq] Tool call validation failed, retrying without tools:", msg.slice(0, 200));
-        const plainResponse = await groq.chat.completions.create({
-          model: "llama-3.3-70b-versatile",
-          max_tokens: 4096,
-          messages: [
-            ...apiMessages,
-            { role: "user", content: "Please answer based on general knowledge. Do not call any tools." },
-          ],
-        });
-        return plainResponse.choices[0]?.message?.content || "I wasn't able to look that up right now. Try rephrasing your question with specific time periods like 'last 30 days' or 'last quarter'.";
+    for (const integration of integrations) {
+      const toolNames = INTEGRATION_TO_TOOLS[integration];
+      if (!toolNames) continue;
+      for (const toolName of toolNames) {
+        try {
+          const toolInput: Record<string, any> = { client_id: clientContext.id };
+          if (integration === "nsm_goals") {
+            toolInput.client_name = clientContext.name;
+            delete toolInput.client_id;
+          }
+          if (defaultCommands[toolName]) toolInput.command = defaultCommands[toolName];
+          console.log(`[ACA/${provider}] Pre-fetching: ${toolName}`);
+          const result = await executeTool(toolName, toolInput);
+          dataBlocks.push(`### ${toolName}\n${result}`);
+        } catch (err: any) {
+          dataBlocks.push(`### ${toolName}\nError: ${err.message}`);
+        }
       }
-      throw groqErr;
     }
-
-    const choice = response.choices[0];
-    if (!choice) throw new Error("No response from the AI service.");
-
-    const assistantMsg = choice.message;
-
-    if (!assistantMsg.tool_calls || assistantMsg.tool_calls.length === 0) {
-      const content = assistantMsg.content || "";
-      const toolCallMatch = content.match(/\{\s*"type"\s*:\s*"function"\s*,\s*"name"\s*:\s*"(\w+)"\s*,\s*"parameters"\s*:\s*(\{[^}]*\})\s*\}/);
-      if (toolCallMatch) {
-        const toolName = toolCallMatch[1];
-        let toolInput: Record<string, any> = {};
-        try { toolInput = JSON.parse(toolCallMatch[2]); } catch {}
-        if (onToolCall) onToolCall(toolName, toolInput);
-        console.log(`[ACA/Groq] Calling tool (text-extracted): ${toolName}`, JSON.stringify(toolInput).slice(0, 200));
-        const result = await executeTool(toolName, toolInput);
-        apiMessages.push({ role: "assistant", content });
-        apiMessages.push({ role: "user", content: `Tool "${toolName}" returned: ${result}\n\nPlease provide a natural language response based on this data.` });
-        continue;
-      }
-      return content || "I wasn't able to generate a response. Please try again.";
-    }
-
-    apiMessages.push({
-      role: "assistant",
-      content: assistantMsg.content || "",
-      tool_calls: assistantMsg.tool_calls,
-    });
-
-    for (const toolCall of assistantMsg.tool_calls) {
-      const toolName = toolCall.function.name;
-      let toolInput: Record<string, any> = {};
-      try {
-        toolInput = JSON.parse(toolCall.function.arguments || "{}");
-      } catch {}
-
-      if (onToolCall) onToolCall(toolName, toolInput);
-      console.log(`[ACA/Groq] Calling tool: ${toolName}`, JSON.stringify(toolInput).slice(0, 200));
-
-      const result = await executeTool(toolName, toolInput);
-      apiMessages.push({
-        role: "tool",
-        tool_call_id: toolCall.id,
-        content: result,
-      });
+    if (dataBlocks.length > 0) {
+      dataContext =
+        "\n\nDATA CONTEXT (pre-fetched from selected integrations):\n" +
+        dataBlocks.join("\n\n");
     }
   }
 
-  return "I ran into an issue processing your request — too many data lookups were needed. Try asking a more specific question.";
+  const systemPrompt = buildSystemPrompt(clientContext, integrations) + dataContext;
+  const apiMessages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
+    { role: "system", content: systemPrompt },
+    ...messages.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+  ];
+
+  const completion = await client.chat.completions.create({
+    model,
+    messages: apiMessages,
+    max_tokens: 4096,
+  });
+
+  return completion.choices[0]?.message?.content || "No response generated.";
 }
 
 // ─── Tool definitions ────────────────────────────────────────────────────────
@@ -412,6 +401,23 @@ const ACA_TOOLS: Anthropic.Tool[] = [
       required: [],
     },
   },
+  {
+    name: "query_website",
+    description: "Fetch and analyze a client's live website for SEO issues. Retrieves page HTML and extracts meta tags, headings, content structure, internal/external links, and on-page SEO signals. Also pulls the most recent Screaming Frog crawl data if available.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        client_id: { type: "number", description: "The client ID" },
+        url: { type: "string", description: "Specific URL to analyze. If omitted, uses the client's primary site URL." },
+        analysis_type: {
+          type: "string",
+          description: "What kind of analysis to perform",
+          enum: ["seo_audit", "meta_tags", "headings", "content", "links", "full_page"],
+        },
+      },
+      required: ["client_id"],
+    },
+  },
 ];
 
 // ─── Tool execution ──────────────────────────────────────────────────────────
@@ -624,6 +630,66 @@ async function executeTool(
         return JSON.stringify(logs);
       }
 
+      case "query_website": {
+        const client = await storage.getClient(input.client_id);
+        if (!client) return JSON.stringify({ error: "Client not found" });
+
+        const targetUrl = input.url || client.gscSiteUrl || client.aboutPageUrl;
+        if (!targetUrl) return JSON.stringify({ error: "No website URL configured for this client." });
+
+        const results: any = { url: targetUrl, analysisType: input.analysis_type || "seo_audit" };
+
+        try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 10000);
+          const resp = await fetch(targetUrl, {
+            headers: { "User-Agent": "SmartEO-Bot/1.0" },
+            signal: controller.signal,
+          });
+          clearTimeout(timeout);
+          const html = await resp.text();
+          const $ = cheerio.load(html);
+
+          results.live = {
+            statusCode: resp.status,
+            title: $("title").text().trim(),
+            metaDescription: $('meta[name="description"]').attr("content") || null,
+            metaRobots: $('meta[name="robots"]').attr("content") || null,
+            canonical: $('link[rel="canonical"]').attr("href") || null,
+            ogTitle: $('meta[property="og:title"]').attr("content") || null,
+            ogDescription: $('meta[property="og:description"]').attr("content") || null,
+            ogImage: $('meta[property="og:image"]').attr("content") || null,
+            h1: $("h1").map((_, el) => $(el).text().trim()).get(),
+            h2: $("h2").map((_, el) => $(el).text().trim()).get(),
+            h3Count: $("h3").length,
+            h4Count: $("h4").length,
+            imgWithoutAlt: $("img:not([alt]), img[alt='']").length,
+            totalImages: $("img").length,
+            internalLinks: $(`a[href^='/'], a[href^='${targetUrl}']`).length,
+            externalLinks: $("a[href^='http']").not(`a[href^='${targetUrl}']`).length,
+            wordCount: $("body").text().replace(/\s+/g, " ").trim().split(" ").length,
+            hasStructuredData: $('script[type="application/ld+json"]').length > 0,
+            schemaTypes: $('script[type="application/ld+json"]')
+              .map((_, el) => {
+                try { const parsed = JSON.parse($(el).html() || "{}"); return parsed["@type"] || null; } catch { return null; }
+              })
+              .get()
+              .filter(Boolean),
+          };
+        } catch (err: any) {
+          results.live = { error: `Failed to fetch website: ${err.message}` };
+        }
+
+        try {
+          const sfResult = await querySfReport("technical_health_summary" as Command, client, "last_90_vs_prev_90");
+          results.screamingFrog = sfResult || { note: "No Screaming Frog data uploaded for this client" };
+        } catch {
+          results.screamingFrog = { note: "No Screaming Frog data available" };
+        }
+
+        return JSON.stringify(results);
+      }
+
       default:
         return JSON.stringify({ error: `Unknown tool: ${name}` });
     }
@@ -667,7 +733,7 @@ export interface ClientContext {
   name: string;
 }
 
-function buildSystemPrompt(clientContext?: ClientContext): string {
+function buildSystemPrompt(clientContext?: ClientContext, integrations?: string[]): string {
   const today = new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 
   let prompt = ACA_SYSTEM_PROMPT_BASE;
@@ -690,6 +756,14 @@ NO CLIENT SELECTED:
 The user has not selected a specific client. If their question is about a specific client, call list_clients first to see what's available, then ask which client they mean. If they ask about all clients, query each one.`;
   }
 
+  if (integrations && integrations.length > 0) {
+    prompt += `
+
+SELECTED INTEGRATIONS:
+The user has selected the following data sources to query: ${integrations.join(", ")}.
+Focus on data from these sources. If data from an unselected source would be helpful, mention that to the user but do not query it.`;
+  }
+
   prompt += `
 
 Today's date is ${today}.`;
@@ -705,37 +779,57 @@ export interface AcaMessage {
 }
 
 /**
- * Run a full ACA conversation turn.
- * Handles the tool-use loop: Claude may call tools, we execute them,
- * feed results back, and repeat until Claude produces a final text response.
- *
- * @param messages - Conversation history
- * @param clientContext - If set, Claude scopes all queries to this client
- * @param onToolCall - Optional callback when a tool is invoked
+ * Run a full ACA conversation turn with multi-provider fallback.
+ * Tries Claude → Groq → OpenAI in order. Any failure on one provider
+ * is logged and the next one is attempted.
  */
 export async function runAcaChat(
   messages: AcaMessage[],
   clientContext?: ClientContext,
+  integrations?: string[],
   onToolCall?: (toolName: string, toolInput: Record<string, any>) => void
-): Promise<string> {
-  try {
-    return await runAcaWithClaude(messages, clientContext, onToolCall);
-  } catch (err: any) {
-    if (isClaudeBillingError(err)) {
-      console.warn("[ACA] Claude unavailable (billing/quota), falling back to Groq:", err.message);
-      return await runAcaWithGroq(messages, clientContext, onToolCall);
+): Promise<{ response: string; provider: string }> {
+  if (process.env.ANTHROPIC_API_KEY) {
+    try {
+      console.log("[ACA] Trying provider: claude");
+      const response = await runWithClaude(messages, clientContext, integrations, onToolCall);
+      return { response, provider: "claude" };
+    } catch (err: any) {
+      console.error("[ACA] Claude failed:", err?.status, err?.message?.slice(0, 200));
     }
-    throw err;
   }
+  if (process.env.GROQ_API_KEY) {
+    try {
+      console.log("[ACA] Trying provider: groq");
+      const response = await runWithOpenAICompatible("groq", messages, clientContext, integrations);
+      return { response, provider: "groq" };
+    } catch (err: any) {
+      console.error("[ACA] Groq failed:", err?.status, err?.message?.slice(0, 200));
+    }
+  }
+  if (process.env.OPENAI_API_KEY) {
+    try {
+      console.log("[ACA] Trying provider: openai");
+      const response = await runWithOpenAICompatible("openai", messages, clientContext, integrations);
+      return { response, provider: "openai" };
+    } catch (err: any) {
+      console.error("[ACA] OpenAI failed:", err?.status, err?.message?.slice(0, 200));
+    }
+  }
+  throw new Error(
+    "All AI providers failed or are unconfigured. Add at least one API key in Secrets: ANTHROPIC_API_KEY, GROQ_API_KEY, or OPENAI_API_KEY."
+  );
 }
 
-async function runAcaWithClaude(
+async function runWithClaude(
   messages: AcaMessage[],
   clientContext?: ClientContext,
+  integrations?: string[],
   onToolCall?: (toolName: string, toolInput: Record<string, any>) => void
 ): Promise<string> {
   const anthropic = getAnthropicClient();
-  const systemPrompt = buildSystemPrompt(clientContext);
+  const systemPrompt = buildSystemPrompt(clientContext, integrations);
+  const tools = getFilteredTools(integrations);
 
   const apiMessages: Anthropic.MessageParam[] = messages.map((m) => ({
     role: m.role,
@@ -744,10 +838,10 @@ async function runAcaWithClaude(
 
   for (let i = 0; i < 15; i++) {
     const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514",
       max_tokens: 4096,
       system: systemPrompt,
-      tools: ACA_TOOLS,
+      tools,
       messages: apiMessages,
     });
 

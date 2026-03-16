@@ -416,6 +416,7 @@ export default function SetupPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/credentials"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/credentials/health"] });
       toast({ title: "Account connected successfully" });
       resetDialog();
     },
@@ -427,6 +428,7 @@ export default function SetupPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/credentials"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/credentials/health"] });
       toast({ title: "Account disconnected" });
     },
   });
@@ -452,6 +454,7 @@ export default function SetupPage() {
       setSheetsConnecting(false);
       if (event.data.success) {
         queryClient.invalidateQueries({ queryKey: ["/api/credentials"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/credentials/health"] });
         toast({ title: "Google Sheets access authorized" });
       } else {
         toast({ title: "Authorization failed", description: event.data.message, variant: "destructive" });
@@ -482,6 +485,7 @@ export default function SetupPage() {
       window.removeEventListener("message", messageHandler);
       if (event.data.success) {
         queryClient.invalidateQueries({ queryKey: ["/api/credentials"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/credentials/health"] });
         toast({ title: `${activeService.name} connected successfully` });
         resetDialog();
       } else {

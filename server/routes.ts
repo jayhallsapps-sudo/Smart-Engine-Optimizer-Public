@@ -545,6 +545,92 @@ export async function registerRoutes(
     }
   });
 
+  // Auto-match GA4 properties to clients by name/domain
+  app.post("/api/ga4/auto-assign", async (_req, res) => {
+    try {
+      const accessToken = await getGoogleAccessToken("google_analytics_4");
+      if (!accessToken) {
+        return res.status(401).json({ message: "GA4 is not connected. Connect it in Setup → Analytics & Search." });
+      }
+      const resp = await fetch("https://analyticsadmin.googleapis.com/v1beta/accountSummaries", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const data = await resp.json() as any;
+      if (!resp.ok) {
+        return res.status(resp.status).json({ message: data.error?.message ?? resp.statusText });
+      }
+
+      const properties: { propertyId: string; displayName: string; accountName: string }[] = [];
+      for (const account of (data.accountSummaries ?? [])) {
+        for (const prop of (account.propertySummaries ?? [])) {
+          properties.push({ propertyId: prop.property, displayName: prop.displayName, accountName: account.displayName });
+        }
+      }
+
+      const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+
+      function scoreMatch(clientName: string, prop: typeof properties[0]): number {
+        const cn = norm(clientName);
+        const pn = norm(prop.displayName);
+        const an = norm(prop.accountName);
+        if (pn === cn) return 100;
+        if (an === cn) return 95;
+        if (pn.includes(cn) || cn.includes(pn)) return 80;
+        if (an.includes(cn) || cn.includes(an)) return 70;
+        const cnWords = cn.split(" ").filter(w => w.length > 3);
+        const pnWords = new Set(pn.split(" "));
+        const anWords = new Set(an.split(" "));
+        const pnHits = cnWords.filter(w => pnWords.has(w)).length;
+        const anHits = cnWords.filter(w => anWords.has(w)).length;
+        return Math.max(pnHits, anHits) * 20;
+      }
+
+      const clients = await storage.getClients();
+      const matches: { clientId: number; clientName: string; propertyId: string; displayName: string; accountName: string; score: number; currentPropertyId: string }[] = [];
+
+      for (const client of clients) {
+        let best: typeof properties[0] | null = null;
+        let bestScore = 0;
+        for (const prop of properties) {
+          const s = scoreMatch(client.name, prop);
+          if (s > bestScore) { bestScore = s; best = prop; }
+        }
+        if (best && bestScore >= 60) {
+          matches.push({
+            clientId: client.id,
+            clientName: client.name,
+            propertyId: best.propertyId,
+            displayName: best.displayName,
+            accountName: best.accountName,
+            score: bestScore,
+            currentPropertyId: client.ga4PropertyId ?? "",
+          });
+        }
+      }
+
+      res.json({ matches, total: properties.length });
+    } catch (err: any) {
+      console.error("[GA4] auto-assign error:", err.message);
+      res.status(500).json({ message: "Auto-assign failed: " + err.message });
+    }
+  });
+
+  // Apply a set of GA4 property assignments
+  app.patch("/api/ga4/apply-assignments", async (req, res) => {
+    try {
+      const assignments = req.body.assignments as { clientId: number; propertyId: string }[];
+      if (!Array.isArray(assignments)) return res.status(400).json({ message: "assignments array required" });
+      const results = [];
+      for (const { clientId, propertyId } of assignments) {
+        const updated = await storage.updateClient(clientId, { ga4PropertyId: propertyId });
+        results.push({ clientId, propertyId, ok: !!updated });
+      }
+      res.json({ results });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.get("/api/gsc/sites", async (_req, res) => {
     try {
       const accessToken = await getGoogleAccessToken("google_search_console");

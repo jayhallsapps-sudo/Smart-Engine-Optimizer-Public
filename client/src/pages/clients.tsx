@@ -63,6 +63,8 @@ import {
   RefreshCw,
   ChevronsUpDown,
   Check,
+  Sparkles,
+  AlertTriangle,
 } from "lucide-react";
 import type { Client } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
@@ -1136,9 +1138,23 @@ function ClientCard({
   );
 }
 
+type Ga4Match = {
+  clientId: number;
+  clientName: string;
+  propertyId: string;
+  displayName: string;
+  accountName: string;
+  score: number;
+  currentPropertyId: string;
+};
+
 export default function ClientsPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
+  const [ga4MatchOpen, setGa4MatchOpen] = useState(false);
+  const [ga4Matches, setGa4Matches] = useState<Ga4Match[]>([]);
+  const [ga4MatchLoading, setGa4MatchLoading] = useState(false);
+  const [ga4ApplyLoading, setGa4ApplyLoading] = useState(false);
   const { toast } = useToast();
 
   const { data: clients = [], isLoading } = useQuery<Client[]>({
@@ -1180,14 +1196,94 @@ export default function ClientsPage() {
     setEditingClient(client);
   };
 
+  const handleGa4AutoMatch = async () => {
+    setGa4MatchLoading(true);
+    try {
+      const res = await apiRequest("POST", "/api/ga4/auto-assign");
+      const data = await res.json() as { matches: Ga4Match[]; total: number };
+      setGa4Matches(data.matches);
+      setGa4MatchOpen(true);
+      if (data.matches.length === 0) {
+        toast({ title: "No matches found", description: `Searched ${data.total} properties — no confident matches found.`, variant: "destructive" });
+      }
+    } catch (err: any) {
+      toast({ title: "Auto-match failed", description: err.message, variant: "destructive" });
+    } finally {
+      setGa4MatchLoading(false);
+    }
+  };
+
+  const handleGa4Apply = async () => {
+    setGa4ApplyLoading(true);
+    try {
+      const assignments = ga4Matches.map(m => ({ clientId: m.clientId, propertyId: m.propertyId }));
+      await apiRequest("PATCH", "/api/ga4/apply-assignments", { assignments });
+      queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
+      setGa4MatchOpen(false);
+      toast({ title: `GA4 assigned for ${assignments.length} client${assignments.length !== 1 ? "s" : ""}`, description: "Property IDs updated from your connected GA4 account." });
+    } catch (err: any) {
+      toast({ title: "Failed to apply assignments", description: err.message, variant: "destructive" });
+    } finally {
+      setGa4ApplyLoading(false);
+    }
+  };
+
   return (
     <div className="h-full overflow-y-auto">
+
+    {/* GA4 Auto-match Dialog */}
+    <Dialog open={ga4MatchOpen} onOpenChange={setGa4MatchOpen}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <BarChart3 className="w-4 h-4 text-[#0369A1]" />
+            GA4 Auto-match Preview
+          </DialogTitle>
+          <DialogDescription>
+            These GA4 properties were matched from your connected account. Review and apply.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+          {ga4Matches.map(m => (
+            <div key={m.clientId} className="flex flex-col gap-0.5 rounded-md border px-3 py-2 bg-muted/30 text-sm">
+              <div className="font-medium">{m.clientName}</div>
+              <div className="text-[11px] text-muted-foreground font-mono">{m.propertyId}</div>
+              <div className="text-[11px] text-muted-foreground">{m.displayName} · {m.accountName}</div>
+              {m.currentPropertyId && m.currentPropertyId !== m.propertyId && (
+                <div className="flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400 mt-0.5">
+                  <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
+                  Replaces: {m.currentPropertyId}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setGa4MatchOpen(false)}>Cancel</Button>
+          <Button onClick={handleGa4Apply} disabled={ga4ApplyLoading} data-testid="button-apply-ga4-matches">
+            {ga4ApplyLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <CheckCheck className="w-3.5 h-3.5 mr-1.5" />}
+            Apply {ga4Matches.length} Assignment{ga4Matches.length !== 1 ? "s" : ""}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
     <div className="p-6 max-w-5xl mx-auto">
       <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
         <div>
           <h1 className="text-xl font-semibold" style={{ color: "#0369A1" }} data-testid="text-clients-title">Client Dashboards</h1>
           <p className="text-sm text-muted-foreground">Manage your recovery & addiction centre clients and their data source configurations.</p>
         </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={handleGa4AutoMatch}
+            disabled={ga4MatchLoading}
+            data-testid="button-ga4-auto-match"
+          >
+            {ga4MatchLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <Sparkles className="w-3.5 h-3.5 mr-1.5" />}
+            Auto-match GA4
+          </Button>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button data-testid="button-add-client">
@@ -1207,6 +1303,7 @@ export default function ClientsPage() {
             />
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {isLoading ? (

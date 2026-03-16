@@ -111,12 +111,30 @@ async function testCallRail(apiKey: string): Promise<TestResult> {
   }
 }
 
-async function testAhrefs(_ignored: string): Promise<TestResult> {
-  return {
-    success: false,
-    message:
-      "Ahrefs direct API access is not available on this plan. Ahrefs data is only available via the Ahrefs Connect / MCP integration.",
-  };
+async function testAhrefs(apiKey: string): Promise<TestResult> {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const resp = await fetch(
+      `https://api.ahrefs.com/v3/site-explorer/domain-rating?target=ahrefs.com&date=${today}`,
+      { headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" } }
+    );
+    if (resp.status === 401 || resp.status === 403) throw new Error("Invalid API key — check the token in your Ahrefs account settings");
+    if (resp.status === 429) throw new Error("Rate limit exceeded — try again shortly");
+    if (!resp.ok) {
+      const body = await resp.text();
+      // Ahrefs returns ["Error","..."] arrays for some errors
+      try { const arr = JSON.parse(body); if (Array.isArray(arr)) throw new Error(arr[1] ?? arr[0]); } catch {}
+      throw new Error(body.substring(0, 120) || resp.statusText);
+    }
+    const data = await resp.json() as any;
+    const dr = data?.domain?.domain_rating ?? data?.domain_rating ?? data?.domainRating;
+    return {
+      success: true,
+      message: dr != null ? `API key valid — ahrefs.com DR ${Math.round(dr)}` : "API key valid",
+    };
+  } catch (err: any) {
+    return { success: false, message: err.message };
+  }
 }
 
 async function testSEMrush(apiKey: string): Promise<TestResult> {

@@ -289,10 +289,10 @@ export default function SetupPage() {
   const [sheetUrlInput, setSheetUrlInput] = useState("");
   const [sheetsConnecting, setSheetsConnecting] = useState(false);
   const [qssbDocInput, setQssbDocInput] = useState("");
-  const [strategyBankInput, setStrategyBankInput] = useState("");
   const [qssbTesting, setQssbTesting] = useState(false);
-  const [strategyTesting, setStrategyTesting] = useState(false);
-  const [strategyBankRefetchKey, setStrategyBankRefetchKey] = useState(0);
+  const [notionPageUrl, setNotionPageUrl] = useState("");
+  const [notionPageLabel, setNotionPageLabel] = useState("");
+  const [notionTestStates, setNotionTestStates] = useState<Record<string, { loading: boolean; entries?: number; childPages?: number; source?: string; error?: string }>>({});
   const { toast } = useToast();
 
   const { data: googleStatus } = useQuery<{ configured: boolean }>({
@@ -318,19 +318,10 @@ export default function SetupPage() {
   });
 
   const savedQssbDocId = appSettings["qssb_document_id"] ?? "";
-  const savedStrategyBankId = appSettings["strategy_bank_page_id"] ?? "";
 
-  const { data: strategyBankStatus, isFetching: strategyBankChecking } = useQuery<{
-    success: boolean;
-    entries: number;
-    pageId?: string;
-    source?: string;
-    error?: string;
-    accessible?: boolean;
-  }>({
-    queryKey: ["/api/strategy-bank/test", savedStrategyBankId, strategyBankRefetchKey],
-    enabled: !!savedStrategyBankId,
-    staleTime: 5 * 60 * 1000,
+  const { data: notionPages = [], isLoading: notionPagesLoading, refetch: refetchNotionPages } = useQuery<{ id: string; label: string; addedAt: string }[]>({
+    queryKey: ["/api/notion-pages"],
+    staleTime: 60 * 1000,
   });
 
   const saveQssbMutation = useMutation({
@@ -347,20 +338,41 @@ export default function SetupPage() {
     onError: () => toast({ title: "Failed to save", variant: "destructive" }),
   });
 
-  const saveStrategyBankMutation = useMutation({
-    mutationFn: async (pageUrl: string) => {
-      const match = pageUrl.match(/([a-f0-9]{32})$/);
-      const pageId = match ? match[1] : pageUrl.trim().replace(/-/g, "");
-      await apiRequest("PUT", "/api/settings/strategy_bank_page_id", { value: pageId });
+  const addNotionPageMutation = useMutation({
+    mutationFn: async ({ url, label }: { url: string; label: string }) => {
+      return apiRequest("POST", "/api/notion-pages", { url, label });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
-      toast({ title: "Strategy Bank ID saved" });
-      setStrategyBankInput("");
-      setStrategyBankRefetchKey(k => k + 1);
+      queryClient.invalidateQueries({ queryKey: ["/api/notion-pages"] });
+      toast({ title: "Notion page added" });
+      setNotionPageUrl("");
+      setNotionPageLabel("");
     },
-    onError: () => toast({ title: "Failed to save", variant: "destructive" }),
+    onError: (err: any) => toast({ title: err?.message || "Failed to add page", variant: "destructive" }),
   });
+
+  const deleteNotionPageMutation = useMutation({
+    mutationFn: async (pageId: string) => {
+      return apiRequest("DELETE", `/api/notion-pages/${pageId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/notion-pages"] });
+      toast({ title: "Notion page removed" });
+    },
+    onError: () => toast({ title: "Failed to remove page", variant: "destructive" }),
+  });
+
+  const testNotionPage = async (pageId: string) => {
+    setNotionTestStates(s => ({ ...s, [pageId]: { loading: true } }));
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(`/api/notion-pages/${pageId}/test`, { headers });
+      const data = await res.json();
+      setNotionTestStates(s => ({ ...s, [pageId]: { loading: false, ...data } }));
+    } catch {
+      setNotionTestStates(s => ({ ...s, [pageId]: { loading: false, error: "Test failed" } }));
+    }
+  };
 
   const testQssbConnection = async () => {
     setQssbTesting(true);
@@ -377,26 +389,6 @@ export default function SetupPage() {
       toast({ title: "QSSB test failed", variant: "destructive" });
     }
     setQssbTesting(false);
-  };
-
-  const testStrategyBankConnection = async () => {
-    setStrategyTesting(true);
-    try {
-      const headers = await getAuthHeaders();
-      const res = await fetch("/api/strategy-bank/test", { headers });
-      const data = await res.json();
-      if (res.ok && data.success && data.entries > 0) {
-        toast({ title: `Strategy Bank connected: ${data.entries} entries found (${data.source ?? "unknown source"})` });
-      } else if (res.ok && data.success && data.entries === 0) {
-        toast({ title: "Page ID is valid but 0 entries found. Ensure the Notion integration has page access.", variant: "destructive" });
-      } else {
-        toast({ title: data.error || data.message || "Strategy Bank connection failed", variant: "destructive" });
-      }
-      setStrategyBankRefetchKey(k => k + 1);
-    } catch {
-      toast({ title: "Strategy Bank test failed", variant: "destructive" });
-    }
-    setStrategyTesting(false);
   };
 
   const { data: credentials = [], isLoading } = useQuery<CredentialSafe[]>({
@@ -821,87 +813,98 @@ export default function SetupPage() {
               <Separator />
 
               <div>
-                <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center gap-2 mb-1">
                   <Globe className="w-4 h-4 text-muted-foreground" />
                   <h3 className="font-medium text-sm">Notion SEO Strategy Bank</h3>
-                  {savedStrategyBankId && strategyBankStatus && (
-                    strategyBankStatus.entries > 0 ? (
-                      <Badge variant="default" className="text-[10px]">
-                        <CheckCircle className="w-3 h-3 mr-1" /> {strategyBankStatus.entries} entries
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" className="text-[10px] text-yellow-700 dark:text-yellow-400 border-yellow-400">
-                        0 entries — check access
-                      </Badge>
-                    )
-                  )}
-                  {savedStrategyBankId && strategyBankChecking && (
-                    <Badge variant="secondary" className="text-[10px]">
-                      <Loader2 className="w-3 h-3 mr-1 animate-spin" /> Checking…
+                  {notionPages.length > 0 && (
+                    <Badge variant="default" className="text-[10px]">
+                      <CheckCircle className="w-3 h-3 mr-1" /> {notionPages.length} {notionPages.length === 1 ? "page" : "pages"}
                     </Badge>
                   )}
-                  {savedStrategyBankId && !strategyBankStatus && !strategyBankChecking && (
-                    <Badge variant="secondary" className="text-[10px]">Configured</Badge>
-                  )}
                 </div>
-                <p className="text-xs text-muted-foreground mb-2">
-                  Paste the Notion page URL or page ID for the SEO Strategy Bank. Strategy entries are merged into the "Additional Opportunities" section of generated reports.
+                <p className="text-xs text-muted-foreground mb-3">
+                  Add up to 50 Notion pages. SmartEO reads each page and its direct sub-pages, then merges all entries into reports. Each page must have the SmartEO integration connected in Notion (••• → Connections).
                 </p>
-                {savedStrategyBankId && (
-                  <div className="flex items-center gap-2 p-1.5 rounded bg-muted/50 mb-2">
-                    <Link className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                    <span className="text-xs text-muted-foreground truncate" data-testid="text-strategy-bank-id">{savedStrategyBankId}</span>
+
+                {notionPagesLoading ? (
+                  <div className="space-y-1.5 mb-3">
+                    <Skeleton className="h-8 w-full" />
+                    <Skeleton className="h-8 w-full" />
                   </div>
-                )}
-                {savedStrategyBankId && strategyBankStatus && strategyBankStatus.entries === 0 && (
-                  <div className="flex items-start gap-2 p-3 rounded-md bg-yellow-500/10 border border-yellow-500/20 mb-2">
-                    <AlertTriangle className="w-4 h-4 text-yellow-600 dark:text-yellow-400 shrink-0 mt-0.5" />
-                    <div className="text-xs text-yellow-700 dark:text-yellow-300">
-                      <strong>0 entries found.</strong> The page ID is saved, but no strategy entries were parsed.
-                      {strategyBankStatus.error && (
-                        <span className="block mt-1 text-yellow-600 dark:text-yellow-400">Error: {strategyBankStatus.error}</span>
-                      )}
-                      <span className="block mt-1">
-                        To fix this: open the Notion page, click the <strong>•••</strong> menu → <strong>Add connections</strong>, and invite the SmartEO integration. Once the integration has access to the page, click Test below.
-                      </span>
-                    </div>
+                ) : notionPages.length > 0 ? (
+                  <div className="space-y-1.5 mb-3">
+                    {notionPages.map((page) => {
+                      const ts = notionTestStates[page.id];
+                      return (
+                        <div key={page.id} className="flex items-center gap-2 p-2 rounded border border-border bg-muted/30">
+                          {ts?.loading ? (
+                            <Loader2 className="w-3.5 h-3.5 text-muted-foreground animate-spin shrink-0" />
+                          ) : ts?.success === false ? (
+                            <XCircle className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                          ) : ts?.entries != null && ts.entries > 0 ? (
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                          ) : (
+                            <Link className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <span className="text-xs font-medium truncate block">{page.label}</span>
+                            {ts?.entries != null && (
+                              <span className={`text-[10px] ${ts.success === false ? "text-red-500" : ts.entries > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-yellow-600 dark:text-yellow-400"}`}>
+                                {ts.success === false ? (ts.error ?? "Access error") : ts.entries === 0 ? "0 entries — check Notion access" : `${ts.entries} entries${ts.childPages ? ` (+${ts.childPages} sub-pages)` : ""} via ${ts.source === "database" ? "database" : "page blocks"}`}
+                              </span>
+                            )}
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 w-6 p-0 shrink-0"
+                            onClick={() => testNotionPage(page.id)}
+                            disabled={ts?.loading}
+                            data-testid={`button-test-notion-${page.id}`}
+                            title="Test page access"
+                          >
+                            <Wifi className="w-3 h-3" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 w-6 p-0 text-red-500 hover:text-red-600 shrink-0"
+                            onClick={() => deleteNotionPageMutation.mutate(page.id)}
+                            disabled={deleteNotionPageMutation.isPending}
+                            data-testid={`button-delete-notion-${page.id}`}
+                            title="Remove page"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      );
+                    })}
                   </div>
-                )}
-                {savedStrategyBankId && strategyBankStatus && strategyBankStatus.entries > 0 && (
-                  <div className="flex items-center gap-2 p-1.5 rounded bg-emerald-500/10 border border-emerald-500/20 mb-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                    <span className="text-xs text-emerald-700 dark:text-emerald-300">
-                      {strategyBankStatus.entries} {strategyBankStatus.entries === 1 ? "entry" : "entries"} found via {strategyBankStatus.source === "database" ? "Notion database" : strategyBankStatus.source === "page_blocks" ? "page blocks" : "Notion"}.
-                    </span>
-                  </div>
-                )}
+                ) : null}
+
                 <div className="flex gap-2">
                   <Input
+                    placeholder="Label (e.g. Anchored Tides Strategy)"
+                    value={notionPageLabel}
+                    onChange={e => setNotionPageLabel(e.target.value)}
+                    className="text-xs h-8 w-40 shrink-0"
+                    data-testid="input-notion-label"
+                  />
+                  <Input
                     placeholder="https://www.notion.so/… or page ID"
-                    value={strategyBankInput}
-                    onChange={e => setStrategyBankInput(e.target.value)}
+                    value={notionPageUrl}
+                    onChange={e => setNotionPageUrl(e.target.value)}
                     className="text-xs h-8"
-                    data-testid="input-strategy-bank"
+                    data-testid="input-notion-url"
                   />
                   <Button
                     size="sm"
-                    onClick={() => saveStrategyBankMutation.mutate(strategyBankInput.trim())}
-                    disabled={!strategyBankInput.trim() || saveStrategyBankMutation.isPending}
-                    data-testid="button-save-strategy-bank"
+                    onClick={() => addNotionPageMutation.mutate({ url: notionPageUrl.trim(), label: notionPageLabel.trim() })}
+                    disabled={!notionPageUrl.trim() || !notionPageLabel.trim() || addNotionPageMutation.isPending}
+                    data-testid="button-add-notion-page"
                   >
-                    {savedStrategyBankId ? "Update" : "Save"}
+                    <Plus className="w-3.5 h-3.5 mr-1" /> Add
                   </Button>
-                  {savedStrategyBankId && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={testStrategyBankConnection}
-                      disabled={strategyTesting}
-                      data-testid="button-test-strategy-bank"
-                    >
-                      {strategyTesting ? <Loader2 className="w-3 h-3 animate-spin" /> : "Test"}
-                    </Button>
-                  )}
                 </div>
               </div>
             </div>

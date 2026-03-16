@@ -5,12 +5,28 @@ export interface StrategyBankEntry {
   service: string;
   description: string;
   category: string;
+  sourcePageId?: string;
+  sourcePageLabel?: string;
 }
 
 export interface StrategyBankData {
   entries: StrategyBankEntry[];
   fetchedAt: string;
-  source?: "database" | "page_blocks" | "none";
+  source?: "database" | "page_blocks" | "mixed" | "none";
+  error?: string;
+}
+
+export interface NotionPageConfig {
+  id: string;
+  label: string;
+  addedAt: string;
+}
+
+export interface PageTestResult {
+  success: boolean;
+  entries: number;
+  childPages: number;
+  source: string;
   error?: string;
 }
 
@@ -133,59 +149,119 @@ function extractDatabaseEntries(results: any[]): StrategyBankEntry[] {
   return entries;
 }
 
+export function extractNotionPageId(input: string): string {
+  const trimmed = input.trim();
+  const match = trimmed.match(/([a-f0-9]{32})(?:[?#].*)?$/i);
+  if (match) return match[1].toLowerCase();
+  const dashMatch = trimmed.match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})(?:[?#].*)?$/i);
+  if (dashMatch) return dashMatch[1].replace(/-/g, "").toLowerCase();
+  return trimmed.replace(/-/g, "").toLowerCase();
+}
+
+export async function fetchSinglePageEntries(pageId: string): Promise<PageTestResult> {
+  let entries: StrategyBankEntry[] = [];
+  let source = "none";
+  let childPageCount = 0;
+
+  try {
+    const dbResult = await notionProxy(`/v1/databases/${pageId}/query`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ page_size: 100 }),
+    });
+    entries = extractDatabaseEntries(dbResult.results ?? []);
+    source = "database";
+  } catch (dbErr: any) {
+    const isNotFound = dbErr.message?.includes("404") || dbErr.message?.includes("validation_error") || dbErr.message?.includes("object_not_found");
+    if (isNotFound) {
+      try {
+        const blocksResult = await notionProxy(`/v1/blocks/${pageId}/children?page_size=100`);
+        const blocks = blocksResult.results ?? [];
+        entries = extractPageBlocks(blocks);
+        source = "page_blocks";
+
+        const childBlocks = blocks.filter((b: any) => b.type === "child_page");
+        childPageCount = childBlocks.length;
+
+        for (const childBlock of childBlocks) {
+          try {
+            const childBlocks2 = await notionProxy(`/v1/blocks/${childBlock.id}/children?page_size=100`);
+            const childEntries = extractPageBlocks(childBlocks2.results ?? []);
+            entries.push(...childEntries);
+          } catch {
+          }
+        }
+      } catch (blockErr: any) {
+        return { success: false, entries: 0, childPages: 0, source: "none", error: blockErr.message ?? "Page not accessible. Ensure the integration has access." };
+      }
+    } else {
+      return { success: false, entries: 0, childPages: 0, source: "none", error: dbErr.message };
+    }
+  }
+
+  return { success: true, entries: entries.length, childPages: childPageCount, source };
+}
+
+export async function getNotionPages(): Promise<NotionPageConfig[]> {
+  const raw = await storage.getSetting("strategy_bank_pages");
+  if (raw) {
+    try { return JSON.parse(raw); } catch { return []; }
+  }
+  const legacyId = await storage.getSetting("strategy_bank_page_id");
+  if (legacyId) {
+    return [{ id: legacyId, label: "Strategy Bank", addedAt: new Date().toISOString() }];
+  }
+  return [];
+}
+
+export async function saveNotionPages(pages: NotionPageConfig[]): Promise<void> {
+  await storage.setSetting("strategy_bank_pages", JSON.stringify(pages));
+}
+
 export async function fetchStrategyBank(forceRefresh = false): Promise<StrategyBankData> {
   if (!forceRefresh && cachedBank && Date.now() < bankCacheExpiry) {
     return cachedBank;
   }
 
   try {
-    const pageId = await storage.getSetting("strategy_bank_page_id");
-    if (!pageId) {
-      console.warn("[StrategyBank] No Notion Strategy Bank page ID configured — skipping");
+    const pages = await getNotionPages();
+    if (!pages.length) {
+      console.warn("[StrategyBank] No Notion pages configured — skipping");
       return EMPTY;
     }
 
-    console.log(`[StrategyBank] Fetching Notion page ${pageId}...`);
+    console.log(`[StrategyBank] Fetching ${pages.length} Notion page(s)...`);
 
-    let entries: StrategyBankEntry[] = [];
-    let source: "database" | "page_blocks" | "none" = "none";
+    const allEntries: StrategyBankEntry[] = [];
+    const sources = new Set<string>();
 
-    try {
-      const dbResult = await notionProxy(`/v1/databases/${pageId}/query`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ page_size: 100 }),
-      });
-      entries = extractDatabaseEntries(dbResult.results ?? []);
-      source = "database";
-      console.log(`[StrategyBank] Parsed ${entries.length} entries from Notion database`);
-    } catch (dbErr: any) {
-      if (dbErr.message?.includes("404") || dbErr.message?.includes("validation_error") || dbErr.message?.includes("object_not_found")) {
-        console.log("[StrategyBank] Not a database — trying as page with blocks...");
+    await Promise.allSettled(
+      pages.map(async (page) => {
         try {
-          const blocksResult = await notionProxy(`/v1/blocks/${pageId}/children?page_size=100`);
-          entries = extractPageBlocks(blocksResult.results ?? []);
-          source = "page_blocks";
-          console.log(`[StrategyBank] Parsed ${entries.length} entries from Notion page blocks`);
-        } catch (blockErr: any) {
-          console.warn("[StrategyBank] Page blocks also failed:", blockErr.message ?? blockErr);
-          const result: StrategyBankData = {
-            entries: [],
-            fetchedAt: new Date().toISOString(),
-            source: "none",
-            error: blockErr.message ?? "Page is not accessible. Ensure the integration has been granted access to this page in Notion.",
-          };
-          cachedBank = result;
-          bankCacheExpiry = Date.now() + CACHE_TTL_MS;
-          return result;
+          const result = await fetchSinglePageEntries(page.id);
+          if (result.success) {
+            const tagged = result.entries > 0
+              ? await fetchRawEntries(page.id, page.label)
+              : [];
+            allEntries.push(...tagged);
+            sources.add(result.source);
+            console.log(`[StrategyBank] Page "${page.label}" (${page.id}): ${result.entries} entries, ${result.childPages} child pages`);
+          } else {
+            console.warn(`[StrategyBank] Page "${page.label}" failed: ${result.error}`);
+          }
+        } catch (err: any) {
+          console.warn(`[StrategyBank] Page "${page.label}" error:`, err.message);
         }
-      } else {
-        throw dbErr;
-      }
-    }
+      })
+    );
+
+    const sourceArr = Array.from(sources);
+    const source = sourceArr.length === 0 ? "none"
+      : sourceArr.length === 1 ? (sourceArr[0] as any)
+      : "mixed";
 
     const result: StrategyBankData = {
-      entries,
+      entries: allEntries,
       fetchedAt: new Date().toISOString(),
       source,
     };
@@ -194,9 +270,37 @@ export async function fetchStrategyBank(forceRefresh = false): Promise<StrategyB
     bankCacheExpiry = Date.now() + CACHE_TTL_MS;
     return result;
   } catch (err: any) {
-    console.error("[StrategyBank] Failed to fetch/parse Notion data:", err.message ?? err);
+    console.error("[StrategyBank] Failed:", err.message ?? err);
     return { ...EMPTY, error: err.message ?? "Unknown error" };
   }
+}
+
+async function fetchRawEntries(pageId: string, label: string): Promise<StrategyBankEntry[]> {
+  let entries: StrategyBankEntry[] = [];
+
+  try {
+    const dbResult = await notionProxy(`/v1/databases/${pageId}/query`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ page_size: 100 }),
+    });
+    entries = extractDatabaseEntries(dbResult.results ?? []);
+  } catch {
+    try {
+      const blocksResult = await notionProxy(`/v1/blocks/${pageId}/children?page_size=100`);
+      const blocks = blocksResult.results ?? [];
+      entries = extractPageBlocks(blocks);
+
+      for (const childBlock of blocks.filter((b: any) => b.type === "child_page")) {
+        try {
+          const childBlocks = await notionProxy(`/v1/blocks/${childBlock.id}/children?page_size=100`);
+          entries.push(...extractPageBlocks(childBlocks.results ?? []));
+        } catch { }
+      }
+    } catch { }
+  }
+
+  return entries.map(e => ({ ...e, sourcePageId: pageId, sourcePageLabel: label }));
 }
 
 export function clearStrategyBankCache(): void {

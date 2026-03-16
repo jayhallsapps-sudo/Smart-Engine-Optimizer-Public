@@ -1268,20 +1268,79 @@ export async function registerRoutes(
 
   app.get("/api/strategy-bank/test", async (_req, res) => {
     try {
-      const { fetchStrategyBank, clearStrategyBankCache } = await import("./notionClient");
+      const { fetchStrategyBank, clearStrategyBankCache, getNotionPages } = await import("./notionClient");
       clearStrategyBankCache();
       const data = await fetchStrategyBank(true);
-      const pageId = await storage.getSetting("strategy_bank_page_id");
+      const pages = await getNotionPages();
       res.json({
         success: true,
         entries: data.entries.length,
-        pageId: pageId ?? null,
+        pageCount: pages.length,
         source: data.source ?? "none",
         error: data.error ?? null,
         accessible: !data.error,
       });
     } catch (err: any) {
       res.json({ success: false, entries: 0, error: err.message, accessible: false });
+    }
+  });
+
+  app.get("/api/notion-pages", async (_req, res) => {
+    try {
+      const { getNotionPages } = await import("./notionClient");
+      const pages = await getNotionPages();
+      res.json(pages);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/notion-pages", async (req, res) => {
+    try {
+      const { getNotionPages, saveNotionPages, extractNotionPageId, clearStrategyBankCache } = await import("./notionClient");
+      const { url, label } = req.body as { url: string; label: string };
+      if (!url?.trim() || !label?.trim()) {
+        return res.status(400).json({ message: "url and label are required" });
+      }
+      const pageId = extractNotionPageId(url.trim());
+      if (!pageId || pageId.length < 10) {
+        return res.status(400).json({ message: "Could not extract a valid Notion page ID from that URL" });
+      }
+      const pages = await getNotionPages();
+      if (pages.find(p => p.id === pageId)) {
+        return res.status(409).json({ message: "That page is already in your list" });
+      }
+      pages.push({ id: pageId, label: label.trim(), addedAt: new Date().toISOString() });
+      await saveNotionPages(pages);
+      clearStrategyBankCache();
+      res.json({ success: true, id: pageId });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.delete("/api/notion-pages/:pageId", async (req, res) => {
+    try {
+      const { getNotionPages, saveNotionPages, clearStrategyBankCache } = await import("./notionClient");
+      const { pageId } = req.params;
+      const pages = await getNotionPages();
+      const filtered = pages.filter(p => p.id !== pageId);
+      await saveNotionPages(filtered);
+      clearStrategyBankCache();
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/notion-pages/:pageId/test", async (req, res) => {
+    try {
+      const { fetchSinglePageEntries } = await import("./notionClient");
+      const { pageId } = req.params;
+      const result = await fetchSinglePageEntries(pageId);
+      res.json(result);
+    } catch (err: any) {
+      res.json({ success: false, entries: 0, childPages: 0, source: "none", error: err.message });
     }
   });
 

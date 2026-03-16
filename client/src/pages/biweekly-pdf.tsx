@@ -5,6 +5,24 @@ import { SourceBadge } from "../components/report-preview/report-table";
 const FOOTER_TEXT = "Webserv  |  32 Discovery Suite 130, Irvine, CA 92618  |  webserv.io";
 const ACCENT = "#C0392B";
 
+function applyBulletEdits(bullets: string[], sectionId: string, edits: Record<string, string>): string[] {
+  return bullets.map((b, i) => edits[`${sectionId}_bullet_${i}`] ?? b);
+}
+
+function applyWorkLogEdits(workLog: any[], sectionId: string, edits: Record<string, string>): any[] {
+  return workLog.map((row: any, ri: number) => {
+    const editedDid = edits[`${sectionId}_worklog_${ri}_did`];
+    const editedNext = edits[`${sectionId}_worklog_${ri}_next`];
+    const items = editedDid !== undefined
+      ? editedDid.split("\n").filter(Boolean).map(t => ({ text: t }))
+      : (row.items ?? []);
+    const nextItemsRich = editedNext !== undefined
+      ? editedNext.split("\n").filter(Boolean).map(t => ({ text: t }))
+      : (row.nextItemsRich ?? (row.nextItems ?? []).map((t: string) => ({ text: t })));
+    return { ...row, items, nextItemsRich };
+  });
+}
+
 function StatusIcon({ value }: { value: string }) {
   const isBad = value.includes("❌") || value.toLowerCase().includes("behind") || value.toLowerCase().includes("no");
   const isGood = value.includes("✅") || value.toLowerCase().includes("on track") || value.toLowerCase().includes("yes");
@@ -41,7 +59,7 @@ function SectionHeading({ num, title }: { num: number; title: string }) {
   );
 }
 
-function BulletList({ bullets, sectionId }: { bullets: string[]; sectionId: string }) {
+function BulletList({ bullets }: { bullets: string[] }) {
   return (
     <div>
       {bullets.map((b, i) => (
@@ -144,7 +162,7 @@ function WorkLogTable({ workLog }: { workLog: any[] }) {
                 ))}
               </td>
               <td style={{ padding: "5px 10px", fontSize: "10px", verticalAlign: "top", borderBottom: "1px solid #F3F4F6", borderLeft: "1px solid #E5E7EB" }}>
-                {(row.nextItemsRich ?? (row.nextItems ?? []).map((t: string) => ({ text: t }))).map((item: any, ii: number) => (
+                {(row.nextItemsRich ?? []).map((item: any, ii: number) => (
                   <div key={ii} style={{ display: "flex", alignItems: "flex-start", gap: "4px", marginBottom: "2px" }}>
                     <span style={{ color: ACCENT, flexShrink: 0, marginTop: "1px" }}>•</span>
                     <span>{item.text}{item.source ? <> <SourceBadge source={item.source} /></> : null}</span>
@@ -197,6 +215,16 @@ export default function BiweeklyPdf() {
   const progressSection   = sections.find(s => s.id === "bw_progress");
   const partnerSection    = sections.find(s => s.id === "bw_partnership");
 
+  const purposeBullets = purposeSection
+    ? applyBulletEdits(purposeSection.bullets ?? [], "bw_purpose", edits)
+    : [];
+  const partnerBullets = partnerSection
+    ? applyBulletEdits(partnerSection.bullets ?? [], "bw_partnership", edits)
+    : [];
+  const workLog = progressSection?.workLog?.length
+    ? applyWorkLogEdits(progressSection.workLog, "bw_progress", edits)
+    : [];
+
   return (
     <div data-report-root style={{ background: "white", margin: 0, padding: 0 }}>
       <style>{`
@@ -205,7 +233,6 @@ export default function BiweeklyPdf() {
         button { display: none !important; }
       `}</style>
 
-      {/* Single wrapper — no page breaks, no fixed height */}
       <div style={{
         position: "relative",
         width: "8.5in",
@@ -213,7 +240,7 @@ export default function BiweeklyPdf() {
         padding: 0,
         background: "#fff",
       }}>
-        {/* Header art — flush to top/left/right */}
+        {/* Header art */}
         <div style={{ position: "relative", width: "100%", lineHeight: 0 }}>
           {headerImgUrl ? (
             <img src={headerImgUrl} alt="" style={{ width: "100%", display: "block" }} />
@@ -245,7 +272,7 @@ export default function BiweeklyPdf() {
           {purposeSection && (
             <div style={{ marginBottom: "16px" }}>
               <SectionHeading num={1} title="Purpose" />
-              <BulletList bullets={purposeSection.bullets ?? []} sectionId="bw_purpose" />
+              <BulletList bullets={purposeBullets} />
             </div>
           )}
 
@@ -258,10 +285,10 @@ export default function BiweeklyPdf() {
           )}
 
           {/* 3. Progress & Quick Wins */}
-          {progressSection && progressSection.workLog && progressSection.workLog.length > 0 && (
+          {workLog.length > 0 && (
             <div style={{ marginBottom: "16px" }}>
               <SectionHeading num={3} title="Progress &amp; Quick Wins" />
-              <WorkLogTable workLog={progressSection.workLog} />
+              <WorkLogTable workLog={workLog} />
             </div>
           )}
 
@@ -269,7 +296,7 @@ export default function BiweeklyPdf() {
           {partnerSection && (
             <div style={{ marginBottom: "16px" }}>
               <SectionHeading num={4} title={partnerSection.title ?? "Partnership &amp; Alignment"} />
-              <BulletList bullets={partnerSection.bullets ?? []} sectionId="bw_partnership" />
+              <BulletList bullets={partnerBullets} />
             </div>
           )}
 

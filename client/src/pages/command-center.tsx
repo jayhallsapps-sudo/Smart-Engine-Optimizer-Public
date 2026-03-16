@@ -52,7 +52,7 @@ const MODULES: ModuleCard[] = [
     icon: History,
     label: "Past Reports",
     description: "Browse, load, edit, and export previously generated reports.",
-    href: "/reports",
+    href: "/saved-reports",
     status: "live",
     accentColor: "#7C3AED",
     group: "primary",

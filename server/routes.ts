@@ -13,6 +13,7 @@ import {
   getSavedReportById,
   listSavedReportsByClientAndType,
   listSavedReportsByClient,
+  listAllSavedReports,
   softDeleteSavedReport,
 } from "./savedReportService";
 import {
@@ -2853,11 +2854,14 @@ export async function registerRoutes(
   // ── Saved Reports API ────────────────────────────────────────────────────────
   app.get("/api/saved-reports", async (req, res) => {
     try {
-      const clientId = Number(req.query.clientId);
+      const rawClientId = req.query.clientId as string | undefined;
       const reportType = req.query.reportType as string | undefined;
-      if (!clientId || isNaN(clientId)) {
-        return res.status(400).json({ message: "clientId required" });
+      if (!rawClientId) {
+        const reports = await listAllSavedReports();
+        return res.json(reports);
       }
+      const clientId = Number(rawClientId);
+      if (isNaN(clientId)) return res.status(400).json({ message: "Invalid clientId" });
       const reports = reportType
         ? await listSavedReportsByClientAndType(clientId, reportType)
         : await listSavedReportsByClient(clientId);
@@ -2872,6 +2876,16 @@ export async function registerRoutes(
       const report = await getSavedReportById(Number(req.params.id));
       if (!report) return res.status(404).json({ message: "Not found" });
       res.json(report);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.delete("/api/saved-reports/:id", async (req, res) => {
+    try {
+      const deleted = await softDeleteSavedReport(Number(req.params.id));
+      if (!deleted) return res.status(404).json({ message: "Not found" });
+      res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -2924,23 +2938,6 @@ export async function registerRoutes(
       const updated = await updateSavedReport(id, rest);
       if (!updated) return res.status(404).json({ message: "Not found" });
       res.json(updated);
-    } catch (err: any) {
-      res.status(500).json({ message: err.message });
-    }
-  });
-
-  app.delete("/api/saved-reports/:id", async (req, res) => {
-    try {
-      const id = Number(req.params.id);
-      const existing = await getSavedReportById(id);
-      if (!existing) return res.status(404).json({ message: "Not found" });
-      const requestedClientId = Number(req.query.clientId || req.body?.clientId);
-      if (requestedClientId && existing.clientId !== requestedClientId) {
-        return res.status(403).json({ message: "Forbidden: report does not belong to this client" });
-      }
-      const ok = await softDeleteSavedReport(id);
-      if (!ok) return res.status(404).json({ message: "Not found" });
-      res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

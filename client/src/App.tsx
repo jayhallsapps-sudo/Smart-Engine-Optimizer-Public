@@ -32,6 +32,7 @@ import AdminConfigPage from "@/pages/admin-config";
 import AdminGuidancePage from "@/pages/admin-guidance";
 import AdminTemplatesPage from "@/pages/admin-templates";
 import AcaPage from "@/pages/aca";
+import SavedReportsPage from "@/pages/saved-reports";
 
 function RootRedirect() {
   const [, setLocation] = useLocation();
@@ -66,6 +67,7 @@ function Router() {
       <Route path="/admin/guidance" component={AdminGuidancePage} />
       <Route path="/admin/templates" component={AdminTemplatesPage} />
       <Route path="/aca" component={AcaPage} />
+      <Route path="/saved-reports" component={SavedReportsPage} />
       <Route component={NotFound} />
     </Switch>
   );

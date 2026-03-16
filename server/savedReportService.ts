@@ -107,6 +107,14 @@ export async function listSavedReportsByClient(clientId: number): Promise<SavedR
     .orderBy(desc(savedReports.createdAt));
 }
 
+export async function listAllSavedReports(): Promise<SavedReport[]> {
+  return db
+    .select()
+    .from(savedReports)
+    .where(isNull(savedReports.deletedAt))
+    .orderBy(desc(savedReports.createdAt));
+}
+
 export async function softDeleteSavedReport(id: number): Promise<boolean> {
   const result = await db
     .update(savedReports)

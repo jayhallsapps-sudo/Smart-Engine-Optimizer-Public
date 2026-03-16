@@ -558,7 +558,7 @@ export async function registerRoutes(
 
       const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
 
-      function scoreMatch(clientName: string, prop: typeof properties[0]): number {
+      function scoreMatch(clientName: string, brandTerms: string[], prop: typeof properties[0]): number {
         const cn = norm(clientName);
         const pn = norm(prop.displayName);
         const an = norm(prop.accountName);
@@ -566,6 +566,14 @@ export async function registerRoutes(
         if (an === cn) return 95;
         if (pn.includes(cn) || cn.includes(pn)) return 80;
         if (an.includes(cn) || cn.includes(an)) return 70;
+        // Check brand terms for near-matches (e.g. "Horseshoe Ridge" matching "Horseshoe Ridge RV Resort")
+        for (const term of brandTerms) {
+          const bt = norm(term);
+          if (!bt) continue;
+          if (pn === bt || an === bt) return 95;
+          if (pn.includes(bt) || bt.includes(pn)) return 78;
+          if (an.includes(bt) || bt.includes(an)) return 68;
+        }
         const cnWords = cn.split(" ").filter(w => w.length > 3);
         const pnWords = new Set(pn.split(" "));
         const anWords = new Set(an.split(" "));
@@ -581,7 +589,7 @@ export async function registerRoutes(
         let best: typeof properties[0] | null = null;
         let bestScore = 0;
         for (const prop of properties) {
-          const s = scoreMatch(client.name, prop);
+          const s = scoreMatch(client.name, client.brandTerms ?? [], prop);
           if (s > bestScore) { bestScore = s; best = prop; }
         }
         if (best && bestScore >= 60) {
@@ -597,7 +605,12 @@ export async function registerRoutes(
         }
       }
 
-      res.json({ matches, total: properties.length });
+      const matchedIds = new Set(matches.map(m => m.clientId));
+      const unmatched = clients
+        .filter(c => !matchedIds.has(c.id))
+        .map(c => ({ clientId: c.id, clientName: c.name, currentPropertyId: c.ga4PropertyId ?? "" }));
+
+      res.json({ matches, unmatched, total: properties.length, properties });
     } catch (err: any) {
       console.error("[GA4] auto-assign error:", err.message);
       res.status(500).json({ message: "Auto-assign failed: " + err.message });

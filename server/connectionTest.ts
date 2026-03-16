@@ -1,3 +1,4 @@
+import { ReplitConnectors } from "@replit/connectors-sdk";
 import { decrypt } from "./encryption";
 import { storage } from "./storage";
 
@@ -57,6 +58,45 @@ async function testGA4(refreshToken: string): Promise<TestResult> {
   }
 }
 
+async function testGBP(refreshToken: string): Promise<TestResult> {
+  try {
+    const token = await getGoogleAccessToken(refreshToken);
+    const resp = await fetch("https://mybusinessaccountmanagement.googleapis.com/v1/accounts", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = (await resp.json()) as any;
+    if (!resp.ok) {
+      const msg: string = data.error?.message ?? resp.statusText;
+      if (msg.toLowerCase().includes("quota") || resp.status === 429) {
+        return { success: false, message: "GBP API quota is 0 — quota increase has been requested. Enter location resource names manually until approved." };
+      }
+      if (msg.includes("has not been used") || msg.includes("is disabled")) {
+        return { success: false, message: "Google My Business Account Management API is not enabled in Google Cloud Console." };
+      }
+      throw new Error(msg);
+    }
+    const n = data.accounts?.length ?? 0;
+    return { success: true, message: `Token valid — ${n} GBP account${n !== 1 ? "s" : ""} accessible` };
+  } catch (err: any) {
+    return { success: false, message: err.message };
+  }
+}
+
+async function testGoogleSheets(refreshToken: string): Promise<TestResult> {
+  try {
+    const token = await getGoogleAccessToken(refreshToken);
+    const resp = await fetch(
+      "https://www.googleapis.com/drive/v3/files?q=mimeType%3D'application%2Fvnd.google-apps.spreadsheet'&pageSize=1&fields=files(id)",
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    const data = (await resp.json()) as any;
+    if (!resp.ok) throw new Error(data.error?.message || resp.statusText);
+    return { success: true, message: "Google Sheets access confirmed" };
+  } catch (err: any) {
+    return { success: false, message: err.message };
+  }
+}
+
 async function testCallRail(apiKey: string): Promise<TestResult> {
   try {
     const resp = await fetch("https://api.callrail.com/v3/a.json", {
@@ -75,7 +115,7 @@ async function testAhrefs(_ignored: string): Promise<TestResult> {
   return {
     success: false,
     message:
-      "Ahrefs direct API access is disabled. Ahrefs data is only available via Ahrefs Connect / MCP integration. This plan does not include a Replit MCP connector for Ahrefs — features requiring Ahrefs data are unavailable.",
+      "Ahrefs direct API access is not available on this plan. Ahrefs data is only available via the Ahrefs Connect / MCP integration.",
   };
 }
 
@@ -131,37 +171,51 @@ async function testAirtable(pat: string): Promise<TestResult> {
   }
 }
 
+async function testAsana(): Promise<TestResult> {
+  try {
+    const connectors = new ReplitConnectors();
+    const resp = await connectors.proxy("asana", "/api/1.0/users/me", { method: "GET" });
+    const data = await resp.json() as any;
+    if (data.errors?.length) throw new Error(data.errors[0]?.message ?? "Asana error");
+    if (!data.data) throw new Error("No response from Asana");
+    const name: string = data.data.name ?? "connected";
+    return { success: true, message: `Connected as ${name}` };
+  } catch (err: any) {
+    return { success: false, message: `Asana connection failed — check Replit integration is authorised: ${err.message}` };
+  }
+}
+
 export async function testCredential(credentialId: number): Promise<TestResult> {
   const all = await storage.getApiCredentials();
   const cred = all.find((c) => c.id === credentialId);
   if (!cred) return { success: false, message: "Credential not found" };
 
+  let value: string;
   try {
-    const value = decrypt(cred.encryptedValue);
+    value = decrypt(cred.encryptedValue);
+  } catch (err: any) {
+    const isAuthError =
+      err.message?.includes("Unsupported state") ||
+      err.message?.includes("unable to authenticate data") ||
+      err.message?.includes("bad decrypt");
+    const label = cred.service.replace(/_/g, " ");
+    return {
+      success: false,
+      message: isAuthError
+        ? `Credential cannot be decrypted — it was saved with a different encryption key. Please delete it and re-enter your ${label} credentials in Setup.`
+        : `Decryption error: ${err.message}`,
+    };
+  }
 
-    if (cred.service === "google_search_console") {
-      return testGSC(value);
-    }
-
-    if (cred.service === "google_analytics_4") {
-      return testGA4(value);
-    }
-
-    if (cred.service === "callrail") {
-      return testCallRail(value);
-    }
-
-    if (cred.service === "ahrefs") {
-      return testAhrefs(value);
-    }
-
-    if (cred.service === "semrush") {
-      return testSEMrush(value);
-    }
-
-    if (cred.service === "airtable") {
-      return testAirtable(value);
-    }
+  try {
+    if (cred.service === "google_search_console") return testGSC(value);
+    if (cred.service === "google_analytics_4") return testGA4(value);
+    if (cred.service === "google_business_profile") return testGBP(value);
+    if (cred.service === "google_sheets") return testGoogleSheets(value);
+    if (cred.service === "callrail") return testCallRail(value);
+    if (cred.service === "ahrefs") return testAhrefs(value);
+    if (cred.service === "semrush") return testSEMrush(value);
+    if (cred.service === "airtable") return testAirtable(value);
 
     if (cred.service === "call_tracking_metrics") {
       const pair = all.find(
@@ -171,14 +225,25 @@ export async function testCredential(credentialId: number): Promise<TestResult> 
           c.id !== cred.id
       );
       if (!pair) return { success: false, message: "Missing paired API key or secret for this account" };
-      const pairValue = decrypt(pair.encryptedValue);
+      let pairValue: string;
+      try {
+        pairValue = decrypt(pair.encryptedValue);
+      } catch {
+        return { success: false, message: "Paired CTM credential cannot be decrypted — please re-enter both the API key and secret in Setup." };
+      }
       const [key, secret] =
         cred.credentialType === "api_key" ? [value, pairValue] : [pairValue, value];
       return testCTM(key, secret);
     }
 
-    return { success: false, message: `No test available for ${cred.service}` };
+    if (cred.service === "asana") return testAsana();
+
+    if (cred.service === "nimbata") {
+      return { success: false, message: "Nimbata does not provide an API test endpoint. Verify the account ID is correct in each client's settings." };
+    }
+
+    return { success: false, message: `No connectivity test available for ${cred.service.replace(/_/g, " ")}` };
   } catch (err: any) {
-    return { success: false, message: `Decryption error: ${err.message}` };
+    return { success: false, message: err.message };
   }
 }

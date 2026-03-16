@@ -66,6 +66,13 @@ import {
   Sparkles,
   AlertTriangle,
 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { Client } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
@@ -1148,11 +1155,26 @@ type Ga4Match = {
   currentPropertyId: string;
 };
 
+type Ga4Unmatched = {
+  clientId: number;
+  clientName: string;
+  currentPropertyId: string;
+};
+
+type Ga4Property = {
+  propertyId: string;
+  displayName: string;
+  accountName: string;
+};
+
 export default function ClientsPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [ga4MatchOpen, setGa4MatchOpen] = useState(false);
   const [ga4Matches, setGa4Matches] = useState<Ga4Match[]>([]);
+  const [ga4Unmatched, setGa4Unmatched] = useState<Ga4Unmatched[]>([]);
+  const [ga4AllProperties, setGa4AllProperties] = useState<Ga4Property[]>([]);
+  const [ga4ManualSelections, setGa4ManualSelections] = useState<Record<number, string>>({});
   const [ga4MatchLoading, setGa4MatchLoading] = useState(false);
   const [ga4ApplyLoading, setGa4ApplyLoading] = useState(false);
   const { toast } = useToast();
@@ -1200,10 +1222,16 @@ export default function ClientsPage() {
     setGa4MatchLoading(true);
     try {
       const res = await apiRequest("POST", "/api/ga4/auto-assign");
-      const data = await res.json() as { matches: Ga4Match[]; total: number };
+      const data = await res.json() as { matches: Ga4Match[]; unmatched: Ga4Unmatched[]; total: number; properties: Ga4Property[] };
       setGa4Matches(data.matches);
+      setGa4Unmatched(data.unmatched ?? []);
+      setGa4AllProperties((data.properties ?? []).sort((a, b) => {
+        const ac = a.accountName.localeCompare(b.accountName);
+        return ac !== 0 ? ac : a.displayName.localeCompare(b.displayName);
+      }));
+      setGa4ManualSelections({});
       setGa4MatchOpen(true);
-      if (data.matches.length === 0) {
+      if (data.matches.length === 0 && (data.unmatched ?? []).length === 0) {
         toast({ title: "No matches found", description: `Searched ${data.total} properties — no confident matches found.`, variant: "destructive" });
       }
     } catch (err: any) {
@@ -1216,7 +1244,15 @@ export default function ClientsPage() {
   const handleGa4Apply = async () => {
     setGa4ApplyLoading(true);
     try {
-      const assignments = ga4Matches.map(m => ({ clientId: m.clientId, propertyId: m.propertyId }));
+      const autoAssignments = ga4Matches.map(m => ({ clientId: m.clientId, propertyId: m.propertyId }));
+      const manualAssignments = Object.entries(ga4ManualSelections)
+        .filter(([, pid]) => !!pid)
+        .map(([cid, pid]) => ({ clientId: Number(cid), propertyId: pid }));
+      const assignments = [...autoAssignments, ...manualAssignments];
+      if (assignments.length === 0) {
+        toast({ title: "Nothing to apply", description: "Select a property for at least one client first.", variant: "destructive" });
+        return;
+      }
       await apiRequest("PATCH", "/api/ga4/apply-assignments", { assignments });
       queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
       setGa4MatchOpen(false);
@@ -1240,29 +1276,75 @@ export default function ClientsPage() {
             GA4 Auto-match Preview
           </DialogTitle>
           <DialogDescription>
-            These GA4 properties were matched from your connected account. Review and apply.
+            Review auto-detected matches and manually assign any remaining clients.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
-          {ga4Matches.map(m => (
-            <div key={m.clientId} className="flex flex-col gap-0.5 rounded-md border px-3 py-2 bg-muted/30 text-sm">
-              <div className="font-medium">{m.clientName}</div>
-              <div className="text-[11px] text-muted-foreground font-mono">{m.propertyId}</div>
-              <div className="text-[11px] text-muted-foreground">{m.displayName} · {m.accountName}</div>
-              {m.currentPropertyId && m.currentPropertyId !== m.propertyId && (
-                <div className="flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400 mt-0.5">
-                  <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
-                  Replaces: {m.currentPropertyId}
+        <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+          {ga4Matches.length > 0 && (
+            <div className="space-y-1.5">
+              <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide px-0.5">Auto-matched</div>
+              {ga4Matches.map(m => (
+                <div key={m.clientId} className="flex flex-col gap-0.5 rounded-md border px-3 py-2 bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800 text-sm">
+                  <div className="font-medium flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-green-600 shrink-0" />
+                    {m.clientName}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground font-mono pl-5">{m.propertyId}</div>
+                  <div className="text-[11px] text-muted-foreground pl-5">{m.displayName} · {m.accountName}</div>
+                  {m.currentPropertyId && m.currentPropertyId !== m.propertyId && (
+                    <div className="flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400 mt-0.5 pl-5">
+                      <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
+                      Replaces: {m.currentPropertyId}
+                    </div>
+                  )}
                 </div>
-              )}
+              ))}
             </div>
-          ))}
+          )}
+          {ga4Unmatched.length > 0 && (
+            <div className="space-y-1.5">
+              <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide px-0.5">Manual match required</div>
+              {ga4Unmatched.map(u => (
+                <div key={u.clientId} className="flex flex-col gap-1.5 rounded-md border px-3 py-2 bg-muted/30 text-sm">
+                  <div className="font-medium text-muted-foreground flex items-center gap-1.5">
+                    <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                    {u.clientName}
+                  </div>
+                  <Select
+                    value={ga4ManualSelections[u.clientId] ?? ""}
+                    onValueChange={val => setGa4ManualSelections(prev => ({ ...prev, [u.clientId]: val }))}
+                  >
+                    <SelectTrigger className="h-7 text-xs" data-testid={`select-ga4-manual-${u.clientId}`}>
+                      <SelectValue placeholder="Select a GA4 property…" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-56">
+                      {ga4AllProperties.map(p => (
+                        <SelectItem key={p.propertyId} value={p.propertyId} className="text-xs">
+                          {p.displayName} <span className="text-muted-foreground">· {p.accountName}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {ga4ManualSelections[u.clientId] && (
+                    <div className="text-[10px] text-muted-foreground font-mono pl-0.5">{ga4ManualSelections[u.clientId]}</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => setGa4MatchOpen(false)}>Cancel</Button>
-          <Button onClick={handleGa4Apply} disabled={ga4ApplyLoading} data-testid="button-apply-ga4-matches">
+          <Button
+            onClick={handleGa4Apply}
+            disabled={ga4ApplyLoading || (ga4Matches.length === 0 && Object.values(ga4ManualSelections).filter(Boolean).length === 0)}
+            data-testid="button-apply-ga4-matches"
+          >
             {ga4ApplyLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <CheckCheck className="w-3.5 h-3.5 mr-1.5" />}
-            Apply {ga4Matches.length} Assignment{ga4Matches.length !== 1 ? "s" : ""}
+            {(() => {
+              const total = ga4Matches.length + Object.values(ga4ManualSelections).filter(Boolean).length;
+              return `Apply ${total} Assignment${total !== 1 ? "s" : ""}`;
+            })()}
           </Button>
         </DialogFooter>
       </DialogContent>

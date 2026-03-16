@@ -259,9 +259,10 @@ export async function registerRoutes(
     "/auth/google/callback",
     "/auth/google/configured",
     "/template/header",
+    "/print-cache/",
   ];
   app.use("/api", (req: Request, res: Response, next: NextFunction) => {
-    if (AUTH_PUBLIC_PATHS.some(p => req.path === p || req.path.startsWith(p + "?"))) return next();
+    if (AUTH_PUBLIC_PATHS.some(p => req.path === p || req.path.startsWith(p + "?") || (p.endsWith("/") && req.path.startsWith(p)))) return next();
     const provided = req.headers["x-internal-token"];
     if (provided !== INTERNAL_TOKEN) {
       return res.status(401).json({ message: "Unauthorized" });
@@ -1862,25 +1863,16 @@ export async function registerRoutes(
   });
 
   app.post("/api/reports/biweekly/upload-to-drive", async (req, res) => {
-    const { json, edits } = req.body as { json: any; edits?: Record<string, string> };
-    if (!json) return res.status(400).json({ message: "json is required" });
+    const { report, edits, json } = req.body as { report?: any; edits?: Record<string, string>; json?: any };
+    const reportData = report ?? json;
+    if (!reportData) return res.status(400).json({ message: "report is required" });
     try {
-      const sections: SectionData[] = (json.sections ?? []).map((s: any) => {
-        const items: any[] = [];
-        if (s.metrics?.length) items.push({ summary: s.metrics.map((m: any) => ({ label: m.label, current: m.current, previous: m.previous ?? "—", deltaPercent: m.delta ?? "—", isPositive: m.isPositive ?? true })) });
-        if (s.bullets?.length) items.push({ manualText: (s.bullets as string[]).map((b, bi) => edits?.[`${s.id}_bullet_${bi}`] ?? b).filter(Boolean).join("\n") });
-        if (s.workLog?.length) {
-          const baseRows = (s.workLog as any[]).map((r: any, ri: number) => { const editedDid = edits?.[`${s.id}_worklog_${ri}_did`]; const editedNext = edits?.[`${s.id}_worklog_${ri}_next`]; return { area: r.area, whatWeDid: editedDid ?? r.whatWeDid, whatsNext: editedNext ?? r.whatsNext, items: editedDid !== undefined ? undefined : r.items, nextItems: editedNext !== undefined ? undefined : (r.nextItemsRich ?? r.nextItems) }; });
-          const crProgress = parseCustomRowsFromEdits(edits, `${s.id}_progress`);
-          items.push({ tableRows: [...baseRows, ...crProgress.map(cr => ({ area: cr[0] ?? "", whatWeDid: cr[1] ?? "", whatsNext: cr[2] ?? "" }))] });
-        }
-        if (s.table) items.push({ tables: [{ title: s.title, headers: s.table.headers, rows: s.table.rows }] });
-        return { sectionId: s.id, title: s.title ?? "", items };
-      });
-      const clientName = edits?.["client_name"] ?? json.client_name;
-      const date = edits?.["report_date"] ?? json.date;
-      const preparedBy = edits?.["preparedBy"] ?? json.preparedBy ?? "";
-      const buffer = await generateBiweeklyPdf(clientName, preparedBy, date, sections);
+      const id = Math.random().toString(36).slice(2) + Date.now().toString(36);
+      printCache.set(id, { data: { report: reportData, edits: edits ?? {} }, ts: Date.now() });
+      const buffer = await generatePdfViaPuppeteer(id);
+      printCache.delete(id);
+      const clientName = edits?.["client_name"] ?? reportData.client_name ?? "report";
+      const date = edits?.["report_date"] ?? reportData.date ?? "";
       const { ReplitConnectors } = await import("@replit/connectors-sdk");
       const connectors = new ReplitConnectors();
       const filename = `${clientName} Biweekly SEO ${date}.pdf`;
@@ -1896,6 +1888,7 @@ export async function registerRoutes(
       const driveFile = await uploadRes.json() as any;
       res.json({ success: true, fileId: driveFile.id, fileName: driveFile.name, webViewLink: driveFile.webViewLink });
     } catch (err: any) {
+      printCache.delete(err._cacheId);
       res.status(500).json({ message: "Upload failed: " + err.message });
     }
   });

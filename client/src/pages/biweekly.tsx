@@ -355,7 +355,7 @@ export default function BiweeklyPage() {
     if (!report) return;
     setIsUploading(true);
     try {
-      const res = await apiRequest("POST", "/api/reports/biweekly/upload-to-drive", { json: report, edits });
+      const res = await apiRequest("POST", "/api/reports/biweekly/upload-to-drive", { report, edits });
       const data = await res.json();
       if (data.webViewLink) {
         toast({

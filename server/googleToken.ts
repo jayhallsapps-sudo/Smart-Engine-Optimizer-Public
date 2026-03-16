@@ -1,18 +1,7 @@
 import { storage } from "./storage";
 import { decrypt } from "./encryption";
 
-export async function getGoogleAccessToken(service: string): Promise<string | null> {
-  const creds = await storage.getApiCredentialsByService(service);
-  if (!creds.length) return null;
-
-  let refreshToken: string;
-  try {
-    refreshToken = decrypt(creds[0].encryptedValue);
-  } catch (err) {
-    console.warn(`[googleToken] Failed to decrypt ${service} credential — re-authorization required in Setup:`, (err as Error).message);
-    return null;
-  }
-
+async function refreshToAccessToken(refreshToken: string): Promise<string | null> {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
   if (!clientId || !clientSecret) return null;
@@ -30,6 +19,39 @@ export async function getGoogleAccessToken(service: string): Promise<string | nu
 
   const data = await resp.json() as any;
   return data.access_token ?? null;
+}
+
+export async function getGoogleAccessToken(service: string): Promise<string | null> {
+  const creds = await storage.getApiCredentialsByService(service);
+  if (!creds.length) return null;
+
+  let refreshToken: string;
+  try {
+    refreshToken = decrypt(creds[0].encryptedValue);
+  } catch (err) {
+    console.warn(`[googleToken] Failed to decrypt ${service} credential — re-authorization required in Setup:`, (err as Error).message);
+    return null;
+  }
+
+  return refreshToAccessToken(refreshToken);
+}
+
+export async function getAllGoogleAccessTokens(service: string): Promise<string[]> {
+  const creds = await storage.getApiCredentialsByService(service);
+  if (!creds.length) return [];
+
+  const tokens: string[] = [];
+  for (const cred of creds) {
+    let refreshToken: string;
+    try {
+      refreshToken = decrypt(cred.encryptedValue);
+    } catch {
+      continue;
+    }
+    const token = await refreshToAccessToken(refreshToken);
+    if (token) tokens.push(token);
+  }
+  return tokens;
 }
 
 export function extractDomain(url: string | null | undefined): string | null {

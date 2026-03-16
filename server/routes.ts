@@ -53,7 +53,7 @@ import { querySemrush, handlesSemrushCommand } from "./semrushClient";
 import { queryAhrefs, handlesAhrefsCommand } from "./ahrefsClient";
 import { queryGbp } from "./gbpClient";
 import { querySfReport, handlesSfCommand } from "./sfClient";
-import { getGoogleAccessToken } from "./googleToken";
+import { getGoogleAccessToken, getAllGoogleAccessTokens } from "./googleToken";
 import { generateQbrPrepReport } from "./qbrPrepSectionGenerator";
 import { generateQbrPrepV2Docx } from "./qbrPrepDocxGenerator";
 import { analyzeReportGaps, loadSEOHQContext, type AccountContext } from "./gapAnalysisEngine";
@@ -506,38 +506,39 @@ export async function registerRoutes(
     }
   });
 
+  async function fetchAllGa4Properties(): Promise<{ propertyId: string; displayName: string; accountName: string }[]> {
+    const tokens = await getAllGoogleAccessTokens("google_analytics_4");
+    const seen = new Set<string>();
+    const all: { propertyId: string; displayName: string; accountName: string }[] = [];
+    for (const token of tokens) {
+      try {
+        const resp = await fetch("https://analyticsadmin.googleapis.com/v1beta/accountSummaries", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!resp.ok) continue;
+        const data = await resp.json() as any;
+        for (const account of (data.accountSummaries ?? [])) {
+          for (const prop of (account.propertySummaries ?? [])) {
+            if (!seen.has(prop.property)) {
+              seen.add(prop.property);
+              all.push({ propertyId: prop.property, displayName: prop.displayName, accountName: account.displayName });
+            }
+          }
+        }
+      } catch {
+        continue;
+      }
+    }
+    return all;
+  }
+
   app.get("/api/ga4/properties", async (_req, res) => {
     try {
-      const accessToken = await getGoogleAccessToken("google_analytics_4");
-      if (!accessToken) {
+      const tokens = await getAllGoogleAccessTokens("google_analytics_4");
+      if (!tokens.length) {
         return res.status(401).json({ message: "GA4 is not connected. Connect it in Setup → Analytics & Search." });
       }
-      const resp = await fetch("https://analyticsadmin.googleapis.com/v1beta/accountSummaries", {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      const data = await resp.json() as any;
-      if (!resp.ok) {
-        const msg: string = data.error?.message ?? resp.statusText;
-        if (msg.includes("has not been used") || msg.includes("is disabled")) {
-          const projectMatch = msg.match(/project (\d+)/);
-          const projectId = projectMatch?.[1] ?? "";
-          const enableUrl = projectId
-            ? `https://console.developers.google.com/apis/api/analyticsadmin.googleapis.com/overview?project=${projectId}`
-            : "https://console.developers.google.com/apis/library/analyticsadmin.googleapis.com";
-          return res.status(403).json({ message: "Google Analytics Admin API is not enabled. Enable it in Google Cloud Console.", enableUrl });
-        }
-        return res.status(resp.status).json({ message: msg });
-      }
-      const properties: { propertyId: string; displayName: string; accountName: string }[] = [];
-      for (const account of (data.accountSummaries ?? [])) {
-        for (const prop of (account.propertySummaries ?? [])) {
-          properties.push({
-            propertyId: prop.property,
-            displayName: prop.displayName,
-            accountName: account.displayName,
-          });
-        }
-      }
+      const properties = await fetchAllGa4Properties();
       res.json({ properties });
     } catch (err: any) {
       console.error("[GA4] /api/ga4/properties error:", err.message);
@@ -548,24 +549,12 @@ export async function registerRoutes(
   // Auto-match GA4 properties to clients by name/domain
   app.post("/api/ga4/auto-assign", async (_req, res) => {
     try {
-      const accessToken = await getGoogleAccessToken("google_analytics_4");
-      if (!accessToken) {
+      const tokens = await getAllGoogleAccessTokens("google_analytics_4");
+      if (!tokens.length) {
         return res.status(401).json({ message: "GA4 is not connected. Connect it in Setup → Analytics & Search." });
       }
-      const resp = await fetch("https://analyticsadmin.googleapis.com/v1beta/accountSummaries", {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      const data = await resp.json() as any;
-      if (!resp.ok) {
-        return res.status(resp.status).json({ message: data.error?.message ?? resp.statusText });
-      }
 
-      const properties: { propertyId: string; displayName: string; accountName: string }[] = [];
-      for (const account of (data.accountSummaries ?? [])) {
-        for (const prop of (account.propertySummaries ?? [])) {
-          properties.push({ propertyId: prop.property, displayName: prop.displayName, accountName: account.displayName });
-        }
-      }
+      const properties = await fetchAllGa4Properties();
 
       const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
 

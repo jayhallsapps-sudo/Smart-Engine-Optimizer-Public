@@ -89,6 +89,15 @@ interface TestState {
   message?: string;
 }
 
+type HealthData = Record<number, { success: boolean; message: string }>;
+
+function CredStatusIcon({ status, loading }: { status?: { success: boolean }; loading?: boolean }) {
+  if (loading) return <Loader2 className="w-3.5 h-3.5 text-muted-foreground animate-spin shrink-0" />;
+  if (!status) return <div className="w-3.5 h-3.5 rounded-full border-2 border-muted-foreground/30 shrink-0" />;
+  if (status.success) return <CheckCircle2 className="w-3.5 h-3.5 text-green-600 dark:text-green-400 shrink-0" />;
+  return <XCircle className="w-3.5 h-3.5 text-red-500 shrink-0" />;
+}
+
 function ServiceSection({
   config,
   credentials,
@@ -96,6 +105,8 @@ function ServiceSection({
   onDeleteAccount,
   onTestAccount,
   testStates,
+  healthData,
+  healthLoading,
 }: {
   config: ServiceConfig;
   credentials: CredentialSafe[];
@@ -103,13 +114,47 @@ function ServiceSection({
   onDeleteAccount: (id: number) => void;
   onTestAccount: (id: number) => void;
   testStates: Record<number, TestState>;
+  healthData?: HealthData;
+  healthLoading?: boolean;
 }) {
   const Icon = getServiceIcon(config.id);
   const serviceCredentials = credentials.filter(c => c.service === config.id);
   const hasAccounts = serviceCredentials.length > 0;
 
+  // Determine per-credential effective status (manual test overrides health check)
+  const getEffective = (id: number): { success: boolean; message: string } | undefined => {
+    const ts = testStates[id];
+    if (ts?.success !== undefined) return { success: ts.success, message: ts.message ?? "" };
+    return healthData?.[id];
+  };
+
+  // Service-level health: any failed credential = "needs attention"
+  const anyFailed = hasAccounts && serviceCredentials.some(c => getEffective(c.id)?.success === false);
+  const allOk = hasAccounts && serviceCredentials.every(c => getEffective(c.id)?.success === true);
+  const isChecking = hasAccounts && healthLoading && serviceCredentials.every(c => testStates[c.id]?.success === undefined);
+
+  const badgeContent = (() => {
+    if ((config.authType as string) === "mcp_only") return <><XCircle className="w-3 h-3 mr-1" /> Not Connected</>;
+    if (config.authType === "desktop") return <><Monitor className="w-3 h-3 mr-1" /> Manual Import</>;
+    if (!hasAccounts) return <><XCircle className="w-3 h-3 mr-1" /> Not Connected</>;
+    if (anyFailed) return <><AlertTriangle className="w-3 h-3 mr-1" /> Needs Attention</>;
+    if (isChecking) return <><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Checking…</>;
+    if (allOk) return <><CheckCircle2 className="w-3 h-3 mr-1" /> {serviceCredentials.length} Account{serviceCredentials.length > 1 ? "s" : ""}</>;
+    return <><CheckCircle2 className="w-3 h-3 mr-1" /> {serviceCredentials.length} Account{serviceCredentials.length > 1 ? "s" : ""}</>;
+  })();
+
+  const badgeVariant = anyFailed
+    ? "outline"
+    : (config.authType as string) === "mcp_only" || config.authType === "desktop" || !hasAccounts
+      ? "secondary"
+      : "default";
+
+  const badgeClass = anyFailed
+    ? "text-[10px] border-amber-400 text-amber-700 dark:text-amber-400"
+    : "text-[10px]";
+
   return (
-    <Card className="p-5">
+    <Card className={`p-5 ${anyFailed ? "border-amber-300 dark:border-amber-700" : ""}`}>
       <div className="flex items-start gap-4">
         <div className={`flex items-center justify-center w-11 h-11 rounded-lg shrink-0 ${config.color}`}>
           <Icon className="w-5 h-5 text-white" />
@@ -117,20 +162,9 @@ function ServiceSection({
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
             <h3 className="font-medium text-sm" data-testid={`text-service-${config.id}`}>{config.name}</h3>
-            <Badge
-            variant={(config.authType as string) === "mcp_only" ? "outline" : config.authType === "desktop" ? "outline" : hasAccounts ? "default" : "secondary"}
-            className="text-[10px]"
-          >
-            {(config.authType as string) === "mcp_only" ? (
-              <><XCircle className="w-3 h-3 mr-1" /> Not Connected</>
-            ) : config.authType === "desktop" ? (
-              <><Monitor className="w-3 h-3 mr-1" /> Manual Import</>
-            ) : hasAccounts ? (
-              <><CheckCircle2 className="w-3 h-3 mr-1" /> {serviceCredentials.length} Account{serviceCredentials.length > 1 ? "s" : ""}</>
-            ) : (
-              <><XCircle className="w-3 h-3 mr-1" /> Not Connected</>
-            )}
-          </Badge>
+            <Badge variant={badgeVariant} className={badgeClass}>
+              {badgeContent}
+            </Badge>
           </div>
           <p className="text-xs text-muted-foreground mb-3">{config.description}</p>
 
@@ -165,11 +199,15 @@ function ServiceSection({
             <div className="space-y-1.5 mb-3">
               {serviceCredentials.map((cred) => {
                 const ts = testStates?.[cred.id];
+                const effective = getEffective(cred.id);
+                const isTesting = ts?.testing;
+                const rowFailed = effective?.success === false;
+
                 return (
                   <div key={cred.id} className="flex flex-col gap-1">
-                    <div className="flex items-center justify-between gap-2 p-2 rounded-md bg-muted/50">
+                    <div className={`flex items-center justify-between gap-2 p-2 rounded-md ${rowFailed ? "bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800" : "bg-muted/50"}`}>
                       <div className="flex items-center gap-2 min-w-0">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-green-600 dark:text-green-400 shrink-0" />
+                        <CredStatusIcon status={effective} loading={isTesting || (!effective && isChecking)} />
                         <span className="text-xs font-medium truncate">{cred.accountLabel}</span>
                         <span className="text-[10px] text-muted-foreground">{cred.credentialType.replace(/_/g, " ")}</span>
                       </div>
@@ -179,11 +217,11 @@ function ServiceSection({
                           variant="ghost"
                           className="h-7 w-7"
                           onClick={() => onTestAccount(cred.id)}
-                          disabled={ts?.testing}
-                          title="Test connection"
+                          disabled={isTesting}
+                          title="Retest connection"
                           data-testid={`button-test-cred-${cred.id}`}
                         >
-                          {ts?.testing
+                          {isTesting
                             ? <Loader2 className="w-3 h-3 animate-spin" />
                             : <Wifi className="w-3 h-3" />}
                         </Button>
@@ -210,12 +248,12 @@ function ServiceSection({
                         </AlertDialog>
                       </div>
                     </div>
-                    {ts && !ts.testing && ts.success !== undefined && (
-                      <div className={`flex items-center gap-1.5 px-2 py-1 rounded text-[10px] ${ts.success ? "text-green-700 dark:text-green-400 bg-green-500/10" : "text-red-700 dark:text-red-400 bg-red-500/10"}`}>
-                        {ts.success
-                          ? <CheckCircle2 className="w-3 h-3 shrink-0" />
-                          : <XCircle className="w-3 h-3 shrink-0" />}
-                        {ts.success ? "Connected — " : "Failed — "}{ts.message}
+                    {effective && !isTesting && (
+                      <div className={`flex items-start gap-1.5 px-2 py-1.5 rounded text-[10px] leading-snug ${effective.success ? "text-green-700 dark:text-green-400 bg-green-500/10" : "text-red-700 dark:text-red-400 bg-red-500/10"}`}>
+                        {effective.success
+                          ? <CheckCircle2 className="w-3 h-3 shrink-0 mt-px" />
+                          : <XCircle className="w-3 h-3 shrink-0 mt-px" />}
+                        <span>{effective.success ? "Connected — " : ""}{effective.message}</span>
                       </div>
                     )}
                   </div>
@@ -365,6 +403,13 @@ export default function SetupPage() {
     queryKey: ["/api/credentials"],
   });
 
+  const { data: healthData, isLoading: healthLoading } = useQuery<HealthData>({
+    queryKey: ["/api/credentials/health"],
+    enabled: !isLoading,
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+
   const saveCredentialMutation = useMutation({
     mutationFn: async (data: { service: string; credentialType: string; value: string; accountLabel: string }) => {
       return apiRequest("POST", "/api/credentials", data);
@@ -458,7 +503,8 @@ export default function SetupPage() {
   const handleTestAccount = async (id: number) => {
     setTestStates(prev => ({ ...prev, [id]: { testing: true } }));
     try {
-      const res = await fetch(`/api/credentials/${id}/test`, { method: "POST" });
+      const headers = await getAuthHeaders();
+      const res = await fetch(`/api/credentials/${id}/test`, { method: "POST", headers });
       const data = await res.json() as { success: boolean; message: string };
       setTestStates(prev => ({ ...prev, [id]: { testing: false, success: data.success, message: data.message } }));
     } catch {
@@ -502,6 +548,28 @@ export default function SetupPage() {
   ).size;
   const totalServices = connectableServiceIds.size;
 
+  // Compute how many services need attention based on health data
+  const attentionServices = healthData
+    ? SERVICE_CONFIGS.filter(s => {
+        const svcCreds = credentials.filter(c => c.service === s.id);
+        return svcCreds.some(c => {
+          const ts = testStates[c.id];
+          if (ts?.success !== undefined) return ts.success === false;
+          return healthData[c.id]?.success === false;
+        });
+      })
+    : [];
+
+  const sharedSectionProps = {
+    credentials,
+    onAddAccount: handleOpenConnect,
+    onDeleteAccount: (id: number) => deleteCredentialMutation.mutate(id),
+    onTestAccount: handleTestAccount,
+    testStates,
+    healthData,
+    healthLoading,
+  };
+
   return (
     <div className="h-full overflow-y-auto">
     <div className="p-6 max-w-3xl mx-auto">
@@ -517,6 +585,22 @@ export default function SetupPage() {
         animate={{ opacity: 1, y: 0 }}
         className="space-y-4"
       >
+        {attentionServices.length > 0 && (
+          <Card className="p-4 border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-amber-800 dark:text-amber-300 mb-0.5">
+                  {attentionServices.length} integration{attentionServices.length > 1 ? "s" : ""} need{attentionServices.length === 1 ? "s" : ""} attention
+                </p>
+                <p className="text-xs text-amber-700 dark:text-amber-400">
+                  {attentionServices.map(s => s.name).join(", ")} — see the error details below each affected account and follow the instructions to reconnect.
+                </p>
+              </div>
+            </div>
+          </Card>
+        )}
+
         <Card className="p-4 bg-accent/30">
           <div className="flex items-start gap-3">
             <Info className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
@@ -539,15 +623,7 @@ export default function SetupPage() {
             Analytics & Search
           </h2>
           {SERVICE_CONFIGS.filter(s => ["google_search_console", "google_analytics_4", "google_business_profile"].includes(s.id)).map(config => (
-            <ServiceSection
-              key={config.id}
-              config={config}
-              credentials={credentials}
-              onAddAccount={handleOpenConnect}
-              onDeleteAccount={(id) => deleteCredentialMutation.mutate(id)}
-              onTestAccount={handleTestAccount}
-              testStates={testStates}
-            />
+            <ServiceSection key={config.id} config={config} {...sharedSectionProps} />
           ))}
         </div>
 
@@ -556,15 +632,7 @@ export default function SetupPage() {
             Call Tracking
           </h2>
           {SERVICE_CONFIGS.filter(s => ["callrail", "call_tracking_metrics", "nimbata"].includes(s.id)).map(config => (
-            <ServiceSection
-              key={config.id}
-              config={config}
-              credentials={credentials}
-              onAddAccount={handleOpenConnect}
-              onDeleteAccount={(id) => deleteCredentialMutation.mutate(id)}
-              onTestAccount={handleTestAccount}
-              testStates={testStates}
-            />
+            <ServiceSection key={config.id} config={config} {...sharedSectionProps} />
           ))}
         </div>
 
@@ -573,15 +641,7 @@ export default function SetupPage() {
             SEO Tools
           </h2>
           {SERVICE_CONFIGS.filter(s => ["ahrefs", "semrush", "screaming_frog"].includes(s.id)).map(config => (
-            <ServiceSection
-              key={config.id}
-              config={config}
-              credentials={credentials}
-              onAddAccount={handleOpenConnect}
-              onDeleteAccount={(id) => deleteCredentialMutation.mutate(id)}
-              onTestAccount={handleTestAccount}
-              testStates={testStates}
-            />
+            <ServiceSection key={config.id} config={config} {...sharedSectionProps} />
           ))}
         </div>
 
@@ -590,15 +650,7 @@ export default function SetupPage() {
             Work Tracking
           </h2>
           {SERVICE_CONFIGS.filter(s => ["airtable"].includes(s.id)).map(config => (
-            <ServiceSection
-              key={config.id}
-              config={config}
-              credentials={credentials}
-              onAddAccount={handleOpenConnect}
-              onDeleteAccount={(id) => deleteCredentialMutation.mutate(id)}
-              onTestAccount={handleTestAccount}
-              testStates={testStates}
-            />
+            <ServiceSection key={config.id} config={config} {...sharedSectionProps} />
           ))}
         </div>
 

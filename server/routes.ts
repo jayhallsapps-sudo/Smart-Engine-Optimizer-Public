@@ -1141,6 +1141,18 @@ export async function registerRoutes(
     res.json(result);
   });
 
+  // Test all credentials in parallel — used by the integrations page on load
+  app.get("/api/credentials/health", async (_req, res) => {
+    const all = await storage.getApiCredentials();
+    const results = await Promise.all(
+      all.map(async (cred) => {
+        const result = await testCredential(cred.id);
+        return [cred.id, result] as const;
+      })
+    );
+    res.json(Object.fromEntries(results));
+  });
+
   app.get("/api/auth/google/configured", (_req, res) => {
     res.json({ configured: isGoogleConfigured() });
   });

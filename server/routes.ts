@@ -512,19 +512,26 @@ export async function registerRoutes(
     const all: { propertyId: string; displayName: string; accountName: string }[] = [];
     for (const token of tokens) {
       try {
-        const resp = await fetch("https://analyticsadmin.googleapis.com/v1beta/accountSummaries", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!resp.ok) continue;
-        const data = await resp.json() as any;
-        for (const account of (data.accountSummaries ?? [])) {
-          for (const prop of (account.propertySummaries ?? [])) {
-            if (!seen.has(prop.property)) {
-              seen.add(prop.property);
-              all.push({ propertyId: prop.property, displayName: prop.displayName, accountName: account.displayName });
+        let pageToken: string | undefined;
+        do {
+          const url = new URL("https://analyticsadmin.googleapis.com/v1beta/accountSummaries");
+          url.searchParams.set("pageSize", "200");
+          if (pageToken) url.searchParams.set("pageToken", pageToken);
+          const resp = await fetch(url.toString(), {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (!resp.ok) break;
+          const data = await resp.json() as any;
+          for (const account of (data.accountSummaries ?? [])) {
+            for (const prop of (account.propertySummaries ?? [])) {
+              if (!seen.has(prop.property)) {
+                seen.add(prop.property);
+                all.push({ propertyId: prop.property, displayName: prop.displayName, accountName: account.displayName });
+              }
             }
           }
-        }
+          pageToken = data.nextPageToken;
+        } while (pageToken);
       } catch {
         continue;
       }
@@ -566,20 +573,45 @@ export async function registerRoutes(
         if (an === cn) return 95;
         if (pn.includes(cn) || cn.includes(pn)) return 80;
         if (an.includes(cn) || cn.includes(an)) return 70;
-        // Check brand terms for near-matches (e.g. "Horseshoe Ridge" matching "Horseshoe Ridge RV Resort")
+
+        let best = 0;
+
+        // Generic healthcare words that appear in many property/client names and shouldn't drive matching alone
+        const genericWords = new Set(["treatment", "healing", "recovery", "center", "health", "wellness",
+          "rehab", "services", "institute", "group", "care", "medical", "clinic", "mental",
+          "behavioral", "detox", "residential", "outpatient", "inpatient", "sober", "living"]);
+
+        // Brand term checks — substring first, then word-ratio on distinctive words only
         for (const term of brandTerms) {
           const bt = norm(term);
           if (!bt) continue;
           if (pn === bt || an === bt) return 95;
-          if (pn.includes(bt) || bt.includes(pn)) return 78;
-          if (an.includes(bt) || bt.includes(an)) return 68;
+          if (pn.includes(bt) || bt.includes(pn)) { best = Math.max(best, 78); continue; }
+          if (an.includes(bt) || bt.includes(an)) { best = Math.max(best, 68); continue; }
+          // Word-ratio matching using only DISTINCTIVE words (filters out generic healthcare terms)
+          // e.g. "Sol" → "Sol Mental Wellness" via brand term "sol treatment" → only "sol" is distinctive
+          const distinctiveBtWords = bt.split(" ").filter(w => w.length >= 3 && !genericWords.has(w));
+          if (distinctiveBtWords.length === 0) continue;
+          const pnSet = new Set(pn.split(" "));
+          const anSet = new Set(an.split(" "));
+          const pnHits = distinctiveBtWords.filter(w => pnSet.has(w)).length;
+          const anHits = distinctiveBtWords.filter(w => anSet.has(w)).length;
+          const maxHits = Math.max(pnHits, anHits);
+          if (maxHits > 0) {
+            const ratio = maxHits / distinctiveBtWords.length;
+            // ≥50% of distinctive brand term words match gives ≥60
+            best = Math.max(best, Math.round(40 + ratio * 40));
+          }
         }
+        if (best >= 60) return best;
+
+        // Client name word scoring (fallback, words > 3 chars only)
         const cnWords = cn.split(" ").filter(w => w.length > 3);
         const pnWords = new Set(pn.split(" "));
         const anWords = new Set(an.split(" "));
         const pnHits = cnWords.filter(w => pnWords.has(w)).length;
         const anHits = cnWords.filter(w => anWords.has(w)).length;
-        return Math.max(pnHits, anHits) * 20;
+        return Math.max(best, Math.max(pnHits, anHits) * 20);
       }
 
       const clients = await storage.getClients();

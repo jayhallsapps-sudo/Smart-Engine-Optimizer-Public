@@ -127,7 +127,8 @@ async function testAhrefs(apiKey: string): Promise<TestResult> {
       throw new Error(body.substring(0, 120) || resp.statusText);
     }
     const data = await resp.json() as any;
-    const dr = data?.domain?.domain_rating ?? data?.domain_rating ?? data?.domainRating;
+    const drRaw = data?.domain?.domain_rating ?? data?.domain_rating ?? data?.domainRating;
+    const dr = typeof drRaw === "number" && !isNaN(drRaw) ? drRaw : null;
     return {
       success: true,
       message: dr != null ? `API key valid — ahrefs.com DR ${Math.round(dr)}` : "API key valid",

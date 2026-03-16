@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient as rqClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -2005,6 +2006,23 @@ export default function ReportsPage() {
           </div>
         )}
         <div className={`flex flex-col flex-1 min-w-0 min-h-0 ${buildPhase !== "idle" ? "hidden" : ""}`}>
+          {reportType === "biweekly" && (
+            <div className="mx-4 mt-3 rounded-md border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/40 px-4 py-3 flex items-start gap-3">
+              <span className="text-amber-600 dark:text-amber-400 text-lg leading-none mt-0.5">📋</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Bi-Weekly reports have moved</p>
+                <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                  The new Bi-Weekly module generates richer reports and auto-saves them. Your past reports are accessible from the <strong>Past Reports</strong> section within that module.
+                </p>
+                <Link
+                  href="/biweekly"
+                  className="inline-block mt-2 text-xs font-semibold text-amber-700 dark:text-amber-300 underline underline-offset-2 hover:text-amber-900 dark:hover:text-amber-100"
+                >
+                  Go to Bi-Weekly module →
+                </Link>
+              </div>
+            </div>
+          )}
           <div className="flex-1 overflow-y-auto">
             {messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full p-6">

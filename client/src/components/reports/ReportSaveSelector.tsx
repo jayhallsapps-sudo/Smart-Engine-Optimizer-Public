@@ -8,6 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { Loader2 } from "lucide-react";
 import type { SavedReport } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
@@ -34,7 +35,6 @@ export function ReportSaveSelector({ clientId, reportType, onLoad }: ReportSaveS
     setIsLoadingFull(true);
     try {
       const res = await apiRequest("GET", `/api/saved-reports/${selectedId}`);
-      if (!res.ok) throw new Error("Failed to load report");
       const report: SavedReport = await res.json();
       onLoad(
         report.generatedReportJson,
@@ -52,44 +52,51 @@ export function ReportSaveSelector({ clientId, reportType, onLoad }: ReportSaveS
   if (!clientId) return null;
 
   return (
-    <div className="flex items-center gap-2">
-      <Select
-        value={selectedId}
-        onValueChange={setSelectedId}
-        disabled={isLoading || savedReports.length === 0}
-      >
-        <SelectTrigger
-          data-testid="select-saved-report"
-          className="h-8 text-xs w-56"
+    <div className="space-y-2">
+      {!isLoading && savedReports.length > 0 && (
+        <p className="text-[10px] text-muted-foreground">
+          {savedReports.length} saved report{savedReports.length !== 1 ? "s" : ""} available
+        </p>
+      )}
+      <div className="flex items-center gap-2">
+        <Select
+          value={selectedId}
+          onValueChange={setSelectedId}
+          disabled={isLoading || savedReports.length === 0}
         >
-          <SelectValue
-            placeholder={
-              isLoading
-                ? "Loading..."
-                : savedReports.length === 0
-                ? "No saved reports"
-                : "Load saved report..."
-            }
-          />
-        </SelectTrigger>
-        <SelectContent>
-          {savedReports.map((r) => (
-            <SelectItem key={r.id} value={String(r.id)}>
-              {r.reportName}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Button
-        data-testid="btn-load-saved-report"
-        variant="outline"
-        size="sm"
-        className="h-8 text-xs"
-        onClick={handleLoad}
-        disabled={!selectedId || isLoadingFull}
-      >
-        {isLoadingFull ? <Loader2 className="w-3 h-3 animate-spin" /> : "Load"}
-      </Button>
+          <SelectTrigger
+            data-testid="select-saved-report"
+            className="h-8 text-xs flex-1"
+          >
+            <SelectValue
+              placeholder={
+                isLoading
+                  ? "Loading..."
+                  : savedReports.length === 0
+                  ? "No saved reports"
+                  : "Choose a past report…"
+              }
+            />
+          </SelectTrigger>
+          <SelectContent>
+            {savedReports.map((r) => (
+              <SelectItem key={r.id} value={String(r.id)}>
+                {r.reportName}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button
+          data-testid="btn-load-saved-report"
+          variant="outline"
+          size="sm"
+          className="h-8 text-xs shrink-0"
+          onClick={handleLoad}
+          disabled={!selectedId || isLoadingFull}
+        >
+          {isLoadingFull ? <Loader2 className="w-3 h-3 animate-spin" /> : "Load"}
+        </Button>
+      </div>
     </div>
   );
 }

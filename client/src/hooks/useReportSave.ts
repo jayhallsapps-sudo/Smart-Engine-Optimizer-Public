@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, type MutableRefObject } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 export type SaveStatus = "saved" | "saving" | "unsaved" | "error";
 
@@ -63,9 +63,15 @@ export function useReportSave({
       const res = await apiRequest("POST", "/api/saved-reports", payload);
       return res.json();
     },
-    onSuccess: (data) => {
+    onSuccess: (data, variables) => {
       updateSavedReportIdRef(data.id);
       setSaveStatus("saved");
+      queryClient.invalidateQueries({
+        predicate: (q) => {
+          const key = q.queryKey[0];
+          return typeof key === "string" && key.includes("/api/saved-reports") && key.includes(`clientId=${variables.clientId}`);
+        },
+      });
     },
     onError: () => {
       setSaveStatus("error");
@@ -77,8 +83,14 @@ export function useReportSave({
       const res = await apiRequest("PATCH", `/api/saved-reports/${id}`, payload);
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       setSaveStatus("saved");
+      queryClient.invalidateQueries({
+        predicate: (q) => {
+          const key = q.queryKey[0];
+          return typeof key === "string" && key.includes("/api/saved-reports") && key.includes(`clientId=${clientId}`);
+        },
+      });
     },
     onError: () => {
       setSaveStatus("error");

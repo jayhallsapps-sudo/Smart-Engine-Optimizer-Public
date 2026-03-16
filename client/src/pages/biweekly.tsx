@@ -455,10 +455,10 @@ export default function BiweeklyPage() {
             </div>
           )}
 
-          {/* Load saved */}
+          {/* Past Reports / Load saved */}
           {clientId && (
-            <div className="space-y-1.5">
-              <Label className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Load Saved</Label>
+            <div className="space-y-1.5 rounded-md border border-dashed border-border px-3 py-2.5">
+              <Label className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Past Reports</Label>
               <ReportSaveSelector
                 clientId={clientId ? Number(clientId) : null}
                 reportType="biweekly"

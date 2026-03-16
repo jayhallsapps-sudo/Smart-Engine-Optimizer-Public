@@ -20,7 +20,7 @@ const TYPE_LABELS: Record<string, string> = {
   biweekly: "Bi-Weekly",
   monthly: "Monthly",
   qbr: "QBR",
-  qbr_prep: "QBR Prep",
+  qbr_prep: "QBS",
   mid_strategy: "Mid-Strategy",
 };
 
@@ -71,9 +71,14 @@ export default function SavedReportsPage() {
     onError: () => toast({ title: "Could not delete report", variant: "destructive" }),
   });
 
-  const filtered = reports.filter(r =>
-    (typeFilter === "all" || r.reportType === typeFilter)
-  );
+  const filtered = reports
+    .filter(r => typeFilter === "all" || r.reportType === typeFilter)
+    .slice()
+    .sort((a, b) => {
+      const ta = new Date(a.lastSavedAt ?? a.createdAt ?? 0).getTime();
+      const tb = new Date(b.lastSavedAt ?? b.createdAt ?? 0).getTime();
+      return tb - ta;
+    });
 
   const grouped: Record<string, SavedReport[]> = {};
   for (const r of filtered) {
@@ -83,6 +88,16 @@ export default function SavedReportsPage() {
   }
 
   const clientName = (id: number) => clients.find(c => c.id === id)?.name ?? `Client ${id}`;
+
+  function formatSavedAt(ts: string | Date | null | undefined): string {
+    if (!ts) return "—";
+    const d = new Date(ts as string);
+    if (isNaN(d.getTime())) return String(ts);
+    return d.toLocaleString(undefined, {
+      month: "short", day: "numeric", year: "numeric",
+      hour: "numeric", minute: "2-digit",
+    });
+  }
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -152,7 +167,7 @@ export default function SavedReportsPage() {
                         <div className="flex items-center gap-3 mt-0.5 text-[11px] text-muted-foreground">
                           <span className="flex items-center gap-1">
                             <CalendarDays className="w-3 h-3" />
-                            {r.generatedOn}
+                            {formatSavedAt(r.lastSavedAt)}
                           </span>
                           <span>{clientName(r.clientId)}</span>
                         </div>

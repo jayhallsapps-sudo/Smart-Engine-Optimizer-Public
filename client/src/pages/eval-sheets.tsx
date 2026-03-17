@@ -631,7 +631,7 @@ function SidebarSetup({ batch, clientId, onBatchChange }: { batch: EvalBatch; cl
 
         {hasCrawlData ? (
           <div className="rounded border bg-green-50/60 dark:bg-green-900/10 border-green-200 dark:border-green-800 px-2 py-1.5">
-            <p className="text-[10px] font-medium text-green-800 dark:text-green-300 truncate">{sfImport?.label ?? "Uploaded"}</p>
+            <p className="text-[10px] font-medium text-green-800 dark:text-green-300 truncate">{sfImport?.fileName ?? "Uploaded"}</p>
             <p className="text-[10px] text-green-700 dark:text-green-400">{crawlRowCount.toLocaleString()} pages</p>
             <button
               onClick={() => fileRef.current?.click()}

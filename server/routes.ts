@@ -3804,11 +3804,13 @@ export async function registerRoutes(
       await storage.createEvalSourceImport({
         evalBatchId: batchId,
         sourceType: "screaming_frog",
-        label: sourceLabel ?? "Screaming Frog Upload",
-        status: "done",
+        sourceTool: "screaming_frog_csv",
+        fileName: sourceLabel ?? "Screaming Frog Upload",
+        uploadedAt: new Date(),
+        fetchRunId: null,
+        parseStatus: "success",
+        enrichmentStatus: "pending",
         rowCount: toInsert.length,
-        importedFields: Object.keys(rows[0] ?? {}),
-        notes: null,
       });
 
       // Build clicks + traffic distribution from SF data

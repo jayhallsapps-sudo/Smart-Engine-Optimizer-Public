@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
@@ -41,6 +42,7 @@ import {
   CheckCircle2,
   XCircle,
   FileText,
+  Files,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { Client, EvalBatch } from "@shared/schema";
@@ -61,6 +63,38 @@ function fmtNum(n: number | string | undefined | null): string {
   if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`;
   if (num >= 1_000) return `${(num / 1_000).toFixed(1)}K`;
   return Math.round(num).toString();
+}
+
+/** Parse one or more CSV files, merging rows. Skips duplicate URLs. */
+async function parseMultipleCsvFiles(files: FileList | File[]): Promise<{ rows: any[]; sourceLabel: string }> {
+  const fileArr = Array.from(files);
+  const allRows: any[] = [];
+  const seenUrls = new Set<string>();
+  const labels: string[] = [];
+
+  for (const file of fileArr) {
+    if (!file.name.toLowerCase().endsWith(".csv")) continue;
+    labels.push(file.name);
+    const text = await file.text();
+    const lines = text.split("\n").filter(l => l.trim());
+    if (lines.length < 2) continue;
+    const headers = lines[0].split(",").map(h => h.replace(/"/g, "").trim());
+    const rows = lines.slice(1).map(line => {
+      const vals = line.split(",").map(v => v.replace(/"/g, "").trim());
+      const obj: any = {};
+      headers.forEach((h, i) => { obj[h] = vals[i] ?? ""; });
+      return obj;
+    }).filter(r => r.Address || r.url || r["Page URL"]);
+
+    for (const row of rows) {
+      const urlKey = (row.Address || row.url || row["Page URL"] || "").toLowerCase();
+      if (urlKey && seenUrls.has(urlKey)) continue;
+      if (urlKey) seenUrls.add(urlKey);
+      allRows.push(row);
+    }
+  }
+
+  return { rows: allRows, sourceLabel: fileArr.length === 1 ? fileArr[0].name : `${fileArr.length} files merged` };
 }
 
 const RAW_METRICS = [
@@ -110,15 +144,13 @@ function EditableCell({ value, onChange, type = "text" }: { value: string; onCha
 
   if (editing) {
     return (
-      <div className="flex items-center gap-0.5">
-        <input
-          ref={ref} value={draft} onChange={e => setDraft(e.target.value)}
-          onBlur={commit}
-          onKeyDown={e => { if (e.key === "Enter") commit(); if (e.key === "Escape") { setEditing(false); setDraft(value); } }}
-          className="w-full text-xs px-1 py-0.5 border rounded bg-background focus:outline-none focus:ring-1 focus:ring-primary"
-          type={type === "number" ? "text" : type}
-        />
-      </div>
+      <input
+        ref={ref} value={draft} onChange={e => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={e => { if (e.key === "Enter") commit(); if (e.key === "Escape") { setEditing(false); setDraft(value); } }}
+        className="w-full text-xs px-1 py-0.5 border rounded bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+        type={type === "number" ? "text" : type}
+      />
     );
   }
   return (
@@ -249,22 +281,15 @@ function CrawlDataTab({ batch }: { batch: EvalBatch }) {
     },
   });
 
-  async function handleFileUpload(file: File) {
+  async function handleFilesUpload(fileList: FileList | null) {
+    if (!fileList || fileList.length === 0) return;
     setUploading(true);
     try {
-      const text = await file.text();
-      const lines = text.split("\n").filter(l => l.trim());
-      if (lines.length < 2) throw new Error("CSV has no data rows");
-      const headers = lines[0].split(",").map(h => h.replace(/"/g, "").trim());
-      const parsedRows = lines.slice(1).map(line => {
-        const vals = line.split(",").map(v => v.replace(/"/g, "").trim());
-        const obj: any = {};
-        headers.forEach((h, i) => { obj[h] = vals[i] ?? ""; });
-        return obj;
-      });
-      const resp = await apiRequest("POST", `/api/eval-batches/${batch.id}/crawl-rows/upload`, { rows: parsedRows, sourceLabel: file.name });
+      const { rows: parsedRows, sourceLabel } = await parseMultipleCsvFiles(fileList);
+      if (parsedRows.length === 0) throw new Error("No valid CSV rows found in the selected files.");
+      const resp = await apiRequest("POST", `/api/eval-batches/${batch.id}/crawl-rows/upload`, { rows: parsedRows, sourceLabel });
       const result = await resp.json();
-      toast({ title: "Crawl data re-uploaded", description: `${result.inserted} rows imported.` });
+      toast({ title: "Crawl data re-uploaded", description: `${result.inserted} rows from ${sourceLabel}.` });
       qc.invalidateQueries({ queryKey: ["/api/eval-batches", batch.id, "crawl-rows"] });
       qc.invalidateQueries({ queryKey: ["/api/eval-batches", batch.id, "imports"] });
       qc.invalidateQueries({ queryKey: ["/api/eval-batches", batch.id, "summary"] });
@@ -290,15 +315,18 @@ function CrawlDataTab({ batch }: { batch: EvalBatch }) {
             <RefreshCw className={`w-3.5 h-3.5 mr-1 ${recomputeMut.isPending ? "animate-spin" : ""}`} /> Recompute
           </Button>
           <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()} disabled={uploading} data-testid="button-upload-crawl">
-            <FileUp className="w-3.5 h-3.5 mr-1" /> {uploading ? "Uploading..." : "Re-upload SF"}
+            <Files className="w-3.5 h-3.5 mr-1" /> {uploading ? "Uploading..." : "Re-upload SF"}
           </Button>
-          <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={e => { if (e.target.files?.[0]) handleFileUpload(e.target.files[0]); }} />
+          <input ref={fileRef} type="file" accept=".csv" multiple className="hidden" onChange={e => handleFilesUpload(e.target.files)} />
         </div>
       </div>
-      {isLoading ? <div className="flex items-center gap-2 text-muted-foreground text-sm"><Loader2 className="w-4 h-4 animate-spin" /> Loading...</div> : rows.length === 0 ? (
+
+      {isLoading ? (
+        <div className="flex items-center gap-2 text-muted-foreground text-sm"><Loader2 className="w-4 h-4 animate-spin" /> Loading...</div>
+      ) : rows.length === 0 ? (
         <div className="border border-dashed rounded-lg p-8 text-center text-muted-foreground">
           <Globe className="w-8 h-8 mx-auto mb-2 opacity-30" />
-          <p className="text-sm">No crawl data. Return to Setup to upload Screaming Frog data.</p>
+          <p className="text-sm">No crawl data. Use the sidebar to upload Screaming Frog data.</p>
         </div>
       ) : (
         <div className="overflow-x-auto rounded-md border">
@@ -377,187 +405,6 @@ function DistributionTab({ batch, tableType }: { batch: EvalBatch; tableType: "c
   );
 }
 
-// ─── Setup Panel (pre-generation) ─────────────────────────────────────────────
-
-function SetupPanel({ batch, clientId, onGenerated }: { batch: EvalBatch; clientId: number; onGenerated: (b: EvalBatch) => void }) {
-  const { toast } = useToast();
-  const qc = useQueryClient();
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
-
-  const { data: clientComps = [] } = useQuery<any[]>({
-    queryKey: ["/api/clients", clientId, "competitors"],
-    queryFn: () => authedGet(`/api/clients/${clientId}/competitors`),
-    enabled: clientId > 0,
-  });
-
-  const { data: imports = [] } = useQuery<any[]>({
-    queryKey: ["/api/eval-batches", batch.id, "imports"],
-    queryFn: () => authedGet(`/api/eval-batches/${batch.id}/imports`),
-  });
-
-  const sfImport = imports.find((i: any) => i.sourceType === "screaming_frog");
-  const crawlRowCount = sfImport?.rowCount ?? 0;
-  const hasCrawlData = crawlRowCount > 0;
-
-  const generateMut = useMutation({
-    mutationFn: () => apiRequest("POST", `/api/eval-batches/${batch.id}/generate`),
-    onSuccess: async resp => {
-      const result = await resp.json();
-      qc.invalidateQueries({ queryKey: ["/api/eval-batches", { clientId }] });
-      qc.invalidateQueries({ queryKey: ["/api/eval-batches", batch.id, "competitors"] });
-      qc.invalidateQueries({ queryKey: ["/api/eval-batches", batch.id, "summary"] });
-      if (result.batch) onGenerated(result.batch);
-    },
-    onError: (err: any) => {
-      toast({ title: "Generation failed", description: err.message, variant: "destructive" });
-    },
-  });
-
-  async function handleFileUpload(file: File) {
-    if (!file.name.endsWith(".csv")) {
-      toast({ title: "CSV only", description: "Please upload a Screaming Frog CSV export.", variant: "destructive" });
-      return;
-    }
-    setUploading(true);
-    try {
-      const text = await file.text();
-      const lines = text.split("\n").filter(l => l.trim());
-      if (lines.length < 2) throw new Error("CSV appears empty — no data rows found.");
-      const headers = lines[0].split(",").map(h => h.replace(/"/g, "").trim());
-      const parsedRows = lines.slice(1).map(line => {
-        const vals = line.split(",").map(v => v.replace(/"/g, "").trim());
-        const obj: any = {};
-        headers.forEach((h, i) => { obj[h] = vals[i] ?? ""; });
-        return obj;
-      }).filter(r => r.Address || r.url || r["Page URL"]);
-
-      const resp = await apiRequest("POST", `/api/eval-batches/${batch.id}/crawl-rows/upload`, { rows: parsedRows, sourceLabel: file.name });
-      const result = await resp.json();
-      toast({ title: "Screaming Frog uploaded", description: `${result.inserted} pages ready.` });
-      qc.invalidateQueries({ queryKey: ["/api/eval-batches", batch.id, "imports"] });
-    } catch (err: any) {
-      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
-    } finally {
-      setUploading(false);
-      if (fileRef.current) fileRef.current.value = "";
-    }
-  }
-
-  return (
-    <div className="max-w-2xl mx-auto p-8 space-y-8">
-      <div>
-        <h2 className="text-lg font-bold mb-1">{batch.evaluationName}</h2>
-        <p className="text-sm text-muted-foreground">Complete the steps below, then click <strong>Generate Evaluation</strong> to auto-populate all sheets.</p>
-      </div>
-
-      {/* Step 1: Competitors */}
-      <div className="rounded-lg border p-5 space-y-3">
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center text-white text-xs font-bold shrink-0">1</div>
-          <div>
-            <p className="text-sm font-semibold">Competitor List</p>
-            <p className="text-xs text-muted-foreground">Auto-loaded from Client Info</p>
-          </div>
-          {clientComps.length > 0 ? (
-            <CheckCircle2 className="w-4 h-4 text-green-500 ml-auto" />
-          ) : (
-            <AlertTriangle className="w-4 h-4 text-amber-500 ml-auto" />
-          )}
-        </div>
-        {clientComps.length === 0 ? (
-          <div className="rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-4 py-3 text-xs text-amber-800 dark:text-amber-300">
-            No competitors found in Client Info. Add competitors in the client's profile, or the evaluation will include only the client row. You can also add rows manually after generation.
-          </div>
-        ) : (
-          <div className="space-y-1">
-            {clientComps.map((c: any) => (
-              <div key={c.id} className="flex items-center gap-2 text-xs py-1 border-b last:border-0">
-                <Users className="w-3 h-3 text-muted-foreground shrink-0" />
-                <span className="font-medium">{c.name}</span>
-                <span className="text-muted-foreground truncate">{c.url}</span>
-              </div>
-            ))}
-            <p className="text-[10px] text-muted-foreground pt-1">{clientComps.length} competitor{clientComps.length !== 1 ? "s" : ""} will be seeded automatically.</p>
-          </div>
-        )}
-      </div>
-
-      {/* Step 2: Screaming Frog Upload */}
-      <div className="rounded-lg border p-5 space-y-3">
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center text-white text-xs font-bold shrink-0">2</div>
-          <div>
-            <p className="text-sm font-semibold">Screaming Frog Export</p>
-            <p className="text-xs text-muted-foreground">Required — Upload a CSV crawl export</p>
-          </div>
-          {hasCrawlData ? (
-            <CheckCircle2 className="w-4 h-4 text-green-500 ml-auto" />
-          ) : (
-            <XCircle className="w-4 h-4 text-muted-foreground ml-auto" />
-          )}
-        </div>
-
-        {hasCrawlData ? (
-          <div className="rounded-md bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 px-4 py-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-semibold text-green-800 dark:text-green-300 flex items-center gap-1.5">
-                  <FileText className="w-3.5 h-3.5" /> {sfImport?.label ?? "Screaming Frog Upload"}
-                </p>
-                <p className="text-[10px] text-green-700 dark:text-green-400 mt-0.5">{crawlRowCount.toLocaleString()} pages ready to process</p>
-              </div>
-              <Button variant="ghost" size="sm" className="text-xs" onClick={() => fileRef.current?.click()} data-testid="button-reupload-sf">
-                Replace
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <div
-            className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer hover:bg-muted/30 transition-colors"
-            onClick={() => fileRef.current?.click()}
-            data-testid="upload-zone-sf"
-          >
-            {uploading ? (
-              <div className="flex flex-col items-center gap-2">
-                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">Parsing crawl data...</p>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center gap-2">
-                <Upload className="w-8 h-8 text-muted-foreground opacity-50" />
-                <p className="text-sm font-medium">Drop Screaming Frog CSV here</p>
-                <p className="text-xs text-muted-foreground">or click to browse · CSV format required</p>
-              </div>
-            )}
-          </div>
-        )}
-        <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={e => { if (e.target.files?.[0]) handleFileUpload(e.target.files[0]); }} data-testid="input-sf-upload" />
-      </div>
-
-      {/* Generate Button */}
-      <div className="flex flex-col items-center gap-3">
-        {!hasCrawlData && (
-          <p className="text-xs text-muted-foreground">Upload a Screaming Frog file to enable generation.</p>
-        )}
-        <Button
-          size="lg"
-          className="w-full max-w-sm gap-2 text-base"
-          onClick={() => generateMut.mutate()}
-          disabled={!hasCrawlData || generateMut.isPending}
-          data-testid="button-generate-evaluation"
-        >
-          {generateMut.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Zap className="w-5 h-5" />}
-          Generate Evaluation
-        </Button>
-        <p className="text-[11px] text-muted-foreground text-center">
-          Pulls SEMrush data for each competitor · Enriches crawl with GSC + GA4 · Auto-computes all metrics and rankings
-        </p>
-      </div>
-    </div>
-  );
-}
-
 // ─── Generating Panel ─────────────────────────────────────────────────────────
 
 function GeneratingPanel({ batch, onDone }: { batch: EvalBatch; onDone: (b: EvalBatch) => void }) {
@@ -595,7 +442,7 @@ function GeneratingPanel({ batch, onDone }: { batch: EvalBatch; onDone: (b: Eval
         </p>
       </div>
       <div className="flex flex-col gap-1.5 text-xs text-muted-foreground">
-        <div className="flex items-center gap-2"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Seeding competitor rows from Client Info</div>
+        <div className="flex items-center gap-2"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Seeding competitor rows</div>
         <div className="flex items-center gap-2"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Fetching SEMrush domain data</div>
         <div className="flex items-center gap-2"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Enriching crawl data with GSC / GA4</div>
         <div className="flex items-center gap-2"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Computing rankings and distributions</div>
@@ -606,13 +453,10 @@ function GeneratingPanel({ batch, onDone }: { batch: EvalBatch; onDone: (b: Eval
 
 // ─── Failed Panel ─────────────────────────────────────────────────────────────
 
-function FailedPanel({ batch, clientId, onRetry }: { batch: EvalBatch; clientId: number; onRetry: (b: EvalBatch) => void }) {
+function FailedPanel({ batch, onRetry }: { batch: EvalBatch; onRetry: (b: EvalBatch) => void }) {
   const retryMut = useMutation({
     mutationFn: () => apiRequest("PATCH", `/api/eval-batches/${batch.id}`, { enrichmentStatus: "pending" }),
-    onSuccess: async resp => {
-      const updated = await resp.json();
-      onRetry(updated);
-    },
+    onSuccess: async resp => { const updated = await resp.json(); onRetry(updated); },
   });
 
   return (
@@ -620,11 +464,11 @@ function FailedPanel({ batch, clientId, onRetry }: { batch: EvalBatch; clientId:
       <XCircle className="w-12 h-12 text-destructive opacity-70" />
       <div className="text-center space-y-1">
         <h2 className="text-lg font-semibold text-destructive">Generation Failed</h2>
-        <p className="text-sm text-muted-foreground max-w-xs">Something went wrong during evaluation generation. Check that all integrations are connected and try again.</p>
+        <p className="text-sm text-muted-foreground max-w-xs">Something went wrong during generation. Check integrations and try again from the sidebar.</p>
       </div>
       <Button variant="outline" onClick={() => retryMut.mutate()} disabled={retryMut.isPending} data-testid="button-retry-generation">
         {retryMut.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-        Reset & Try Again
+        Reset to Setup
       </Button>
     </div>
   );
@@ -632,33 +476,18 @@ function FailedPanel({ batch, clientId, onRetry }: { batch: EvalBatch; clientId:
 
 // ─── Generated Panel (4 tabs) ─────────────────────────────────────────────────
 
-function GeneratedPanel({ batch, clientId, onRegenerate }: { batch: EvalBatch; clientId: number; onRegenerate: (b: EvalBatch) => void }) {
+function GeneratedPanel({ batch }: { batch: EvalBatch }) {
   const [activeTab, setActiveTab] = useState("main-eval");
-
-  const regenMut = useMutation({
-    mutationFn: () => apiRequest("PATCH", `/api/eval-batches/${batch.id}`, { enrichmentStatus: "pending" }),
-    onSuccess: async resp => {
-      const updated = await resp.json();
-      onRegenerate(updated);
-    },
-  });
 
   return (
     <div className="p-6 space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold">{batch.evaluationName}</h1>
-            <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-green-300 text-[10px]">
-              <CheckCircle2 className="w-3 h-3 mr-1" /> Generated
-            </Badge>
-          </div>
-          <p className="text-sm text-muted-foreground">{new Date(batch.evaluationDate).toLocaleDateString()} · {(batch.dataSourcesUsed as string[] ?? []).join(", ") || "Screaming Frog"}</p>
-        </div>
-        <Button variant="outline" size="sm" onClick={() => regenMut.mutate()} disabled={regenMut.isPending} data-testid="button-goto-setup">
-          <RefreshCw className="w-3.5 h-3.5 mr-1" /> Regenerate
-        </Button>
+      <div className="flex items-center gap-2">
+        <h1 className="text-xl font-bold">{batch.evaluationName}</h1>
+        <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-green-300 text-[10px]">
+          <CheckCircle2 className="w-3 h-3 mr-1" /> Generated
+        </Badge>
       </div>
+      <p className="text-sm text-muted-foreground -mt-2">{new Date(batch.evaluationDate).toLocaleDateString()} · {(batch.dataSourcesUsed as string[] ?? []).join(", ") || "Screaming Frog"}</p>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="bg-muted/40">
@@ -678,23 +507,206 @@ function GeneratedPanel({ batch, clientId, onRegenerate }: { batch: EvalBatch; c
 
 // ─── Batch Detail Router ──────────────────────────────────────────────────────
 
-function BatchDetailPanel({ batch: initialBatch, clientId }: { batch: EvalBatch; clientId: number }) {
+function BatchDetailPanel({ batch: initialBatch }: { batch: EvalBatch }) {
   const [batch, setBatch] = useState<EvalBatch>(initialBatch);
-
   useEffect(() => { setBatch(initialBatch); }, [initialBatch.id, initialBatch.enrichmentStatus]);
 
-  const status = batch.enrichmentStatus;
+  if (batch.enrichmentStatus === "generating") return <GeneratingPanel batch={batch} onDone={setBatch} />;
+  if (batch.enrichmentStatus === "generated") return <GeneratedPanel batch={batch} />;
+  if (batch.enrichmentStatus === "failed") return <FailedPanel batch={batch} onRetry={setBatch} />;
 
-  if (status === "generating") {
-    return <GeneratingPanel batch={batch} onDone={setBatch} />;
+  return (
+    <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-3 p-8">
+      <Zap className="w-10 h-10 opacity-20" />
+      <p className="text-sm text-center">Upload Screaming Frog data and click<br /><strong>Generate Evaluation</strong> in the sidebar to get started.</p>
+    </div>
+  );
+}
+
+// ─── Sidebar Setup Section ────────────────────────────────────────────────────
+
+function SidebarSetup({ batch, clientId, onBatchChange }: { batch: EvalBatch; clientId: number; onBatchChange: (b: EvalBatch) => void }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+
+  const { data: clientComps = [] } = useQuery<any[]>({
+    queryKey: ["/api/clients", clientId, "competitors"],
+    queryFn: () => authedGet(`/api/clients/${clientId}/competitors`),
+    enabled: clientId > 0,
+  });
+
+  const { data: imports = [], refetch: refetchImports } = useQuery<any[]>({
+    queryKey: ["/api/eval-batches", batch.id, "imports"],
+    queryFn: () => authedGet(`/api/eval-batches/${batch.id}/imports`),
+  });
+
+  const sfImport = imports.find((i: any) => i.sourceType === "screaming_frog");
+  const crawlRowCount = sfImport?.rowCount ?? 0;
+  const hasCrawlData = crawlRowCount > 0;
+
+  const generateMut = useMutation({
+    mutationFn: () => apiRequest("POST", `/api/eval-batches/${batch.id}/generate`),
+    onSuccess: async resp => {
+      const result = await resp.json();
+      qc.invalidateQueries({ queryKey: ["/api/eval-batches"] });
+      if (result.batch) onBatchChange(result.batch);
+    },
+    onError: (err: any) => {
+      toast({ title: "Generation failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const regenMut = useMutation({
+    mutationFn: () => apiRequest("PATCH", `/api/eval-batches/${batch.id}`, { enrichmentStatus: "pending" }),
+    onSuccess: async resp => { const updated = await resp.json(); onBatchChange(updated); },
+  });
+
+  async function doUpload(fileList: FileList | File[] | null) {
+    if (!fileList || (fileList instanceof FileList ? fileList.length : fileList.length) === 0) return;
+    setUploading(true);
+    try {
+      const { rows: parsedRows, sourceLabel } = await parseMultipleCsvFiles(fileList instanceof FileList ? fileList : fileList);
+      if (parsedRows.length === 0) throw new Error("No valid CSV rows found. Make sure files are Screaming Frog CSVs.");
+      const resp = await apiRequest("POST", `/api/eval-batches/${batch.id}/crawl-rows/upload`, { rows: parsedRows, sourceLabel });
+      const result = await resp.json();
+      toast({ title: "Screaming Frog uploaded", description: `${result.inserted} pages from ${sourceLabel}.` });
+      qc.invalidateQueries({ queryKey: ["/api/eval-batches", batch.id, "imports"] });
+      qc.invalidateQueries({ queryKey: ["/api/eval-batches", batch.id, "crawl-rows"] });
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
   }
-  if (status === "generated") {
-    return <GeneratedPanel batch={batch} clientId={clientId} onRegenerate={setBatch} />;
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragOver(false);
+    doUpload(e.dataTransfer.files);
   }
-  if (status === "failed") {
-    return <FailedPanel batch={batch} clientId={clientId} onRetry={setBatch} />;
-  }
-  return <SetupPanel batch={batch} clientId={clientId} onGenerated={setBatch} />;
+
+  const isGenerated = batch.enrichmentStatus === "generated";
+  const isGenerating = batch.enrichmentStatus === "generating";
+
+  return (
+    <div className="border-t mt-2 pt-3 space-y-3 px-3 pb-3">
+
+      {/* Competitors */}
+      <div>
+        <div className="flex items-center gap-1.5 mb-1.5">
+          <Users className="w-3 h-3 text-muted-foreground" />
+          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Competitors</span>
+          {clientComps.length === 0
+            ? <AlertTriangle className="w-3 h-3 text-amber-500 ml-auto" />
+            : <CheckCircle2 className="w-3 h-3 text-green-500 ml-auto" />}
+        </div>
+        {clientComps.length === 0 ? (
+          <p className="text-[10px] text-amber-600 dark:text-amber-400 leading-tight">No competitors in Client Info. Only the client row will be seeded.</p>
+        ) : (
+          <div className="space-y-0.5">
+            {clientComps.slice(0, 6).map((c: any) => (
+              <div key={c.id} className="text-[10px] text-muted-foreground truncate flex items-center gap-1">
+                <span className="shrink-0 w-1 h-1 rounded-full bg-muted-foreground/40 inline-block" />
+                {c.name || c.url}
+              </div>
+            ))}
+            {clientComps.length > 6 && <p className="text-[10px] text-muted-foreground">+{clientComps.length - 6} more</p>}
+          </div>
+        )}
+      </div>
+
+      {/* Screaming Frog Upload */}
+      <div>
+        <div className="flex items-center gap-1.5 mb-1.5">
+          <FileText className="w-3 h-3 text-muted-foreground" />
+          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Screaming Frog</span>
+          {hasCrawlData
+            ? <CheckCircle2 className="w-3 h-3 text-green-500 ml-auto" />
+            : <XCircle className="w-3 h-3 text-muted-foreground ml-auto" />}
+        </div>
+
+        {hasCrawlData ? (
+          <div className="rounded border bg-green-50/60 dark:bg-green-900/10 border-green-200 dark:border-green-800 px-2 py-1.5">
+            <p className="text-[10px] font-medium text-green-800 dark:text-green-300 truncate">{sfImport?.label ?? "Uploaded"}</p>
+            <p className="text-[10px] text-green-700 dark:text-green-400">{crawlRowCount.toLocaleString()} pages</p>
+            <button
+              onClick={() => fileRef.current?.click()}
+              className="text-[10px] text-muted-foreground underline underline-offset-2 mt-0.5 hover:text-foreground"
+              data-testid="button-replace-sf"
+            >
+              Replace / add more files
+            </button>
+          </div>
+        ) : (
+          <div
+            onDrop={handleDrop}
+            onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onClick={() => fileRef.current?.click()}
+            className={`border-2 border-dashed rounded-md p-3 text-center cursor-pointer transition-colors ${dragOver ? "border-primary bg-primary/5" : "border-muted-foreground/30 hover:border-primary/50 hover:bg-muted/30"}`}
+            data-testid="upload-zone-sf"
+          >
+            {uploading ? (
+              <div className="flex flex-col items-center gap-1">
+                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                <p className="text-[10px] text-muted-foreground">Parsing...</p>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-1">
+                <Upload className="w-5 h-5 text-muted-foreground opacity-50" />
+                <p className="text-[10px] font-medium">Drop CSV(s) or click</p>
+                <p className="text-[9px] text-muted-foreground">Multi-file supported</p>
+              </div>
+            )}
+          </div>
+        )}
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".csv"
+          multiple
+          className="hidden"
+          onChange={e => doUpload(e.target.files)}
+          data-testid="input-sf-upload"
+        />
+      </div>
+
+      {/* Generate / Regenerate button */}
+      {isGenerated ? (
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full text-xs gap-1.5"
+          onClick={() => regenMut.mutate()}
+          disabled={regenMut.isPending}
+          data-testid="button-regenerate"
+        >
+          {regenMut.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+          Regenerate
+        </Button>
+      ) : (
+        <Button
+          size="sm"
+          className="w-full gap-1.5"
+          onClick={() => generateMut.mutate()}
+          disabled={!hasCrawlData || generateMut.isPending || isGenerating}
+          data-testid="button-generate-evaluation"
+        >
+          {generateMut.isPending || isGenerating
+            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            : <Zap className="w-3.5 h-3.5" />}
+          Generate Evaluation
+        </Button>
+      )}
+      {!hasCrawlData && !isGenerated && (
+        <p className="text-[10px] text-muted-foreground text-center leading-tight">Upload Screaming Frog data above to enable generation.</p>
+      )}
+    </div>
+  );
 }
 
 // ─── Batch List ───────────────────────────────────────────────────────────────
@@ -744,51 +756,51 @@ function BatchSelector({ clientId, selected, onSelect }: { clientId: number; sel
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <Label className="text-xs text-muted-foreground uppercase tracking-wide">Evaluation Batches</Label>
-        <Button variant="ghost" size="sm" onClick={() => setCreating(true)} data-testid="button-new-batch">
-          <Plus className="w-3.5 h-3.5 mr-1" /> New
+        <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">Eval Batches</Label>
+        <Button variant="ghost" size="sm" className="h-6 text-xs px-1.5" onClick={() => setCreating(true)} data-testid="button-new-batch">
+          <Plus className="w-3 h-3 mr-0.5" /> New
         </Button>
       </div>
 
       {creating && (
-        <div className="flex gap-2">
+        <div className="flex gap-1.5">
           <Input
             value={newName}
             onChange={e => setNewName(e.target.value)}
-            placeholder="e.g. Mar 2026 Mid-Strategy"
-            className="text-sm h-8"
+            placeholder="e.g. Mar 2026"
+            className="text-xs h-7"
             onKeyDown={e => { if (e.key === "Enter") createMut.mutate(newName); if (e.key === "Escape") setCreating(false); }}
             autoFocus
             data-testid="input-batch-name"
           />
-          <Button size="sm" onClick={() => createMut.mutate(newName)} disabled={!newName.trim() || createMut.isPending} data-testid="button-create-batch">
-            {createMut.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+          <Button size="sm" className="h-7 w-7 p-0" onClick={() => createMut.mutate(newName)} disabled={!newName.trim() || createMut.isPending} data-testid="button-create-batch">
+            {createMut.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => setCreating(false)} data-testid="button-cancel-batch"><X className="w-3.5 h-3.5" /></Button>
+          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setCreating(false)} data-testid="button-cancel-batch"><X className="w-3 h-3" /></Button>
         </div>
       )}
 
       {isLoading ? (
-        <div className="text-xs text-muted-foreground p-2">Loading...</div>
+        <div className="text-xs text-muted-foreground p-1">Loading...</div>
       ) : batches.length === 0 ? (
-        <div className="text-xs text-muted-foreground border border-dashed rounded p-3 text-center">No batches yet. Create one above.</div>
+        <div className="text-[10px] text-muted-foreground border border-dashed rounded p-2 text-center">No batches yet.</div>
       ) : (
-        <div className="space-y-1">
+        <div className="space-y-0.5">
           {batches.map(b => (
             <div
               key={b.id}
               onClick={() => onSelect(b)}
-              className={`flex items-center justify-between px-2.5 py-2 rounded-md cursor-pointer transition-colors border ${selected?.id === b.id ? "bg-primary/10 border-primary/30" : "hover:bg-muted/60 border-transparent"}`}
+              className={`flex items-center justify-between px-2 py-1.5 rounded-md cursor-pointer transition-colors border text-xs ${selected?.id === b.id ? "bg-primary/10 border-primary/30" : "hover:bg-muted/60 border-transparent"}`}
               data-testid={`item-batch-${b.id}`}
             >
               <div className="min-w-0">
-                <p className="text-sm font-medium truncate">{b.evaluationName}</p>
-                <p className="text-[10px] text-muted-foreground">{new Date(b.createdAt).toLocaleDateString()}</p>
+                <p className="font-medium truncate text-[11px]">{b.evaluationName}</p>
+                <p className="text-[9px] text-muted-foreground">{new Date(b.createdAt).toLocaleDateString()}</p>
               </div>
-              <div className="flex items-center gap-1 shrink-0">
-                <Badge variant="outline" className={`text-[9px] ${statusColor(b.enrichmentStatus)}`}>{b.enrichmentStatus}</Badge>
-                <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive" onClick={e => { e.stopPropagation(); deleteMut.mutate(b.id); }} data-testid={`button-delete-batch-${b.id}`}>
-                  <Trash2 className="w-3 h-3" />
+              <div className="flex items-center gap-0.5 shrink-0 ml-1">
+                <Badge variant="outline" className={`text-[8px] px-1 py-0 ${statusColor(b.enrichmentStatus)}`}>{b.enrichmentStatus}</Badge>
+                <Button variant="ghost" size="sm" className="h-5 w-5 p-0 text-muted-foreground hover:text-destructive" onClick={e => { e.stopPropagation(); deleteMut.mutate(b.id); }} data-testid={`button-delete-batch-${b.id}`}>
+                  <Trash2 className="w-2.5 h-2.5" />
                 </Button>
               </div>
             </div>
@@ -809,13 +821,15 @@ export default function EvalSheetsPage() {
 
   return (
     <div className="flex h-full">
-      <div className="w-64 border-r bg-muted/20 flex flex-col shrink-0">
-        <div className="p-4 border-b">
+      {/* ── Left sidebar ── */}
+      <div className="w-72 border-r bg-muted/20 flex flex-col shrink-0 overflow-y-auto">
+        <div className="p-4 border-b shrink-0">
           <h2 className="font-semibold text-sm">Evaluation Sheets</h2>
           <p className="text-xs text-muted-foreground mt-0.5">Competitive benchmarking</p>
         </div>
-        <div className="p-3 border-b">
-          <Label className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 block">Client</Label>
+
+        <div className="p-3 border-b shrink-0">
+          <Label className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1.5 block">Client</Label>
           <Select value={clientId} onValueChange={v => { setClientId(v); setSelectedBatch(null); }}>
             <SelectTrigger className="h-8 text-xs" data-testid="select-eval-client">
               <SelectValue placeholder="Select a client..." />
@@ -827,13 +841,28 @@ export default function EvalSheetsPage() {
             </SelectContent>
           </Select>
         </div>
+
         {clientId && (
-          <div className="p-3 flex-1 overflow-y-auto">
-            <BatchSelector clientId={parseInt(clientId)} selected={selectedBatch} onSelect={setSelectedBatch} />
+          <div className="p-3 shrink-0">
+            <BatchSelector
+              clientId={parseInt(clientId)}
+              selected={selectedBatch}
+              onSelect={b => setSelectedBatch(b)}
+            />
           </div>
+        )}
+
+        {/* Setup section appears in sidebar when a batch is selected */}
+        {selectedBatch && (
+          <SidebarSetup
+            batch={selectedBatch}
+            clientId={parseInt(clientId)}
+            onBatchChange={b => setSelectedBatch(b)}
+          />
         )}
       </div>
 
+      {/* ── Main content ── */}
       <div className="flex-1 overflow-auto">
         {!clientId ? (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-3">
@@ -847,7 +876,7 @@ export default function EvalSheetsPage() {
             <p className="text-xs opacity-70">Each batch represents one evaluation period</p>
           </div>
         ) : (
-          <BatchDetailPanel batch={selectedBatch} clientId={parseInt(clientId)} />
+          <BatchDetailPanel batch={selectedBatch} />
         )}
       </div>
     </div>

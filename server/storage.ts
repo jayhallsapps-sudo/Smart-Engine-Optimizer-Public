@@ -14,6 +14,7 @@ import {
   adminConfigOverrides,
   findingHistory,
   reportTemplateSections,
+  clientCompetitors,
   type FindingHistory,
   type InsertFindingHistory,
   type Client,
@@ -41,6 +42,7 @@ import {
   type InsertAdminConfigOverride,
   type ReportTemplateSection,
   type InsertReportTemplateSection,
+  type ClientCompetitor,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -49,6 +51,12 @@ export interface IStorage {
   createClient(client: InsertClient): Promise<Client>;
   updateClient(id: number, client: Partial<InsertClient>): Promise<Client | undefined>;
   deleteClient(id: number): Promise<boolean>;
+
+  getClientCompetitors(clientId: number): Promise<ClientCompetitor[]>;
+  createClientCompetitor(data: { clientId: number; name: string; url: string; ordinal?: number }): Promise<ClientCompetitor>;
+  updateClientCompetitor(id: number, data: { name?: string; url?: string; ordinal?: number }): Promise<ClientCompetitor | undefined>;
+  deleteClientCompetitor(id: number): Promise<boolean>;
+  replaceClientCompetitors(clientId: number, competitors: { name: string; url: string }[]): Promise<ClientCompetitor[]>;
 
   getQueryLogs(clientId?: number, limit?: number): Promise<QueryLog[]>;
   createQueryLog(log: InsertQueryLog): Promise<QueryLog>;
@@ -138,6 +146,47 @@ export class DatabaseStorage implements IStorage {
   async deleteClient(id: number): Promise<boolean> {
     const result = await db.delete(clients).where(eq(clients.id, id)).returning();
     return result.length > 0;
+  }
+
+  async getClientCompetitors(clientId: number): Promise<ClientCompetitor[]> {
+    return db
+      .select()
+      .from(clientCompetitors)
+      .where(eq(clientCompetitors.clientId, clientId))
+      .orderBy(clientCompetitors.ordinal, clientCompetitors.createdAt);
+  }
+
+  async createClientCompetitor(data: { clientId: number; name: string; url: string; ordinal?: number }): Promise<ClientCompetitor> {
+    const [created] = await db.insert(clientCompetitors).values({
+      clientId: data.clientId,
+      name: data.name,
+      url: data.url,
+      ordinal: data.ordinal ?? 0,
+    }).returning();
+    return created;
+  }
+
+  async updateClientCompetitor(id: number, data: { name?: string; url?: string; ordinal?: number }): Promise<ClientCompetitor | undefined> {
+    const [updated] = await db
+      .update(clientCompetitors)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(clientCompetitors.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteClientCompetitor(id: number): Promise<boolean> {
+    const result = await db.delete(clientCompetitors).where(eq(clientCompetitors.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async replaceClientCompetitors(clientId: number, competitors: { name: string; url: string }[]): Promise<ClientCompetitor[]> {
+    await db.delete(clientCompetitors).where(eq(clientCompetitors.clientId, clientId));
+    if (competitors.length === 0) return [];
+    const rows = await db.insert(clientCompetitors).values(
+      competitors.map((c, i) => ({ clientId, name: c.name, url: c.url, ordinal: i }))
+    ).returning();
+    return rows;
   }
 
   async getQueryLogs(clientId?: number, limit = 50): Promise<QueryLog[]> {

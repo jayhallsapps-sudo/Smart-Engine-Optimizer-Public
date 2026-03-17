@@ -779,6 +779,78 @@ export async function registerRoutes(
     res.json({ success: true });
   });
 
+  // ─── Client Competitors ──────────────────────────────────────────────────────
+
+  app.get("/api/clients/:id/competitors", async (req, res) => {
+    const clientId = Number(req.params.id);
+    const competitors = await storage.getClientCompetitors(clientId);
+    res.json(competitors);
+  });
+
+  app.post("/api/clients/:id/competitors", async (req, res) => {
+    const clientId = Number(req.params.id);
+    const { name = "", url = "", ordinal } = req.body;
+    const competitor = await storage.createClientCompetitor({ clientId, name, url, ordinal });
+    res.json(competitor);
+  });
+
+  app.patch("/api/clients/:id/competitors/:competitorId", async (req, res) => {
+    const competitorId = Number(req.params.competitorId);
+    const { name, url, ordinal } = req.body;
+    const updated = await storage.updateClientCompetitor(competitorId, { name, url, ordinal });
+    if (!updated) return res.status(404).json({ message: "Competitor not found" });
+    res.json(updated);
+  });
+
+  app.delete("/api/clients/:id/competitors/:competitorId", async (req, res) => {
+    const competitorId = Number(req.params.competitorId);
+    const deleted = await storage.deleteClientCompetitor(competitorId);
+    if (!deleted) return res.status(404).json({ message: "Competitor not found" });
+    res.json({ success: true });
+  });
+
+  app.put("/api/clients/:id/competitors", async (req, res) => {
+    const clientId = Number(req.params.id);
+    const { competitors } = req.body as { competitors: { name: string; url: string }[] };
+    if (!Array.isArray(competitors)) return res.status(400).json({ message: "competitors must be an array" });
+    const rows = await storage.replaceClientCompetitors(clientId, competitors);
+    res.json(rows);
+  });
+
+  // Ahrefs competitor auto-fetch
+  app.get("/api/clients/:id/competitors/ahrefs", async (req, res) => {
+    const clientId = Number(req.params.id);
+    try {
+      const client = await storage.getClient(clientId);
+      if (!client?.ahrefsProjectUrl) {
+        return res.json({ competitors: [], message: "No Ahrefs project URL configured for this client." });
+      }
+      const creds = await storage.getApiCredentialsByService("ahrefs");
+      const tokenCred = creds.find(c => c.credentialType === "bearer_token") ?? creds.find(c => c.credentialType === "api_key");
+      if (!tokenCred) {
+        return res.json({ competitors: [], message: "No Ahrefs credentials configured." });
+      }
+      const { decryptCredential } = await import("./credentialEncryption");
+      const token = decryptCredential(tokenCred.encryptedValue);
+      const targetDomain = client.ahrefsProjectUrl.replace(/^https?:\/\//, "").replace(/\/$/, "");
+      const ahrefsRes = await fetch(
+        `https://api.ahrefs.com/v3/site-explorer/competitors-overview?target=${encodeURIComponent(targetDomain)}&select=competitor,common_keywords&limit=10`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (!ahrefsRes.ok) {
+        return res.json({ competitors: [], message: `Ahrefs returned ${ahrefsRes.status}` });
+      }
+      const ahrefsData = await ahrefsRes.json();
+      const competitors = (ahrefsData?.competitors ?? []).slice(0, 10).map((c: any) => ({
+        name: c.competitor ?? "",
+        url: c.competitor ? `https://${c.competitor}` : "",
+      }));
+      res.json({ competitors });
+    } catch (err: any) {
+      res.json({ competitors: [], message: err.message ?? "Ahrefs fetch failed" });
+    }
+  });
+
   // ─── ACA: Ask Claude Anything ───────────────────────────────────────────────
 
   app.post("/api/aca/chat", heavyLimiter, async (req: Request, res: Response) => {

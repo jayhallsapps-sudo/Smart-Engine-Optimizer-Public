@@ -30,9 +30,29 @@ export const clients = pgTable("clients", {
   asanaProjectId: text("asana_project_id"),
   primaryGoal: text("primary_goal"),
   aboutPageUrl: text("about_page_url"),
+  contactName: text("contact_name"),
+  contactEmail: text("contact_email"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+export const clientCompetitors = pgTable("client_competitors", {
+  id: serial("id").primaryKey(),
+  clientId: integer("client_id").notNull().references(() => clients.id, { onDelete: "cascade" }),
+  name: text("name").notNull().default(""),
+  url: text("url").notNull().default(""),
+  ordinal: integer("ordinal").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertClientCompetitorSchema = createInsertSchema(clientCompetitors).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type ClientCompetitor = typeof clientCompetitors.$inferSelect;
+export type InsertClientCompetitor = z.infer<typeof insertClientCompetitorSchema>;
 
 export const queryLogs = pgTable("query_logs", {
   id: serial("id").primaryKey(),

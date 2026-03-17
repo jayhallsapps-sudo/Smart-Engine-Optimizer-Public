@@ -292,7 +292,8 @@ export default function SetupPage() {
   const [qssbTesting, setQssbTesting] = useState(false);
   const [notionPageUrl, setNotionPageUrl] = useState("");
   const [notionPageLabel, setNotionPageLabel] = useState("");
-  const [notionTestStates, setNotionTestStates] = useState<Record<string, { loading: boolean; entries?: number; childPages?: number; source?: string; error?: string }>>({});
+  const [notionTestStates, setNotionTestStates] = useState<Record<string, { loading: boolean; success?: boolean; entries?: number; childPages?: number; childPageList?: { id: string; title: string; accessible: boolean; entries: number }[]; source?: string; error?: string }>>({});
+  const [notionExpandedPages, setNotionExpandedPages] = useState<Record<string, boolean>>({});
   const { toast } = useToast();
 
   const { data: googleStatus } = useQuery<{ configured: boolean }>({
@@ -369,6 +370,9 @@ export default function SetupPage() {
       const res = await fetch(`/api/notion-pages/${pageId}/test`, { headers });
       const data = await res.json();
       setNotionTestStates(s => ({ ...s, [pageId]: { loading: false, ...data } }));
+      if (data.childPageList?.length > 0) {
+        setNotionExpandedPages(s => ({ ...s, [pageId]: true }));
+      }
     } catch {
       setNotionTestStates(s => ({ ...s, [pageId]: { loading: false, error: "Test failed" } }));
     }
@@ -832,50 +836,86 @@ export default function SetupPage() {
                     <Skeleton className="h-8 w-full" />
                   </div>
                 ) : notionPages.length > 0 ? (
-                  <div className="space-y-1.5 mb-3">
+                  <div className="space-y-1 mb-3">
                     {notionPages.map((page) => {
                       const ts = notionTestStates[page.id];
+                      const expanded = notionExpandedPages[page.id] ?? false;
+                      const hasChildPages = (ts?.childPageList?.length ?? 0) > 0;
                       return (
-                        <div key={page.id} className="flex items-center gap-2 p-2 rounded border border-border bg-muted/30">
-                          {ts?.loading ? (
-                            <Loader2 className="w-3.5 h-3.5 text-muted-foreground animate-spin shrink-0" />
-                          ) : ts?.success === false ? (
-                            <XCircle className="w-3.5 h-3.5 text-red-500 shrink-0" />
-                          ) : ts?.entries != null && ts.entries > 0 ? (
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                          ) : (
-                            <Link className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                          )}
-                          <div className="flex-1 min-w-0">
-                            <span className="text-xs font-medium truncate block">{page.label}</span>
-                            {ts?.entries != null && (
-                              <span className={`text-[10px] ${ts.success === false ? "text-red-500" : ts.entries > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-yellow-600 dark:text-yellow-400"}`}>
-                                {ts.success === false ? (ts.error ?? "Access error") : ts.entries === 0 ? "0 entries — check Notion access" : `${ts.entries} entries${ts.childPages ? ` (+${ts.childPages} sub-pages)` : ""} via ${ts.source === "database" ? "database" : "page blocks"}`}
-                              </span>
+                        <div key={page.id} className="rounded border border-border overflow-hidden">
+                          <div className="flex items-center gap-2 p-2 bg-muted/30">
+                            {ts?.loading ? (
+                              <Loader2 className="w-3.5 h-3.5 text-muted-foreground animate-spin shrink-0" />
+                            ) : ts?.success === false ? (
+                              <XCircle className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                            ) : ts?.entries != null && ts.entries > 0 ? (
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                            ) : (
+                              <Link className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                             )}
+                            <div className="flex-1 min-w-0">
+                              <span className="text-xs font-medium truncate block">{page.label}</span>
+                              {ts?.entries != null && (
+                                <span className={`text-[10px] ${ts.success === false ? "text-red-500" : ts.entries > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-yellow-600 dark:text-yellow-400"}`}>
+                                  {ts.success === false ? (ts.error ?? "Access error") : ts.entries === 0 ? "0 entries — check Notion access" : `${ts.entries} entries${ts.childPages ? `, ${ts.childPages} sub-page${ts.childPages !== 1 ? "s" : ""}` : ""} via ${ts.source === "database" ? "database" : "page blocks"}`}
+                                </span>
+                              )}
+                            </div>
+                            {hasChildPages && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 w-6 p-0 shrink-0 text-muted-foreground"
+                                onClick={() => setNotionExpandedPages(s => ({ ...s, [page.id]: !expanded }))}
+                                data-testid={`button-expand-notion-${page.id}`}
+                                title={expanded ? "Hide sub-pages" : "Show sub-pages"}
+                              >
+                                <svg className={`w-3 h-3 transition-transform ${expanded ? "rotate-180" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9" /></svg>
+                              </Button>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 w-6 p-0 shrink-0"
+                              onClick={() => testNotionPage(page.id)}
+                              disabled={ts?.loading}
+                              data-testid={`button-test-notion-${page.id}`}
+                              title="Test page access"
+                            >
+                              <Wifi className="w-3 h-3" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 w-6 p-0 text-red-500 hover:text-red-600 shrink-0"
+                              onClick={() => deleteNotionPageMutation.mutate(page.id)}
+                              disabled={deleteNotionPageMutation.isPending}
+                              data-testid={`button-delete-notion-${page.id}`}
+                              title="Remove page"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
                           </div>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-6 w-6 p-0 shrink-0"
-                            onClick={() => testNotionPage(page.id)}
-                            disabled={ts?.loading}
-                            data-testid={`button-test-notion-${page.id}`}
-                            title="Test page access"
-                          >
-                            <Wifi className="w-3 h-3" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-6 w-6 p-0 text-red-500 hover:text-red-600 shrink-0"
-                            onClick={() => deleteNotionPageMutation.mutate(page.id)}
-                            disabled={deleteNotionPageMutation.isPending}
-                            data-testid={`button-delete-notion-${page.id}`}
-                            title="Remove page"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </Button>
+                          {expanded && hasChildPages && (
+                            <div className="border-t border-border bg-muted/10 px-2 py-1.5 space-y-0.5">
+                              <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1">Sub-pages found on this parent</p>
+                              {ts.childPageList!.map((child) => (
+                                <div key={child.id} className="flex items-center gap-2 py-0.5">
+                                  {child.accessible ? (
+                                    <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />
+                                  ) : (
+                                    <XCircle className="w-3 h-3 text-red-400 shrink-0" />
+                                  )}
+                                  <span className="text-xs flex-1 truncate">{child.title}</span>
+                                  {child.accessible ? (
+                                    <span className="text-[10px] text-muted-foreground shrink-0">{child.entries} entries</span>
+                                  ) : (
+                                    <span className="text-[10px] text-red-400 shrink-0">No access — share with integration</span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       );
                     })}

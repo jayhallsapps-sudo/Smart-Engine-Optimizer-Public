@@ -22,10 +22,18 @@ export interface NotionPageConfig {
   addedAt: string;
 }
 
+export interface ChildPageInfo {
+  id: string;
+  title: string;
+  accessible: boolean;
+  entries: number;
+}
+
 export interface PageTestResult {
   success: boolean;
   entries: number;
   childPages: number;
+  childPageList: ChildPageInfo[];
   source: string;
   error?: string;
 }
@@ -161,7 +169,7 @@ export function extractNotionPageId(input: string): string {
 export async function fetchSinglePageEntries(pageId: string): Promise<PageTestResult> {
   let entries: StrategyBankEntry[] = [];
   let source = "none";
-  let childPageCount = 0;
+  const childPageList: ChildPageInfo[] = [];
 
   try {
     const dbResult = await notionProxy(`/v1/databases/${pageId}/query`, {
@@ -181,25 +189,29 @@ export async function fetchSinglePageEntries(pageId: string): Promise<PageTestRe
         source = "page_blocks";
 
         const childBlocks = blocks.filter((b: any) => b.type === "child_page");
-        childPageCount = childBlocks.length;
 
-        for (const childBlock of childBlocks) {
+        await Promise.allSettled(childBlocks.map(async (childBlock: any) => {
+          const title = childBlock.child_page?.title ?? "Untitled";
           try {
-            const childBlocks2 = await notionProxy(`/v1/blocks/${childBlock.id}/children?page_size=100`);
-            const childEntries = extractPageBlocks(childBlocks2.results ?? []);
+            const childResult = await notionProxy(`/v1/blocks/${childBlock.id}/children?page_size=100`);
+            const childEntries = extractPageBlocks(childResult.results ?? []);
             entries.push(...childEntries);
+            childPageList.push({ id: childBlock.id, title, accessible: true, entries: childEntries.length });
           } catch {
+            childPageList.push({ id: childBlock.id, title, accessible: false, entries: 0 });
           }
-        }
+        }));
+
+        childPageList.sort((a, b) => a.title.localeCompare(b.title));
       } catch (blockErr: any) {
-        return { success: false, entries: 0, childPages: 0, source: "none", error: blockErr.message ?? "Page not accessible. Ensure the integration has access." };
+        return { success: false, entries: 0, childPages: 0, childPageList: [], source: "none", error: blockErr.message ?? "Page not accessible. Ensure the integration has access." };
       }
     } else {
-      return { success: false, entries: 0, childPages: 0, source: "none", error: dbErr.message };
+      return { success: false, entries: 0, childPages: 0, childPageList: [], source: "none", error: dbErr.message };
     }
   }
 
-  return { success: true, entries: entries.length, childPages: childPageCount, source };
+  return { success: true, entries: entries.length, childPages: childPageList.length, childPageList, source };
 }
 
 export async function getNotionPages(): Promise<NotionPageConfig[]> {

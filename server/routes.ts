@@ -833,14 +833,17 @@ export async function registerRoutes(
       const token = decrypt(tokenCred.encryptedValue);
       const { extractDomain } = await import("./googleToken");
       const targetDomain = extractDomain(client.ahrefsProjectUrl) ?? client.ahrefsProjectUrl.replace(/^https?:\/\//, "").replace(/\/$/, "");
+      const today = new Date().toISOString().split("T")[0];
       const qs = new URLSearchParams({
-        select: "domain,common_keywords,competition_level",
+        select: "competitor_domain,traffic,domain_rating,keywords_common",
         target: targetDomain,
         mode: "domain",
         limit: "10",
+        date: today,
+        country: "us",
       }).toString();
       const ahrefsRes = await fetch(
-        `https://api.ahrefs.com/v3/site-explorer/competing-domains?${qs}`,
+        `https://api.ahrefs.com/v3/site-explorer/organic-competitors?${qs}`,
         { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } }
       );
       if (!ahrefsRes.ok) {
@@ -848,9 +851,9 @@ export async function registerRoutes(
         return res.json({ competitors: [], message: `Ahrefs returned ${ahrefsRes.status}: ${body.substring(0, 200)}` });
       }
       const ahrefsData = await ahrefsRes.json();
-      const competitors = (ahrefsData?.domains ?? []).slice(0, 10).map((c: any) => ({
-        name: c.domain ?? "",
-        url: c.domain ? `https://${c.domain}` : "",
+      const competitors = (ahrefsData?.competitors ?? []).slice(0, 10).map((c: any) => ({
+        name: c.competitor_domain ?? "",
+        url: c.competitor_domain ? `https://${c.competitor_domain}` : "",
       }));
       res.json({ competitors });
     } catch (err: any) {

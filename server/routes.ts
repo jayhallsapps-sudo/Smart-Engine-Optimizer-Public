@@ -1319,6 +1319,24 @@ export async function registerRoutes(
     }
   });
 
+  app.put("/api/notion-pages/:pageId", async (req, res) => {
+    try {
+      const { getNotionPages, saveNotionPages, clearStrategyBankCache } = await import("./notionClient");
+      const { pageId } = req.params;
+      const { label } = req.body as { label: string };
+      if (!label?.trim()) return res.status(400).json({ message: "label is required" });
+      const pages = await getNotionPages();
+      const idx = pages.findIndex(p => p.id === pageId);
+      if (idx === -1) return res.status(404).json({ message: "Page not found" });
+      pages[idx] = { ...pages[idx], label: label.trim() };
+      await saveNotionPages(pages);
+      clearStrategyBankCache();
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.delete("/api/notion-pages/:pageId", async (req, res) => {
     try {
       const { getNotionPages, saveNotionPages, clearStrategyBankCache } = await import("./notionClient");

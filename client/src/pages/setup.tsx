@@ -294,6 +294,8 @@ export default function SetupPage() {
   const [notionPageLabel, setNotionPageLabel] = useState("");
   const [notionTestStates, setNotionTestStates] = useState<Record<string, { loading: boolean; success?: boolean; entries?: number; childPages?: number; childPageList?: { id: string; title: string; accessible: boolean; entries: number }[]; source?: string; error?: string }>>({});
   const [notionExpandedPages, setNotionExpandedPages] = useState<Record<string, boolean>>({});
+  const [notionRenamingId, setNotionRenamingId] = useState<string | null>(null);
+  const [notionRenameValue, setNotionRenameValue] = useState("");
   const { toast } = useToast();
 
   const { data: googleStatus } = useQuery<{ configured: boolean }>({
@@ -361,6 +363,19 @@ export default function SetupPage() {
       toast({ title: "Notion page removed" });
     },
     onError: () => toast({ title: "Failed to remove page", variant: "destructive" }),
+  });
+
+  const renameNotionPageMutation = useMutation({
+    mutationFn: async ({ pageId, label }: { pageId: string; label: string }) => {
+      return apiRequest("PUT", `/api/notion-pages/${pageId}`, { label });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/notion-pages"] });
+      setNotionRenamingId(null);
+      setNotionRenameValue("");
+      toast({ title: "Page renamed" });
+    },
+    onError: () => toast({ title: "Failed to rename page", variant: "destructive" }),
   });
 
   const testNotionPage = async (pageId: string) => {
@@ -854,8 +869,40 @@ export default function SetupPage() {
                               <Link className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                             )}
                             <div className="flex-1 min-w-0">
-                              <span className="text-xs font-medium truncate block">{page.label}</span>
-                              {ts?.entries != null && (
+                              {notionRenamingId === page.id ? (
+                                <div className="flex items-center gap-1">
+                                  <Input
+                                    value={notionRenameValue}
+                                    onChange={e => setNotionRenameValue(e.target.value)}
+                                    onKeyDown={e => {
+                                      if (e.key === "Enter") renameNotionPageMutation.mutate({ pageId: page.id, label: notionRenameValue });
+                                      if (e.key === "Escape") { setNotionRenamingId(null); setNotionRenameValue(""); }
+                                    }}
+                                    className="text-xs h-6 py-0 px-1.5"
+                                    autoFocus
+                                    data-testid={`input-rename-notion-${page.id}`}
+                                  />
+                                  <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-emerald-500" onClick={() => renameNotionPageMutation.mutate({ pageId: page.id, label: notionRenameValue })} disabled={!notionRenameValue.trim() || renameNotionPageMutation.isPending}>
+                                    <CheckCircle2 className="w-3 h-3" />
+                                  </Button>
+                                  <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => { setNotionRenamingId(null); setNotionRenameValue(""); }}>
+                                    <XCircle className="w-3 h-3" />
+                                  </Button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-1 group">
+                                  <span className="text-xs font-medium truncate">{page.label}</span>
+                                  <button
+                                    className="opacity-0 group-hover:opacity-60 hover:!opacity-100 p-0 h-4 w-4 shrink-0 text-muted-foreground"
+                                    onClick={() => { setNotionRenamingId(page.id); setNotionRenameValue(page.label); }}
+                                    data-testid={`button-rename-notion-${page.id}`}
+                                    title="Rename"
+                                  >
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                                  </button>
+                                </div>
+                              )}
+                              {notionRenamingId !== page.id && ts?.entries != null && (
                                 <span className={`text-[10px] ${ts.success === false ? "text-red-500" : ts.entries > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-yellow-600 dark:text-yellow-400"}`}>
                                   {ts.success === false ? (ts.error ?? "Access error") : ts.entries === 0 ? "0 entries — check Notion access" : `${ts.entries} entries${ts.childPages ? `, ${ts.childPages} sub-page${ts.childPages !== 1 ? "s" : ""}` : ""} via ${ts.source === "database" ? "database" : "page blocks"}`}
                                 </span>

@@ -63,7 +63,7 @@ function extractRichText(richText: any[]): string {
   return richText.map((r: any) => r.plain_text ?? "").join("");
 }
 
-function extractPageBlocks(blocks: any[]): StrategyBankEntry[] {
+function extractPageBlocks(blocks: any[], tableRowsMap: Record<string, any[]> = {}): StrategyBankEntry[] {
   const entries: StrategyBankEntry[] = [];
   let currentHeading = "";
 
@@ -85,18 +85,14 @@ function extractPageBlocks(blocks: any[]): StrategyBankEntry[] {
             category: currentHeading || "General",
           });
         } else {
-          entries.push({
-            service: text,
-            description: "",
-            category: currentHeading || "General",
-          });
+          entries.push({ service: text, description: "", category: currentHeading || "General" });
         }
       }
     }
 
     if (type === "paragraph") {
       const text = extractRichText(block.paragraph?.rich_text ?? []);
-      if (text.length > 10 && currentHeading) {
+      if (text.length > 15) {
         const colonIdx = text.indexOf(":");
         if (colonIdx > 0 && colonIdx < 80) {
           entries.push({
@@ -104,18 +100,28 @@ function extractPageBlocks(blocks: any[]): StrategyBankEntry[] {
             description: text.substring(colonIdx + 1).trim(),
             category: currentHeading || "General",
           });
+        } else if (currentHeading && text.length > 30) {
+          entries.push({ service: text.substring(0, 80).trim(), description: text.length > 80 ? text.substring(80).trim() : "", category: currentHeading });
         }
       }
     }
 
+    if (type === "callout") {
+      const text = extractRichText(block.callout?.rich_text ?? []);
+      if (text.length > 15 && currentHeading) {
+        entries.push({ service: text.substring(0, 80).trim(), description: text.length > 80 ? text.substring(80).trim() : "", category: currentHeading || "General" });
+      }
+    }
+
     if (type === "table") {
-      const rows = block.table?.has_column_header ? block.children?.slice(1) : block.children;
-      for (const row of rows ?? []) {
+      const rows: any[] = tableRowsMap[block.id] ?? block.children ?? [];
+      const dataRows = block.table?.has_column_header ? rows.slice(1) : rows;
+      for (const row of dataRows) {
         if (row.type === "table_row") {
           const cells = (row.table_row?.cells ?? []).map((c: any) => extractRichText(c));
-          if (cells.length >= 2 && cells[0]) {
+          if (cells.length >= 2 && cells[0]?.trim()) {
             entries.push({
-              service: cells[0],
+              service: cells[0].trim(),
               description: cells.slice(1).filter(Boolean).join(" — "),
               category: currentHeading || "General",
             });
@@ -126,6 +132,20 @@ function extractPageBlocks(blocks: any[]): StrategyBankEntry[] {
   }
 
   return entries;
+}
+
+async function fetchTableRowsForBlocks(blocks: any[]): Promise<Record<string, any[]>> {
+  const tableBlocks = blocks.filter((b: any) => b.type === "table");
+  const result: Record<string, any[]> = {};
+  await Promise.allSettled(
+    tableBlocks.map(async (block: any) => {
+      try {
+        const resp = await notionProxy(`/v1/blocks/${block.id}/children?page_size=100`);
+        result[block.id] = resp.results ?? [];
+      } catch { }
+    })
+  );
+  return result;
 }
 
 function extractDatabaseEntries(results: any[]): StrategyBankEntry[] {
@@ -185,8 +205,10 @@ export async function fetchSinglePageEntries(pageId: string): Promise<PageTestRe
       try {
         const blocksResult = await notionProxy(`/v1/blocks/${pageId}/children?page_size=100`);
         const blocks = blocksResult.results ?? [];
-        entries = extractPageBlocks(blocks);
         source = "page_blocks";
+
+        const tableRowsMap = await fetchTableRowsForBlocks(blocks);
+        entries = extractPageBlocks(blocks, tableRowsMap);
 
         const childBlocks = blocks.filter((b: any) => b.type === "child_page");
 
@@ -194,7 +216,8 @@ export async function fetchSinglePageEntries(pageId: string): Promise<PageTestRe
           const title = childBlock.child_page?.title ?? "Untitled";
           try {
             const childResult = await notionProxy(`/v1/blocks/${childBlock.id}/children?page_size=100`);
-            const childEntries = extractPageBlocks(childResult.results ?? []);
+            const childTableRows = await fetchTableRowsForBlocks(childResult.results ?? []);
+            const childEntries = extractPageBlocks(childResult.results ?? [], childTableRows);
             entries.push(...childEntries);
             childPageList.push({ id: childBlock.id, title, accessible: true, entries: childEntries.length });
           } catch {
@@ -301,12 +324,14 @@ async function fetchRawEntries(pageId: string, label: string): Promise<StrategyB
     try {
       const blocksResult = await notionProxy(`/v1/blocks/${pageId}/children?page_size=100`);
       const blocks = blocksResult.results ?? [];
-      entries = extractPageBlocks(blocks);
+      const tableRowsMap = await fetchTableRowsForBlocks(blocks);
+      entries = extractPageBlocks(blocks, tableRowsMap);
 
       for (const childBlock of blocks.filter((b: any) => b.type === "child_page")) {
         try {
           const childBlocks = await notionProxy(`/v1/blocks/${childBlock.id}/children?page_size=100`);
-          entries.push(...extractPageBlocks(childBlocks.results ?? []));
+          const childTableRows = await fetchTableRowsForBlocks(childBlocks.results ?? []);
+          entries.push(...extractPageBlocks(childBlocks.results ?? [], childTableRows));
         } catch { }
       }
     } catch { }

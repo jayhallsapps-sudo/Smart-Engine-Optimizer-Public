@@ -1,6 +1,6 @@
 import { Switch, Route, useLocation, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider } from "@/components/ui/sidebar";
@@ -44,6 +44,32 @@ function RootRedirect() {
 }
 
 const PRINT_ROUTES = ["/biweekly/print", "/monthly/print", "/biweekly/pdf-render", "/qbr-prep-print", "/mid-strategy/pdf-render"];
+
+function AiStatusIndicator() {
+  const { data } = useQuery<{ provider: string | null; label: string }>({
+    queryKey: ["/api/ai/status"],
+    refetchInterval: 1500,
+    staleTime: 0,
+  });
+
+  const isActive = !!data?.provider;
+  const label = data?.label ?? "None";
+
+  return (
+    <span className="flex items-center gap-1.5" data-testid="ai-status-indicator">
+      <span className="text-muted-foreground/60">AI:</span>
+      {isActive && (
+        <span className="relative flex h-1.5 w-1.5">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500" />
+        </span>
+      )}
+      <span className={isActive ? "text-green-600 dark:text-green-400 font-medium" : ""}>
+        {label}
+      </span>
+    </span>
+  );
+}
 
 function Router() {
   return (
@@ -113,16 +139,19 @@ export default function App() {
                 <main className="flex-1 overflow-hidden flex flex-col">
                   <Router />
                 </main>
-                <footer className="shrink-0 border-t px-4 py-2 text-center text-[11px] text-muted-foreground">
-                  Designed by{" "}
-                  <a
-                    href="https://syncds.ca"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline underline-offset-2 hover:text-foreground transition-colors"
-                  >
-                    Sync Digital Solutions
-                  </a>
+                <footer className="shrink-0 border-t px-4 py-2 flex items-center justify-between text-[11px] text-muted-foreground">
+                  <span>
+                    Designed by{" "}
+                    <a
+                      href="https://syncds.ca"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline underline-offset-2 hover:text-foreground transition-colors"
+                    >
+                      Sync Digital Solutions
+                    </a>
+                  </span>
+                  <AiStatusIndicator />
                 </footer>
               </div>
             </div>

@@ -2,7 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import * as fs from "fs";
 import * as path from "path";
-import { callAIJson } from "./aiProvider";
+import { callAIJson, getAiStatus } from "./aiProvider";
 import { randomUUID } from "crypto";
 import { buildSectionCommandsAutoMap, getReportFamily } from "@shared/reportRegistry";
 import rateLimit from "express-rate-limit";
@@ -252,6 +252,11 @@ export async function registerRoutes(
       }
     }
     res.json({ token: INTERNAL_TOKEN });
+  });
+
+  // AI provider status — polled by the footer indicator
+  app.get("/api/ai/status", (_req, res) => {
+    res.json(getAiStatus());
   });
 
   const AUTH_PUBLIC_PATHS = [

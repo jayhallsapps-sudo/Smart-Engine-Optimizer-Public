@@ -3,10 +3,40 @@
  *
  * Used by all SmartEO features that need AI completions.
  * Tries each provider in order; falls through on any error.
+ * Also tracks which provider is currently active for the footer status indicator.
  */
 
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
+
+// ─── Active provider tracking ─────────────────────────────────────────────────
+
+type Provider = "claude" | "groq" | "openai";
+
+const activeCounts: Record<Provider, number> = { claude: 0, groq: 0, openai: 0 };
+
+function increment(p: Provider) { activeCounts[p] = (activeCounts[p] || 0) + 1; }
+function decrement(p: Provider) { activeCounts[p] = Math.max(0, (activeCounts[p] || 1) - 1); }
+
+/** Called by ACA (claudeService) to register its own active provider */
+export function setAiActive(provider: Provider, active: boolean) {
+  if (active) increment(provider);
+  else decrement(provider);
+}
+
+/** Returns the provider currently handling at least one call, or null */
+export function getAiStatus(): { provider: Provider | null; label: string } {
+  const order: Provider[] = ["claude", "groq", "openai"];
+  const active = order.find(p => activeCounts[p] > 0) ?? null;
+  const labels: Record<Provider, string> = {
+    claude: "Claude (Anthropic)",
+    groq: "Groq (Llama)",
+    openai: "OpenAI (GPT-4o)",
+  };
+  return { provider: active, label: active ? labels[active] : "None" };
+}
+
+// ─── Core callAIJson ─────────────────────────────────────────────────────────
 
 interface AiCallOptions {
   maxOutputTokens?: number;
@@ -27,18 +57,23 @@ export async function callAIJson(
   if (process.env.ANTHROPIC_API_KEY) {
     try {
       console.log("[AI] Trying provider: claude");
-      const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-      const response = await anthropic.messages.create({
-        model: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514",
-        max_tokens: maxTokens,
-        system: systemPrompt + "\n\nIMPORTANT: Return ONLY valid JSON with no markdown code blocks or extra commentary.",
-        messages: [{ role: "user", content: userPrompt }],
-      });
-      const text = response.content[0]?.type === "text" ? response.content[0].text : "";
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error("No JSON object in Claude response");
-      const result = JSON.parse(jsonMatch[0]);
-      return { result, provider: "claude" };
+      increment("claude");
+      try {
+        const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+        const response = await anthropic.messages.create({
+          model: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514",
+          max_tokens: maxTokens,
+          system: systemPrompt + "\n\nIMPORTANT: Return ONLY valid JSON with no markdown code blocks or extra commentary.",
+          messages: [{ role: "user", content: userPrompt }],
+        });
+        const text = response.content[0]?.type === "text" ? response.content[0].text : "";
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) throw new Error("No JSON object in Claude response");
+        const result = JSON.parse(jsonMatch[0]);
+        return { result, provider: "claude" };
+      } finally {
+        decrement("claude");
+      }
     } catch (err: any) {
       console.error("[AI] Claude failed:", err?.status ?? "", err?.message?.slice(0, 200));
     }
@@ -47,23 +82,28 @@ export async function callAIJson(
   if (process.env.GROQ_API_KEY) {
     try {
       console.log("[AI] Trying provider: groq");
-      const groq = new OpenAI({
-        apiKey: process.env.GROQ_API_KEY,
-        baseURL: "https://api.groq.com/openai/v1",
-      });
-      const model = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
-      const completion = await groq.chat.completions.create({
-        model,
-        max_tokens: Math.min(maxTokens, 8000),
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        response_format: { type: "json_object" },
-      });
-      const text = completion.choices[0].message.content || "";
-      const result = JSON.parse(text);
-      return { result, provider: "groq" };
+      increment("groq");
+      try {
+        const groq = new OpenAI({
+          apiKey: process.env.GROQ_API_KEY,
+          baseURL: "https://api.groq.com/openai/v1",
+        });
+        const model = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+        const completion = await groq.chat.completions.create({
+          model,
+          max_tokens: Math.min(maxTokens, 8000),
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt },
+          ],
+          response_format: { type: "json_object" },
+        });
+        const text = completion.choices[0].message.content || "";
+        const result = JSON.parse(text);
+        return { result, provider: "groq" };
+      } finally {
+        decrement("groq");
+      }
     } catch (err: any) {
       console.error("[AI] Groq failed:", err?.status ?? "", err?.message?.slice(0, 200));
     }
@@ -72,20 +112,25 @@ export async function callAIJson(
   if (process.env.OPENAI_API_KEY) {
     try {
       console.log("[AI] Trying provider: openai");
-      const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-      const model = process.env.OPENAI_MODEL || "gpt-4o";
-      const completion = await openai.chat.completions.create({
-        model,
-        max_tokens: maxTokens,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        response_format: { type: "json_object" },
-      });
-      const text = completion.choices[0].message.content || "";
-      const result = JSON.parse(text);
-      return { result, provider: "openai" };
+      increment("openai");
+      try {
+        const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+        const model = process.env.OPENAI_MODEL || "gpt-4o";
+        const completion = await openai.chat.completions.create({
+          model,
+          max_tokens: maxTokens,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt },
+          ],
+          response_format: { type: "json_object" },
+        });
+        const text = completion.choices[0].message.content || "";
+        const result = JSON.parse(text);
+        return { result, provider: "openai" };
+      } finally {
+        decrement("openai");
+      }
     } catch (err: any) {
       console.error("[AI] OpenAI failed:", err?.status ?? "", err?.message?.slice(0, 200));
     }

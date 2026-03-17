@@ -8,6 +8,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import * as cheerio from "cheerio";
+import { setAiActive } from "./aiProvider";
 import { storage } from "./storage";
 import { queryGsc, handlesGscCommand } from "./gscClient";
 import { queryGa4, handlesGa4Command } from "./ga4Client";
@@ -802,8 +803,13 @@ export async function runAcaChat(
   if (process.env.ANTHROPIC_API_KEY) {
     try {
       console.log("[ACA] Trying provider: claude");
-      const response = await runWithClaude(messages, clientContext, integrations, onToolCall);
-      return { response, provider: "claude" };
+      setAiActive("claude", true);
+      try {
+        const response = await runWithClaude(messages, clientContext, integrations, onToolCall);
+        return { response, provider: "claude" };
+      } finally {
+        setAiActive("claude", false);
+      }
     } catch (err: any) {
       console.error("[ACA] Claude failed:", err?.status, err?.message?.slice(0, 200));
     }
@@ -811,8 +817,13 @@ export async function runAcaChat(
   if (process.env.GROQ_API_KEY) {
     try {
       console.log("[ACA] Trying provider: groq");
-      const response = await runWithOpenAICompatible("groq", messages, clientContext, integrations, onToolCall);
-      return { response, provider: "groq" };
+      setAiActive("groq", true);
+      try {
+        const response = await runWithOpenAICompatible("groq", messages, clientContext, integrations, onToolCall);
+        return { response, provider: "groq" };
+      } finally {
+        setAiActive("groq", false);
+      }
     } catch (err: any) {
       console.error("[ACA] Groq failed:", err?.status, err?.message?.slice(0, 200));
     }
@@ -820,8 +831,13 @@ export async function runAcaChat(
   if (process.env.OPENAI_API_KEY) {
     try {
       console.log("[ACA] Trying provider: openai");
-      const response = await runWithOpenAICompatible("openai", messages, clientContext, integrations, onToolCall);
-      return { response, provider: "openai" };
+      setAiActive("openai", true);
+      try {
+        const response = await runWithOpenAICompatible("openai", messages, clientContext, integrations, onToolCall);
+        return { response, provider: "openai" };
+      } finally {
+        setAiActive("openai", false);
+      }
     } catch (err: any) {
       console.error("[ACA] OpenAI failed:", err?.status, err?.message?.slice(0, 200));
     }

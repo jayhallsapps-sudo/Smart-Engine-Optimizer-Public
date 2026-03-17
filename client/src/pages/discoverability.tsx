@@ -126,7 +126,19 @@ interface Workspace {
   updatedAt: string;
 }
 
-interface Client { id: number; name: string; gscSiteUrl?: string | null; }
+interface Client {
+  id: number;
+  name: string;
+  gscSiteUrl?: string | null;
+  ahrefsProjectUrl?: string | null;
+  competitorDomains?: string[] | null;
+  brandTerms?: string[] | null;
+  leadEvents?: string[] | null;
+  moneyPages?: string[] | null;
+  primaryGoal?: string | null;
+  gbpLocationName?: string | null;
+  aboutPageUrl?: string | null;
+}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -405,8 +417,17 @@ function WorkspacePicker({ onSelect }: { onSelect: (ws: Workspace) => void }) {
 
 // ─── Step 1: Business Profile ─────────────────────────────────────────────────
 
+interface ClientCompetitor { id: number; clientId: number; name: string; url: string; ordinal: number; }
+
 function BusinessProfileStep({ ws, onSave }: { ws: Workspace; onSave: (bp: BusinessProfile) => void }) {
-  const { data: clients = [] } = useQuery<Client[]>({ queryKey: ["/api/clients"] });
+  const { data: clientList = [] } = useQuery<Client[]>({ queryKey: ["/api/clients"] });
+  const client = ws.clientId ? clientList.find(c => c.id === ws.clientId) : null;
+
+  const { data: competitorRows = [] } = useQuery<ClientCompetitor[]>({
+    queryKey: ["/api/clients", ws.clientId, "competitors"],
+    queryFn: () => fetch(`/api/clients/${ws.clientId}/competitors`).then(r => r.json()),
+    enabled: !!ws.clientId,
+  });
 
   const defaultBp: BusinessProfile = {
     clientName: "", domain: "", businessType: "", industryCategory: "",
@@ -415,18 +436,88 @@ function BusinessProfileStep({ ws, onSave }: { ws: Workspace; onSave: (bp: Busin
     competitorDomains: [], isYmyl: false, complianceSensitivity: "low",
   };
 
-  const [bp, setBp] = useState<BusinessProfile>((ws.businessProfile as BusinessProfile) || defaultBp);
+  function buildFromClient(c: Client, competitors: ClientCompetitor[]): Partial<BusinessProfile> {
+    const domain = c.ahrefsProjectUrl || c.gscSiteUrl || "";
+    const competitorDomains = competitors
+      .filter(comp => comp.url)
+      .map(comp => comp.url.replace(/^https?:\/\//, "").replace(/\/$/, "").replace(/^www\./, ""));
+    return {
+      clientName: c.name,
+      domain: domain.replace(/^https?:\/\//, "").replace(/\/$/, "").replace(/^(sc-domain:|www\.)/, ""),
+      competitorDomains,
+      primaryConversionGoals: (c.leadEvents || []).filter(Boolean),
+    };
+  }
+
+  const [bp, setBp] = useState<BusinessProfile>(() => {
+    const saved = ws.businessProfile as BusinessProfile | null;
+    if (saved?.businessType) return saved;
+    return defaultBp;
+  });
+
+  const [synced, setSynced] = useState(false);
+
+  useEffect(() => {
+    if (client && competitorRows !== undefined && !synced) {
+      const saved = ws.businessProfile as BusinessProfile | null;
+      if (!saved?.businessType) {
+        setBp(prev => ({ ...prev, ...buildFromClient(client, competitorRows) }));
+        setSynced(true);
+      }
+    }
+  }, [client, competitorRows]);
+
+  function syncFromClient() {
+    if (!client) return;
+    setBp(prev => ({ ...prev, ...buildFromClient(client, competitorRows) }));
+    setSynced(true);
+  }
 
   function set(key: keyof BusinessProfile, val: any) {
     setBp(prev => ({ ...prev, [key]: val }));
   }
 
+  const autoFilledFields = client
+    ? [
+        client.name && "Client name",
+        (client.ahrefsProjectUrl || client.gscSiteUrl) && "Domain",
+        competitorRows.length > 0 && `${competitorRows.length} competitor${competitorRows.length > 1 ? "s" : ""}`,
+        (client.leadEvents?.length ?? 0) > 0 && "Conversion goals",
+      ].filter(Boolean)
+    : [];
+
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-base font-semibold text-foreground mb-0.5">Business Profile</h2>
-        <p className="text-xs text-muted-foreground">Define the client's business context. This profile drives all downstream scoring and recommendations.</p>
+        <p className="text-xs text-muted-foreground">This profile drives all AI-generated clusters, keyword scoring, and recommendations.</p>
       </div>
+
+      {client && (
+        <div className="rounded-xl border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/30 p-4 flex items-start gap-3">
+          <Zap className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold text-blue-700 dark:text-blue-300 mb-0.5">Auto-populated from Client Info</p>
+            <p className="text-xs text-blue-600 dark:text-blue-400">
+              {autoFilledFields.length > 0
+                ? `Pulled: ${autoFilledFields.join(" · ")}`
+                : "Client record linked — refresh to pull latest data."}
+            </p>
+            {competitorRows.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-2">
+                {competitorRows.map(comp => (
+                  <span key={comp.id} className="text-[10px] bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-full font-mono">
+                    {comp.url.replace(/^https?:\/\//, "").replace(/\/$/, "").replace(/^www\./, "")}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+          <Button size="sm" variant="outline" className="shrink-0 text-xs h-7 border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-300" onClick={syncFromClient}>
+            <RefreshCw className="w-3 h-3 mr-1" /> Refresh
+          </Button>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-4">
         <div>
@@ -499,11 +590,6 @@ function BusinessProfileStep({ ws, onSave }: { ws: Workspace; onSave: (bp: Busin
         <Textarea value={bp.seasonalPriorities || ""} onChange={e => set("seasonalPriorities", e.target.value)} placeholder="e.g. Summer bookings (May–Aug), Q4 detox surge, Spring deals…" rows={2} data-testid="input-seasonal" />
       </div>
 
-      <div>
-        <label className="text-xs font-medium text-foreground mb-1.5 block">Competitor Domains</label>
-        <TagInput values={bp.competitorDomains} onChange={v => set("competitorDomains", v)} placeholder="e.g. competitor.com then Enter…" />
-      </div>
-
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className="text-xs font-medium text-foreground mb-1.5 block">YMYL / Regulated Industry</label>
@@ -535,7 +621,7 @@ function BusinessProfileStep({ ws, onSave }: { ws: Workspace; onSave: (bp: Busin
 
       <div className="flex justify-end">
         <Button onClick={() => onSave(bp)} data-testid="button-save-profile">
-          <Check className="w-4 h-4 mr-1.5" /> Save Business Profile
+          <Check className="w-4 h-4 mr-1.5" /> Save & Continue
         </Button>
       </div>
     </div>
@@ -544,9 +630,10 @@ function BusinessProfileStep({ ws, onSave }: { ws: Workspace; onSave: (bp: Busin
 
 // ─── Step 2: Clusters ─────────────────────────────────────────────────────────
 
-function ClustersStep({ ws, onUpdate }: { ws: Workspace; onUpdate: (clusters: Cluster[]) => void }) {
+function ClustersStep({ ws, onUpdate, onGenerate }: { ws: Workspace; onUpdate: (clusters: Cluster[]) => void; onGenerate: () => void }) {
   const clusters: Cluster[] = (ws.clusters as Cluster[]) || [];
   const keywords: Keyword[] = (ws.keywords as Keyword[]) || [];
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const CLUSTER_TYPE_OPTS = [
     "service", "location", "problem_symptom", "comparison", "cost_pricing",
@@ -574,6 +661,7 @@ function ClustersStep({ ws, onUpdate }: { ws: Workspace; onUpdate: (clusters: Cl
       notes: "",
     };
     onUpdate([...clusters, newCluster]);
+    setEditingId(newCluster.id);
   }
 
   function updateCluster(id: string, updates: Partial<Cluster>) {
@@ -582,6 +670,7 @@ function ClustersStep({ ws, onUpdate }: { ws: Workspace; onUpdate: (clusters: Cl
 
   function deleteCluster(id: string) {
     onUpdate(clusters.filter(c => c.id !== id));
+    if (editingId === id) setEditingId(null);
   }
 
   return (
@@ -589,85 +678,135 @@ function ClustersStep({ ws, onUpdate }: { ws: Workspace; onUpdate: (clusters: Cl
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-base font-semibold text-foreground mb-0.5">Keyword Clusters</h2>
-          <p className="text-xs text-muted-foreground">Organize keywords into business-goal-aligned clusters. Generate clusters via AI in the toolbar above.</p>
+          <p className="text-xs text-muted-foreground">AI generates clusters from your business profile. Review, edit, or delete after generation.</p>
         </div>
-        <Button size="sm" variant="outline" onClick={addCluster} data-testid="button-add-cluster">
-          <Plus className="w-3.5 h-3.5 mr-1" /> Add Cluster
-        </Button>
+        {clusters.length > 0 && (
+          <Button size="sm" variant="outline" onClick={addCluster} data-testid="button-add-cluster">
+            <Plus className="w-3.5 h-3.5 mr-1" /> Add Cluster
+          </Button>
+        )}
       </div>
 
       {clusters.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-12 border-2 border-dashed border-border rounded-xl">
-          <Layers className="w-8 h-8 text-muted-foreground/40 mb-2" />
-          <p className="text-sm font-medium text-foreground mb-1">No clusters yet</p>
-          <p className="text-xs text-muted-foreground mb-3">Use the Generate button above to create AI-powered clusters from your business profile.</p>
-          <Button size="sm" variant="outline" onClick={addCluster}>
-            <Plus className="w-3.5 h-3.5 mr-1" /> Add Manually
+        <div className="rounded-2xl border-2 border-dashed border-[#EA580C]/40 bg-orange-50/50 dark:bg-orange-950/10 p-10 flex flex-col items-center text-center">
+          <div className="w-12 h-12 rounded-xl bg-[#EA580C]/10 flex items-center justify-center mb-4">
+            <Sparkles className="w-6 h-6 text-[#EA580C]" />
+          </div>
+          <h3 className="text-sm font-semibold text-foreground mb-1">Let AI build your clusters</h3>
+          <p className="text-xs text-muted-foreground max-w-xs mb-6">
+            Based on your business profile, the AI will generate keyword clusters organized by type, role, and business goal — then populate each with scored keywords.
+          </p>
+          <Button
+            className="bg-[#EA580C] hover:bg-[#EA580C]/90 text-white gap-2 px-6"
+            onClick={onGenerate}
+            data-testid="button-generate-clusters"
+          >
+            <Sparkles className="w-4 h-4" />
+            Generate Clusters &amp; Keywords with AI
           </Button>
+          <button
+            className="mt-4 text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+            onClick={addCluster}
+            data-testid="button-add-cluster-manual"
+          >
+            or add a cluster manually
+          </button>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-3">
           {clusters.map((cluster) => {
             const kwCount = keywords.filter(k => k.clusterId === cluster.id).length;
             const approvedCount = keywords.filter(k => k.clusterId === cluster.id && k.status === "approved").length;
+            const isEditing = editingId === cluster.id;
             return (
               <div key={cluster.id} className="p-4 rounded-xl border bg-card" data-testid={`cluster-card-${cluster.id}`}>
-                <div className="flex items-start gap-3">
-                  <div className="flex-1 grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1 block">Cluster Name</label>
-                      <Input
-                        value={cluster.name}
-                        onChange={e => updateCluster(cluster.id, { name: e.target.value })}
-                        className="text-sm font-semibold h-8"
-                        data-testid={`input-cluster-name-${cluster.id}`}
-                      />
+                {isEditing ? (
+                  <div className="flex items-start gap-3">
+                    <div className="flex-1 grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1 block">Cluster Name</label>
+                        <Input
+                          value={cluster.name}
+                          onChange={e => updateCluster(cluster.id, { name: e.target.value })}
+                          className="text-sm font-semibold h-8"
+                          data-testid={`input-cluster-name-${cluster.id}`}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1 block">Business Goal Link</label>
+                        <Input
+                          value={cluster.linkedBusinessGoal}
+                          onChange={e => updateCluster(cluster.id, { linkedBusinessGoal: e.target.value })}
+                          placeholder="Which business goal does this support?"
+                          className="h-8 text-xs"
+                          data-testid={`input-cluster-goal-${cluster.id}`}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1 block">Cluster Type</label>
+                        <Select value={cluster.clusterType} onValueChange={v => updateCluster(cluster.id, { clusterType: v })}>
+                          <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {CLUSTER_TYPE_OPTS.map(v => <SelectItem key={v} value={v}>{v.replace(/_/g, " ")}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1 block">Cluster Role</label>
+                        <Select value={cluster.clusterRole} onValueChange={v => updateCluster(cluster.id, { clusterRole: v })}>
+                          <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {CLUSTER_ROLE_OPTS.map(v => <SelectItem key={v} value={v}>{v.replace(/_/g, " ")}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
-                    <div>
-                      <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1 block">Business Goal Link</label>
-                      <Input
-                        value={cluster.linkedBusinessGoal}
-                        onChange={e => updateCluster(cluster.id, { linkedBusinessGoal: e.target.value })}
-                        placeholder="Which business goal does this support?"
-                        className="h-8 text-xs"
-                        data-testid={`input-cluster-goal-${cluster.id}`}
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1 block">Cluster Type</label>
-                      <Select value={cluster.clusterType} onValueChange={v => updateCluster(cluster.id, { clusterType: v })}>
-                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {CLUSTER_TYPE_OPTS.map(v => <SelectItem key={v} value={v}>{v.replace(/_/g, " ")}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1 block">Cluster Role</label>
-                      <Select value={cluster.clusterRole} onValueChange={v => updateCluster(cluster.id, { clusterRole: v })}>
-                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {CLUSTER_ROLE_OPTS.map(v => <SelectItem key={v} value={v}>{v.replace(/_/g, " ")}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
+                    <div className="flex flex-col gap-1 shrink-0">
+                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setEditingId(null)}>Done</Button>
+                      <button
+                        onClick={() => deleteCluster(cluster.id)}
+                        className="p-1.5 rounded-md hover:bg-red-50 dark:hover:bg-red-950/30 text-muted-foreground hover:text-red-500 transition-colors"
+                        data-testid={`button-delete-cluster-${cluster.id}`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </div>
-                  <div className="flex flex-col gap-1 shrink-0 items-end">
-                    <button
-                      onClick={() => deleteCluster(cluster.id)}
-                      className="p-1.5 rounded-md hover:bg-red-50 dark:hover:bg-red-950/30 text-muted-foreground hover:text-red-500 transition-colors"
-                      data-testid={`button-delete-cluster-${cluster.id}`}
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${ROLE_COLORS[cluster.clusterRole] || "bg-muted text-muted-foreground"}`}>
-                      {cluster.clusterRole.replace(/_/g, " ")}
-                    </span>
-                    <span className="text-[10px] text-muted-foreground">{kwCount} kws · {approvedCount} approved</span>
+                ) : (
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="text-sm font-semibold text-foreground">{cluster.name}</span>
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${ROLE_COLORS[cluster.clusterRole] || "bg-muted text-muted-foreground"}`}>
+                          {cluster.clusterRole.replace(/_/g, " ")}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{cluster.clusterType.replace(/_/g, " ")}</span>
+                      </div>
+                      {cluster.linkedBusinessGoal && (
+                        <p className="text-xs text-muted-foreground">Goal: {cluster.linkedBusinessGoal}</p>
+                      )}
+                      {cluster.notes && (
+                        <p className="text-xs text-muted-foreground mt-0.5 italic">{cluster.notes}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <span className="text-xs text-muted-foreground">{kwCount} kws · <span className="text-emerald-600">{approvedCount} approved</span></span>
+                      <button
+                        onClick={() => setEditingId(cluster.id)}
+                        className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                        data-testid={`button-edit-cluster-${cluster.id}`}
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => deleteCluster(cluster.id)}
+                        className="p-1.5 rounded-md hover:bg-red-50 dark:hover:bg-red-950/30 text-muted-foreground hover:text-red-500 transition-colors"
+                        data-testid={`button-delete-cluster-${cluster.id}`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
-                </div>
-                {cluster.notes && (
-                  <p className="mt-2 text-xs text-muted-foreground border-t pt-2">{cluster.notes}</p>
                 )}
               </div>
             );
@@ -1740,7 +1879,7 @@ function WorkspaceEditor({ initialWs, onBack }: { initialWs: Workspace; onBack: 
             <BusinessProfileStep ws={ws} onSave={saveBusinessProfile} />
           )}
           {step === "clusters" && (
-            <ClustersStep ws={ws} onUpdate={saveClusters} />
+            <ClustersStep ws={ws} onUpdate={saveClusters} onGenerate={runGenerate} />
           )}
           {step === "keywords" && (
             <KeywordsStep ws={ws} onUpdate={saveKeywords} />

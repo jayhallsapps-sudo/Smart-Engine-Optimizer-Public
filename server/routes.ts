@@ -2,6 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import * as fs from "fs";
 import * as path from "path";
+import { callAIJson } from "./aiProvider";
 import { randomUUID } from "crypto";
 import { buildSectionCommandsAutoMap, getReportFamily } from "@shared/reportRegistry";
 import rateLimit from "express-rate-limit";
@@ -4168,11 +4169,6 @@ export async function registerRoutes(
       const workspace = await storage.getDiscoverabilityWorkspace(Number(req.params.id));
       if (!workspace) return res.status(404).json({ error: "Workspace not found" });
 
-      const OpenAI = (await import("openai")).default;
-      const apiKey = process.env.OPENAI_API_KEY;
-      if (!apiKey) return res.status(500).json({ error: "OPENAI_API_KEY not configured" });
-
-      const openaiClient = new OpenAI({ apiKey });
       const bp = workspace.businessProfile as any;
       const existingKeywords = (workspace.keywords as any[]) || [];
       const existingClusters = (workspace.clusters as any[]) || [];
@@ -4242,23 +4238,10 @@ Return ONLY valid JSON:
   ]
 }`;
 
-      const clusterCompletion = await openaiClient.chat.completions.create({
-        model: "gpt-4o",
-        max_tokens: 4000,
-        messages: [
-          { role: "system", content: clusterSystemPrompt },
-          { role: "user", content: clusterUserPrompt },
-        ],
-        response_format: { type: "json_object" },
-      });
-
-      const clusterText = clusterCompletion.choices[0].message.content || "";
-      let clusterData: any;
-      try {
-        clusterData = JSON.parse(clusterText);
-      } catch {
-        return res.status(500).json({ error: "AI returned malformed JSON for clusters" });
-      }
+      const { result: clusterData, provider: clusterProvider } = await callAIJson(
+        clusterSystemPrompt, clusterUserPrompt, { maxOutputTokens: 4000 }
+      );
+      console.log(`[Discoverability] Clusters generated via: ${clusterProvider}`);
 
       if (!Array.isArray(clusterData.clusters) || clusterData.clusters.length === 0) {
         return res.status(500).json({ error: "AI response missing clusters" });
@@ -4335,18 +4318,10 @@ Return ONLY valid JSON:
 }`;
 
         try {
-          const completion = await openaiClient.chat.completions.create({
-            model: "gpt-4o",
-            max_tokens: 8000,
-            messages: [
-              { role: "system", content: kwSystemPrompt },
-              { role: "user", content: kwUserPrompt },
-            ],
-            response_format: { type: "json_object" },
-          });
-
-          const text = completion.choices[0].message.content || "";
-          const parsed = JSON.parse(text);
+          const { result: parsed, provider } = await callAIJson(
+            kwSystemPrompt, kwUserPrompt, { maxOutputTokens: 8000 }
+          );
+          console.log(`[Discoverability] Cluster "${cluster.name}" keywords via: ${provider}`);
           return Array.isArray(parsed.keywords) ? parsed.keywords : [];
         } catch (err) {
           console.error(`[Discoverability] Keyword gen failed for cluster "${cluster.name}":`, err);

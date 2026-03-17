@@ -35,6 +35,7 @@ import AdminGuidancePage from "@/pages/admin-guidance";
 import AdminTemplatesPage from "@/pages/admin-templates";
 import AcaPage from "@/pages/aca";
 import SavedReportsPage from "@/pages/saved-reports";
+import DiscoverabilityPage from "@/pages/discoverability";
 
 function RootRedirect() {
   const [, setLocation] = useLocation();
@@ -70,6 +71,7 @@ function Router() {
       <Route path="/admin/templates" component={AdminTemplatesPage} />
       <Route path="/aca" component={AcaPage} />
       <Route path="/saved-reports" component={SavedReportsPage} />
+      <Route path="/discoverability" component={DiscoverabilityPage} />
       <Route path="/eval-sheets" component={EvalSheetsPage} />
       <Route path="/mid-strategy-deck" component={MidStrategyDeckPage} />
       <Route component={NotFound} />

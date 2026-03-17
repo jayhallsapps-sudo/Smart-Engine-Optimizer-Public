@@ -4122,5 +4122,337 @@ export async function registerRoutes(
     } catch (err: any) { res.status(500).json({ error: err.message }); }
   });
 
+  // ─── Discoverability Tool API ────────────────────────────────────────────────
+
+  app.get("/api/discoverability/workspaces", async (req, res) => {
+    try {
+      const clientId = req.query.clientId ? Number(req.query.clientId) : undefined;
+      const workspaces = await storage.listDiscoverabilityWorkspaces(clientId);
+      res.json(workspaces);
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  app.post("/api/discoverability/workspaces", async (req, res) => {
+    try {
+      const workspace = await storage.createDiscoverabilityWorkspace(req.body);
+      res.json(workspace);
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  app.get("/api/discoverability/workspaces/:id", async (req, res) => {
+    try {
+      const workspace = await storage.getDiscoverabilityWorkspace(Number(req.params.id));
+      if (!workspace) return res.status(404).json({ error: "Workspace not found" });
+      res.json(workspace);
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  app.put("/api/discoverability/workspaces/:id", async (req, res) => {
+    try {
+      const workspace = await storage.updateDiscoverabilityWorkspace(Number(req.params.id), req.body);
+      if (!workspace) return res.status(404).json({ error: "Workspace not found" });
+      res.json(workspace);
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  app.delete("/api/discoverability/workspaces/:id", async (req, res) => {
+    try {
+      const ok = await storage.deleteDiscoverabilityWorkspace(Number(req.params.id));
+      res.json({ success: ok });
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  // AI generation for keyword clusters, intent, scoring, and page-type recommendations
+  app.post("/api/discoverability/workspaces/:id/generate", async (req, res) => {
+    try {
+      const workspace = await storage.getDiscoverabilityWorkspace(Number(req.params.id));
+      if (!workspace) return res.status(404).json({ error: "Workspace not found" });
+
+      const Anthropic = (await import("@anthropic-ai/sdk")).default;
+      const apiKey = process.env.ANTHROPIC_API_KEY;
+      if (!apiKey) return res.status(500).json({ error: "ANTHROPIC_API_KEY not configured" });
+
+      const client = new Anthropic({ apiKey });
+      const bp = workspace.businessProfile as any;
+      const existingKeywords = (workspace.keywords as any[]) || [];
+      const existingClusters = (workspace.clusters as any[]) || [];
+
+      const systemPrompt = `You are a senior SEO strategist at Webserv. You follow Webserv's SEO philosophy:
+- Client business goals come first, before raw volume
+- Search intent and user need come before volume
+- Recommendations must be defensible, measurable, and explainable
+- Rankings are indicators; business outcomes matter more
+- YMYL logic only applies when the client or page type actually requires it
+- Never assume all clients are treatment centers or regulated industries
+
+Your task: Generate a structured keyword research workspace in JSON format.`;
+
+      const isYmyl = bp?.isYmyl || false;
+      const complianceSensitivity = bp?.complianceSensitivity || "low";
+
+      const userPrompt = `Generate keyword research clusters and keyword candidates for this client.
+
+BUSINESS PROFILE:
+- Client: ${bp?.clientName || "Unknown"}
+- Domain: ${bp?.domain || ""}
+- Business Type: ${bp?.businessType || ""}
+- Industry: ${bp?.industryCategory || ""}
+- Market Type: ${bp?.marketType || ""}
+- Locations: ${(bp?.locationTargets || []).join(", ") || "Not specified"}
+- Primary Services: ${(bp?.primaryServices || []).join(", ") || ""}
+- Secondary Services: ${(bp?.secondaryServices || []).join(", ") || ""}
+- Target Audiences: ${(bp?.targetAudiences || []).join(", ") || ""}
+- Conversion Goals: ${(bp?.primaryConversionGoals || []).join(", ") || ""}
+- North Star Metric: ${bp?.northStarMetric || ""}
+- Seasonal Priorities: ${bp?.seasonalPriorities || "None"}
+- Competitors: ${(bp?.competitorDomains || []).join(", ") || "None specified"}
+- YMYL/Regulated: ${isYmyl ? "Yes" : "No"}
+- Compliance Sensitivity: ${complianceSensitivity}
+- Notes: ${bp?.notes || "None"}
+
+${existingKeywords.length > 0 ? `EXISTING KEYWORDS (${existingKeywords.length} already in workspace — generate NEW ones that complement these, do not duplicate): ${existingKeywords.slice(0, 20).map((k: any) => k.keyword).join(", ")}` : ""}
+
+Generate 4-6 keyword clusters with 4-6 keyword candidates each.
+
+For each keyword, provide realistic estimated scores (0-10) for:
+- businessGoalAlignmentScore (how directly it supports stated goals)
+- intentFitScore (does SERP intent match what client can satisfy)
+- currentTractionScore (estimated existing visibility — use 3-5 for unknowns)
+- rankingOpportunityScore (realistic rankability given domain)
+- conversionProximityScore (how close to conversion/lead/booking)
+- topicalAuthorityValueScore (strengthens important cluster)
+- contentEffortScore (effort required — 1=easy, 10=heavy)
+- existingCoverageScore (likely existing page coverage)
+- localRelevanceScore (geo-relevance, weight heavily if local business)
+- trustComplianceComplexityScore (only if YMYL/regulated — else 2-3)
+
+Also include for each keyword:
+- dominantIntent (transactional|commercial_investigation|informational|navigational|local_intent|mixed)
+- recommendedPageType (existing_page_refresh|new_blog|new_service_page|new_location_page|new_faq_page|comparison_page|booking_page|category_hub_page|no_action)
+- serpNotes (1-2 sentence SERP analysis)
+- estimatedVolume (realistic monthly search volume range like "200-500")
+- estimatedDifficulty (0-100 KD estimate)
+
+Scoring guidance:
+- Score businessGoalAlignmentScore highest for keywords that match core services + conversion intent
+- Do NOT boost scores just because a keyword has volume
+- For non-YMYL clients, do not apply healthcare/compliance trust rules
+- Local businesses: boost localRelevanceScore and rankingOpportunityScore for geo-targeted terms
+
+Return ONLY valid JSON with this structure:
+{
+  "clusters": [
+    {
+      "id": "cluster_uuid",
+      "name": "Cluster Name",
+      "clusterType": "service|location|problem_symptom|comparison|cost_pricing|amenity_experience|branded|faq_informational",
+      "clusterRole": "core_revenue|support_authority|local_visibility|cro_support|brand_protection",
+      "linkedBusinessGoal": "specific goal this cluster supports",
+      "notes": "why this cluster matters"
+    }
+  ],
+  "keywords": [
+    {
+      "id": "kw_uuid",
+      "keyword": "exact keyword phrase",
+      "clusterId": "cluster_uuid",
+      "source": "ai_inferred",
+      "estimatedVolume": "500-1000",
+      "estimatedDifficulty": 35,
+      "businessGoal": "specific business goal this supports",
+      "businessGoalAlignmentScore": 8,
+      "intentFitScore": 7,
+      "currentTractionScore": 4,
+      "rankingOpportunityScore": 7,
+      "conversionProximityScore": 8,
+      "topicalAuthorityValueScore": 6,
+      "contentEffortScore": 4,
+      "existingCoverageScore": 3,
+      "localRelevanceScore": 7,
+      "trustComplianceComplexityScore": 2,
+      "dominantIntent": "transactional",
+      "recommendedPageType": "new_service_page",
+      "serpNotes": "SERP shows primarily service pages from local providers. Strong transactional intent.",
+      "status": "pending",
+      "isLocked": false,
+      "notes": "",
+      "manualOverrides": {}
+    }
+  ],
+  "internalLinkSuggestions": [
+    {
+      "clusterId": "cluster_uuid",
+      "clusterName": "Cluster Name",
+      "supportingPages": ["suggested internal page types to link from/to"],
+      "anchorTextSuggestions": ["anchor text ideas"],
+      "linkingNotes": "brief note on internal link strategy for this cluster"
+    }
+  ]
+}`;
+
+      const message = await client.messages.create({
+        model: "claude-opus-4-5",
+        max_tokens: 8000,
+        messages: [{ role: "user", content: userPrompt }],
+        system: systemPrompt,
+      });
+
+      const text = message.content[0].type === "text" ? message.content[0].text : "";
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) return res.status(500).json({ error: "Failed to parse AI response" });
+
+      const generated = JSON.parse(jsonMatch[0]);
+
+      // Merge generated with existing (new clusters + keywords appended)
+      const mergedClusters = [...existingClusters, ...(generated.clusters || [])];
+      const mergedKeywords = [...existingKeywords, ...(generated.keywords || [])];
+
+      // Calculate finalOpportunityScore for each keyword
+      const weights = (workspace.scoringWeights as any) || {
+        businessGoalAlignment: 20, intentFit: 20, currentTraction: 10,
+        rankingOpportunity: 15, conversionProximity: 15, topicalAuthorityValue: 10,
+        contentEffort: 5, existingCoverage: 5,
+      };
+      const totalWeight = Object.values(weights).reduce((a: any, b: any) => a + b, 0);
+
+      const keywordsWithFinal = mergedKeywords.map((kw: any) => {
+        if (kw.finalOpportunityScore !== undefined && kw.manualOverrides?.finalOpportunityScore) return kw;
+        const raw =
+          (kw.businessGoalAlignmentScore || 0) * (weights.businessGoalAlignment / totalWeight) +
+          (kw.intentFitScore || 0) * (weights.intentFit / totalWeight) +
+          (kw.currentTractionScore || 0) * (weights.currentTraction / totalWeight) +
+          (kw.rankingOpportunityScore || 0) * (weights.rankingOpportunity / totalWeight) +
+          (kw.conversionProximityScore || 0) * (weights.conversionProximity / totalWeight) +
+          (kw.topicalAuthorityValueScore || 0) * (weights.topicalAuthorityValue / totalWeight) +
+          ((10 - (kw.contentEffortScore || 5)) * (weights.contentEffort / totalWeight)) +
+          (kw.existingCoverageScore || 0) * (weights.existingCoverage / totalWeight);
+        return { ...kw, finalOpportunityScore: Math.round(raw * 10) / 10 };
+      });
+
+      // Build change log entry
+      const changeLog = [...((workspace.changeLog as any[]) || []), {
+        timestamp: new Date().toISOString(),
+        action: "ai_generation",
+        detail: `Generated ${generated.clusters?.length || 0} clusters and ${generated.keywords?.length || 0} keywords`,
+      }];
+
+      const updated = await storage.updateDiscoverabilityWorkspace(Number(req.params.id), {
+        clusters: mergedClusters as any,
+        keywords: keywordsWithFinal as any,
+        internalLinkSuggestions: generated.internalLinkSuggestions as any,
+        changeLog: changeLog as any,
+        status: "active",
+      });
+
+      res.json(updated);
+    } catch (err: any) {
+      console.error("[Discoverability Generate]", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // XLSX export for discoverability workspace
+  app.get("/api/discoverability/workspaces/:id/export-xlsx", async (req, res) => {
+    try {
+      const workspace = await storage.getDiscoverabilityWorkspace(Number(req.params.id));
+      if (!workspace) return res.status(404).json({ error: "Workspace not found" });
+
+      const XLSX = await import("xlsx");
+      const bp = workspace.businessProfile as any;
+      const clusters = (workspace.clusters as any[]) || [];
+      const keywords = (workspace.keywords as any[]) || [];
+      const ilSuggestions = (workspace.internalLinkSuggestions as any[]) || [];
+      const wb = XLSX.utils.book_new();
+
+      // Tab 1: Summary
+      const summaryData = [
+        ["Discoverability Tool — Keyword Research Workspace"],
+        [""],
+        ["Client", bp?.clientName || ""],
+        ["Domain", bp?.domain || ""],
+        ["Business Type", bp?.businessType || ""],
+        ["Industry", bp?.industryCategory || ""],
+        ["Market Type", bp?.marketType || ""],
+        ["Locations", (bp?.locationTargets || []).join(", ")],
+        ["Primary Services", (bp?.primaryServices || []).join(", ")],
+        ["Conversion Goals", (bp?.primaryConversionGoals || []).join(", ")],
+        ["North Star Metric", bp?.northStarMetric || ""],
+        ["YMYL", bp?.isYmyl ? "Yes" : "No"],
+        ["Compliance Sensitivity", bp?.complianceSensitivity || ""],
+        ["Workspace Name", workspace.name],
+        ["Total Clusters", clusters.length],
+        ["Total Keywords", keywords.length],
+        ["Approved Keywords", keywords.filter((k: any) => k.status === "approved").length],
+        ["Rejected Keywords", keywords.filter((k: any) => k.status === "rejected").length],
+        ["Watchlist Keywords", keywords.filter((k: any) => k.status === "watchlist").length],
+        ["Last Updated", workspace.updatedAt?.toString() || ""],
+      ];
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summaryData), "Summary");
+
+      // Tab 2: Clusters
+      const clusterHeaders = ["Cluster ID", "Cluster Name", "Type", "Role", "Linked Business Goal", "Notes"];
+      const clusterRows = clusters.map((c: any) => [c.id, c.name, c.clusterType, c.clusterRole, c.linkedBusinessGoal, c.notes || ""]);
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([clusterHeaders, ...clusterRows]), "Clusters");
+
+      // Tab 3: Keywords (main)
+      const kwHeaders = [
+        "Keyword", "Cluster", "Source", "Est. Volume", "Est. Difficulty",
+        "Current Position", "Impressions", "Clicks",
+        "Business Goal", "Business Goal Align Score", "Intent", "Intent Fit Score",
+        "Traction Score", "Ranking Opp Score", "Conversion Proximity",
+        "Topical Authority Value", "Content Effort", "Existing Coverage",
+        "Local Relevance", "Trust/Compliance Complexity", "Final Opportunity Score",
+        "Recommended Page Type", "Recommended URL", "Dominant Intent", "SERP Notes",
+        "Status", "Locked", "Notes"
+      ];
+      const clusterMap = Object.fromEntries(clusters.map((c: any) => [c.id, c.name]));
+      const kwRows = keywords.map((kw: any) => [
+        kw.keyword, clusterMap[kw.clusterId] || kw.clusterId, kw.source,
+        kw.estimatedVolume || kw.searchVolume || "", kw.estimatedDifficulty || kw.difficulty || "",
+        kw.currentPosition || "", kw.impressions || "", kw.clicks || "",
+        kw.businessGoal, kw.businessGoalAlignmentScore, kw.dominantIntent, kw.intentFitScore,
+        kw.currentTractionScore, kw.rankingOpportunityScore, kw.conversionProximityScore,
+        kw.topicalAuthorityValueScore, kw.contentEffortScore, kw.existingCoverageScore,
+        kw.localRelevanceScore, kw.trustComplianceComplexityScore, kw.finalOpportunityScore,
+        kw.recommendedPageType, kw.recommendedTargetUrl || "", kw.dominantIntent,
+        kw.serpNotes || "", kw.status, kw.isLocked ? "Yes" : "No", kw.notes || ""
+      ]);
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([kwHeaders, ...kwRows]), "Keywords");
+
+      // Tab 4: Internal Linking
+      const ilHeaders = ["Cluster", "Supporting Pages", "Anchor Text Suggestions", "Notes"];
+      const ilRows = ilSuggestions.map((il: any) => [
+        il.clusterName, (il.supportingPages || []).join("; "),
+        (il.anchorTextSuggestions || []).join("; "), il.linkingNotes || ""
+      ]);
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([ilHeaders, ...ilRows]), "Internal Linking");
+
+      // Tab 5: Rejected / Watchlist
+      const rejectedRows = keywords.filter((k: any) => k.status === "rejected" || k.status === "watchlist");
+      const rjHeaders = ["Status", "Keyword", "Cluster", "Reason / Notes", "Final Opportunity Score"];
+      const rjRows = rejectedRows.map((kw: any) => [kw.status, kw.keyword, clusterMap[kw.clusterId] || "", kw.notes || "", kw.finalOpportunityScore || ""]);
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([rjHeaders, ...rjRows]), "Rejected-Watchlist");
+
+      // Tab 6: Scoring Weights
+      const weights = (workspace.scoringWeights as any) || {
+        businessGoalAlignment: 20, intentFit: 20, currentTraction: 10,
+        rankingOpportunity: 15, conversionProximity: 15, topicalAuthorityValue: 10,
+        contentEffort: 5, existingCoverage: 5,
+      };
+      const wHeaders = ["Score Dimension", "Weight"];
+      const wRows = Object.entries(weights).map(([k, v]) => [k, v]);
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([wHeaders, ...wRows]), "Scoring Weights");
+
+      const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+      const filename = `discoverability_${(workspace.name || "workspace").replace(/\s+/g, "_").toLowerCase()}_${new Date().toISOString().split("T")[0]}.xlsx`;
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.send(buf);
+    } catch (err: any) {
+      console.error("[Discoverability XLSX]", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   return httpServer;
 }

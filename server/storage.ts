@@ -21,6 +21,7 @@ import {
   evalSummaryRows,
   evalSourceImports,
   midStrategyDecks,
+  discoverabilityWorkspaces,
   type FindingHistory,
   type InsertFindingHistory,
   type Client,
@@ -58,6 +59,8 @@ import {
   type EvalSourceImport,
   type MidStrategyDeck,
   type InsertMidStrategyDeck,
+  type DiscoverabilityWorkspace,
+  type InsertDiscoverabilityWorkspace,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -168,6 +171,13 @@ export interface IStorage {
   createMidStrategyDeck(data: InsertMidStrategyDeck): Promise<MidStrategyDeck>;
   updateMidStrategyDeck(id: number, data: Partial<InsertMidStrategyDeck>): Promise<MidStrategyDeck | undefined>;
   deleteMidStrategyDeck(id: number): Promise<boolean>;
+
+  // Discoverability Workspaces
+  listDiscoverabilityWorkspaces(clientId?: number): Promise<DiscoverabilityWorkspace[]>;
+  getDiscoverabilityWorkspace(id: number): Promise<DiscoverabilityWorkspace | undefined>;
+  createDiscoverabilityWorkspace(data: InsertDiscoverabilityWorkspace): Promise<DiscoverabilityWorkspace>;
+  updateDiscoverabilityWorkspace(id: number, data: Partial<InsertDiscoverabilityWorkspace>): Promise<DiscoverabilityWorkspace | undefined>;
+  deleteDiscoverabilityWorkspace(id: number): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -739,6 +749,35 @@ export class DatabaseStorage implements IStorage {
 
   async deleteMidStrategyDeck(id: number): Promise<boolean> {
     const res = await db.delete(midStrategyDecks).where(eq(midStrategyDecks.id, id));
+    return (res.rowCount ?? 0) > 0;
+  }
+
+  // ─── Discoverability Workspaces ──────────────────────────────────────────────
+
+  async listDiscoverabilityWorkspaces(clientId?: number): Promise<DiscoverabilityWorkspace[]> {
+    if (clientId !== undefined) {
+      return db.select().from(discoverabilityWorkspaces).where(eq(discoverabilityWorkspaces.clientId, clientId)).orderBy(desc(discoverabilityWorkspaces.updatedAt));
+    }
+    return db.select().from(discoverabilityWorkspaces).orderBy(desc(discoverabilityWorkspaces.updatedAt));
+  }
+
+  async getDiscoverabilityWorkspace(id: number): Promise<DiscoverabilityWorkspace | undefined> {
+    const [row] = await db.select().from(discoverabilityWorkspaces).where(eq(discoverabilityWorkspaces.id, id)).limit(1);
+    return row;
+  }
+
+  async createDiscoverabilityWorkspace(data: InsertDiscoverabilityWorkspace): Promise<DiscoverabilityWorkspace> {
+    const [row] = await db.insert(discoverabilityWorkspaces).values(data).returning();
+    return row;
+  }
+
+  async updateDiscoverabilityWorkspace(id: number, data: Partial<InsertDiscoverabilityWorkspace>): Promise<DiscoverabilityWorkspace | undefined> {
+    const [row] = await db.update(discoverabilityWorkspaces).set({ ...data, updatedAt: new Date() }).where(eq(discoverabilityWorkspaces.id, id)).returning();
+    return row;
+  }
+
+  async deleteDiscoverabilityWorkspace(id: number): Promise<boolean> {
+    const res = await db.delete(discoverabilityWorkspaces).where(eq(discoverabilityWorkspaces.id, id));
     return (res.rowCount ?? 0) > 0;
   }
 }

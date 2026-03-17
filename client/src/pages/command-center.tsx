@@ -13,6 +13,7 @@ import {
   ArrowRight,
   Lock,
   Sparkles,
+  Search,
 } from "lucide-react";
 
 interface ModuleCard {
@@ -85,6 +86,16 @@ const MODULES: ModuleCard[] = [
     href: "/integrations",
     status: "live",
     accentColor: "#0891B2",
+    group: "primary",
+  },
+  {
+    id: "discoverability",
+    icon: Search,
+    label: "Discoverability Tool",
+    description: "Structured keyword research aligned to business goals, search intent, and conversion outcomes.",
+    href: "/discoverability",
+    status: "live",
+    accentColor: "#1B3A6B",
     group: "primary",
   },
   {

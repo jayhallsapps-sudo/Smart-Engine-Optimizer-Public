@@ -880,3 +880,28 @@ export interface IAStructure {
   aboutSubpages: { slug: string; label: string }[];
   resourcesSubpages: { slug: string; label: string }[];
 }
+
+// ─── Discoverability Tool (Keyword Research Engine) ──────────────────────────
+
+export const discoverabilityWorkspaces = pgTable("discoverability_workspaces", {
+  id: serial("id").primaryKey(),
+  clientId: integer("client_id").references(() => clients.id, { onDelete: "set null" }),
+  name: text("name").notNull().default("Untitled Workspace"),
+  businessProfile: jsonb("business_profile"),
+  clusters: jsonb("clusters").default(sql`'[]'::jsonb`),
+  keywords: jsonb("keywords").default(sql`'[]'::jsonb`),
+  scoringWeights: jsonb("scoring_weights"),
+  internalLinkSuggestions: jsonb("internal_link_suggestions"),
+  changeLog: jsonb("change_log").default(sql`'[]'::jsonb`),
+  status: varchar("status", { length: 32 }).notNull().default("draft"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => [
+  index("discoverability_workspaces_client_idx").on(t.clientId),
+]);
+
+export const insertDiscoverabilityWorkspaceSchema = createInsertSchema(discoverabilityWorkspaces).omit({
+  id: true, createdAt: true, updatedAt: true,
+});
+export type DiscoverabilityWorkspace = typeof discoverabilityWorkspaces.$inferSelect;
+export type InsertDiscoverabilityWorkspace = z.infer<typeof insertDiscoverabilityWorkspaceSchema>;

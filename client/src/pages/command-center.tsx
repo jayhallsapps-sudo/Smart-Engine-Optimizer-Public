@@ -60,7 +60,7 @@ const MODULES: ModuleCard[] = [
   {
     id: "client-signals",
     icon: BarChart3,
-    label: "Client Signals",
+    label: "Client Info",
     description: "Live cross-client performance metrics from GSC, GA4, CallRail, and more.",
     href: "/dashboard",
     status: "live",

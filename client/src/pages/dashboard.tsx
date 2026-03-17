@@ -1,7 +1,7 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -33,8 +33,16 @@ import {
   Globe,
   CreditCard,
   Target,
+  User,
+  Mail,
+  Plus,
+  Trash2,
+  ExternalLink,
+  Check,
+  Pencil,
+  Download,
 } from "lucide-react";
-import type { Client } from "@shared/schema";
+import type { Client, ClientCompetitor } from "@shared/schema";
 
 interface NsmData {
   quarter: string;
@@ -686,7 +694,90 @@ function NsmQuarterSection({ label, nsm, clientId }: { label: string; nsm: NsmDa
   );
 }
 
-function ClientInfoTab({ client, clientId }: { client: Client; clientId: number }) {
+function InlineEditField({
+  icon,
+  value,
+  placeholder,
+  onSave,
+  testIdPrefix,
+  type = "text",
+}: {
+  icon: React.ReactNode;
+  value: string | null | undefined;
+  placeholder: string;
+  onSave: (val: string) => Promise<void>;
+  testIdPrefix: string;
+  type?: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value ?? "");
+  const [saving, setSaving] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing) inputRef.current?.focus();
+  }, [editing]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await onSave(draft);
+    } finally {
+      setSaving(false);
+      setEditing(false);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") handleSave();
+    if (e.key === "Escape") { setDraft(value ?? ""); setEditing(false); }
+  };
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-2">
+        <span className="shrink-0" style={{ color: "rgba(255,255,255,0.35)" }}>{icon}</span>
+        <input
+          ref={inputRef}
+          type={type}
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onBlur={handleSave}
+          className="flex-1 bg-white/10 rounded px-2 py-0.5 text-[11px] text-white/90 outline-none border border-white/20 min-w-0"
+          placeholder={placeholder}
+          data-testid={`input-${testIdPrefix}`}
+        />
+        {saving ? (
+          <RefreshCw className="w-3 h-3 animate-spin shrink-0" style={{ color: "rgba(255,255,255,0.4)" }} />
+        ) : (
+          <button onClick={handleSave} className="shrink-0" data-testid={`button-save-${testIdPrefix}`}>
+            <Check className="w-3 h-3" style={{ color: "rgba(134,239,172,0.8)" }} />
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="flex items-center gap-2 group cursor-pointer"
+      onClick={() => { setDraft(value ?? ""); setEditing(true); }}
+      data-testid={`field-${testIdPrefix}`}
+    >
+      <span className="shrink-0" style={{ color: "rgba(255,255,255,0.35)" }}>{icon}</span>
+      <span
+        className="text-[11px] truncate flex-1"
+        style={{ color: value ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.28)" }}
+      >
+        {value || placeholder}
+      </span>
+      <Pencil className="w-2.5 h-2.5 shrink-0 opacity-0 group-hover:opacity-60 transition-opacity" style={{ color: "rgba(255,255,255,0.5)" }} />
+    </div>
+  );
+}
+
+function ClientDataTab({ client, clientId }: { client: Client; clientId: number }) {
   const { data: nsmData, isLoading } = useQuery<ClientNsmResponse>({
     queryKey: ["/api/dashboard/client", clientId, "nsm"],
     queryFn: async () => {
@@ -699,13 +790,14 @@ function ClientInfoTab({ client, clientId }: { client: Client; clientId: number 
   const current = nsmData?.current ?? null;
   const next = nsmData?.next ?? null;
 
-  // All three fields are pre-resolved by the API and always return a value or "—".
-  // Website: client.gscSiteUrl first → NSM sheet fallback → "—"
-  // Credits: NSM sheet only (no credits field on client record yet) → "—"
-  // NSM Type: NSM sheet only → "—"
   const website = nsmData?.website ?? "—";
   const credits = nsmData?.credits ?? "—";
   const nsmType = nsmData?.nsmType ?? "—";
+
+  const saveClientField = async (field: string, val: string) => {
+    await apiRequest("PATCH", `/api/clients/${clientId}`, { [field]: val });
+    queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
+  };
 
   if (isLoading) {
     return (
@@ -722,6 +814,22 @@ function ClientInfoTab({ client, clientId }: { client: Client; clientId: number 
   return (
     <div className="p-4 pb-12 flex flex-col gap-4">
       <div className="flex flex-col gap-2">
+        <InlineEditField
+          icon={<User className="w-3 h-3" />}
+          value={client.contactName}
+          placeholder="Add contact name"
+          onSave={val => saveClientField("contactName", val)}
+          testIdPrefix={`contact-name-${clientId}`}
+        />
+        <InlineEditField
+          icon={<Mail className="w-3 h-3" />}
+          value={client.contactEmail}
+          placeholder="Add contact email"
+          onSave={val => saveClientField("contactEmail", val)}
+          testIdPrefix={`contact-email-${clientId}`}
+          type="email"
+        />
+        <div style={{ height: "1px", background: "rgba(255,255,255,0.07)", margin: "2px 0" }} />
         <div className="flex items-center gap-2">
           <Globe className="w-3 h-3 shrink-0" style={{ color: "rgba(255,255,255,0.35)" }} />
           {website !== "—" ? (
@@ -761,6 +869,228 @@ function ClientInfoTab({ client, clientId }: { client: Client; clientId: number 
   );
 }
 
+function CompetitorRow({
+  competitor,
+  clientId,
+  onDelete,
+}: {
+  competitor: ClientCompetitor;
+  clientId: number;
+  onDelete: (id: number) => void;
+}) {
+  const [editingField, setEditingField] = useState<"name" | "url" | null>(null);
+  const [draftName, setDraftName] = useState(competitor.name);
+  const [draftUrl, setDraftUrl] = useState(competitor.url);
+  const nameRef = useRef<HTMLInputElement>(null);
+  const urlRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editingField === "name") nameRef.current?.focus();
+    if (editingField === "url") urlRef.current?.focus();
+  }, [editingField]);
+
+  const savePatch = async (field: "name" | "url", val: string) => {
+    await apiRequest("PATCH", `/api/clients/${clientId}/competitors/${competitor.id}`, { [field]: val });
+    queryClient.invalidateQueries({ queryKey: ["/api/clients", clientId, "competitors"] });
+    setEditingField(null);
+  };
+
+  const handleNameKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") savePatch("name", draftName);
+    if (e.key === "Escape") { setDraftName(competitor.name); setEditingField(null); }
+  };
+
+  const handleUrlKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") savePatch("url", draftUrl);
+    if (e.key === "Escape") { setDraftUrl(competitor.url); setEditingField(null); }
+  };
+
+  return (
+    <div className="flex items-center gap-2 group rounded-md px-2 py-1.5" style={{ background: "rgba(255,255,255,0.04)" }}>
+      {editingField === "name" ? (
+        <input
+          ref={nameRef}
+          value={draftName}
+          onChange={e => setDraftName(e.target.value)}
+          onKeyDown={handleNameKeyDown}
+          onBlur={() => savePatch("name", draftName)}
+          className="flex-1 bg-white/10 rounded px-1.5 py-0.5 text-[11px] text-white/90 outline-none border border-white/20 min-w-0"
+          placeholder="Competitor name"
+          data-testid={`input-competitor-name-${competitor.id}`}
+        />
+      ) : (
+        <span
+          className="flex-1 text-[11px] text-white/70 cursor-pointer hover:text-white/90 truncate group/name"
+          onClick={() => { setDraftName(competitor.name); setEditingField("name"); }}
+          data-testid={`text-competitor-name-${competitor.id}`}
+        >
+          {competitor.name || <span style={{ color: "rgba(255,255,255,0.25)" }}>Name</span>}
+        </span>
+      )}
+
+      {editingField === "url" ? (
+        <input
+          ref={urlRef}
+          value={draftUrl}
+          onChange={e => setDraftUrl(e.target.value)}
+          onKeyDown={handleUrlKeyDown}
+          onBlur={() => savePatch("url", draftUrl)}
+          className="w-36 bg-white/10 rounded px-1.5 py-0.5 text-[11px] text-white/90 outline-none border border-white/20"
+          placeholder="https://..."
+          data-testid={`input-competitor-url-${competitor.id}`}
+        />
+      ) : (
+        <span
+          className="text-[11px] cursor-pointer hover:text-white/90 truncate max-w-[140px]"
+          style={{ color: competitor.url ? "rgba(255,255,255,0.45)" : "rgba(255,255,255,0.2)" }}
+          onClick={() => { setDraftUrl(competitor.url); setEditingField("url"); }}
+          data-testid={`text-competitor-url-${competitor.id}`}
+        >
+          {competitor.url || "URL"}
+        </span>
+      )}
+
+      {competitor.url && (
+        <a
+          href={competitor.url.startsWith("http") ? competitor.url : `https://${competitor.url}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="shrink-0 opacity-0 group-hover:opacity-60 transition-opacity"
+          data-testid={`link-competitor-${competitor.id}`}
+        >
+          <ExternalLink className="w-3 h-3" style={{ color: "rgba(255,255,255,0.5)" }} />
+        </a>
+      )}
+
+      <button
+        onClick={() => onDelete(competitor.id)}
+        className="shrink-0 opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity"
+        data-testid={`button-delete-competitor-${competitor.id}`}
+      >
+        <Trash2 className="w-3 h-3" style={{ color: "rgba(239,68,68,0.8)" }} />
+      </button>
+    </div>
+  );
+}
+
+function CompetitorsTab({ client, clientId }: { client: Client; clientId: number }) {
+  const { data: competitors, isLoading } = useQuery<ClientCompetitor[]>({
+    queryKey: ["/api/clients", clientId, "competitors"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/clients/${clientId}/competitors`);
+      return res.json();
+    },
+  });
+
+  const [ahrefsStatus, setAhrefsStatus] = useState<string | null>(null);
+  const [pullLoading, setPullLoading] = useState(false);
+
+  const addMutation = useMutation({
+    mutationFn: async () => {
+      const ordinal = (competitors?.length ?? 0);
+      const res = await apiRequest("POST", `/api/clients/${clientId}/competitors`, { name: "", url: "", ordinal });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/clients", clientId, "competitors"] });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (competitorId: number) => {
+      await apiRequest("DELETE", `/api/clients/${clientId}/competitors/${competitorId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/clients", clientId, "competitors"] });
+    },
+  });
+
+  const pullFromAhrefs = async () => {
+    setPullLoading(true);
+    setAhrefsStatus(null);
+    try {
+      const res = await apiRequest("GET", `/api/clients/${clientId}/competitors/ahrefs`);
+      const data = await res.json() as { competitors: { name: string; url: string }[]; message?: string };
+      if (data.competitors.length > 0) {
+        await apiRequest("PUT", `/api/clients/${clientId}/competitors`, { competitors: data.competitors });
+        queryClient.invalidateQueries({ queryKey: ["/api/clients", clientId, "competitors"] });
+        setAhrefsStatus(`Imported ${data.competitors.length} competitors from Ahrefs`);
+      } else {
+        setAhrefsStatus(data.message ?? "No competitors found in Ahrefs");
+      }
+    } catch {
+      setAhrefsStatus("Failed to fetch from Ahrefs");
+    } finally {
+      setPullLoading(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="p-4 flex flex-col gap-2 pb-12">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <Skeleton key={i} className="h-7 w-full bg-white/5 rounded-md" />
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4 pb-12 flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <p className="text-[9px] font-bold uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.3)" }}>
+          Competitors
+        </p>
+        <div className="flex items-center gap-1.5">
+          {client.ahrefsProjectUrl && (
+            <button
+              onClick={pullFromAhrefs}
+              disabled={pullLoading}
+              className="flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-medium transition-all hover:bg-white/10"
+              style={{ color: "rgba(255,255,255,0.4)", border: "1px solid rgba(255,255,255,0.12)" }}
+              data-testid={`button-pull-ahrefs-${clientId}`}
+            >
+              {pullLoading ? <RefreshCw className="w-2.5 h-2.5 animate-spin" /> : <Download className="w-2.5 h-2.5" />}
+              Ahrefs
+            </button>
+          )}
+          <button
+            onClick={() => addMutation.mutate()}
+            disabled={addMutation.isPending}
+            className="flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-medium transition-all hover:bg-white/10"
+            style={{ color: "rgba(255,255,255,0.4)", border: "1px solid rgba(255,255,255,0.12)" }}
+            data-testid={`button-add-competitor-${clientId}`}
+          >
+            <Plus className="w-2.5 h-2.5" />
+            Add
+          </button>
+        </div>
+      </div>
+
+      {ahrefsStatus && (
+        <p className="text-[10px] px-1" style={{ color: "rgba(255,255,255,0.4)" }}>{ahrefsStatus}</p>
+      )}
+
+      {(competitors ?? []).length === 0 ? (
+        <p className="text-[11px] text-center py-3" style={{ color: "rgba(255,255,255,0.25)" }}>
+          No competitors yet. Add one or pull from Ahrefs.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-1">
+          {(competitors ?? []).map(c => (
+            <CompetitorRow
+              key={c.id}
+              competitor={c}
+              clientId={clientId}
+              onDelete={id => deleteMutation.mutate(id)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ClientCard({
   client,
   color,
@@ -774,7 +1104,7 @@ function ClientCard({
 }) {
   const [data, setData] = useState<ClientDashboardData | null>(null);
   const [selectedMetricLabel, setSelectedMetricLabel] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"stats" | "client-info">("stats");
+  const [activeTab, setActiveTab] = useState<"stats" | "client-data" | "competitors">("stats");
 
   const mutation = useMutation<ClientDashboardData, Error, void>({
     mutationFn: async () => {
@@ -881,7 +1211,7 @@ function ClientCard({
         className="flex items-center gap-1 px-4 py-2"
         style={{ borderBottom: "1px solid rgba(255,255,255,0.07)", background: "#0d1117" }}
       >
-        {(["stats", "client-info"] as const).map(tab => (
+        {(["stats", "client-data", "competitors"] as const).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -893,7 +1223,7 @@ function ClientCard({
             }
             data-testid={`tab-${tab}-${client.id}`}
           >
-            {tab === "stats" ? "Stats" : "Client Info"}
+            {tab === "stats" ? "Stats" : tab === "client-data" ? "Client Data" : "Competitors"}
           </button>
         ))}
       </div>
@@ -951,8 +1281,10 @@ function ClientCard({
             )}
           </div>
         </>
+      ) : activeTab === "client-data" ? (
+        <ClientDataTab client={client} clientId={client.id} />
       ) : (
-        <ClientInfoTab client={client} clientId={client.id} />
+        <CompetitorsTab client={client} clientId={client.id} />
       )}
 
       <button
@@ -1006,7 +1338,7 @@ export default function DashboardPage() {
         <div className="flex items-center gap-2">
           <LayoutDashboard className="w-5 h-5" style={{ color: "#059669" }} />
           <h1 className="text-base font-semibold leading-tight" style={{ color: "#059669" }} data-testid="text-page-title">
-            Client Signals
+            Client Info
           </h1>
         </div>
         <div className="flex items-center gap-2">

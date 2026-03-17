@@ -8,6 +8,8 @@ import {
   Users,
   User,
   Zap,
+  TableProperties,
+  LayoutTemplate,
 } from "lucide-react";
 import { listReportTypes, familyColor, familyLabel, type ReportTypeDefinition } from "@/lib/reportFamilyUtils";
 
@@ -144,6 +146,49 @@ export default function PrepareReportPage() {
           </div>
         </div>
 
+        {/* Mid-Strategy System */}
+        <div className="mt-6">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-2 h-2 rounded-full bg-[#7C3AED]" />
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">
+              Mid-Strategy System
+            </p>
+            <span className="text-[10px] text-muted-foreground ml-1">· Evaluation + 14-slide deck</span>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
+            <Link href="/eval-sheets" data-testid="link-eval-sheets">
+              <div className="group flex items-center gap-4 rounded-xl border bg-card px-5 py-4 transition-all duration-150 border-border hover:border-[#7C3AED]/40 hover:shadow-sm cursor-pointer">
+                <div className="flex items-center justify-center w-10 h-10 rounded-lg shrink-0" style={{ backgroundColor: "#7C3AED12", border: "1.5px solid #7C3AED25" }}>
+                  <TableProperties className="w-5 h-5" style={{ color: "#7C3AED" }} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-sm font-semibold text-foreground">Evaluation Sheets</span>
+                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wide shrink-0" style={{ backgroundColor: "#7C3AED12", color: "#7C3AED" }}>Tool</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-relaxed">Competitive benchmarking, crawl data, and click/traffic distribution tables for a client batch.</p>
+                </div>
+                <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+              </div>
+            </Link>
+            <Link href="/mid-strategy-deck" data-testid="link-mid-strategy-deck">
+              <div className="group flex items-center gap-4 rounded-xl border bg-card px-5 py-4 transition-all duration-150 border-border hover:border-[#7C3AED]/40 hover:shadow-sm cursor-pointer">
+                <div className="flex items-center justify-center w-10 h-10 rounded-lg shrink-0" style={{ backgroundColor: "#7C3AED12", border: "1.5px solid #7C3AED25" }}>
+                  <LayoutTemplate className="w-5 h-5" style={{ color: "#7C3AED" }} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-sm font-semibold text-foreground">Mid-Strategy Deck</span>
+                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wide shrink-0" style={{ backgroundColor: "#7C3AED12", color: "#7C3AED" }}>Deck</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-relaxed">Generate a 14-slide mid-strategy presentation linked to an evaluation batch, with slide-by-slide editing.</p>
+                </div>
+                <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+              </div>
+            </Link>
+          </div>
+        </div>
+
         <div className="mt-6 rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3">
           <div className="flex items-start gap-2">
             <User className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
@@ -168,9 +213,12 @@ export default function PrepareReportPage() {
                 >
                   {rt.displayName}
                 </a>
-                {i < arr.length - 1 && <span className="text-muted-foreground/40 mx-1">·</span>}
+                <span className="text-muted-foreground/40 mx-1">·</span>
               </span>
             ))}
+            <Link href="/eval-sheets" className="text-[11px] text-muted-foreground hover:text-foreground underline underline-offset-2 decoration-muted-foreground/40 transition-colors" data-testid="link-quicklaunch-eval-sheets">Evaluation Sheets</Link>
+            <span className="text-muted-foreground/40 mx-1">·</span>
+            <Link href="/mid-strategy-deck" className="text-[11px] text-muted-foreground hover:text-foreground underline underline-offset-2 decoration-muted-foreground/40 transition-colors" data-testid="link-quicklaunch-mid-strategy-deck">Mid-Strategy Deck</Link>
           </div>
         </div>
 

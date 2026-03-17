@@ -4184,97 +4184,44 @@ export async function registerRoutes(
       const isYmyl = bp?.isYmyl || false;
       const complianceSensitivity = bp?.complianceSensitivity || "low";
 
-      const systemPrompt = `You are a senior SEO strategist at Webserv. Core philosophy:
-- Client business goals come first — never raw volume
-- Intent fit before volume; conversion proximity matters more than impressions
-- Recommendations must be defensible with a clear human-readable reason
-- YMYL trust/compliance scoring only applies when explicitly flagged — never assume regulated industry
-- Local businesses get heavily boosted local signals
-- Never recommend a new page when an existing page can be refreshed
-- Cannibalization risk must be flagged whenever multiple pages could target the same intent
-- Every recommendation gets a confidence level (high/medium/low) based on how well intent and goal signals are confirmed
+      const bpSummary = `Client: ${bp?.clientName || "Unknown"}
+Domain: ${bp?.domain || ""}
+Business Type: ${bp?.businessType || ""}
+Industry: ${bp?.industryCategory || ""}
+Market Type: ${bp?.marketType || ""}
+Locations: ${(bp?.locationTargets || []).join(", ") || "Not specified"}
+Primary Services: ${(bp?.primaryServices || []).join(", ") || ""}
+Secondary Services: ${(bp?.secondaryServices || []).join(", ") || ""}
+Target Audiences: ${(bp?.targetAudiences || []).join(", ") || ""}
+Conversion Goals: ${(bp?.primaryConversionGoals || []).join(", ") || ""}
+North Star Metric: ${bp?.northStarMetric || ""}
+Seasonal Priorities: ${bp?.seasonalPriorities || "None"}
+Competitors: ${(bp?.competitorDomains || []).join(", ") || "None specified"}
+YMYL/Regulated: ${isYmyl ? "Yes" : "No"}
+Compliance Sensitivity: ${complianceSensitivity}
+Notes: ${bp?.notes || "None"}`;
 
-Your task: Generate a structured keyword research workspace in JSON format.`;
+      const existingKwList = existingKeywords.length > 0
+        ? `EXISTING KEYWORDS (do NOT duplicate): ${existingKeywords.map((k: any) => k.keyword).join(", ")}`
+        : "";
 
-      const userPrompt = `Generate keyword research clusters and keyword candidates for this client.
+      // ── PHASE 1: Generate clusters + internal linking ─────────────────────
+      const clusterSystemPrompt = `You are a senior SEO strategist. Your task is to generate keyword research clusters and internal linking strategy in JSON format. Be thorough and strategic — business goals first, never raw volume.`;
+
+      const clusterUserPrompt = `Generate 10-12 keyword clusters for this client's SEO keyword research workspace.
 
 BUSINESS PROFILE:
-- Client: ${bp?.clientName || "Unknown"}
-- Domain: ${bp?.domain || ""}
-- Business Type: ${bp?.businessType || ""}
-- Industry: ${bp?.industryCategory || ""}
-- Market Type: ${bp?.marketType || ""}
-- Locations: ${(bp?.locationTargets || []).join(", ") || "Not specified"}
-- Primary Services: ${(bp?.primaryServices || []).join(", ") || ""}
-- Secondary Services: ${(bp?.secondaryServices || []).join(", ") || ""}
-- Target Audiences: ${(bp?.targetAudiences || []).join(", ") || ""}
-- Conversion Goals: ${(bp?.primaryConversionGoals || []).join(", ") || ""}
-- North Star Metric: ${bp?.northStarMetric || ""}
-- Seasonal Priorities: ${bp?.seasonalPriorities || "None"}
-- Competitors: ${(bp?.competitorDomains || []).join(", ") || "None specified"}
-- YMYL/Regulated: ${isYmyl ? "Yes" : "No"}
-- Compliance Sensitivity: ${complianceSensitivity}
-- Notes: ${bp?.notes || "None"}
+${bpSummary}
 
-${existingKeywords.length > 0 ? `EXISTING KEYWORDS (already in workspace — do NOT duplicate these): ${existingKeywords.slice(0, 30).map((k: any) => k.keyword).join(", ")}` : ""}
+${existingKwList}
 
-Generate 6-8 keyword clusters with 8-10 keyword candidates each (target ~60 total keywords).
-
-For each keyword, provide:
-SCORES (0-10):
-- businessGoalAlignmentScore
-- intentFitScore
-- currentTractionScore (use 3-5 if unknown)
-- rankingOpportunityScore
-- conversionProximityScore
-- topicalAuthorityValueScore
-- contentEffortScore (1=easy, 10=heavy)
-- existingCoverageScore
-- localRelevanceScore (weight heavily for local businesses)
-- trustComplianceComplexityScore (2-3 for non-YMYL; higher only for regulated industries)
-
-EXPLAINABILITY (required):
-- dominantIntent: transactional|commercial_investigation|informational|navigational|local_intent|mixed
-- confidence: "high"|"medium"|"low" (high = clear intent signal + strong goal match; low = inferred with thin data)
-- pageTypeReason: 1-2 sentence human-readable justification for the recommended page type
-- bgaHigh: array of 2-3 brief factors that RAISED the business goal alignment score (e.g. "directly matches a core service")
-- bgaLow: array of 1-2 brief factors that LOWERED it (e.g. "weak connection to stated conversion goals") — omit if all high
-
-RANKING INTELLIGENCE (estimate based on keyword difficulty, domain authority signals, and known client services):
-- clientRanksForKeyword: true if you estimate the client's domain likely appears in top 30 results for this keyword, false otherwise
-- clientEstimatedPosition: estimated rank position 1-100 if clientRanksForKeyword=true, null otherwise (use null when genuinely uncertain)
-- competitorRankingDomains: array of domain names from the competitor list above that you estimate rank for this keyword (can be empty array if none, max 5)
-
-SERP & CANNIBALIZATION:
-- serpNotes: 1-2 sentence SERP analysis
-- cannibalizationWarning: string if risk exists, null if not (e.g. "Similar intent to /existing-page — risk of splitting ranking signals")
-- cannibalizationSeverity: "low"|"medium"|"high"|null
-- cannibalizationAction: "consolidate"|"refresh_existing"|"merge_redirect"|"review_manually"|null
-
-METADATA:
-- recommendedPageType: existing_page_refresh|new_blog|new_service_page|new_location_page|new_faq_page|comparison_page|booking_page|category_hub_page|no_action
-- estimatedVolume: realistic monthly range like "200-500"
-- estimatedDifficulty: 0-100 KD estimate
-
-SCORING GUIDANCE:
-- businessGoalAlignmentScore is the most important signal — weight heavily for core service keywords
-- Do NOT boost scores for volume alone
-- Prefer existing_page_refresh over new pages when coverage exists
-- For non-YMYL clients, set trustComplianceComplexityScore = 2
-- For local businesses, boost localRelevanceScore and rankingOpportunityScore on geo terms
-- When recommendedPageType = "existing_page_refresh", set recommendedTargetUrl to the specific URL path (from money pages or known site structure) that should be refreshed
-
-INTERNAL LINKING:
-For each cluster, provide strategic internal linking guidance:
-- linkType: "cluster_support"|"conversion_support"|"authority_reinforcement"|"local_relevance_support"
-- rationale: why source pages should link to this cluster's pages
-- anchorTextSuggestions: 3-5 precise anchor text phrases reflecting actual keyword intent
+Each cluster should represent a distinct topical area aligned to a specific business goal. Cover the full spectrum: core services, location/geo terms, comparison/cost queries, FAQ/informational, seasonal, audience-specific, and any other relevant angles.
 
 Return ONLY valid JSON:
 {
   "clusters": [
     {
-      "id": "cluster_uuid",
+      "id": "cluster_1",
       "name": "Cluster Name",
       "clusterType": "service|location|problem_symptom|comparison|cost_pricing|amenity_experience|branded|faq_informational",
       "clusterRole": "core_revenue|support_authority|local_visibility|cro_support|brand_protection",
@@ -4282,15 +4229,83 @@ Return ONLY valid JSON:
       "notes": "strategic rationale for this cluster"
     }
   ],
+  "internalLinkSuggestions": [
+    {
+      "clusterId": "cluster_1",
+      "clusterName": "Cluster Name",
+      "linkType": "cluster_support|conversion_support|authority_reinforcement|local_relevance_support",
+      "rationale": "Why pages in this cluster should interlink",
+      "supportingPages": ["page type to link from", "page type to link to"],
+      "anchorTextSuggestions": ["anchor text 1", "anchor text 2", "anchor text 3"],
+      "linkingNotes": "brief topical authority note"
+    }
+  ]
+}`;
+
+      const clusterCompletion = await openaiClient.chat.completions.create({
+        model: "gpt-4o",
+        max_tokens: 4000,
+        messages: [
+          { role: "system", content: clusterSystemPrompt },
+          { role: "user", content: clusterUserPrompt },
+        ],
+        response_format: { type: "json_object" },
+      });
+
+      const clusterText = clusterCompletion.choices[0].message.content || "";
+      let clusterData: any;
+      try {
+        clusterData = JSON.parse(clusterText);
+      } catch {
+        return res.status(500).json({ error: "AI returned malformed JSON for clusters" });
+      }
+
+      if (!Array.isArray(clusterData.clusters) || clusterData.clusters.length === 0) {
+        return res.status(500).json({ error: "AI response missing clusters" });
+      }
+
+      const generatedClusters: any[] = clusterData.clusters;
+      const internalLinkSuggestions: any[] = clusterData.internalLinkSuggestions || [];
+
+      // ── PHASE 2: Generate keywords per cluster in parallel ─────────────────
+      const competitorList = (bp?.competitorDomains || []).join(", ") || "None";
+      const moneyPages = (bp?.moneyPages || []).join(", ") || "None";
+
+      const kwSystemPrompt = `You are a senior SEO strategist. Generate comprehensive keyword candidates for a specific topic cluster. Business goals first. Return compact, precise JSON only.`;
+
+      async function generateKeywordsForCluster(cluster: any): Promise<any[]> {
+        const kwUserPrompt = `Generate 18-22 keyword candidates for this cluster.
+
+CLUSTER: "${cluster.name}"
+Cluster Role: ${cluster.clusterRole}
+Linked Business Goal: ${cluster.linkedBusinessGoal}
+Cluster Notes: ${cluster.notes}
+
+BUSINESS CONTEXT:
+${bpSummary}
+Money Pages: ${moneyPages}
+
+${existingKwList}
+
+Rules:
+- All keywords must clearly belong to the "${cluster.name}" topic area
+- Mix head terms, mid-tail, and long-tail keywords
+- Include geo-modified variants for local businesses
+- Include question-based queries (how, what, best, near me)
+- For non-YMYL: trustComplianceComplexityScore = 2
+- When recommendedPageType = existing_page_refresh, set recommendedTargetUrl to the specific money page path that should be refreshed
+
+Return ONLY valid JSON:
+{
   "keywords": [
     {
-      "id": "kw_uuid",
+      "id": "kw_unique_id",
       "keyword": "exact keyword phrase",
-      "clusterId": "cluster_uuid",
+      "clusterId": "${cluster.id}",
       "source": "ai_inferred",
-      "estimatedVolume": "500-1000",
+      "businessGoal": "specific goal",
+      "estimatedVolume": "200-500",
       "estimatedDifficulty": 35,
-      "businessGoal": "specific business goal",
       "businessGoalAlignmentScore": 8,
       "intentFitScore": 7,
       "currentTractionScore": 4,
@@ -4303,69 +4318,51 @@ Return ONLY valid JSON:
       "trustComplianceComplexityScore": 2,
       "confidence": "medium",
       "dominantIntent": "transactional",
-      "recommendedPageType": "new_service_page",
-      "recommendedTargetUrl": null,
-      "pageTypeReason": "SERP is dominated by local service pages. New dedicated page would target this cluster with transactional intent.",
-      "bgaHigh": ["matches core service", "supports booking conversion goal"],
-      "bgaLow": ["limited geo signal in keyword"],
-      "serpNotes": "SERP shows primarily service pages from local providers.",
+      "recommendedPageType": "existing_page_refresh",
+      "recommendedTargetUrl": "/relevant-page",
+      "pageTypeReason": "One sentence justification.",
+      "bgaHigh": ["matches core service"],
+      "bgaLow": [],
+      "serpNotes": "One sentence SERP note.",
       "clientRanksForKeyword": false,
       "clientEstimatedPosition": null,
-      "competitorRankingDomains": ["competitor1.com", "competitor2.com"],
+      "competitorRankingDomains": ["${competitorList.split(",")[0]?.trim() || ""}"],
       "cannibalizationWarning": null,
       "cannibalizationSeverity": null,
-      "cannibalizationAction": null,
-      "status": "pending",
-      "reviewState": "new_suggestion",
-      "isLocked": false,
-      "notes": "",
-      "manualOverrides": {}
-    }
-  ],
-  "internalLinkSuggestions": [
-    {
-      "clusterId": "cluster_uuid",
-      "clusterName": "Cluster Name",
-      "linkType": "cluster_support",
-      "rationale": "Why pages in this cluster should link to and from service hubs",
-      "supportingPages": ["page type to link from", "page type to link to"],
-      "anchorTextSuggestions": ["anchor text 1", "anchor text 2"],
-      "linkingNotes": "brief topical authority strategy note"
+      "cannibalizationAction": null
     }
   ]
 }`;
 
-      const completion = await openaiClient.chat.completions.create({
-        model: "gpt-4o",
-        max_tokens: 10000,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        response_format: { type: "json_object" },
-      });
+        try {
+          const completion = await openaiClient.chat.completions.create({
+            model: "gpt-4o",
+            max_tokens: 8000,
+            messages: [
+              { role: "system", content: kwSystemPrompt },
+              { role: "user", content: kwUserPrompt },
+            ],
+            response_format: { type: "json_object" },
+          });
 
-      const text = completion.choices[0].message.content || "";
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) return res.status(500).json({ error: "Failed to parse AI response" });
-
-      let generated: any;
-      try {
-        generated = JSON.parse(jsonMatch[0]);
-      } catch {
-        return res.status(500).json({ error: "AI returned malformed JSON" });
+          const text = completion.choices[0].message.content || "";
+          const parsed = JSON.parse(text);
+          return Array.isArray(parsed.keywords) ? parsed.keywords : [];
+        } catch (err) {
+          console.error(`[Discoverability] Keyword gen failed for cluster "${cluster.name}":`, err);
+          return [];
+        }
       }
 
-      // Validate required structure
-      if (!Array.isArray(generated.clusters) || !Array.isArray(generated.keywords)) {
-        return res.status(500).json({ error: "AI response missing required clusters or keywords arrays" });
-      }
+      // Run all cluster keyword generations in parallel
+      const kwBatches = await Promise.all(generatedClusters.map(generateKeywordsForCluster));
+      const allGeneratedKeywords: any[] = kwBatches.flat();
 
       // ── Safe refresh logic ────────────────────────────────────────────────
       // 1. Always keep existing clusters (append new ones only)
       const mergedClusters = [...existingClusters];
       const existingClusterIds = new Set(existingClusters.map((c: any) => c.id));
-      for (const c of generated.clusters) {
+      for (const c of generatedClusters) {
         if (c.id && !existingClusterIds.has(c.id)) mergedClusters.push(c);
       }
 
@@ -4374,28 +4371,26 @@ Return ONLY valid JSON:
 
       // 3. Process new keywords — skip any that would overwrite a locked row
       const newKeywords: any[] = [];
-      for (const kw of generated.keywords) {
+      for (const kw of allGeneratedKeywords) {
         if (!kw.keyword) continue;
         const norm = kw.keyword.toLowerCase().trim();
-        if (lockedSet.has(norm)) continue; // Never overwrite locked
+        if (lockedSet.has(norm)) continue;
 
         const existing = existingKwIndex.get(norm);
-        if (existing) {
-          // Already exists — don't re-add; leave it as-is (safe refresh)
-          continue;
-        }
-        // Truly new keyword — mark as new_suggestion for review
+        if (existing) continue; // Don't re-add existing
+
         newKeywords.push({
           ...kw,
           id: kw.id || `kw_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
           status: "pending",
           reviewState: "new_suggestion",
           isLocked: false,
+          notes: "",
           manualOverrides: {},
         });
       }
 
-      // 4. Merge: locked first, then existing unlocked, then new suggestions
+      // 4. Merge: existing first, then new suggestions
       const mergedKeywords = [...existingKeywords, ...newKeywords];
 
       // 5. Score calculation — skip locked rows with manual final scores
@@ -4423,7 +4418,7 @@ Return ONLY valid JSON:
       const changeLog = [...((workspace.changeLog as any[]) || []), {
         timestamp: new Date().toISOString(),
         action: "ai_generation",
-        detail: `Generated ${generated.clusters?.length || 0} clusters · ${newKeywords.length} new keywords · ${lockedKeywords.length} locked rows preserved`,
+        detail: `Generated ${generatedClusters.length} clusters · ${newKeywords.length} new keywords · ${lockedKeywords.length} locked rows preserved`,
         lockedPreserved: lockedKeywords.length,
         newSuggestions: newKeywords.length,
       }];
@@ -4431,7 +4426,7 @@ Return ONLY valid JSON:
       const updated = await storage.updateDiscoverabilityWorkspace(Number(req.params.id), {
         clusters: mergedClusters as any,
         keywords: keywordsWithFinal as any,
-        internalLinkSuggestions: (generated.internalLinkSuggestions || []) as any,
+        internalLinkSuggestions: internalLinkSuggestions as any,
         changeLog: changeLog as any,
         status: "active",
       });

@@ -44,13 +44,18 @@ let cachedBank: StrategyBankData | null = null;
 let bankCacheExpiry = 0;
 const CACHE_TTL_MS = 60 * 60 * 1000;
 
-export async function notionProxy(path: string, options?: RequestInit): Promise<any> {
+export async function notionProxy(path: string, options?: RequestInit, _retries = 3): Promise<any> {
   const connectors = new ReplitConnectors();
   const resp = await connectors.proxy("notion", path, {
     method: options?.method ?? "GET",
     headers: options?.headers as Record<string, string>,
     body: options?.body,
   });
+  if (resp.status === 429 && _retries > 0) {
+    const retryAfter = Number(resp.headers?.get?.("Retry-After") ?? "1");
+    await new Promise(r => setTimeout(r, (isNaN(retryAfter) ? 1 : retryAfter) * 1000));
+    return notionProxy(path, options, _retries - 1);
+  }
   if (!resp.ok) {
     const text = await resp.text().catch(() => "");
     throw new Error(`Notion API ${resp.status}: ${text}`);

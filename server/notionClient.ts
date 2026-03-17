@@ -137,15 +137,26 @@ function extractPageBlocks(blocks: any[], tableRowsMap: Record<string, any[]> = 
 async function fetchTableRowsForBlocks(blocks: any[]): Promise<Record<string, any[]>> {
   const tableBlocks = blocks.filter((b: any) => b.type === "table");
   const result: Record<string, any[]> = {};
-  await Promise.allSettled(
-    tableBlocks.map(async (block: any) => {
-      try {
-        const resp = await notionProxy(`/v1/blocks/${block.id}/children?page_size=100`);
-        result[block.id] = resp.results ?? [];
-      } catch { }
-    })
-  );
+  await runConcurrent(tableBlocks.map((block: any) => async () => {
+    try {
+      const resp = await notionProxy(`/v1/blocks/${block.id}/children?page_size=100`);
+      result[block.id] = resp.results ?? [];
+    } catch { }
+  }), 4);
   return result;
+}
+
+async function runConcurrent<T>(tasks: (() => Promise<T>)[], concurrency = 4): Promise<T[]> {
+  const results: T[] = [];
+  let i = 0;
+  async function worker() {
+    while (i < tasks.length) {
+      const idx = i++;
+      results[idx] = await tasks[idx]();
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, worker));
+  return results;
 }
 
 const CONTAINER_BLOCK_TYPES = new Set(["column_list", "column", "toggle", "synced_block", "template", "bulleted_list_item", "numbered_list_item", "quote"]);
@@ -233,7 +244,7 @@ export async function fetchSinglePageEntries(pageId: string): Promise<PageTestRe
 
         const childBlocks = blocks.filter((b: any) => b.type === "child_page");
 
-        await Promise.allSettled(childBlocks.map(async (childBlock: any) => {
+        await runConcurrent(childBlocks.map((childBlock: any) => async () => {
           const title = childBlock.child_page?.title ?? "Untitled";
           try {
             const childResult = await notionProxy(`/v1/blocks/${childBlock.id}/children?page_size=100`);
@@ -242,10 +253,10 @@ export async function fetchSinglePageEntries(pageId: string): Promise<PageTestRe
             const childEntries = extractPageBlocks(childBlockItems, childTableRows);
             entries.push(...childEntries);
             childPageList.push({ id: childBlock.id, title, accessible: true, entries: childEntries.length });
-          } catch (childErr: any) {
+          } catch {
             childPageList.push({ id: childBlock.id, title, accessible: false, entries: 0 });
           }
-        }));
+        }), 4);
 
         childPageList.sort((a, b) => a.title.localeCompare(b.title));
       } catch (blockErr: any) {

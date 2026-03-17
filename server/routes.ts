@@ -3869,34 +3869,11 @@ export async function registerRoutes(
         computeDerivedMetrics, computeRanks,
         enrichCrawlRowsWithPerformance,
         buildClicksDistribution, buildTrafficDistribution,
+        fetchCompetitorEvalMetrics,
       } = await import("./evalDataCollector");
       const { extractDomain } = await import("./googleToken");
-      const { decrypt } = await import("./encryption");
 
-      // SEMrush key (optional)
-      const semrushCreds = await storage.getApiCredentialsByService("semrush");
-      let semrushKey: string | null = null;
-      if (semrushCreds.length) {
-        try { semrushKey = decrypt(semrushCreds[0].encryptedValue); } catch {}
-      }
-
-      async function fetchSemrush(domain: string): Promise<{ organicKeywords: string; organicTraffic: string } | null> {
-        if (!semrushKey || !domain) return null;
-        try {
-          const qs = new URLSearchParams({ type: "domain_ranks", domain, database: "us", export_columns: "Or,Ot", key: semrushKey }).toString();
-          const resp = await fetch(`https://api.semrush.com/?${qs}`);
-          const text = await resp.text();
-          if (!resp.ok || text.startsWith("ERROR") || !text.trim()) return null;
-          const lines = text.trim().split("\n");
-          if (lines.length < 2) return null;
-          const headers = lines[0].split(";");
-          const vals = lines[1].split(";");
-          const get = (h: string) => vals[headers.indexOf(h)] ?? "—";
-          return { organicKeywords: get("Organic Keywords"), organicTraffic: get("Organic Traffic") };
-        } catch { return null; }
-      }
-
-      // Build competitor row list: client first, then client_competitors
+      // Build competitor row list: client first, then competitors saved on the batch/client
       const clientCompsList = await storage.getClientCompetitors(batch.clientId);
       const clientDomain = extractDomain(client.gscSiteUrl ?? client.ahrefsProjectUrl) ?? "";
 
@@ -3910,26 +3887,40 @@ export async function registerRoutes(
         })),
       ];
 
-      // Fetch SEMrush for all rows in parallel
-      const semrushResults = await Promise.allSettled(rowDefs.map(r => fetchSemrush(r.domain)));
+      // Fetch Ahrefs + SEMrush data for all rows in parallel
+      const fetchResults = await Promise.allSettled(
+        rowDefs.map(r => fetchCompetitorEvalMetrics(r.domain))
+      );
 
       // Build eval_competitor_rows from the row definitions
       const rowsToInsert: Omit<import("@shared/schema").InsertEvalCompetitorRow, "evalBatchId">[] = rowDefs.map((rowDef, i) => {
-        const sem = semrushResults[i].status === "fulfilled" ? semrushResults[i].value : null;
+        const fetched = fetchResults[i].status === "fulfilled" ? fetchResults[i].value : null;
         const metrics: Record<string, any> = {
-          dr: "—",
-          referringDomains: "—",
-          backlinks: "—",
-          indexedPages: "—",
-          aiVisibilityScore: "—",
-          aiMentions: "—",
-          citedSources: "—",
-          featuredSnippets: "—",
-          informationalKeywords: "—",
-          organicKeywords: sem?.organicKeywords ?? "—",
-          organicTraffic: sem?.organicTraffic ?? "—",
+          dr:                   fetched?.dr ?? "—",
+          referringDomains:     fetched?.referringDomains ?? "—",
+          backlinks:            fetched?.backlinks ?? "—",
+          organicTraffic:       fetched?.organicTraffic ?? "—",
+          organicKeywords:      fetched?.organicKeywords ?? "—",
+          top10Keywords:        fetched?.top10Keywords ?? "—",
+          indexedPages:         fetched?.indexedPages ?? "—",
+          featuredSnippets:     fetched?.featuredSnippets ?? "—",
+          informationalKeywords: fetched?.informationalKeywords ?? "—",
+          // Manual-entry fields (no API source)
+          aiVisibilityScore:    "—",
+          aiMentions:           "—",
+          citedSources:         "—",
+          whoisReg:             "—",
+          firstArchive:         "—",
         };
         const computed = computeDerivedMetrics(metrics);
+        const sourceTrace: Record<string, string> = {};
+        if (fetched?.dr !== "—") { sourceTrace.dr = "ahrefs"; sourceTrace.referringDomains = "ahrefs"; sourceTrace.backlinks = "ahrefs"; }
+        if (fetched?.organicTraffic !== "—") sourceTrace.organicTraffic = "ahrefs";
+        if (fetched?.organicKeywords !== "—") sourceTrace.organicKeywords = "ahrefs";
+        if (fetched?.top10Keywords !== "—") sourceTrace.top10Keywords = "ahrefs";
+        if (fetched?.indexedPages !== "—") sourceTrace.indexedPages = "semrush";
+        if (fetched?.featuredSnippets !== "—") sourceTrace.featuredSnippets = "semrush";
+        if (fetched?.informationalKeywords !== "—") sourceTrace.informationalKeywords = "semrush";
         return {
           rowOrder: rowDef.rowOrder,
           isClient: rowDef.isClient,
@@ -3938,16 +3929,15 @@ export async function registerRoutes(
           metrics,
           computed,
           ranks: {},
-          sourceTrace: sem ? { organicKeywords: "semrush", organicTraffic: "semrush" } : {},
+          sourceTrace,
         };
       });
 
       // Replace all existing competitor rows with newly seeded ones
       const savedRows = await storage.replaceEvalCompetitorRows(batchId, rowsToInsert);
 
-      // Compute ranks across all rows
+      // Compute ranks across all rows and persist
       const ranks = computeRanks(savedRows as any);
-      // Update each row with its ranks via upsert
       for (let i = 0; i < savedRows.length; i++) {
         if (savedRows[i]?.id) {
           await storage.upsertEvalCompetitorRow({ ...savedRows[i], ranks: ranks[i] ?? {} });
@@ -3964,7 +3954,6 @@ export async function registerRoutes(
           performanceFields: (r.performanceFields as any) ?? {},
         })),
       );
-      // Persist enriched performance data back to crawl rows
       for (let i = 0; i < existingCrawlRows.length; i++) {
         const rowId = existingCrawlRows[i]?.id;
         if (rowId && enrichedRows[i]) {
@@ -3979,10 +3968,9 @@ export async function registerRoutes(
       await storage.replaceEvalSummaryRows(batchId, "traffic_dist", trafficDist.map(r => ({ category: r.category, data: r })));
 
       // Mark as generated
-      const dataSourcesUsed = ["screaming_frog", ...(semrushKey ? ["semrush"] : [])];
       const updatedBatch = await storage.updateEvalBatch(batchId, {
         enrichmentStatus: "generated",
-        dataSourcesUsed: dataSourcesUsed as any,
+        dataSourcesUsed: ["screaming_frog", "ahrefs", "semrush"] as any,
       });
 
       res.json({ success: true, batch: updatedBatch });

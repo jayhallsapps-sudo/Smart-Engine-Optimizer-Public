@@ -311,14 +311,99 @@ export interface CategoryRule {
 }
 
 export const DEFAULT_CATEGORY_RULES: CategoryRule[] = [
-  { category: "Home", patterns: ["^/$", "^/index"], priority: 100 },
-  { category: "Care access", patterns: ["/verify-insurance", "/verify_insurance", "/insurance", "/vob", "/admissions", "/start-here", "/contact", "/get-help", "/reach-us"], priority: 90 },
-  { category: "Blogs", patterns: ["/blog/", "/post/", "/news/", "/articles/", "/resources/blog"], priority: 80 },
-  { category: "Conditions", patterns: ["/conditions/", "/substance-use/", "/alcohol/", "/cocaine/", "/heroin/", "/fentanyl/", "/meth", "/marijuana", "/benzodiazepines", "/prescription-drugs", "/opioid"], priority: 70 },
-  { category: "MH Conditions", patterns: ["/mental-health/", "/co-occurring/", "/depression", "/anxiety", "/ptsd", "/bipolar", "/adhd", "/schizophrenia", "/borderline", "/ocd"], priority: 70 },
-  { category: "Modalities", patterns: ["/programs/", "/treatment/", "/therapy/", "/detox", "/residential", "/php", "/iop", "/outpatient", "/inpatient", "/aftercare", "/sober-living"], priority: 60 },
-  { category: "About", patterns: ["/about", "/our-story", "/mission", "/team", "/staff", "/clinical", "/accreditation", "/location", "/facility"], priority: 50 },
-  { category: "Luxury Experience", patterns: ["/luxury", "/amenities", "/experience", "/resort"], priority: 45 },
+  // Home
+  { category: "Home", patterns: ["^/$", "^/index\\.", "^/home$"], priority: 100 },
+
+  // Insurance / Admissions / Conversion pages (highest priority after home)
+  { category: "Insurance & Admissions", patterns: [
+    "/verify-insurance", "/verify_insurance", "/insurance-verification", "/insurance-coverage",
+    "/insurance", "/vob", "/admissions", "/start-here", "/get-help", "/reach-us",
+    "/contact", "/contact-us", "/get-started", "/intake", "/enroll", "/apply",
+    "/free-assessment", "/assessment", "/get-treatment",
+  ], priority: 92 },
+
+  // Blog / Resources / Educational content
+  { category: "Blog & Resources", patterns: [
+    "/blog", "/post/", "/news/", "/articles/", "/resources/", "/education/",
+    "/faq", "/faqs", "/glossary", "/guide/", "/guides/", "/learn/",
+    "/what-is", "/how-to", "/understanding", "/signs-of", "/symptoms-of",
+  ], priority: 80 },
+
+  // Substance use / addiction conditions
+  { category: "Substance Use Conditions", patterns: [
+    "/conditions/", "/substance-use/", "/substance-abuse/", "/addiction/",
+    "/alcohol", "/alcoholism", "/cocaine", "/crack", "/heroin", "/fentanyl",
+    "/meth", "/methamphetamine", "/marijuana", "/cannabis", "/weed",
+    "/benzodiazepines", "/benzos", "/xanax", "/valium", "/prescription-drugs",
+    "/opioid", "/opioids", "/opiate", "/opiates", "/painkillers",
+    "/stimulants", "/kratom", "/polysubstance", "/poly-substance",
+  ], priority: 72 },
+
+  // Mental health conditions
+  { category: "Mental Health Conditions", patterns: [
+    "/mental-health/", "/co-occurring/", "/dual-diagnosis/",
+    "/depression", "/anxiety", "/ptsd", "/trauma",
+    "/bipolar", "/adhd", "/schizophrenia", "/borderline", "/bpd",
+    "/ocd", "/eating-disorder", "/anorexia", "/bulimia",
+    "/personality-disorder", "/psychosis", "/grief",
+  ], priority: 71 },
+
+  // Detox (separate from general modalities — usually high-value)
+  { category: "Detox", patterns: [
+    "/detox", "/detoxification", "/medical-detox", "/drug-detox", "/alcohol-detox",
+    "/withdrawal", "/medically-supervised",
+  ], priority: 68 },
+
+  // Residential / Inpatient programs
+  { category: "Residential Treatment", patterns: [
+    "/residential", "/inpatient", "/live-in", "/long-term", "/30-day", "/60-day", "/90-day",
+    "/drug-rehab", "/alcohol-rehab", "/addiction-rehab", "/rehab-center",
+  ], priority: 66 },
+
+  // Partial / Day programs
+  { category: "PHP & IOP", patterns: [
+    "/php", "/partial-hospitalization", "/day-program", "/day-treatment",
+    "/iop", "/intensive-outpatient", "/evening-program",
+  ], priority: 64 },
+
+  // Outpatient / Continuing care
+  { category: "Outpatient & Aftercare", patterns: [
+    "/outpatient", "/op-program", "/aftercare", "/continuing-care",
+    "/sober-living", "/recovery-house", "/halfway-house", "/transitional",
+    "/step-down", "/alumni", "/alumni-program",
+  ], priority: 62 },
+
+  // Therapy & Modalities (catch-all for therapy types)
+  { category: "Therapies & Modalities", patterns: [
+    "/programs/", "/treatment/", "/therapy/", "/therapies/", "/services/",
+    "/cbt", "/cognitive-behavioral", "/dbt", "/dialectical", "/emdr",
+    "/holistic", "/yoga", "/meditation", "/mindfulness", "/equine",
+    "/art-therapy", "/music-therapy", "/group-therapy", "/individual-therapy",
+    "/family-therapy", "/trauma-therapy", "/brainspotting",
+    "/medication-assisted", "/mat", "/suboxone", "/vivitrol",
+    "/12-step", "/non-12-step", "/faith-based",
+  ], priority: 60 },
+
+  // About / Trust signals
+  { category: "About & Trust", patterns: [
+    "/about", "/our-story", "/mission", "/vision", "/values",
+    "/team", "/staff", "/doctors", "/therapists", "/counselors", "/leadership",
+    "/clinical", "/accreditation", "/licensure", "/certifications",
+    "/location", "/facility", "/campus", "/virtual-tour",
+    "/testimonials", "/reviews", "/success-stories",
+  ], priority: 50 },
+
+  // Luxury / Premium experience
+  { category: "Luxury Experience", patterns: [
+    "/luxury", "/amenities", "/experience", "/resort", "/premium",
+    "/private", "/executive", "/vip", "/concierge",
+  ], priority: 45 },
+
+  // Legal / Utility pages (low value — separate from everything else)
+  { category: "Legal & Utility", patterns: [
+    "/privacy", "/terms", "/disclaimer", "/sitemap", "/accessibility",
+    "/cookie", "/404", "/error", "/robots",
+  ], priority: 10 },
 ];
 
 export function classifyUrl(url: string, customRules?: CategoryRule[]): string {

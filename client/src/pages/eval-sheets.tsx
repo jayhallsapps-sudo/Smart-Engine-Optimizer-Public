@@ -343,7 +343,7 @@ function CrawlDataTab({ batch }: { batch: EvalBatch }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.slice(0, 200).map((row: any, i: number) => (
+              {rows.map((row: any, i: number) => (
                 <TableRow key={row.id ?? i} data-testid={`row-crawl-${i}`}>
                   <TableCell className="text-xs font-mono truncate max-w-[260px] sticky left-0 bg-background">{row.url}</TableCell>
                   <TableCell><Badge variant="outline" className="text-[9px]">{row.pageCategory ?? "—"}</Badge></TableCell>
@@ -356,7 +356,6 @@ function CrawlDataTab({ batch }: { batch: EvalBatch }) {
               ))}
             </TableBody>
           </Table>
-          {rows.length > 200 && <p className="text-[10px] text-muted-foreground p-2 text-center">Showing 200 of {rows.length} rows</p>}
         </div>
       )}
     </div>
@@ -438,12 +437,12 @@ function GeneratingPanel({ batch, onDone }: { batch: EvalBatch; onDone: (b: Eval
       <div className="text-center space-y-2">
         <h2 className="text-lg font-semibold">Generating Evaluation...</h2>
         <p className="text-sm text-muted-foreground max-w-xs">
-          Pulling SEMrush data for each competitor, enriching crawl rows with GSC and GA4, computing derived metrics and rankings.
+          Pulling Ahrefs (DR, RD, Backlinks, Traffic, Keywords) and SEMrush data for each competitor, enriching crawl rows with GSC and GA4, computing derived metrics and rankings.
         </p>
       </div>
       <div className="flex flex-col gap-1.5 text-xs text-muted-foreground">
         <div className="flex items-center gap-2"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Seeding competitor rows</div>
-        <div className="flex items-center gap-2"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Fetching SEMrush domain data</div>
+        <div className="flex items-center gap-2"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Fetching Ahrefs &amp; SEMrush domain data</div>
         <div className="flex items-center gap-2"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Enriching crawl data with GSC / GA4</div>
         <div className="flex items-center gap-2"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Computing rankings and distributions</div>
       </div>

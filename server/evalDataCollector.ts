@@ -51,7 +51,7 @@ function safeDiv(a: number, b: number): number {
   return Math.round((a / b) * 100) / 100;
 }
 
-// ─── SEMrush helpers ──────────────────────────────────────────────────────────
+// ─── API credential helpers ────────────────────────────────────────────────────
 
 async function getSemrushKey(): Promise<string | null> {
   const creds = await storage.getApiCredentialsByService("semrush");
@@ -59,30 +59,169 @@ async function getSemrushKey(): Promise<string | null> {
   try { return decrypt(creds[0].encryptedValue); } catch { return null; }
 }
 
+async function getAhrefsToken(): Promise<string | null> {
+  const creds = await storage.getApiCredentialsByService("ahrefs");
+  if (!creds.length) return null;
+  try { return decrypt(creds[0].encryptedValue); } catch { return null; }
+}
+
+function cleanDomainForApi(url: string): string {
+  return (extractDomain(url) ?? url).replace(/^www\./, "");
+}
+
+// ─── SEMrush domain data ──────────────────────────────────────────────────────
+
 async function semrushDomainData(apiKey: string, domain: string): Promise<{
   organicKeywords: string;
   organicTraffic: string;
+  indexedPages: string;
   informationalKeywords: string;
   featuredSnippets: string;
 } | null> {
   try {
-    // Domain ranks (organic keywords + traffic)
-    const qs = new URLSearchParams({ type: "domain_ranks", domain, database: "us", export_columns: "Or,Ot", key: apiKey }).toString();
-    const resp = await fetch(`https://api.semrush.com/?${qs}`);
-    const text = await resp.text();
-    if (!resp.ok || text.startsWith("ERROR") || !text.trim()) return null;
-    const lines = text.trim().split("\n");
-    if (lines.length < 2) return null;
-    const headers = lines[0].split(";");
-    const vals = lines[1].split(";");
-    const get = (h: string) => vals[headers.indexOf(h)] ?? DASH;
-    return {
-      organicKeywords: fmtNum(get("Organic Keywords")),
-      organicTraffic: fmtNum(get("Organic Traffic")),
-      informationalKeywords: DASH,
-      featuredSnippets: DASH,
-    };
+    const d = cleanDomainForApi(domain);
+
+    // 1. Domain ranks → organic keywords + traffic
+    const rankQs = new URLSearchParams({ type: "domain_ranks", domain: d, database: "us", export_columns: "Or,Ot,Pc", key: apiKey }).toString();
+    const rankResp = await fetch(`https://api.semrush.com/?${rankQs}`);
+    const rankText = await rankResp.text();
+    let organicKeywords = DASH, organicTraffic = DASH, indexedPages = DASH;
+    if (rankResp.ok && rankText && !rankText.startsWith("ERROR")) {
+      const lines = rankText.trim().split("\n");
+      if (lines.length >= 2) {
+        const headers = lines[0].split(";");
+        const vals = lines[1].split(";");
+        const get = (h: string) => { const i = headers.indexOf(h); return i >= 0 ? vals[i] : null; };
+        organicKeywords = fmtNum(get("Organic Keywords") ?? get("Or") ?? null);
+        organicTraffic = fmtNum(get("Organic Traffic") ?? get("Ot") ?? null);
+        indexedPages = fmtNum(get("Pages Crawled") ?? get("Pc") ?? null);
+      }
+    }
+
+    // 2. Featured snippets — domain_organic filtered by SERP feature = Featured Snippet
+    let featuredSnippets = DASH;
+    try {
+      const fsQs = new URLSearchParams({
+        type: "domain_organic",
+        domain: d,
+        database: "us",
+        display_limit: "5000",
+        export_columns: "Ph,Po,Fk",
+        display_filter: "%2B|Fk|Co|1",
+        key: apiKey,
+      }).toString();
+      const fsResp = await fetch(`https://api.semrush.com/?${fsQs}`);
+      const fsText = await fsResp.text();
+      if (fsResp.ok && fsText && !fsText.startsWith("ERROR")) {
+        const count = Math.max(0, fsText.trim().split("\n").filter(Boolean).length - 1);
+        if (count > 0) featuredSnippets = String(count);
+      }
+    } catch { /* silent */ }
+
+    // 3. Informational keywords — domain_organic filtered by intent
+    let informationalKeywords = DASH;
+    try {
+      const infoQs = new URLSearchParams({
+        type: "domain_organic",
+        domain: d,
+        database: "us",
+        display_limit: "5000",
+        export_columns: "Ph,Po,In",
+        display_filter: "%2B|In|Eq|Informational",
+        key: apiKey,
+      }).toString();
+      const infoResp = await fetch(`https://api.semrush.com/?${infoQs}`);
+      const infoText = await infoResp.text();
+      if (infoResp.ok && infoText && !infoText.startsWith("ERROR")) {
+        const count = Math.max(0, infoText.trim().split("\n").filter(Boolean).length - 1);
+        if (count > 0) informationalKeywords = String(count);
+      }
+    } catch { /* silent */ }
+
+    return { organicKeywords, organicTraffic, indexedPages, informationalKeywords, featuredSnippets };
   } catch { return null; }
+}
+
+// ─── Ahrefs domain overview ───────────────────────────────────────────────────
+
+async function ahrefsOverview(token: string, domain: string): Promise<{
+  dr: string; referringDomains: string; backlinks: string; organicTraffic: string; organicKeywords: string;
+} | null> {
+  try {
+    const d = cleanDomainForApi(domain);
+    const qs = new URLSearchParams({
+      select: "domain_rating,backlinks,refdomains,org_keywords,org_traffic",
+      target: d,
+      mode: "domain",
+    }).toString();
+    const resp = await fetch(`https://api.ahrefs.com/v3/site-explorer/overview?${qs}`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+    });
+    if (!resp.ok) { console.error(`[Ahrefs overview] ${resp.status} for ${d}`); return null; }
+    const data = await resp.json();
+    const m = data.domain ?? {};
+    return {
+      dr: m.domain_rating != null ? String(Math.round(Number(m.domain_rating))) : DASH,
+      referringDomains: m.refdomains != null ? String(m.refdomains) : DASH,
+      backlinks: m.backlinks != null ? String(m.backlinks) : DASH,
+      organicKeywords: m.org_keywords != null ? String(m.org_keywords) : DASH,
+      organicTraffic: m.org_traffic != null ? String(m.org_traffic) : DASH,
+    };
+  } catch (e: any) { console.error("[Ahrefs overview]", e.message); return null; }
+}
+
+async function ahrefsTop4to10Count(token: string, domain: string): Promise<string> {
+  try {
+    const d = cleanDomainForApi(domain);
+    const where = JSON.stringify({ and: [{ field: "position", is: ["gte", 4] }, { field: "position", is: ["lte", 10] }] });
+    const qs = new URLSearchParams({ select: "keyword", target: d, mode: "domain", limit: "1", where }).toString();
+    const resp = await fetch(`https://api.ahrefs.com/v3/site-explorer/organic-keywords?${qs}`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+    });
+    if (!resp.ok) return DASH;
+    const data = await resp.json();
+    const total = data.meta?.total ?? null;
+    return total !== null ? String(total) : DASH;
+  } catch { return DASH; }
+}
+
+// ─── Combined competitor metric fetch ─────────────────────────────────────────
+
+export async function fetchCompetitorEvalMetrics(domain: string): Promise<{
+  dr: string; referringDomains: string; backlinks: string;
+  organicTraffic: string; organicKeywords: string; top10Keywords: string;
+  indexedPages: string; featuredSnippets: string; informationalKeywords: string;
+}> {
+  const blank = {
+    dr: DASH, referringDomains: DASH, backlinks: DASH,
+    organicTraffic: DASH, organicKeywords: DASH, top10Keywords: DASH,
+    indexedPages: DASH, featuredSnippets: DASH, informationalKeywords: DASH,
+  };
+
+  const [ahrefsToken, semrushKey] = await Promise.all([getAhrefsToken(), getSemrushKey()]);
+
+  const [ahrefsResult, top10Result, semrushResult] = await Promise.allSettled([
+    ahrefsToken ? ahrefsOverview(ahrefsToken, domain) : Promise.resolve(null),
+    ahrefsToken ? ahrefsTop4to10Count(ahrefsToken, domain) : Promise.resolve(DASH),
+    semrushKey ? semrushDomainData(semrushKey, domain) : Promise.resolve(null),
+  ]);
+
+  const ahrefs = ahrefsResult.status === "fulfilled" ? ahrefsResult.value : null;
+  const top10 = top10Result.status === "fulfilled" ? top10Result.value : DASH;
+  const sem = semrushResult.status === "fulfilled" ? semrushResult.value : null;
+
+  return {
+    dr: ahrefs?.dr ?? blank.dr,
+    referringDomains: ahrefs?.referringDomains ?? blank.referringDomains,
+    backlinks: ahrefs?.backlinks ?? blank.backlinks,
+    // Prefer Ahrefs for org traffic/keywords; fall back to SEMrush
+    organicTraffic: ahrefs?.organicTraffic !== DASH ? (ahrefs?.organicTraffic ?? blank.organicTraffic) : (sem?.organicTraffic ?? blank.organicTraffic),
+    organicKeywords: ahrefs?.organicKeywords !== DASH ? (ahrefs?.organicKeywords ?? blank.organicKeywords) : (sem?.organicKeywords ?? blank.organicKeywords),
+    top10Keywords: top10,
+    indexedPages: sem?.indexedPages ?? blank.indexedPages,
+    featuredSnippets: sem?.featuredSnippets ?? blank.featuredSnippets,
+    informationalKeywords: sem?.informationalKeywords ?? blank.informationalKeywords,
+  };
 }
 
 // ─── Metric computation ───────────────────────────────────────────────────────

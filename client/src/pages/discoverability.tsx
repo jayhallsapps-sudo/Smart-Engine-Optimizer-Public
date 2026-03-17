@@ -88,6 +88,9 @@ interface Keyword {
   cannibalizationAction?: string | null;
   bgaHigh?: string[];
   bgaLow?: string[];
+  clientRanksForKeyword?: boolean | null;
+  clientEstimatedPosition?: number | null;
+  competitorRankingDomains?: string[];
 }
 
 interface InternalLinkSuggestion {
@@ -1021,14 +1024,19 @@ function KeywordDetailDrawer({
               {draft.isLocked && <span className="flex items-center gap-1 text-[10px] text-amber-600"><Lock className="w-3 h-3" /> Locked</span>}
             </div>
             <div className="flex gap-1.5 mb-3">
-              {(["pending", "approved", "rejected", "watchlist"] as const).map(s => (
+              {([
+                { value: "pending", label: "Needs Review" },
+                { value: "approved", label: "Approved" },
+                { value: "rejected", label: "Rejected" },
+                { value: "watchlist", label: "Watchlist" },
+              ] as const).map(({ value, label }) => (
                 <button
-                  key={s}
-                  onClick={() => setDraft(d => ({ ...d, status: s }))}
-                  className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border transition-colors ${draft.status === s ? STATUS_COLORS[s] + " border-current" : "border-border text-muted-foreground hover:bg-muted"}`}
-                  data-testid={`button-kw-status-${s}`}
+                  key={value}
+                  onClick={() => setDraft(d => ({ ...d, status: value }))}
+                  className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border transition-colors ${draft.status === value ? STATUS_COLORS[value] + " border-current" : "border-border text-muted-foreground hover:bg-muted"}`}
+                  data-testid={`button-kw-status-${value}`}
                 >
-                  {s.charAt(0).toUpperCase() + s.slice(1)}
+                  {label}
                 </button>
               ))}
             </div>
@@ -1168,7 +1176,12 @@ function KeywordsStep({ ws, onUpdate }: { ws: Workspace; onUpdate: (keywords: Ke
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All status</SelectItem>
-              {["pending", "approved", "rejected", "watchlist"].map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+              {[
+                { value: "pending", label: "Needs Review" },
+                { value: "approved", label: "Approved" },
+                { value: "rejected", label: "Rejected" },
+                { value: "watchlist", label: "Watchlist" },
+              ].map(({ value, label }) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
               <SelectItem value="new_suggestion">New suggestions</SelectItem>
             </SelectContent>
           </Select>
@@ -1216,7 +1229,7 @@ function KeywordsStep({ ws, onUpdate }: { ws: Workspace; onUpdate: (keywords: Ke
         <span className="text-emerald-600 dark:text-emerald-400">{keywords.filter(k => k.status === "approved").length} approved</span>
         <span className="text-red-500">{keywords.filter(k => k.status === "rejected").length} rejected</span>
         <span className="text-amber-600">{keywords.filter(k => k.status === "watchlist").length} watchlist</span>
-        <span>{keywords.filter(k => k.status === "pending").length} pending</span>
+        <span>{keywords.filter(k => k.status === "pending").length} needs review</span>
         {keywords.filter(k => k.reviewState === "new_suggestion").length > 0 && (
           <span className="text-purple-600 dark:text-purple-400 font-medium">{keywords.filter(k => k.reviewState === "new_suggestion").length} new suggestions</span>
         )}
@@ -1244,6 +1257,8 @@ function KeywordsStep({ ws, onUpdate }: { ws: Workspace; onUpdate: (keywords: Ke
                   <th className="text-left p-2 font-semibold text-muted-foreground">Cluster</th>
                   <th className="text-left p-2 font-semibold text-muted-foreground">Intent</th>
                   <th className="text-left p-2 font-semibold text-muted-foreground">Volume</th>
+                  <th className="text-left p-2 font-semibold text-muted-foreground">Site Ranks?</th>
+                  <th className="text-left p-2 font-semibold text-muted-foreground">Competitors</th>
                   <th className="text-left p-2 font-semibold text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => toggleSort("businessGoalAlignmentScore")}>
                     <span className="flex items-center gap-1">Goal Align <ArrowUpDown className="w-3 h-3" /></span>
                   </th>
@@ -1297,6 +1312,42 @@ function KeywordsStep({ ws, onUpdate }: { ws: Workspace; onUpdate: (keywords: Ke
                         </span>
                       </td>
                       <td className="p-2 text-muted-foreground">{kw.estimatedVolume || kw.searchVolume || "—"}</td>
+                      <td className="p-2">
+                        {kw.clientRanksForKeyword === true ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium text-xs cursor-default">
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                {kw.clientEstimatedPosition ? `#${kw.clientEstimatedPosition}` : "Yes"}
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent className="text-xs">Client estimated to rank{kw.clientEstimatedPosition ? ` around position #${kw.clientEstimatedPosition}` : " in top 30"}</TooltipContent>
+                          </Tooltip>
+                        ) : kw.clientRanksForKeyword === false ? (
+                          <span className="text-xs text-muted-foreground">Not ranking</span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="p-2">
+                        {(kw.competitorRankingDomains?.length ?? 0) > 0 ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950 px-2 py-0.5 rounded-full cursor-default">
+                                {kw.competitorRankingDomains!.length} competing
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-xs text-xs">
+                              <p className="font-semibold mb-1">Competitors ranking for this keyword:</p>
+                              <ul className="space-y-0.5">
+                                {kw.competitorRankingDomains!.map(d => <li key={d} className="font-mono">{d}</li>)}
+                              </ul>
+                            </TooltipContent>
+                          </Tooltip>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </td>
                       <td className="p-2"><ScoreBadge score={kw.businessGoalAlignmentScore} /></td>
                       <td className="p-2"><ScoreBadge score={kw.intentFitScore} /></td>
                       <td className="p-2"><ScoreBadge score={kw.conversionProximityScore} /></td>
@@ -1304,13 +1355,38 @@ function KeywordsStep({ ws, onUpdate }: { ws: Workspace; onUpdate: (keywords: Ke
                         <span className="font-bold text-foreground tabular-nums">{kw.finalOpportunityScore?.toFixed(1)}</span>
                       </td>
                       <td className="p-2">
-                        <span className="text-muted-foreground">{PAGE_TYPE_LABELS[kw.recommendedPageType] || kw.recommendedPageType}</span>
+                        {kw.recommendedPageType === "existing_page_refresh" && kw.recommendedTargetUrl ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline cursor-pointer text-xs font-medium">
+                                <RefreshCw className="w-3 h-3" />
+                                Refresh Existing
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent className="text-xs max-w-xs">
+                              <p className="font-semibold mb-0.5">Recommended page to refresh:</p>
+                              <p className="font-mono text-blue-300">{kw.recommendedTargetUrl}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">{PAGE_TYPE_LABELS[kw.recommendedPageType] || kw.recommendedPageType}</span>
+                        )}
                       </td>
                       <td className="p-2">
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${STATUS_COLORS[kw.status]}`}>
-                          <StatusIcon className="w-2.5 h-2.5" />
-                          {kw.status}
-                        </span>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold cursor-default ${STATUS_COLORS[kw.status]}`}>
+                              <StatusIcon className="w-2.5 h-2.5" />
+                              {kw.status === "pending" ? "Needs Review" : kw.status.charAt(0).toUpperCase() + kw.status.slice(1)}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent className="text-xs max-w-xs">
+                            {kw.status === "pending" && "This keyword hasn't been reviewed yet. Open it to approve, reject, or add to watchlist."}
+                            {kw.status === "approved" && "Approved for targeting — include in content strategy."}
+                            {kw.status === "rejected" && "Rejected — not a priority for this cycle."}
+                            {kw.status === "watchlist" && "On watchlist — monitor but not actively targeting yet."}
+                          </TooltipContent>
+                        </Tooltip>
                       </td>
                       <td className="p-2" onClick={e => e.stopPropagation()}>
                         <button
@@ -1398,7 +1474,7 @@ function RecommendationsStep({ ws }: { ws: Workspace }) {
                   {kws.slice(0, 8).map(kw => (
                     <div key={kw.id} className="flex items-center gap-3 px-4 py-2.5" data-testid={`rec-row-${kw.id}`}>
                       <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ${STATUS_COLORS[kw.status]}`}>
-                        {kw.status}
+                        {kw.status === "pending" ? "Needs Review" : kw.status.charAt(0).toUpperCase() + kw.status.slice(1)}
                       </div>
                       <span className="text-sm text-foreground font-medium flex-1 min-w-0 truncate">{kw.keyword}</span>
                       <span className="text-xs text-muted-foreground shrink-0">{clusterMap[kw.clusterId] || ""}</span>
@@ -1651,7 +1727,7 @@ function ExportStep({ ws }: { ws: Workspace }) {
           { label: "Total Keywords", value: keywords.length, icon: Search },
           { label: "Clusters", value: clusters.length, icon: Layers },
           { label: "Approved", value: keywords.filter(k => k.status === "approved").length, icon: CheckCircle2 },
-          { label: "Pending", value: keywords.filter(k => k.status === "pending").length, icon: Clock },
+          { label: "Needs Review", value: keywords.filter(k => k.status === "pending").length, icon: Clock },
           { label: "Rejected", value: keywords.filter(k => k.status === "rejected").length, icon: X },
           { label: "New Suggestions", value: keywords.filter(k => k.reviewState === "new_suggestion").length, icon: Sparkles },
         ].map(stat => {

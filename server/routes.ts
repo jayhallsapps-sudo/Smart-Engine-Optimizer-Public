@@ -4218,7 +4218,7 @@ BUSINESS PROFILE:
 
 ${existingKeywords.length > 0 ? `EXISTING KEYWORDS (already in workspace — do NOT duplicate these): ${existingKeywords.slice(0, 30).map((k: any) => k.keyword).join(", ")}` : ""}
 
-Generate 4-6 keyword clusters with 4-6 keyword candidates each.
+Generate 6-8 keyword clusters with 8-10 keyword candidates each (target ~60 total keywords).
 
 For each keyword, provide:
 SCORES (0-10):
@@ -4240,6 +4240,11 @@ EXPLAINABILITY (required):
 - bgaHigh: array of 2-3 brief factors that RAISED the business goal alignment score (e.g. "directly matches a core service")
 - bgaLow: array of 1-2 brief factors that LOWERED it (e.g. "weak connection to stated conversion goals") — omit if all high
 
+RANKING INTELLIGENCE (estimate based on keyword difficulty, domain authority signals, and known client services):
+- clientRanksForKeyword: true if you estimate the client's domain likely appears in top 30 results for this keyword, false otherwise
+- clientEstimatedPosition: estimated rank position 1-100 if clientRanksForKeyword=true, null otherwise (use null when genuinely uncertain)
+- competitorRankingDomains: array of domain names from the competitor list above that you estimate rank for this keyword (can be empty array if none, max 5)
+
 SERP & CANNIBALIZATION:
 - serpNotes: 1-2 sentence SERP analysis
 - cannibalizationWarning: string if risk exists, null if not (e.g. "Similar intent to /existing-page — risk of splitting ranking signals")
@@ -4257,6 +4262,7 @@ SCORING GUIDANCE:
 - Prefer existing_page_refresh over new pages when coverage exists
 - For non-YMYL clients, set trustComplianceComplexityScore = 2
 - For local businesses, boost localRelevanceScore and rankingOpportunityScore on geo terms
+- When recommendedPageType = "existing_page_refresh", set recommendedTargetUrl to the specific URL path (from money pages or known site structure) that should be refreshed
 
 INTERNAL LINKING:
 For each cluster, provide strategic internal linking guidance:
@@ -4298,10 +4304,14 @@ Return ONLY valid JSON:
       "confidence": "medium",
       "dominantIntent": "transactional",
       "recommendedPageType": "new_service_page",
+      "recommendedTargetUrl": null,
       "pageTypeReason": "SERP is dominated by local service pages. New dedicated page would target this cluster with transactional intent.",
       "bgaHigh": ["matches core service", "supports booking conversion goal"],
       "bgaLow": ["limited geo signal in keyword"],
       "serpNotes": "SERP shows primarily service pages from local providers.",
+      "clientRanksForKeyword": false,
+      "clientEstimatedPosition": null,
+      "competitorRankingDomains": ["competitor1.com", "competitor2.com"],
       "cannibalizationWarning": null,
       "cannibalizationSeverity": null,
       "cannibalizationAction": null,

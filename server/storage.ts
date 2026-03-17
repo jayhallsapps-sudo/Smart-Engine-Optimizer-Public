@@ -151,6 +151,7 @@ export interface IStorage {
   bulkInsertEvalCrawlRows(rows: Omit<EvalCrawlRow, "id" | "createdAt">[]): Promise<void>;
   deleteEvalCrawlRows(evalBatchId: number): Promise<void>;
   updateEvalCrawlRowCategory(id: number, category: string): Promise<void>;
+  updateEvalCrawlRowPerformance(id: number, performanceFields: any): Promise<void>;
 
   // Eval Summary Rows
   getEvalSummaryRows(evalBatchId: number, tableType: string): Promise<EvalSummaryRow[]>;
@@ -677,6 +678,10 @@ export class DatabaseStorage implements IStorage {
 
   async updateEvalCrawlRowCategory(id: number, category: string): Promise<void> {
     await db.update(evalCrawlRows).set({ manualCategoryOverride: category, pageCategory: category }).where(eq(evalCrawlRows.id, id));
+  }
+
+  async updateEvalCrawlRowPerformance(id: number, performanceFields: any): Promise<void> {
+    await db.update(evalCrawlRows).set({ performanceFields }).where(eq(evalCrawlRows.id, id));
   }
 
   // ─── Eval Summary Rows ───────────────────────────────────────────────────────

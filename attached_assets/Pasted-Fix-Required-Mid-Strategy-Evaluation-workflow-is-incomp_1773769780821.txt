@@ -1,0 +1,348 @@
+Fix Required: Mid-Strategy Evaluation workflow is incomplete and currently wrong
+
+The current implementation is not acceptable. It built empty tables instead of the automated workflow requested.
+
+What is wrong right now
+
+Current behavior:
+
+I select the client
+
+I name the evaluation batch
+
+I land in empty tables
+
+the system expects manual data entry
+
+there is no Screaming Frog upload entry point in the expected workflow
+
+there is no Generate Evaluation action
+
+competitor data is not auto-pulled from the client info section
+
+That is not the required behavior.
+
+The Evaluation Sheets module must not behave like a blank spreadsheet editor. It must behave like an automated evaluation generator.
+
+Required behavior
+Correct user flow
+
+When I create a new evaluation batch, the workflow must be:
+
+Select client
+
+Auto-load competitor list from the Client Info section under competitors
+
+Enter evaluation batch name
+
+Upload Screaming Frog crawl export
+
+Click Generate Evaluation
+
+System automatically:
+
+parses Screaming Frog upload into Crawl Data
+
+pulls competitor benchmark data from integrations
+
+fills Main Evaluation automatically
+
+fills Clicks Distribution automatically
+
+fills Traffic Distribution automatically
+
+calculates derived metrics automatically
+
+calculates rankings automatically
+
+saves the populated evaluation batch
+
+I should not have to manually type values into the evaluation sheets.
+
+Functional fixes required now
+1. Client selection must auto-pull competitors
+
+When a client is selected, the system must fetch the competitor list from that client’s stored Client Info record.
+
+Expected source:
+
+Client Info → competitors
+
+Required behavior:
+
+auto-populate competitor rows in Main Evaluation from stored competitors
+
+include the selected client as the first row
+
+do not make me manually add competitor rows unless I choose to override
+
+If no competitors exist in Client Info:
+
+show a clear warning state
+
+allow manual add only as a fallback
+
+2. Add Screaming Frog upload directly in batch creation flow
+
+After selecting client and naming the batch, I need a visible upload area for Screaming Frog.
+
+Required:
+
+upload control in the creation/setup step, not buried later
+
+accepted file types: CSV and XLSX if supported
+
+store uploaded file as crawl source for this batch
+
+parse after upload
+
+show success/failure state
+
+This should be part of the standard setup flow.
+
+3. Add Generate Evaluation button
+
+There must be a primary CTA button:
+
+Generate Evaluation
+
+Clicking this button should run the full population workflow.
+
+This is the missing orchestration layer.
+
+4. Generate Evaluation must populate all sheets
+
+When Generate Evaluation is clicked, the system must:
+
+Main Evaluation
+
+Auto-fill:
+
+client row
+
+competitor rows from Client Info
+
+WHOIS / archive data
+
+Ahrefs data
+
+SEMrush data
+
+derived metrics
+
+rank columns
+
+summary rows
+
+Crawl Data
+
+Auto-fill:
+
+parsed SF rows
+
+enriched fields from GSC / GA4 / Ahrefs / SEMrush where needed
+
+Clicks Distribution
+
+Auto-generate from:
+
+Crawl Data category mapping
+
+GSC URL data
+
+Traffic Distribution
+
+Auto-generate from:
+
+Crawl Data category mapping
+
+GA4 URL/session data
+
+No manual metric entry.
+
+5. Empty tables should never be the first state after setup
+
+After batch creation, the default experience should not drop me into blank editable grids.
+
+Instead:
+
+before generation: show setup panel with client, competitors preview, SF upload, and Generate button
+
+after generation: show populated tabs
+
+If generation has not yet been run, each tab should clearly say something like:
+
+“No evaluation generated yet. Upload Screaming Frog and click Generate Evaluation.”
+
+Do not present blank spreadsheet tables as though manual entry is expected.
+
+6. Preserve manual editing only after generation
+
+Editable cells are fine, but only after the system has generated the baseline data.
+
+Correct model:
+
+generation first
+
+manual adjustment second
+
+Not:
+
+blank table first
+
+user does all the work
+
+Required implementation changes
+A. Add generation setup state to Evaluation Batch page
+
+Build a pre-generation setup view containing:
+
+selected client
+
+competitor preview loaded from Client Info
+
+batch name
+
+Screaming Frog upload
+
+Generate Evaluation button
+
+Only after generation completes should the populated sheet tabs be the primary focus.
+
+B. Add server-side generation endpoint
+
+Create a proper generation endpoint for evaluation batches, something like:
+
+POST /api/eval-sheets/:id/generate
+
+This endpoint must orchestrate:
+
+fetch evaluation batch
+
+fetch selected client
+
+fetch competitors from Client Info
+
+fetch integration data for client + competitors
+
+parse uploaded Screaming Frog file
+
+populate Crawl Data rows
+
+enrich missing fields
+
+build Main Evaluation rows
+
+calculate formulas and ranks
+
+build Clicks Distribution
+
+build Traffic Distribution
+
+persist all generated data
+
+return completed batch state
+
+C. Add batch generation status
+
+Add fields like:
+
+setup
+
+generating
+
+generated
+
+failed
+
+Show this in UI.
+
+D. Add explicit competitor source mapping
+
+Do not ask me to manually type competitors when the client already has them stored.
+
+Fetch from:
+
+Client Info → competitors
+
+Use those by default.
+
+E. Add uploaded crawl source reference to batch
+
+Each batch must know:
+
+crawl source uploaded?
+
+file name
+
+upload timestamp
+
+parse status
+
+So the system can block generation if no crawl file is attached.
+
+UX requirements for this fix
+Batch creation modal or flow should be:
+Step 1
+
+Select client
+
+Step 2
+
+Auto-preview competitors pulled from Client Info
+
+Step 3
+
+Name evaluation batch
+
+Step 4
+
+Upload Screaming Frog file
+
+Step 5
+
+Click Generate Evaluation
+
+After that, user lands in populated sheet tabs.
+
+Acceptance criteria for this fix
+
+This fix is done only when all of the below are true:
+
+Selecting a client automatically loads competitors from Client Info.
+
+I do not need to manually create competitor rows in normal use.
+
+I can upload Screaming Frog during setup.
+
+There is a visible Generate Evaluation button.
+
+Clicking Generate Evaluation populates Main Evaluation automatically.
+
+Clicking Generate Evaluation populates Crawl Data automatically from SF upload.
+
+Clicks Distribution auto-generates.
+
+Traffic Distribution auto-generates.
+
+Derived formulas and rankings auto-generate.
+
+Blank spreadsheet-style manual entry is no longer the primary workflow.
+
+Manual editing is still available after generation.
+
+If Client Info has no competitors, the system clearly warns me and allows manual fallback.
+
+If no SF file is uploaded, generation is blocked with a clear message.
+
+Batch status updates correctly during generation.
+
+Important rule
+
+Do not respond by saying the tables are “ready for data entry.” That is the opposite of the intended workflow.
+
+The intended workflow is automated generation, not manual spreadsheet population.
+
+You should also add one line at the top when you send it:
+
+“The UI shell exists, but the core generation workflow was not implemented. Please fix the workflow, not just the layout.”

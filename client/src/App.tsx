@@ -20,6 +20,8 @@ import MonthlyPrintPage from "@/pages/monthly-print";
 import QbrFullPage from "@/pages/qbr-full";
 import MidStrategyPage from "@/pages/mid-strategy";
 import MidStrategyPrintPage from "@/pages/mid-strategy-print";
+import EvalSheetsPage from "@/pages/eval-sheets";
+import MidStrategyDeckPage from "@/pages/mid-strategy-deck";
 import DashboardPage from "@/pages/dashboard";
 import SampleReportsPage from "@/pages/sample-reports";
 import TemplateBuilderPage from "@/pages/template-builder";
@@ -68,6 +70,8 @@ function Router() {
       <Route path="/admin/templates" component={AdminTemplatesPage} />
       <Route path="/aca" component={AcaPage} />
       <Route path="/saved-reports" component={SavedReportsPage} />
+      <Route path="/eval-sheets" component={EvalSheetsPage} />
+      <Route path="/mid-strategy-deck" component={MidStrategyDeckPage} />
       <Route component={NotFound} />
     </Switch>
   );

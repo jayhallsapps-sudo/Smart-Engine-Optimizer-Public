@@ -3671,5 +3671,305 @@ export async function registerRoutes(
     return res.status(204).end();
   });
 
+  // ─── Evaluation Batches ─────────────────────────────────────────────────────
+
+  app.get("/api/eval-batches", async (req, res) => {
+    try {
+      const clientId = req.query.clientId ? Number(req.query.clientId) : undefined;
+      const batches = await storage.listEvalBatches(clientId);
+      res.json(batches);
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  app.get("/api/eval-batches/:id", async (req, res) => {
+    try {
+      const batch = await storage.getEvalBatch(Number(req.params.id));
+      if (!batch) return res.status(404).json({ error: "Not found" });
+      res.json(batch);
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  app.post("/api/eval-batches", async (req, res) => {
+    try {
+      const { insertEvalBatchSchema } = await import("@shared/schema");
+      const data = insertEvalBatchSchema.parse(req.body);
+      const batch = await storage.createEvalBatch(data);
+      res.status(201).json(batch);
+    } catch (err: any) { res.status(400).json({ error: err.message }); }
+  });
+
+  app.patch("/api/eval-batches/:id", async (req, res) => {
+    try {
+      const updated = await storage.updateEvalBatch(Number(req.params.id), req.body);
+      if (!updated) return res.status(404).json({ error: "Not found" });
+      res.json(updated);
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  app.delete("/api/eval-batches/:id", async (req, res) => {
+    try {
+      const ok = await storage.deleteEvalBatch(Number(req.params.id));
+      if (!ok) return res.status(404).json({ error: "Not found" });
+      res.status(204).end();
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  // ─── Eval Competitor Rows ───────────────────────────────────────────────────
+
+  app.get("/api/eval-batches/:batchId/competitors", async (req, res) => {
+    try {
+      const rows = await storage.getEvalCompetitorRows(Number(req.params.batchId));
+      // Compute derived metrics and ranks inline
+      const { computeDerivedMetrics, computeRanks } = await import("./evalDataCollector");
+      const withComputed = rows.map(r => ({
+        ...r,
+        computed: computeDerivedMetrics({ ...((r.metrics as any) ?? {}), ...((r.computed as any) ?? {}) }),
+      }));
+      const ranks = computeRanks(withComputed.map(r => ({ metrics: r.metrics, computed: r.computed })));
+      const result = withComputed.map((r, i) => ({ ...r, ranks: ranks[i] }));
+      res.json(result);
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  app.post("/api/eval-batches/:batchId/competitors", async (req, res) => {
+    try {
+      const row = await storage.upsertEvalCompetitorRow({ ...req.body, evalBatchId: Number(req.params.batchId) });
+      res.status(201).json(row);
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  app.put("/api/eval-batches/:batchId/competitors", async (req, res) => {
+    try {
+      const rows = await storage.replaceEvalCompetitorRows(Number(req.params.batchId), req.body);
+      res.json(rows);
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  app.patch("/api/eval-competitor-rows/:id", async (req, res) => {
+    try {
+      const row = await storage.upsertEvalCompetitorRow({ ...req.body, id: Number(req.params.id) });
+      res.json(row);
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  app.delete("/api/eval-competitor-rows/:id", async (req, res) => {
+    try {
+      const ok = await storage.deleteEvalCompetitorRow(Number(req.params.id));
+      if (!ok) return res.status(404).json({ error: "Not found" });
+      res.status(204).end();
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  // ─── Eval Crawl Rows ────────────────────────────────────────────────────────
+
+  app.get("/api/eval-batches/:batchId/crawl-rows", async (req, res) => {
+    try {
+      const rows = await storage.getEvalCrawlRows(Number(req.params.batchId));
+      res.json(rows);
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  app.post("/api/eval-batches/:batchId/crawl-rows/upload", async (req, res) => {
+    try {
+      const batchId = Number(req.params.batchId);
+      const { rows, sourceLabel } = req.body;
+      if (!Array.isArray(rows)) return res.status(400).json({ error: "rows must be an array" });
+
+      const { classifyUrl, DEFAULT_CATEGORY_RULES } = await import("./evalMetricRegistry");
+      const batch = await storage.getEvalBatch(batchId);
+      const customRules = (batch?.categoryRules as any[]) ?? undefined;
+
+      await storage.deleteEvalCrawlRows(batchId);
+      const toInsert = rows.map((r: any, i: number) => ({
+        evalBatchId: batchId,
+        url: String(r.url ?? r.Address ?? r["Page URL"] ?? ""),
+        pageCategory: classifyUrl(String(r.url ?? r.Address ?? r["Page URL"] ?? ""), customRules),
+        manualCategoryOverride: null,
+        crawlFields: r,
+        performanceFields: {},
+        pageTitle: r.Title ?? r["Meta Title 1"] ?? null,
+        metaDesc: r["Meta Description 1"] ?? null,
+        h1: r.H1_1 ?? r["H1-1"] ?? null,
+        statusCode: r["Status Code"] ? Number(r["Status Code"]) : null,
+        wordCount: r["Word Count"] ? Number(r["Word Count"]) : null,
+        indexability: r.Indexability ?? null,
+        canonical: r.Canonical ?? null,
+        crawlDepth: r["Crawl Depth"] ? Number(r["Crawl Depth"]) : null,
+        inlinks: r.Inlinks ? Number(r.Inlinks) : null,
+      }));
+
+      await storage.bulkInsertEvalCrawlRows(toInsert);
+
+      // Record source import
+      await storage.createEvalSourceImport({
+        evalBatchId: batchId,
+        sourceType: "screaming_frog",
+        label: sourceLabel ?? "Screaming Frog Upload",
+        status: "done",
+        rowCount: toInsert.length,
+        importedFields: Object.keys(rows[0] ?? {}),
+        notes: null,
+      });
+
+      // Build clicks + traffic distribution from SF data
+      const allRows = await storage.getEvalCrawlRows(batchId);
+      const { buildClicksDistribution, buildTrafficDistribution } = await import("./evalDataCollector");
+      const clicksDist = buildClicksDistribution(allRows as any);
+      const trafficDist = buildTrafficDistribution(allRows as any);
+
+      await storage.replaceEvalSummaryRows(batchId, "clicks_dist", clicksDist.map(r => ({
+        category: r.category,
+        data: { numPages: r.numPages, sumClicks: r.sumClicks, clicksPerPage: r.clicksPerPage, shareOfClicks: r.shareOfClicks },
+      })));
+      await storage.replaceEvalSummaryRows(batchId, "traffic_dist", trafficDist.map(r => ({
+        category: r.category,
+        data: { numPages: r.numPages, sumSessions: r.sumSessions, sessionsPerPage: r.sessionsPerPage, shareOfSessions: r.shareOfSessions },
+      })));
+
+      res.json({ inserted: toInsert.length, clicksDistRows: clicksDist.length, trafficDistRows: trafficDist.length });
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  app.patch("/api/eval-crawl-rows/:id/category", async (req, res) => {
+    try {
+      const { category } = req.body;
+      if (!category) return res.status(400).json({ error: "category required" });
+      await storage.updateEvalCrawlRowCategory(Number(req.params.id), category);
+      res.json({ success: true });
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  // ─── Eval Summary Tables ────────────────────────────────────────────────────
+
+  app.get("/api/eval-batches/:batchId/summary/:tableType", async (req, res) => {
+    try {
+      const rows = await storage.getEvalSummaryRows(Number(req.params.batchId), req.params.tableType);
+      res.json(rows);
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  app.put("/api/eval-batches/:batchId/summary/:tableType", async (req, res) => {
+    try {
+      const { rows } = req.body;
+      await storage.replaceEvalSummaryRows(Number(req.params.batchId), req.params.tableType, rows);
+      res.json({ success: true });
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  // ─── Eval Source Imports ────────────────────────────────────────────────────
+
+  app.get("/api/eval-batches/:batchId/imports", async (req, res) => {
+    try {
+      const imports = await storage.getEvalSourceImports(Number(req.params.batchId));
+      res.json(imports);
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  // ─── Mid-Strategy Decks ─────────────────────────────────────────────────────
+
+  app.get("/api/mid-strategy-decks", async (req, res) => {
+    try {
+      const clientId = req.query.clientId ? Number(req.query.clientId) : undefined;
+      const decks = await storage.listMidStrategyDecks(clientId);
+      res.json(decks);
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  app.get("/api/mid-strategy-decks/:id", async (req, res) => {
+    try {
+      const deck = await storage.getMidStrategyDeck(Number(req.params.id));
+      if (!deck) return res.status(404).json({ error: "Not found" });
+      res.json(deck);
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  app.post("/api/mid-strategy-decks", async (req, res) => {
+    try {
+      const { insertMidStrategyDeckSchema } = await import("@shared/schema");
+      const data = insertMidStrategyDeckSchema.parse(req.body);
+      const deck = await storage.createMidStrategyDeck(data);
+      res.status(201).json(deck);
+    } catch (err: any) { res.status(400).json({ error: err.message }); }
+  });
+
+  app.patch("/api/mid-strategy-decks/:id", async (req, res) => {
+    try {
+      const updated = await storage.updateMidStrategyDeck(Number(req.params.id), req.body);
+      if (!updated) return res.status(404).json({ error: "Not found" });
+      res.json(updated);
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  app.delete("/api/mid-strategy-decks/:id", async (req, res) => {
+    try {
+      const ok = await storage.deleteMidStrategyDeck(Number(req.params.id));
+      if (!ok) return res.status(404).json({ error: "Not found" });
+      res.status(204).end();
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  // Generate / preview deck slides
+  app.post("/api/mid-strategy-decks/:id/generate", async (req, res) => {
+    try {
+      const deckId = Number(req.params.id);
+      const deck = await storage.getMidStrategyDeck(deckId);
+      if (!deck) return res.status(404).json({ error: "Deck not found" });
+
+      const existingEdits = (deck.editsJson as Record<string, string>) ?? {};
+      const { generateMidStrategyDeck } = await import("./midStrategyDeckGenerator");
+      const payload = await generateMidStrategyDeck(deckId, existingEdits);
+
+      // Persist slides back to deck
+      await storage.updateMidStrategyDeck(deckId, { slidesJson: payload.slides as any, reportStatus: "draft" } as any);
+
+      res.json(payload);
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  // Save an edited block to the deck's editsJson
+  app.patch("/api/mid-strategy-decks/:id/edits", async (req, res) => {
+    try {
+      const deckId = Number(req.params.id);
+      const deck = await storage.getMidStrategyDeck(deckId);
+      if (!deck) return res.status(404).json({ error: "Deck not found" });
+
+      const current = (deck.editsJson as Record<string, string>) ?? {};
+      const merged = { ...current, ...req.body };
+      const updated = await storage.updateMidStrategyDeck(deckId, { editsJson: merged as any });
+      res.json(updated);
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  // Update IA structure on a deck
+  app.patch("/api/mid-strategy-decks/:id/ia-structure", async (req, res) => {
+    try {
+      const deckId = Number(req.params.id);
+      const deck = await storage.getMidStrategyDeck(deckId);
+      if (!deck) return res.status(404).json({ error: "Deck not found" });
+      const updated = await storage.updateMidStrategyDeck(deckId, { iaStructureJson: req.body as any });
+      res.json(updated);
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  // Recompute summary tables from crawl rows for a batch
+  app.post("/api/eval-batches/:batchId/recompute-summaries", async (req, res) => {
+    try {
+      const batchId = Number(req.params.batchId);
+      const allRows = await storage.getEvalCrawlRows(batchId);
+      const { buildClicksDistribution, buildTrafficDistribution } = await import("./evalDataCollector");
+      const clicksDist = buildClicksDistribution(allRows as any);
+      const trafficDist = buildTrafficDistribution(allRows as any);
+      await storage.replaceEvalSummaryRows(batchId, "clicks_dist", clicksDist.map(r => ({
+        category: r.category,
+        data: { numPages: r.numPages, sumClicks: r.sumClicks, clicksPerPage: r.clicksPerPage, shareOfClicks: r.shareOfClicks },
+      })));
+      await storage.replaceEvalSummaryRows(batchId, "traffic_dist", trafficDist.map(r => ({
+        category: r.category,
+        data: { numPages: r.numPages, sumSessions: r.sumSessions, sessionsPerPage: r.sessionsPerPage, shareOfSessions: r.shareOfSessions },
+      })));
+      res.json({ clicksDistRows: clicksDist.length, trafficDistRows: trafficDist.length });
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
   return httpServer;
 }

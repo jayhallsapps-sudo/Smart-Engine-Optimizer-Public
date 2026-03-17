@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   ExternalLink, Settings, LogOut, Shield, User, ChevronDown, Check,
   BookOpen, Layers, Lock, Unlock, KeyRound, Eye, EyeOff, LayoutTemplate,
+  BarChart3, Presentation,
 } from "lucide-react";
 import {
   Sidebar,
@@ -383,6 +384,42 @@ export function AppSidebar() {
 
         <SidebarSectionLabel label="My Clients" />
         <ClientList />
+
+        <SidebarDivider />
+        <SidebarSectionLabel label="Mid-Strategy" />
+        {!collapsed ? (
+          <div className="px-1 py-1">
+            <Link
+              href="/eval-sheets"
+              className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition-colors"
+              data-testid="link-eval-sheets"
+            >
+              <BarChart3 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+              <span className="text-xs text-foreground">Evaluation Sheets</span>
+            </Link>
+            <Link
+              href="/mid-strategy-deck"
+              className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition-colors"
+              data-testid="link-mid-strategy-deck"
+            >
+              <Presentation className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+              <span className="text-xs text-foreground">Mid-Strategy Deck</span>
+            </Link>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-1 py-1">
+            <Link href="/eval-sheets" title="Evaluation Sheets">
+              <button className="p-1.5 rounded hover:bg-muted transition-colors" data-testid="link-eval-sheets-collapsed">
+                <BarChart3 className="w-4 h-4 text-muted-foreground" />
+              </button>
+            </Link>
+            <Link href="/mid-strategy-deck" title="Mid-Strategy Deck">
+              <button className="p-1.5 rounded hover:bg-muted transition-colors" data-testid="link-mid-strategy-deck-collapsed">
+                <Presentation className="w-4 h-4 text-muted-foreground" />
+              </button>
+            </Link>
+          </div>
+        )}
 
         {showAdmin && (
           <>

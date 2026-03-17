@@ -15,6 +15,12 @@ import {
   findingHistory,
   reportTemplateSections,
   clientCompetitors,
+  evalBatches,
+  evalCompetitorRows,
+  evalCrawlRows,
+  evalSummaryRows,
+  evalSourceImports,
+  midStrategyDecks,
   type FindingHistory,
   type InsertFindingHistory,
   type Client,
@@ -43,6 +49,15 @@ import {
   type ReportTemplateSection,
   type InsertReportTemplateSection,
   type ClientCompetitor,
+  type EvalBatch,
+  type InsertEvalBatch,
+  type EvalCompetitorRow,
+  type InsertEvalCompetitorRow,
+  type EvalCrawlRow,
+  type EvalSummaryRow,
+  type EvalSourceImport,
+  type MidStrategyDeck,
+  type InsertMidStrategyDeck,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -117,6 +132,41 @@ export interface IStorage {
   // Finding History (Cross-Period Memory)
   saveFindingHistoryBatch(rows: InsertFindingHistory[]): Promise<void>;
   queryFindingHistory(clientId: number, reportType: string): Promise<FindingHistory[]>;
+
+  // Evaluation Batches (Mid-Strategy Evaluation Sheets)
+  listEvalBatches(clientId?: number): Promise<EvalBatch[]>;
+  getEvalBatch(id: number): Promise<EvalBatch | undefined>;
+  createEvalBatch(data: InsertEvalBatch): Promise<EvalBatch>;
+  updateEvalBatch(id: number, data: Partial<InsertEvalBatch>): Promise<EvalBatch | undefined>;
+  deleteEvalBatch(id: number): Promise<boolean>;
+
+  // Eval Competitor Rows
+  getEvalCompetitorRows(evalBatchId: number): Promise<EvalCompetitorRow[]>;
+  upsertEvalCompetitorRow(data: InsertEvalCompetitorRow & { id?: number }): Promise<EvalCompetitorRow>;
+  deleteEvalCompetitorRow(id: number): Promise<boolean>;
+  replaceEvalCompetitorRows(evalBatchId: number, rows: Omit<InsertEvalCompetitorRow, "evalBatchId">[]): Promise<EvalCompetitorRow[]>;
+
+  // Eval Crawl Rows
+  getEvalCrawlRows(evalBatchId: number): Promise<EvalCrawlRow[]>;
+  bulkInsertEvalCrawlRows(rows: Omit<EvalCrawlRow, "id" | "createdAt">[]): Promise<void>;
+  deleteEvalCrawlRows(evalBatchId: number): Promise<void>;
+  updateEvalCrawlRowCategory(id: number, category: string): Promise<void>;
+
+  // Eval Summary Rows
+  getEvalSummaryRows(evalBatchId: number, tableType: string): Promise<EvalSummaryRow[]>;
+  replaceEvalSummaryRows(evalBatchId: number, tableType: string, rows: { category: string; data: any; notes?: string }[]): Promise<void>;
+
+  // Eval Source Imports
+  getEvalSourceImports(evalBatchId: number): Promise<EvalSourceImport[]>;
+  createEvalSourceImport(data: Omit<EvalSourceImport, "id" | "createdAt">): Promise<EvalSourceImport>;
+  updateEvalSourceImport(id: number, data: Partial<Omit<EvalSourceImport, "id" | "createdAt">>): Promise<void>;
+
+  // Mid-Strategy Decks
+  listMidStrategyDecks(clientId?: number): Promise<MidStrategyDeck[]>;
+  getMidStrategyDeck(id: number): Promise<MidStrategyDeck | undefined>;
+  createMidStrategyDeck(data: InsertMidStrategyDeck): Promise<MidStrategyDeck>;
+  updateMidStrategyDeck(id: number, data: Partial<InsertMidStrategyDeck>): Promise<MidStrategyDeck | undefined>;
+  deleteMidStrategyDeck(id: number): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -548,6 +598,143 @@ export class DatabaseStorage implements IStorage {
         ),
       )
       .orderBy(desc(findingHistory.seenAt));
+  }
+
+  // ─── Evaluation Batches ──────────────────────────────────────────────────────
+
+  async listEvalBatches(clientId?: number): Promise<EvalBatch[]> {
+    if (clientId !== undefined) {
+      return db.select().from(evalBatches).where(eq(evalBatches.clientId, clientId)).orderBy(desc(evalBatches.createdAt));
+    }
+    return db.select().from(evalBatches).orderBy(desc(evalBatches.createdAt));
+  }
+
+  async getEvalBatch(id: number): Promise<EvalBatch | undefined> {
+    const [row] = await db.select().from(evalBatches).where(eq(evalBatches.id, id)).limit(1);
+    return row;
+  }
+
+  async createEvalBatch(data: InsertEvalBatch): Promise<EvalBatch> {
+    const [row] = await db.insert(evalBatches).values(data).returning();
+    return row;
+  }
+
+  async updateEvalBatch(id: number, data: Partial<InsertEvalBatch>): Promise<EvalBatch | undefined> {
+    const [row] = await db.update(evalBatches).set({ ...data, updatedAt: new Date() }).where(eq(evalBatches.id, id)).returning();
+    return row;
+  }
+
+  async deleteEvalBatch(id: number): Promise<boolean> {
+    const res = await db.delete(evalBatches).where(eq(evalBatches.id, id));
+    return (res.rowCount ?? 0) > 0;
+  }
+
+  // ─── Eval Competitor Rows ────────────────────────────────────────────────────
+
+  async getEvalCompetitorRows(evalBatchId: number): Promise<EvalCompetitorRow[]> {
+    return db.select().from(evalCompetitorRows).where(eq(evalCompetitorRows.evalBatchId, evalBatchId)).orderBy(evalCompetitorRows.rowOrder);
+  }
+
+  async upsertEvalCompetitorRow(data: InsertEvalCompetitorRow & { id?: number }): Promise<EvalCompetitorRow> {
+    if (data.id) {
+      const { id, ...rest } = data;
+      const [row] = await db.update(evalCompetitorRows).set({ ...rest, updatedAt: new Date() }).where(eq(evalCompetitorRows.id, id)).returning();
+      return row;
+    }
+    const [row] = await db.insert(evalCompetitorRows).values(data).returning();
+    return row;
+  }
+
+  async deleteEvalCompetitorRow(id: number): Promise<boolean> {
+    const res = await db.delete(evalCompetitorRows).where(eq(evalCompetitorRows.id, id));
+    return (res.rowCount ?? 0) > 0;
+  }
+
+  async replaceEvalCompetitorRows(evalBatchId: number, rows: Omit<InsertEvalCompetitorRow, "evalBatchId">[]): Promise<EvalCompetitorRow[]> {
+    await db.delete(evalCompetitorRows).where(eq(evalCompetitorRows.evalBatchId, evalBatchId));
+    if (!rows.length) return [];
+    const toInsert = rows.map((r, i) => ({ ...r, evalBatchId, rowOrder: i }));
+    return db.insert(evalCompetitorRows).values(toInsert).returning();
+  }
+
+  // ─── Eval Crawl Rows ─────────────────────────────────────────────────────────
+
+  async getEvalCrawlRows(evalBatchId: number): Promise<EvalCrawlRow[]> {
+    return db.select().from(evalCrawlRows).where(eq(evalCrawlRows.evalBatchId, evalBatchId)).orderBy(evalCrawlRows.id);
+  }
+
+  async bulkInsertEvalCrawlRows(rows: Omit<EvalCrawlRow, "id" | "createdAt">[]): Promise<void> {
+    if (!rows.length) return;
+    const CHUNK = 200;
+    for (let i = 0; i < rows.length; i += CHUNK) {
+      await db.insert(evalCrawlRows).values(rows.slice(i, i + CHUNK) as any);
+    }
+  }
+
+  async deleteEvalCrawlRows(evalBatchId: number): Promise<void> {
+    await db.delete(evalCrawlRows).where(eq(evalCrawlRows.evalBatchId, evalBatchId));
+  }
+
+  async updateEvalCrawlRowCategory(id: number, category: string): Promise<void> {
+    await db.update(evalCrawlRows).set({ manualCategoryOverride: category, pageCategory: category }).where(eq(evalCrawlRows.id, id));
+  }
+
+  // ─── Eval Summary Rows ───────────────────────────────────────────────────────
+
+  async getEvalSummaryRows(evalBatchId: number, tableType: string): Promise<EvalSummaryRow[]> {
+    return db.select().from(evalSummaryRows)
+      .where(and(eq(evalSummaryRows.evalBatchId, evalBatchId), eq(evalSummaryRows.tableType, tableType)))
+      .orderBy(evalSummaryRows.rowOrder);
+  }
+
+  async replaceEvalSummaryRows(evalBatchId: number, tableType: string, rows: { category: string; data: any; notes?: string }[]): Promise<void> {
+    await db.delete(evalSummaryRows).where(and(eq(evalSummaryRows.evalBatchId, evalBatchId), eq(evalSummaryRows.tableType, tableType)));
+    if (!rows.length) return;
+    await db.insert(evalSummaryRows).values(rows.map((r, i) => ({ evalBatchId, tableType, rowOrder: i, category: r.category, data: r.data, notes: r.notes ?? null })));
+  }
+
+  // ─── Eval Source Imports ─────────────────────────────────────────────────────
+
+  async getEvalSourceImports(evalBatchId: number): Promise<EvalSourceImport[]> {
+    return db.select().from(evalSourceImports).where(eq(evalSourceImports.evalBatchId, evalBatchId)).orderBy(desc(evalSourceImports.createdAt));
+  }
+
+  async createEvalSourceImport(data: Omit<EvalSourceImport, "id" | "createdAt">): Promise<EvalSourceImport> {
+    const [row] = await db.insert(evalSourceImports).values(data as any).returning();
+    return row;
+  }
+
+  async updateEvalSourceImport(id: number, data: Partial<Omit<EvalSourceImport, "id" | "createdAt">>): Promise<void> {
+    await db.update(evalSourceImports).set(data as any).where(eq(evalSourceImports.id, id));
+  }
+
+  // ─── Mid-Strategy Decks ──────────────────────────────────────────────────────
+
+  async listMidStrategyDecks(clientId?: number): Promise<MidStrategyDeck[]> {
+    if (clientId !== undefined) {
+      return db.select().from(midStrategyDecks).where(eq(midStrategyDecks.clientId, clientId)).orderBy(desc(midStrategyDecks.createdAt));
+    }
+    return db.select().from(midStrategyDecks).orderBy(desc(midStrategyDecks.createdAt));
+  }
+
+  async getMidStrategyDeck(id: number): Promise<MidStrategyDeck | undefined> {
+    const [row] = await db.select().from(midStrategyDecks).where(eq(midStrategyDecks.id, id)).limit(1);
+    return row;
+  }
+
+  async createMidStrategyDeck(data: InsertMidStrategyDeck): Promise<MidStrategyDeck> {
+    const [row] = await db.insert(midStrategyDecks).values(data).returning();
+    return row;
+  }
+
+  async updateMidStrategyDeck(id: number, data: Partial<InsertMidStrategyDeck>): Promise<MidStrategyDeck | undefined> {
+    const [row] = await db.update(midStrategyDecks).set({ ...data, updatedAt: new Date() }).where(eq(midStrategyDecks.id, id)).returning();
+    return row;
+  }
+
+  async deleteMidStrategyDeck(id: number): Promise<boolean> {
+    const res = await db.delete(midStrategyDecks).where(eq(midStrategyDecks.id, id));
+    return (res.rowCount ?? 0) > 0;
   }
 }
 

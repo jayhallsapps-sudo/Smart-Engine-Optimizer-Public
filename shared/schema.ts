@@ -688,3 +688,195 @@ export const SERVICE_CONFIGS: ServiceConfig[] = [
     ],
   },
 ];
+
+// ─── Mid-Strategy Evaluation Sheets ──────────────────────────────────────────
+
+export const EVAL_BATCH_STATUSES = ["draft", "ready", "linked", "archived"] as const;
+export type EvalBatchStatus = typeof EVAL_BATCH_STATUSES[number];
+
+export const evalBatches = pgTable("eval_batches", {
+  id: serial("id").primaryKey(),
+  clientId: integer("client_id").notNull().references(() => clients.id, { onDelete: "cascade" }),
+  clientNameSnapshot: text("client_name_snapshot").notNull().default(""),
+  evaluationName: text("evaluation_name").notNull(),
+  evaluationDate: text("evaluation_date").notNull(),
+  preparedBy: text("prepared_by").notNull().default(""),
+  status: varchar("status", { length: 32 }).notNull().default("draft"),
+  linkedMidStrategyDeckId: integer("linked_mid_strategy_deck_id"),
+  categoryRules: jsonb("category_rules"),
+  crawlUploadId: integer("crawl_upload_id"),
+  dataSourcesUsed: text("data_sources_used").array().default(sql`'{}'::text[]`),
+  enrichmentStatus: text("enrichment_status").notNull().default("pending"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => [
+  index("eval_batches_client_idx").on(t.clientId),
+]);
+
+export const insertEvalBatchSchema = createInsertSchema(evalBatches).omit({
+  id: true, createdAt: true, updatedAt: true,
+});
+export type EvalBatch = typeof evalBatches.$inferSelect;
+export type InsertEvalBatch = z.infer<typeof insertEvalBatchSchema>;
+
+// Competitor rows in the Main Evaluation sheet
+export const evalCompetitorRows = pgTable("eval_competitor_rows", {
+  id: serial("id").primaryKey(),
+  evalBatchId: integer("eval_batch_id").notNull().references(() => evalBatches.id, { onDelete: "cascade" }),
+  rowOrder: integer("row_order").notNull().default(0),
+  isClient: boolean("is_client").notNull().default(false),
+  name: text("name").notNull(),
+  websiteUrl: text("website_url").notNull().default(""),
+  // Raw metrics (stored as strings to handle dashes/MNE/formatted numbers)
+  metrics: jsonb("metrics").notNull().default({}),
+  // Computed/derived metrics
+  computed: jsonb("computed").notNull().default({}),
+  // Rank columns (per-metric rank within this batch)
+  ranks: jsonb("ranks").notNull().default({}),
+  // Source traceability: which tool provided each metric
+  sourceTrace: jsonb("source_trace").notNull().default({}),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => [
+  index("eval_competitor_rows_batch_idx").on(t.evalBatchId),
+]);
+
+export const insertEvalCompetitorRowSchema = createInsertSchema(evalCompetitorRows).omit({
+  id: true, createdAt: true, updatedAt: true,
+});
+export type EvalCompetitorRow = typeof evalCompetitorRows.$inferSelect;
+export type InsertEvalCompetitorRow = z.infer<typeof insertEvalCompetitorRowSchema>;
+
+// Crawl data rows (from Screaming Frog upload or future crawl engine)
+export const evalCrawlRows = pgTable("eval_crawl_rows", {
+  id: serial("id").primaryKey(),
+  evalBatchId: integer("eval_batch_id").notNull().references(() => evalBatches.id, { onDelete: "cascade" }),
+  url: text("url").notNull(),
+  pageCategory: text("page_category").notNull().default("Other"),
+  manualCategoryOverride: text("manual_category_override"),
+  tier: text("tier"),
+  // All crawl fields stored in flexible JSON
+  crawlFields: jsonb("crawl_fields").notNull().default({}),
+  // Performance fields from GSC/GA4
+  performanceFields: jsonb("performance_fields").notNull().default({}),
+  // Source: "screaming_frog_upload" | "enriched_gsc" | "enriched_ga4" | "enriched_ahrefs"
+  dataSource: text("data_source").notNull().default("screaming_frog_upload"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [
+  index("eval_crawl_rows_batch_idx").on(t.evalBatchId),
+  index("eval_crawl_rows_batch_url_idx").on(t.evalBatchId, t.url),
+]);
+
+export type EvalCrawlRow = typeof evalCrawlRows.$inferSelect;
+
+// Derived summary tables: Pivot Table 2, Clicks Distribution, Traffic Distribution
+export const evalSummaryRows = pgTable("eval_summary_rows", {
+  id: serial("id").primaryKey(),
+  evalBatchId: integer("eval_batch_id").notNull().references(() => evalBatches.id, { onDelete: "cascade" }),
+  tableType: varchar("table_type", { length: 32 }).notNull(), // "pivot2" | "clicks_dist" | "traffic_dist"
+  rowOrder: integer("row_order").notNull().default(0),
+  category: text("category").notNull(),
+  data: jsonb("data").notNull().default({}),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [
+  index("eval_summary_rows_batch_type_idx").on(t.evalBatchId, t.tableType),
+]);
+
+export type EvalSummaryRow = typeof evalSummaryRows.$inferSelect;
+
+// Source import tracking
+export const evalSourceImports = pgTable("eval_source_imports", {
+  id: serial("id").primaryKey(),
+  evalBatchId: integer("eval_batch_id").notNull().references(() => evalBatches.id, { onDelete: "cascade" }),
+  sourceType: varchar("source_type", { length: 64 }).notNull(), // "screaming_frog_upload" | "ahrefs_pull" | "semrush_pull" | "gsc_pull" | "ga4_pull" | "whois_lookup" | "wayback_lookup"
+  sourceTool: varchar("source_tool", { length: 64 }).notNull(),
+  fileName: text("file_name"),
+  uploadedAt: timestamp("uploaded_at"),
+  fetchRunId: text("fetch_run_id"),
+  parseStatus: varchar("parse_status", { length: 32 }).notNull().default("pending"), // "pending" | "success" | "failed" | "partial"
+  enrichmentStatus: varchar("enrichment_status", { length: 32 }).notNull().default("pending"),
+  rowCount: integer("row_count").notNull().default(0),
+  rawPayload: jsonb("raw_payload"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [
+  index("eval_source_imports_batch_idx").on(t.evalBatchId),
+]);
+
+export type EvalSourceImport = typeof evalSourceImports.$inferSelect;
+
+// Mid-Strategy Deck records (the generated slide deck, linked to eval batch)
+export const MID_STRATEGY_DECK_STATUSES = ["not_generated", "draft", "finalized"] as const;
+export type MidStrategyDeckStatus = typeof MID_STRATEGY_DECK_STATUSES[number];
+
+export const midStrategyDecks = pgTable("mid_strategy_decks", {
+  id: serial("id").primaryKey(),
+  clientId: integer("client_id").notNull().references(() => clients.id, { onDelete: "cascade" }),
+  evalBatchId: integer("eval_batch_id").references(() => evalBatches.id, { onDelete: "set null" }),
+  reportName: text("report_name").notNull(),
+  reportStatus: varchar("report_status", { length: 32 }).notNull().default("not_generated"),
+  reportDate: text("report_date").notNull(),
+  preparedBy: text("prepared_by").notNull().default(""),
+  slidesJson: jsonb("slides_json"),
+  editsJson: jsonb("edits_json"),
+  iaStructureJson: jsonb("ia_structure_json"), // IA nav/blueprint data
+  slideContentJson: jsonb("slide_content_json"), // generated slide content/narrative
+  exportPayload: jsonb("export_payload"),
+  generatedAt: timestamp("generated_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => [
+  index("mid_strategy_decks_client_idx").on(t.clientId),
+  index("mid_strategy_decks_eval_idx").on(t.evalBatchId),
+]);
+
+export const insertMidStrategyDeckSchema = createInsertSchema(midStrategyDecks).omit({
+  id: true, createdAt: true, updatedAt: true,
+});
+export type MidStrategyDeck = typeof midStrategyDecks.$inferSelect;
+export type InsertMidStrategyDeck = z.infer<typeof insertMidStrategyDeckSchema>;
+
+// ─── Metric Registry Types ────────────────────────────────────────────────────
+
+export interface MetricDefinition {
+  metricKey: string;
+  label: string;
+  sourceTool: string;
+  sourceType: "integration" | "derived" | "uploaded" | "web_retrieval" | "system";
+  retrievalMethod?: string;
+  calculationFormula?: string;
+  rankDirection: "desc" | "asc"; // desc = higher is better
+  refreshable: boolean;
+  fallbackBehavior?: string;
+  notes?: string;
+}
+
+// ─── IA Structure Types ───────────────────────────────────────────────────────
+
+export interface IANavItem {
+  id: string;
+  label: string;
+  slug: string;
+  parentId?: string;
+  order: number;
+  type: "normal" | "cta" | "dropdown";
+  emphasis?: string;
+  visible: boolean;
+  children?: IANavItem[];
+}
+
+export interface IAHubPage {
+  slug: string;
+  label: string;
+  children: { slug: string; label: string; subChildren?: { slug: string; label: string }[] }[];
+}
+
+export interface IAStructure {
+  currentNav: IANavItem[];
+  futureNav: IANavItem[];
+  contentHubs: IAHubPage[];
+  aboutSubpages: { slug: string; label: string }[];
+  resourcesSubpages: { slug: string; label: string }[];
+}

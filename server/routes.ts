@@ -831,18 +831,26 @@ export async function registerRoutes(
         return res.json({ competitors: [], message: "No Ahrefs credentials configured." });
       }
       const token = decrypt(tokenCred.encryptedValue);
-      const targetDomain = client.ahrefsProjectUrl.replace(/^https?:\/\//, "").replace(/\/$/, "");
+      const { extractDomain } = await import("./googleToken");
+      const targetDomain = extractDomain(client.ahrefsProjectUrl) ?? client.ahrefsProjectUrl.replace(/^https?:\/\//, "").replace(/\/$/, "");
+      const qs = new URLSearchParams({
+        select: "domain,common_keywords,competition_level",
+        target: targetDomain,
+        mode: "domain",
+        limit: "10",
+      }).toString();
       const ahrefsRes = await fetch(
-        `https://api.ahrefs.com/v3/site-explorer/competitors-overview?target=${encodeURIComponent(targetDomain)}&select=competitor,common_keywords&limit=10`,
-        { headers: { Authorization: `Bearer ${token}` } }
+        `https://api.ahrefs.com/v3/site-explorer/competing-domains?${qs}`,
+        { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } }
       );
       if (!ahrefsRes.ok) {
-        return res.json({ competitors: [], message: `Ahrefs returned ${ahrefsRes.status}` });
+        const body = await ahrefsRes.text();
+        return res.json({ competitors: [], message: `Ahrefs returned ${ahrefsRes.status}: ${body.substring(0, 200)}` });
       }
       const ahrefsData = await ahrefsRes.json();
-      const competitors = (ahrefsData?.competitors ?? []).slice(0, 10).map((c: any) => ({
-        name: c.competitor ?? "",
-        url: c.competitor ? `https://${c.competitor}` : "",
+      const competitors = (ahrefsData?.domains ?? []).slice(0, 10).map((c: any) => ({
+        name: c.domain ?? "",
+        url: c.domain ? `https://${c.domain}` : "",
       }));
       res.json({ competitors });
     } catch (err: any) {

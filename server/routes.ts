@@ -830,7 +830,6 @@ export async function registerRoutes(
       if (!tokenCred) {
         return res.json({ competitors: [], message: "No Ahrefs credentials configured." });
       }
-      const { decrypt } = await import("./encryption");
       const token = decrypt(tokenCred.encryptedValue);
       const targetDomain = client.ahrefsProjectUrl.replace(/^https?:\/\//, "").replace(/\/$/, "");
       const ahrefsRes = await fetch(

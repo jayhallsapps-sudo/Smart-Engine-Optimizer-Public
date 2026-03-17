@@ -95,7 +95,7 @@ const MODULES: ModuleCard[] = [
     description: "Structured keyword research aligned to business goals, search intent, and conversion outcomes.",
     href: "/discoverability",
     status: "live",
-    accentColor: "#1B3A6B",
+    accentColor: "#EA580C",
     group: "primary",
   },
   {

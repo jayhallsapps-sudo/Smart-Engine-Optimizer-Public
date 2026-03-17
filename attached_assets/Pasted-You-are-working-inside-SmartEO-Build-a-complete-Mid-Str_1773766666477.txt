@@ -1,0 +1,2197 @@
+You are working inside SmartEO. Build a complete Mid-Strategy reporting workflow consisting of two connected systems:
+
+Evaluation Sheets module
+
+Mid-Strategy Report generator
+
+The goal is to make this work the same way our other report systems do in terms of saved records, editability, rendering quality, and printable/exportable presentation, but adapted for a slide-deck style output.
+
+The system must be reusable for any client. Bliss is the seeded example and reference structure, not a hardcoded one-client build.
+
+PART 1: CORE OBJECTIVE
+
+We need a robust feature that lets a user:
+
+create and save a batched Mid-Strategy Evaluation Sheet set
+
+populate it automatically from integrations, web retrieval, formulas, and crawl data
+
+support manual upload/import of Screaming Frog crawl exports until SmartEO has its own crawl engine
+
+preserve formulas, rankings, and chart-ready outputs
+
+link a saved evaluation batch to a Mid-Strategy Report record
+
+generate a slide-deck-style report from that linked evaluation batch
+
+allow manual editing of all generated text fields after generation
+
+preserve charts, tables, and visual sections inside the report
+
+support export/print in the same polished way our other reports do
+
+Do not build this as a one-off Bliss-only feature. Build it as a reusable system.
+
+PART 2: HIGH-LEVEL PRODUCT REQUIREMENTS
+A. New module: Evaluation Sheets
+
+Add a new core module in Command Center called:
+
+Mid-Strategy Evaluation Sheets
+
+This module should sit alongside the rest of the reporting and report-prep infrastructure, not inside the report generator itself.
+
+The Evaluation Sheets module is where the user creates and manages the source data batch that later powers a Mid-Strategy Report.
+
+Each saved evaluation batch must represent one named project snapshot for one client.
+
+Example:
+
+Client: Bliss Recovery
+
+Eval Batch Name: Bliss Mid-Strategy March 2026
+
+Status: Draft / Linked / Report Generated
+
+Each evaluation batch must be saveable independently from the report.
+
+B. Linking workflow
+
+Once an Evaluation Sheet batch is created and saved, the user must be able to link it to a Mid-Strategy Report.
+
+In the Evaluation Sheets list view, add an action like:
+
+Link to Mid-Strategy Report
+
+When clicked, the system should:
+
+create a new report-generation record
+
+assign the selected evaluation batch to that report
+
+name the report based on the batch name unless manually overridden
+
+place the report into the Mid-Strategy Report list as “Not Generated Yet” or equivalent pending state
+
+Then, when the user opens that pending report, the system generates the Mid-Strategy slide deck using the linked evaluation batch.
+
+This linkage is one-directional in terms of data source:
+
+Evaluation batch is the source of truth for metrics, tables, charts, and citations
+
+Mid-Strategy Report is the presentation layer built from that linked source
+
+PART 3: NON-NEGOTIABLE AUTOMATION RULE
+
+The Mid-Strategy Evaluation Sheets must be fully automated wherever possible.
+
+The user should not have to manually populate evaluation metrics. Every field in the Evaluation Sheets must be sourced from one of the following:
+
+an existing SmartEO integration
+
+a crawl run inside SmartEO when available in the future
+
+a manual Screaming Frog export upload for crawl-based data until SmartEO has its own crawl feature
+
+a web retrieval task
+
+a system-generated formula or calculation
+
+a derived rollup from imported raw data
+
+an Ahrefs or SEMrush fallback where uploaded crawl data does not contain required information
+
+Manual entry should be limited to:
+
+selecting the client
+
+selecting competitors
+
+uploading Screaming Frog crawl exports where needed
+
+optional overrides for page category classification
+
+optional editing of report narrative after generation
+
+optional editing of navigation and IA structures for recommendation slides
+
+Do not build the Evaluation Sheets as manual spreadsheet-entry tools. Build them as auto-populated analytical sheets backed by integrations, uploads, and formulas.
+
+PART 4: REQUIRED EVALUATION SHEETS STRUCTURE
+
+Each evaluation batch must support the following connected tables or sheets:
+
+Main Evaluation
+
+Crawl Data
+
+Pivot Table 2
+
+Clicks Distribution
+
+Traffic Distribution
+
+These can be implemented as tabbed subviews, sheet-like tables, or internal structured datasets that visually behave like sheets.
+
+They must feel like connected spreadsheet tabs, not unrelated forms.
+
+PART 5: DATA SOURCE RULES BY SHEET
+1. Main Evaluation sheet
+
+Each metric in Main Evaluation must include:
+
+metric name
+
+source tool
+
+source type
+
+retrieval method
+
+refresh behavior
+
+formula behavior if derived
+
+Build a metric registry so each metric knows exactly where it comes from.
+
+A. Domain / authority / archive metrics
+WHOIS Reg
+
+Source:
+
+web retrieval
+Tool:
+
+AI web retrieval against public WHOIS source
+Preferred sources:
+
+GoDaddy Whois or equivalent public WHOIS provider
+Method:
+
+search the domain and extract registration date
+Notes:
+
+if exact registration date cannot be reliably retrieved, flag for fallback review, but system must attempt automatically first
+
+Age
+
+Source:
+
+system calculation
+Formula:
+
+Age = current date - WHOIS Reg date
+
+First Archive
+
+Source:
+
+web retrieval
+Tool:
+
+Wayback Machine lookup
+Method:
+
+retrieve earliest archived snapshot date for the domain
+
+Archive Age
+
+Source:
+
+system calculation
+Formula:
+
+Archive Age = current date - First Archive date
+
+B. Ahrefs-based metrics
+
+Use Ahrefs integration or Ahrefs batch analysis where the screenshots indicate Ahrefs.
+
+DR
+
+Source:
+
+Ahrefs batch analysis
+
+Referring Domains
+
+Source:
+
+Ahrefs batch analysis
+
+Backlinks
+
+Source:
+
+Ahrefs batch analysis
+
+Organic Traffic
+
+Source:
+
+Ahrefs batch analysis
+
+Organic Keywords
+
+Source:
+
+Ahrefs batch analysis
+
+Top 10 Keywords
+
+Source:
+
+Ahrefs batch analysis
+Method:
+
+if Ahrefs returns Top 1-3 and Top 4-10 buckets separately, calculate Top 10 as combined total
+
+C. SEMrush-based AI / keyword metrics
+
+Use SEMrush where the screenshots indicate SEMrush.
+
+AI Visibility Score
+
+Source:
+
+SEMrush AI tool
+
+Mentions (AI Responses)
+
+Source:
+
+SEMrush AI tool
+
+Cited Sources
+
+Source:
+
+SEMrush AI tool
+
+Informational Keywords
+
+Source:
+
+SEMrush organic rankings dataset, US only, filtered to informational keywords
+Method:
+
+use stored filter definition for informational intent
+
+make this a reproducible query, not manual export cleanup
+
+Featured Snippet / AIO
+
+Source:
+
+SEMrush organic keyword report
+Method:
+
+apply SERP feature filters for Featured Snippet, AI Overview, or equivalent feature flags available through SEMrush
+
+use current included target list / overview / any matching feature rules
+
+D. Google / indexation / crawl metrics
+Indexed Pages
+
+Source priority:
+
+Google indexation query or site:domain estimate if this is the current workflow
+
+URL inspection / indexed URL rollup if available
+
+Screaming Frog uploaded crawl plus inspection status enrichment
+Rule:
+
+build this as a retrievable metric, not manual entry
+
+Crawl Data
+
+Source priority:
+
+manual Screaming Frog export upload for now
+
+SmartEO crawl engine later when built
+
+supplemental enrichment from Ahrefs / SEMrush / GSC / GA4 where applicable
+
+Coverage / Indexability / Technical page-level fields
+
+Source priority:
+
+Screaming Frog upload
+
+GSC URL inspection / coverage data where available
+
+Ahrefs / SEMrush fallback if the required field is missing and either tool can supply a close equivalent
+Rule:
+
+if SF upload does not provide a required field, the system should attempt to enrich the row from Ahrefs or SEMrush before flagging the field as unavailable
+
+E. Google Search Console metrics
+Clicks
+
+Source:
+
+GSC integration
+Level:
+
+URL-level, then category rollup
+
+Impressions
+
+Source:
+
+GSC integration
+
+CTR
+
+Source:
+
+GSC integration
+
+Position
+
+Source:
+
+GSC integration
+
+These populate Crawl Data and feed Clicks Distribution.
+
+F. Google Analytics 4 metrics
+Sessions
+
+Source:
+
+GA4 integration
+
+Views
+
+Source:
+
+GA4 integration
+
+Engagement metrics
+
+Source:
+
+GA4 integration
+
+These populate Crawl Data and feed Traffic Distribution.
+
+PART 6: DERIVED / FORMULA METRICS
+
+The following should be calculated by the system, not manually entered.
+
+Rank columns
+
+For each benchmark metric:
+
+compute competitor rank automatically
+
+support consistent rank direction rules
+
+higher is better for DR, traffic, keywords, mentions, citations, indexed pages, etc.
+
+lower is better only where explicitly configured
+
+Use metric config to determine ascending vs descending rank behavior.
+
+Mean / Median / Max / Min
+
+For each benchmark metric column:
+
+calculate automatically across competitor rows
+
+KW Velocity
+
+Formula:
+
+Organic Keywords / Age
+Interpretation:
+
+growth rate of ranking keywords per year
+
+Snippet Velocity
+
+Formula:
+
+Featured Snippet count or snippet count / Age
+Interpretation:
+
+snippet growth rate per year
+
+RD Velocity
+
+Formula:
+
+Referring Domains / Age
+Interpretation:
+
+growth rate of referring domains per year
+
+Content Velocity
+
+Formula:
+
+Indexed Pages / Age
+Interpretation:
+
+growth rate of indexed pages per year
+
+KW Yield
+
+Formula:
+
+Organic Traffic / Organic Keywords
+Interpretation:
+
+traffic efficiency per ranking keyword
+
+Snippet Yield
+
+Formula:
+
+Organic Traffic / Featured Snippets
+Interpretation:
+
+traffic efficiency per snippet earned
+
+Mention Rate (%)
+
+Formula:
+
+Mentions / Cited Sources
+Interpretation:
+
+when mentioned in AI responses, how often also cited as a trusted source
+Guardrails:
+
+protect against divide-by-zero
+
+RD Yield
+
+Formula:
+
+Organic Traffic / Referring Domains
+Interpretation:
+
+traffic efficiency per referring domain
+
+Content Yield
+
+Formula:
+
+Organic Traffic / Indexed Pages
+Interpretation:
+
+traffic efficiency per indexed page
+
+Backlink Density
+
+Formula:
+
+Backlinks / Referring Domains
+Interpretation:
+
+backlink concentration per referring domain
+
+Informational Density
+
+Formula:
+
+Informational Keywords / Total Organic Keywords
+Interpretation:
+
+share of keyword portfolio focused on informational intent
+
+Final Score
+
+Source:
+
+system-calculated composite score
+Method:
+
+weighted score across benchmark metrics
+Implementation:
+
+make weights configurable in metric registry, not hardcoded
+
+Average Rank
+
+Source:
+
+system calculation
+Formula:
+
+average of rank columns across selected benchmark metrics
+
+Overall Rank
+
+Source:
+
+system calculation
+Formula:
+
+rank of Average Rank or Final Score according to configured logic
+
+PART 7: CRAWL DATA INGESTION AND SCREAMING FROG UPLOAD SUPPORT
+
+This is mandatory.
+
+SmartEO does not yet have its own Screaming Frog clone or internal crawl engine for this workflow, so the system must support importing manual Screaming Frog crawl exports.
+
+A. Required user flow
+
+Inside the Evaluation Batch editor, the user must be able to:
+
+upload a Screaming Frog export file
+
+choose the file type if needed
+
+map the uploaded dataset to Crawl Data
+
+save the upload as the crawl source for the evaluation batch
+
+rerun enrichment after upload
+
+Accepted source formats should include the common export structures used by Screaming Frog, ideally CSV and XLSX.
+
+B. Imported fields from Screaming Frog
+
+The system should ingest as many crawl fields as are available from the uploaded file, including but not limited to:
+
+Address / URL
+
+Content Type
+
+Status Code
+
+Status
+
+Indexability
+
+Indexability Status
+
+Title 1
+
+Title 1 Length
+
+Title 1 Pixel Width
+
+Meta Description 1
+
+Meta Description 1 Length
+
+Meta Description 1 Pixel Width
+
+H1-1
+
+H1-1 Length
+
+H2-1
+
+H2-1 Length
+
+H2-2
+
+H2-2 Length
+
+Meta Robots 1
+
+X-Robots-Tag
+
+Canonical Link Element 1
+
+rel next 1
+
+rel prev 1
+
+Inlinks
+
+Unique Inlinks
+
+Outlinks
+
+Unique Outlinks
+
+External Outlinks
+
+Unique External Outlinks
+
+Response Time
+
+Last Modified
+
+Redirect URL
+
+Coverage if available
+
+crawl/indexation/mobile/rich result related fields if present in export
+
+Do not assume every upload will include all fields.
+
+C. Enrichment rule for missing crawl fields
+
+If the uploaded Screaming Frog export does not contain a needed field for downstream reporting, the system must try to fill the gap using:
+
+Ahrefs
+
+SEMrush
+
+GSC
+
+GA4
+
+web retrieval where appropriate
+
+Examples:
+
+if crawl export lacks useful indexation support data, enrich from GSC inspection/coverage where possible
+
+if crawl export lacks supporting keyword or traffic context, enrich from Ahrefs or SEMrush
+
+if crawl export lacks page-level performance context, enrich from GSC and GA4
+
+if crawl export lacks metadata useful for narrative interpretation but the URL exists in Ahrefs or SEMrush landing page data, use that to supplement
+
+Do not leave blanks immediately if a secondary integrated tool can provide equivalent or near-equivalent support.
+
+D. Source precedence for Crawl Data rows
+
+For page-level technical fields:
+
+Screaming Frog upload
+
+GSC inspection / coverage
+
+Ahrefs / SEMrush enrichment
+
+system-derived calculation
+
+For page-level performance fields:
+
+GSC
+
+GA4
+
+Ahrefs / SEMrush enrichment if necessary
+
+E. Future-proofing
+
+Build this upload architecture so that when SmartEO has its own crawl engine later, the system can swap source priority to:
+
+SmartEO crawl engine
+
+Screaming Frog upload fallback
+
+enrichment tools
+
+PART 8: CRAWL DATA SHEET
+
+The Crawl Data sheet must store the page-level crawl export for the evaluated client site.
+
+It should support hundreds or thousands of rows.
+
+Required characteristics:
+
+large tabular dataset
+
+filterable
+
+sortable
+
+searchable
+
+supports highlighting / conditional formatting style flags
+
+supports category mapping used later by Pivot Table 2 and distribution sheets
+
+Expected data types visible in screenshots
+
+Support fields such as:
+
+Address / URL
+
+Tier
+
+Page Category
+
+Content Type
+
+Status Code
+
+Status
+
+Indexability
+
+Title 1
+
+Title length
+
+Title pixel width
+
+Meta description
+
+Meta description length
+
+H1-1
+
+H1-1 length
+
+H2-1
+
+H2-1 length
+
+H2-2
+
+H2-2 length
+
+Meta robots
+
+Canonical
+
+rel prev / rel next
+
+unique inlinks
+
+unique outlinks
+
+external outlinks
+
+response time
+
+GA4 sessions
+
+GA4 views
+
+engagement metrics
+
+GSC clicks
+
+impressions
+
+CTR
+
+position
+
+URL inspection result
+
+URL is on Google / not on Google
+
+coverage label such as Submitted and indexed, Crawled currently not indexed, Discovered currently not indexed
+
+days since crawl
+
+crawl allow
+
+page fetch
+
+indexing allowed
+
+mobile usability
+
+AMP
+
+rich results
+
+semantic similarity / nearest neighbor style fields if present
+
+Do not collapse this into a simplified dataset. The system should be able to store wide crawl tables.
+
+PART 9: CATEGORY + MAPPING LOGIC
+
+Build a reusable category-mapping layer so pages from Crawl Data can be assigned to page categories used in Pivot Table 2, Clicks Distribution, and Traffic Distribution.
+
+Example categories seen in screenshots:
+
+About
+
+Blogs
+
+Care access
+
+Conditions
+
+Home
+
+Luxury Experience
+
+MH Conditions
+
+Modalities
+
+Other
+
+This categorization must be editable by the user.
+
+Required behavior:
+
+system suggests category based on URL patterns, page title, or rule set
+
+user can manually override per page
+
+overrides persist
+
+downstream summary tables automatically recalculate
+
+Also allow a configuration area for category rules such as:
+
+if URL = homepage → Home
+
+if /blog/ or /post/ → Blogs
+
+if verify-insurance/contact/start-here/admissions terms → Care access
+
+etc.
+
+PART 10: PIVOT TABLE 2 + DISTRIBUTION SHEETS AUTOMATION
+
+These are not manually built sheets.
+
+They must be system-generated from Crawl Data plus GSC plus GA4 plus category logic.
+
+Pivot Table 2
+
+Source:
+
+Crawl Data
+Method:
+
+aggregate by Page Category
+
+count pages
+
+support additional rolled-up metrics as configured
+
+Clicks Distribution
+
+Sources:
+
+Crawl Data page-category mapping
+
+GSC clicks data
+Formulas:
+
+of Pages = count of URLs per category
+
+Sum of Clicks = total GSC clicks for URLs in category
+
+Clicks per page = Sum of Clicks / # of Pages
+
+Share of GSC Clicks = category clicks / all clicks
+
+Also generate the scatter chart:
+
+Share of Google Clicks by Page Category
+
+Support notes/comments per row because the sheet screenshot shows annotations like:
+
+majority of this traffic goes to the /blog home page
+
+Traffic Distribution
+
+Sources:
+
+Crawl Data page-category mapping
+
+GA4 sessions data
+Formulas:
+
+of Pages = count of URLs per category
+
+Sum of Total Sessions = total GA4 sessions for URLs in category
+
+Sessions per page = Sum of Total Sessions / # of Pages
+
+Share of Sessions = category sessions / all sessions
+
+Also generate the scatter chart:
+
+Share of Sessions by Page Category
+
+Support notes/comments per row.
+
+PART 11: MAIN EVALUATION SHEET
+
+The Main Evaluation sheet must support competitor benchmarking against the client domain.
+
+It should contain:
+
+Name
+
+Website URL / Main domain used for evaluation
+
+all comparative metrics
+
+rank columns beside metric columns
+
+bottom summary rows:
+
+mean
+
+median
+
+max
+
+min
+
+The screenshots show the benchmark structure spanning many columns. Build the system so these metrics are supported.
+
+Main Evaluation metrics to support
+
+At minimum, support the following fields and rank columns:
+
+WHOIS Reg
+
+Age
+
+Archive First Date
+
+Archive Age
+
+DR
+
+Referring Domains
+
+Backlinks
+
+Indexed Pages
+
+AI Visibility Score
+
+Mentions (AI Responses)
+
+Cited Sources
+
+Organic Traffic
+
+Organic Keywords
+
+Top 10 Keywords
+
+Informational Keywords
+
+Featured Snippet / AIO
+
+KW Velocity
+
+Snippet Velocity
+
+RD Velocity
+
+Content Velocity
+
+KW Yield
+
+Snippet Yield
+
+Mention Rate (%)
+
+RD Yield
+
+Content Yield
+
+Backlink Density
+
+Informational Density
+
+Final Score
+
+Average Rank
+
+Rank
+
+The system must not hardcode only the visible screenshot columns. It must be extensible. Use a schema-driven metric config.
+
+Formula behavior
+
+Support spreadsheet-like formula definitions or computed fields for:
+
+derived metrics
+
+rank fields
+
+summary rows
+
+percentile / average rank / final score calculations
+
+The UI does not need to become full Google Sheets. But the system must preserve the logic:
+
+raw metric
+
+derived metric
+
+ranking output
+
+summary rows
+
+Record structure
+
+The first row set is competitors plus client.
+Example:
+
+Bliss
+
+La Hacienda / Legacy Healing
+
+Promises Behavioral Health
+
+Passages Malibu
+
+Muse Treatment
+
+Cliffside Malibu
+
+The Hills Treatment Center
+
+Ritz Recovery
+
+Luxe Recovery
+
+Detox LA
+
+The system must support arbitrary competitor count, not fixed to 10.
+
+PART 12: DATA MODEL
+
+Create a schema that cleanly separates:
+
+A. Evaluation Batch
+
+Fields:
+
+id
+
+clientId
+
+clientNameSnapshot
+
+evaluationName
+
+evaluationDate
+
+preparedBy
+
+status
+
+linkedMidStrategyReportId nullable
+
+createdAt
+
+updatedAt
+
+B. Evaluation Competitor Row
+
+Fields:
+
+evaluationBatchId
+
+rowOrder
+
+name
+
+websiteUrl
+
+metric payloads
+
+computed payloads
+
+rank payloads
+
+Use structured JSON or normalized metric tables. Prefer schema-driven storage so new metrics can be added later without migrations every time.
+
+C. Crawl Data Row
+
+Fields:
+
+evaluationBatchId
+
+url
+
+pageCategory
+
+manualCategoryOverride
+
+all crawl metrics
+
+source row metadata
+
+D. Derived Summary Table Row
+
+For:
+
+Pivot Table 2
+
+Clicks Distribution
+
+Traffic Distribution
+
+Can be materialized or computed on demand, but must be saveable after generation for audit consistency.
+
+E. Mid-Strategy Report
+
+Fields:
+
+id
+
+clientId
+
+evaluationBatchId
+
+reportName
+
+reportStatus
+
+reportDate
+
+preparedBy
+
+slide content payload
+
+editable overrides
+
+export payload
+
+createdAt
+
+updatedAt
+
+F. Raw Source Import Record
+
+Fields:
+
+evaluationBatchId
+
+sourceType
+
+sourceTool
+
+fileName nullable
+
+uploadedAt nullable
+
+fetchRunId nullable
+
+parseStatus
+
+enrichmentStatus
+
+rawPayloadReference
+
+notes
+
+Use this to track Screaming Frog uploads, Ahrefs pulls, SEMrush pulls, GSC pulls, GA4 pulls, WHOIS lookups, and Wayback lookups.
+
+PART 13: TOOL MAPPING TABLE REQUIREMENT
+
+Inside the codebase, create a metric-source registry table that powers both automation and UI explainability.
+
+Each metric should be defined roughly like this:
+
+metricKey
+
+label
+
+sourceTool
+
+sourceType
+
+retrievalMethod
+
+calculationFormula nullable
+
+rankDirection
+
+refreshable boolean
+
+fallbackBehavior
+
+notes
+
+Example entries:
+
+whoisReg
+
+sourceTool: web retrieval
+
+sourceType: external lookup
+
+retrievalMethod: whois search
+
+calculationFormula: null
+
+age
+
+sourceTool: system
+
+sourceType: derived
+
+calculationFormula: today - whoisReg
+
+dr
+
+sourceTool: ahrefs
+
+sourceType: integration
+
+retrievalMethod: batch domain analysis
+
+aiVisibilityScore
+
+sourceTool: semrush
+
+sourceType: integration
+
+retrievalMethod: semrush ai endpoint or imported SEMrush AI dataset
+
+clicks
+
+sourceTool: gsc
+
+sourceType: integration
+
+retrievalMethod: url performance query
+
+sessions
+
+sourceTool: ga4
+
+sourceType: integration
+
+retrievalMethod: landing page/session query
+
+title1
+
+sourceTool: screaming_frog_upload
+
+sourceType: uploaded crawl
+
+retrievalMethod: parsed from uploaded export
+
+fallbackBehavior: use crawl enrichment only if missing and a valid equivalent exists
+
+This registry should drive:
+
+field sourcing
+
+refresh jobs
+
+debugging
+
+source traceability in reports
+
+PART 14: AUTOMATION WORKFLOW
+
+When a user creates an Evaluation Batch, the system should do the following:
+
+user selects client
+
+system fetches main client domain
+
+user selects competitors or system loads suggested competitors
+
+system runs batch data collection jobs:
+
+Ahrefs domain batch analysis
+
+SEMrush domain and AI batch analysis
+
+WHOIS lookup
+
+Wayback earliest archive lookup
+
+GSC URL-level performance pull
+
+GA4 landing page/session pull
+
+indexation / inspection pull where available
+
+system prompts for crawl source:
+
+use uploaded Screaming Frog export now
+
+later support SmartEO crawl engine
+
+system parses uploaded crawl file
+
+system stores raw data
+
+system enriches missing crawl fields using Ahrefs / SEMrush / GSC / GA4 as appropriate
+
+system calculates derived metrics
+
+system populates Main Evaluation
+
+system populates Crawl Data
+
+system applies category mapping rules
+
+system generates Pivot Table 2
+
+system generates Clicks Distribution
+
+system generates Traffic Distribution
+
+system renders charts and makes batch ready for linking
+
+The user should not need to fill the sheets manually.
+
+PART 15: FALLBACK RULES
+
+If one tool is unavailable:
+
+WHOIS Reg fallback
+
+try alternate public WHOIS provider
+
+if still unavailable, flag row as needs review
+
+First Archive fallback
+
+retry Wayback query
+
+if unavailable, flag as unavailable and skip dependent velocity formulas until resolved
+
+Ahrefs / SEMrush failures
+
+mark affected metrics as pending
+
+allow partial batch completion
+
+support rerun for failed integrations only
+
+GSC / GA4 page mismatch
+
+normalize URL mapping rules
+
+canonicalize trailing slash and protocol handling
+
+Screaming Frog upload limitations
+
+parse whatever fields are available
+
+enrich missing required fields from GSC, GA4, Ahrefs, or SEMrush depending on field type
+
+only flag as unavailable after enrichment attempts fail
+
+PART 16: UI / UX REQUIREMENTS
+A. Evaluation Sheets list page
+
+Columns:
+
+Evaluation Name
+
+Client
+
+Date
+
+Status
+
+Linked Report
+
+Last Updated
+
+Actions:
+
+Open
+
+Duplicate
+
+Link to Mid-Strategy Report
+
+Delete
+
+B. Evaluation Batch editor
+
+Tabbed sheet interface:
+
+Main Evaluation
+
+Crawl Data
+
+Pivot Table 2
+
+Clicks Distribution
+
+Traffic Distribution
+
+Top actions:
+
+Save
+
+Recalculate
+
+Refresh Data
+
+Upload Screaming Frog Export
+
+Duplicate
+
+Link to Report
+
+C. Refresh Data behavior
+
+Support rerunning:
+
+all sources
+
+only benchmark metrics
+
+only crawl-derived data
+
+only GSC/GA4 rollups
+
+only failed pulls
+
+re-enrichment only after a new SF upload
+
+D. Mid-Strategy Report list
+
+Include:
+
+Report Name
+
+Client
+
+Linked Evaluation Batch
+
+Status
+
+Date
+
+Last Updated
+
+Statuses:
+
+Not Generated
+
+Draft
+
+Finalized
+
+E. Mid-Strategy Report editor/viewer
+
+Slide navigator on left or top
+Main slide canvas
+Per-slide editable text blocks
+Charts and IA visuals rendered on slide
+
+Top actions:
+
+Generate / Regenerate
+
+Save edits
+
+Export / Print
+
+Duplicate
+
+Finalize
+
+PART 17: MID-STRATEGY REPORT GENERATOR
+A. General output type
+
+This report is a slide-deck-style presentation inside SmartEO.
+
+It is not a doc page and not a PDF-only output.
+
+It must render as a presentation/report view with slide-like sections, similar in polish to the existing QBR / bi-weekly report experience, but visually structured like slides.
+
+Use the existing SmartEO design language where appropriate:
+
+clean typography
+
+polished cards/tables
+
+good spacing
+
+strong header hierarchy
+
+existing red accents where relevant
+
+But do not clone the old Bliss deck exactly. Improve the look and feel while preserving the structure and information.
+
+B. Required editability
+
+Every generated text field must be manually editable after generation.
+
+Examples:
+
+title page text
+
+section titles
+
+narrative paragraphs
+
+insights
+
+opportunities
+
+bullet lists
+
+“What’s Next” blocks
+
+labels/captions where reasonable
+
+Some items should default to generated/manual placeholders:
+
+Prepared by → default “Manual entry needed”
+
+What’s Next → generated baseline where specified, but editable
+
+client team notes → manual entry area
+
+Webserv notes → editable
+
+Charts and tables should regenerate from linked evaluation data, but the surrounding written interpretation must be editable.
+
+C. Required report sections
+
+Build the Mid-Strategy deck generator to include these sections in order, based on the Bliss example deck.
+
+Slide 1: Title Page
+
+Include:
+
+client name
+
+“Content & SEO Mid-Strategy Check-in”
+
+date auto-filled using current generation date
+
+Prepared by: default “Manual entry needed”
+
+subtitle / tagline area supported
+
+Make all title page text editable.
+
+Slide 2: What’s in this deck
+
+Auto-generate from included sections.
+
+Default bullets based on Bliss:
+
+Competitive Benchmarking
+
+First Core Focus: Structural Cleanup for the navigation menu
+
+What’s next
+
+Editable.
+
+Slide 3: Our Next Checkpoint
+
+Use default baseline text from Bliss:
+
+Launch Strategy & Roadmap Review - Date TBD (2 weeks from now)
+
+Finalizes goals, North Star Metrics, and success benchmarks
+
+Aligns on the execution plan across content, SEO, and site improvements
+
+Confirms launch-ready priorities for the next phase
+
+Signals the transition from planning to active execution
+
+Set this as default text for now, but keep fully editable.
+
+Slides 4–7: Competitive Analysis Baseline
+
+These are the “Where you stand vs. everybody else” slides.
+
+The system must generate four competitive narrative slides based on the Main Evaluation data.
+
+Each slide must include:
+
+section kicker/header
+
+headline
+
+narrative block
+
+“Our Opportunity” block
+
+chart
+
+Slide 4 theme
+
+Authority exists but is underdeployed.
+
+Generate from metrics like:
+
+DR
+
+referring domains
+
+backlinks
+
+indexed pages
+
+organic traffic
+
+Slide 5 theme
+
+Pages exist, but keyword ownership is weak.
+
+Generate from:
+
+indexed pages
+
+organic keywords
+
+top 10 keywords
+
+content yield
+
+keyword yield / keyword velocity
+
+Slide 6 theme
+
+Low AI visibility and citation presence.
+
+Generate from:
+
+AI visibility score
+
+mentions
+
+cited sources
+
+snippet-related metrics
+
+mention rate
+
+Slide 7 theme
+
+Overall market position summary.
+
+Generate:
+
+overall percentile / position summary
+
+final score / average rank interpretation
+
+concise “fastest growth levers” statement
+
+The logic should generate the interpretation from ranking outputs, not hardcode Bliss wording.
+
+PART 18: CHARTS FOR COMPETITIVE SLIDES
+
+The generator must create charts directly from evaluation data, not rely on static images.
+
+Required charts corresponding to the Bliss deck:
+
+Authority / traffic comparison
+Likely bars for:
+
+DR
+
+Organic Traffic
+
+Indexed Pages
+
+Content yield / top 10 keyword comparison
+Likely bars for:
+
+Content Yield or OT + Pages style metric
+
+Top 10 Keywords
+
+AI visibility comparison
+Likely bars for:
+
+Mention Rate (%)
+
+AI Visibility Score
+
+Snippet Yield or similar
+
+Summary position slide
+Can be:
+
+percentile card
+
+rank summary table
+
+scorecard
+
+compact benchmark visualization
+
+Match the spirit of the deck, not necessarily the exact old chart format.
+
+PART 19: DISTRIBUTION INSIGHT SLIDES
+Slide 8: Homepage Drives X% of Organic Clicks
+
+Use Clicks Distribution data.
+
+Generate narrative based on:
+
+Home share of GSC clicks
+
+total clicks
+
+page count
+
+blog contribution
+
+all other page categories
+
+Include:
+
+bullet insights
+
+supporting scatter chart using Clicks Distribution data
+
+Chart title:
+
+Share of Google Clicks by Page Category
+
+Slide 9: A Small Set of Pages Drives a Large Share of All Sessions
+
+Use Traffic Distribution data.
+
+Generate narrative based on:
+
+high-performing categories by sessions per page
+
+care access concentration
+
+blog concentration on index vs individual pages when notes indicate it
+
+condition and modality contribution
+
+Include:
+
+bullet insights
+
+supporting scatter chart using Traffic Distribution data
+
+Chart title:
+
+Share of Sessions by Page Category
+
+PART 20: FIRST PRIORITIES SLIDE
+Slide 10: First Priorities
+
+Use a structured recommendations block with three priority pillars.
+
+Default structure modeled on Bliss:
+
+Build the Middle of the Funnel
+
+Turn the Blog Into a Discovery Engine
+
+Structure Content to Win AI & SERP Visibility
+
+Each should be generated from linked evaluation findings, but editable.
+
+Use the evaluation sheets and distribution insights to shape the content:
+
+category gaps
+
+click concentration
+
+session concentration
+
+AI visibility gaps
+
+content/funnel missing layers
+
+Preserve the practical, strategy-oriented tone from the deck.
+
+PART 21: NAVIGATION / IA VISUAL SLIDES
+
+This is critical.
+
+The system must support slides that visually render current and proposed information architecture.
+
+Slide 11: Current vs Future navigation
+
+Required:
+
+explanatory text at top
+
+current navigation visual
+
+future navigation visual
+
+Build requirement
+
+Do not make this a plain bulleted list.
+
+Build a navigation rendering component that can visually display:
+
+top-level menu items
+
+dropdown arrows
+
+CTA buttons
+
+optional logo placeholder
+
+current vs future version blocks
+
+This should be data-driven.
+
+Input model should allow:
+
+menu label
+
+slug
+
+parentId
+
+order
+
+type: normal / CTA
+
+emphasis style
+
+visibility
+
+For the first version, allow manual editing of both:
+
+Current menu
+
+Future menu
+
+The report should render them beautifully in a mocked navigation bar style.
+
+Slide 12: Scalable blueprint for what we publish next
+
+Required:
+
+future nav visual at top
+
+arrows or directional connectors
+
+grouped IA tree below
+
+hierarchical slugs visible
+
+This must show parent/child relationships.
+
+Build requirement
+
+Create a reusable IA Blueprint component that renders:
+
+columns by hub
+
+nested children
+
+slugs, not just pretty labels
+
+optional arrows from nav items to column groups
+
+The user must be able to edit this structure.
+
+Slide 13: About + Resources credibility layer
+
+Required:
+
+nav visual at top
+
+arrows to /about/ and /resources/
+
+subpage slug trees below
+
+explanatory paragraph
+
+Use the same IA component family.
+
+PART 22: WHAT’S NEXT SLIDE
+Slide 14: What’s Next
+
+Use two editable sections:
+
+Webserv
+
+Client Team
+
+Default baseline text for first version should follow the Bliss example:
+
+continued content and technical remediation planning
+
+local SEO and visibility foundations
+
+confirm proposed long-term site structure
+
+Keep fully editable.
+
+PART 23: CITATION + TRACEABILITY REQUIREMENTS
+
+This matters a lot.
+
+The report text must be tied back to the evaluation sheets.
+
+Build citation traceability at the block level.
+
+Every generated insight block should store:
+
+source sheet
+
+source fields or rows used
+
+supporting metrics used
+
+generation timestamp
+
+The user does not need to see ugly system citations in the slide itself, but there should be an internal trace mechanism so we know:
+
+which slide text came from which sheet
+
+which chart came from which summary table
+
+which narrative used which metrics
+
+For example:
+
+Slide 8 homepage concentration bullets → Clicks Distribution
+
+Slide 9 sessions concentration bullets → Traffic Distribution
+
+Slides 4–7 competitor narratives → Main Evaluation
+
+IA slides → manually entered IA model plus optional current menu source
+
+Also allow an optional “show sources” developer/debug view.
+
+PART 24: EXPORT / PRINT REQUIREMENTS
+
+The Mid-Strategy Report must support polished export or print output similar in reliability to our other reports.
+
+Requirements:
+
+printable slide layout
+
+preserved charts
+
+preserved IA visuals
+
+preserved text formatting
+
+no clipping
+
+repeatable export result
+
+Use stable rendering logic. Avoid fragile browser-only screenshot hacks where possible.
+
+PART 25: IMPLEMENTATION REQUIREMENTS
+A. Architecture
+
+Use modular components:
+
+EvaluationBatchManager
+
+SheetTableRenderer
+
+MetricConfigEngine
+
+CategoryRuleEngine
+
+SummaryTableGenerator
+
+ChartRenderer
+
+MidStrategySlideBuilder
+
+NavigationMockRenderer
+
+IABlueprintRenderer
+
+CitationTraceService
+
+ExportRenderer
+
+ScreamingFrogImportService
+
+CrawlEnrichmentService
+
+B. Strong typing
+
+Use strict types for:
+
+evaluation metrics
+
+competitor rows
+
+crawl rows
+
+category rules
+
+slide blocks
+
+chart configs
+
+IA tree nodes
+
+source import records
+
+C. Preserve manual overrides
+
+Critical:
+If a user edits generated narrative text, do not wipe those edits on regeneration unless explicitly requested.
+
+Support:
+
+regenerate all
+
+regenerate unlocked sections only
+
+preserve manually edited sections
+
+D. Performance
+
+Crawl Data can be large.
+Use virtualization or pagination where needed.
+Do not render thousand-row raw tables inefficiently.
+
+E. Error handling
+
+Handle:
+
+missing evaluation batch
+
+incomplete metrics
+
+empty crawl data
+
+broken category mapping
+
+missing chart inputs
+
+malformed Screaming Frog upload
+
+partial enrichment failures
+
+missing IA structures
+
+Use graceful fallback messages in UI.
+
+PART 26: FIRST PASS DATA SEED
+
+Seed the first implementation with a Bliss example template so we can test quickly.
+
+Use the Bliss deck as the starter template for:
+
+default slide ordering
+
+default section labels
+
+initial narrative structure
+
+initial IA example
+
+initial “What’s Next” text
+
+initial checkpoint slide
+
+But keep the system generic so any client can use it later. The Bliss deck should act as the template reference, not a hardcoded one-client deck.
+
+PART 27: ACCEPTANCE CRITERIA
+
+The feature is done only when all of the below are true:
+
+I can create a new Evaluation Batch from Command Center.
+
+I can open tabs for Main Evaluation, Crawl Data, Pivot Table 2, Clicks Distribution, and Traffic Distribution.
+
+I can upload a Screaming Frog export and use it as the crawl source.
+
+The uploaded crawl is parsed into Crawl Data.
+
+Missing crawl fields are enriched from Ahrefs, SEMrush, GSC, or GA4 where possible.
+
+I can enter/select client and competitors without manually filling metrics.
+
+Main Evaluation metrics populate from integrations, web retrieval, uploads, and formulas.
+
+Summary tables and chart inputs recalculate correctly.
+
+I can link a saved evaluation batch to a Mid-Strategy Report.
+
+The linked report appears in the report list as pending/not generated.
+
+Opening the pending report generates the full Mid-Strategy slide report.
+
+The report includes all required sections from the Bliss example deck.
+
+All text sections are editable after generation.
+
+Competitive analysis charts render from evaluation data.
+
+Clicks Distribution and Traffic Distribution charts render from summary tables.
+
+Current and future menu visuals render as actual visual mockups, not plain bullets.
+
+IA blueprint slides render parent/child slug structures clearly.
+
+“What’s Next” sections are editable.
+
+Export/print works cleanly.
+
+Manual text edits persist after save.
+
+Citation/source traceability exists internally for generated insight blocks.
+
+Refresh Data supports rerunning full or partial data jobs.
+
+The system is built generically for future clients, not just Bliss.
+
+PART 28: BUILD ORDER
+
+Build this in the following sequence:
+
+Data schema + list views
+
+Evaluation Batch editor with tabs
+
+Screaming Frog upload parser and raw import storage
+
+Main Evaluation metric engine
+
+Ahrefs / SEMrush / GSC / GA4 / WHOIS / Wayback retrieval and enrichment layer
+
+Crawl Data table
+
+Category mapping + derived summary tables
+
+Clicks / Traffic charts
+
+Mid-Strategy report record + linking logic
+
+Slide renderer
+
+Competitive slides
+
+Distribution slides
+
+Menu mock component
+
+IA blueprint component
+
+Export / print polish
+
+Manual override persistence refinement
+
+FINAL IMPORTANT RULES
+
+Do not flatten the evaluation sheets into a simple form.
+
+Do not treat the IA slides as plain text.
+
+Do not hardcode Bliss values.
+
+Do not wipe manual edits on regenerate.
+
+Do not skip charts or replace them with placeholders.
+
+Do not make “Prepared by” auto-populate with a random user.
+
+Do not make the Mid-Strategy report live inside the Evaluation Sheets module.
+
+Do not require manual metric entry for evaluation data that can be pulled, uploaded, or calculated.
+
+Do not treat missing Screaming Frog fields as dead ends; attempt enrichment from Ahrefs or SEMrush and other integrations first.
+
+Build the metric-source registry and source traceability layer from the start.

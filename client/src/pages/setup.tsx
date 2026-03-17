@@ -945,19 +945,33 @@ export default function SetupPage() {
                           </div>
                           {expanded && hasChildPages && (
                             <div className="border-t border-border bg-muted/10 px-2 py-1.5 space-y-0.5">
-                              <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1">Sub-pages found on this parent</p>
+                              {(() => {
+                                const accessible = ts.childPageList!.filter(c => c.accessible).length;
+                                const total = ts.childPageList!.length;
+                                const locked = total - accessible;
+                                return (
+                                  <div className="flex items-start justify-between mb-1.5">
+                                    <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">{accessible}/{total} sub-pages readable</p>
+                                    {locked > 0 && (
+                                      <span className="text-[10px] text-muted-foreground italic ml-2 text-right leading-tight">
+                                        Open locked pages in Notion → ··· → Connections → add integration
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })()}
                               {ts.childPageList!.map((child) => (
                                 <div key={child.id} className="flex items-center gap-2 py-0.5">
                                   {child.accessible ? (
                                     <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />
                                   ) : (
-                                    <XCircle className="w-3 h-3 text-red-400 shrink-0" />
+                                    <svg className="w-3 h-3 text-muted-foreground shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                                   )}
-                                  <span className="text-xs flex-1 truncate">{child.title}</span>
+                                  <span className={`text-xs flex-1 truncate ${child.accessible ? "" : "text-muted-foreground"}`}>{child.title}</span>
                                   {child.accessible ? (
                                     <span className="text-[10px] text-muted-foreground shrink-0">{child.entries} entries</span>
                                   ) : (
-                                    <span className="text-[10px] text-red-400 shrink-0">No access — share with integration</span>
+                                    <span className="text-[10px] text-muted-foreground shrink-0">not shared</span>
                                   )}
                                 </div>
                               ))}

@@ -4168,11 +4168,11 @@ export async function registerRoutes(
       const workspace = await storage.getDiscoverabilityWorkspace(Number(req.params.id));
       if (!workspace) return res.status(404).json({ error: "Workspace not found" });
 
-      const Anthropic = (await import("@anthropic-ai/sdk")).default;
-      const apiKey = process.env.ANTHROPIC_API_KEY;
-      if (!apiKey) return res.status(500).json({ error: "ANTHROPIC_API_KEY not configured" });
+      const OpenAI = (await import("openai")).default;
+      const apiKey = process.env.OPENAI_API_KEY;
+      if (!apiKey) return res.status(500).json({ error: "OPENAI_API_KEY not configured" });
 
-      const client = new Anthropic({ apiKey });
+      const openaiClient = new OpenAI({ apiKey });
       const bp = workspace.businessProfile as any;
       const existingKeywords = (workspace.keywords as any[]) || [];
       const existingClusters = (workspace.clusters as any[]) || [];
@@ -4325,14 +4325,17 @@ Return ONLY valid JSON:
   ]
 }`;
 
-      const message = await client.messages.create({
-        model: "claude-opus-4-5",
+      const completion = await openaiClient.chat.completions.create({
+        model: "gpt-4o",
         max_tokens: 10000,
-        messages: [{ role: "user", content: userPrompt }],
-        system: systemPrompt,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        response_format: { type: "json_object" },
       });
 
-      const text = message.content[0].type === "text" ? message.content[0].text : "";
+      const text = completion.choices[0].message.content || "";
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (!jsonMatch) return res.status(500).json({ error: "Failed to parse AI response" });
 

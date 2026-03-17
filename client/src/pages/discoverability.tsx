@@ -1073,7 +1073,7 @@ function KeywordsStep({ ws, onUpdate }: { ws: Workspace; onUpdate: (keywords: Ke
   const [filterCluster, setFilterCluster] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterIntent, setFilterIntent] = useState("all");
-  const [sortBy, setSortBy] = useState<"finalOpportunityScore" | "businessGoalAlignmentScore" | "keyword">("finalOpportunityScore");
+  const [sortBy, setSortBy] = useState<string>("finalOpportunityScore");
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -1081,15 +1081,26 @@ function KeywordsStep({ ws, onUpdate }: { ws: Workspace; onUpdate: (keywords: Ke
 
   const clusterMap = Object.fromEntries(clusters.map(c => [c.id, c.name]));
 
+  function getSortValue(k: Keyword, field: string): string | number {
+    if (field === "clusterName") return clusterMap[k.clusterId] || "";
+    if (field === "estimatedVolume") {
+      const v = k.estimatedVolume || k.searchVolume || "0";
+      return parseInt(String(v).split("-")[0].replace(/[^\d]/g, "") || "0", 10);
+    }
+    if (field === "competitorCount") return (k.competitorRankingDomains?.length ?? 0);
+    if (field === "clientRanksForKeyword") return k.clientRanksForKeyword === true ? 1 : 0;
+    return (k as any)[field] ?? "";
+  }
+
   const filtered = keywords
     .filter(k => filterCluster === "all" || k.clusterId === filterCluster)
     .filter(k => filterStatus === "all" || (filterStatus === "new_suggestion" ? k.reviewState === "new_suggestion" : k.status === filterStatus))
     .filter(k => filterIntent === "all" || k.dominantIntent === filterIntent)
     .sort((a, b) => {
-      const va = (a as any)[sortBy] ?? 0;
-      const vb = (b as any)[sortBy] ?? 0;
-      if (typeof va === "string") return sortDir === "asc" ? va.localeCompare(vb) : vb.localeCompare(va);
-      return sortDir === "asc" ? va - vb : vb - va;
+      const va = getSortValue(a, sortBy);
+      const vb = getSortValue(b, sortBy);
+      if (typeof va === "string") return sortDir === "asc" ? va.localeCompare(String(vb)) : String(vb).localeCompare(va);
+      return sortDir === "asc" ? (va as number) - (vb as number) : (vb as number) - (va as number);
     });
 
   function toggleSort(col: typeof sortBy) {
@@ -1245,30 +1256,40 @@ function KeywordsStep({ ws, onUpdate }: { ws: Workspace; onUpdate: (keywords: Ke
       ) : (
         <div className="border rounded-lg overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-xs" data-testid="keywords-table">
+            <table className="min-w-max w-full text-xs" data-testid="keywords-table">
               <thead>
                 <tr className="border-b bg-muted/50">
-                  <th className="w-8 p-2">
+                  <th className="w-8 p-2 sticky left-0 bg-muted/50 z-10">
                     <input type="checkbox" checked={selectedIds.size === filtered.length && filtered.length > 0} onChange={toggleSelectAll} className="rounded" data-testid="checkbox-select-all" />
                   </th>
-                  <th className="text-left p-2 font-semibold text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => toggleSort("keyword")}>
-                    <span className="flex items-center gap-1">Keyword <ArrowUpDown className="w-3 h-3" /></span>
-                  </th>
-                  <th className="text-left p-2 font-semibold text-muted-foreground">Cluster</th>
-                  <th className="text-left p-2 font-semibold text-muted-foreground">Intent</th>
-                  <th className="text-left p-2 font-semibold text-muted-foreground">Volume</th>
-                  <th className="text-left p-2 font-semibold text-muted-foreground">Site Ranks?</th>
-                  <th className="text-left p-2 font-semibold text-muted-foreground">Competitors</th>
-                  <th className="text-left p-2 font-semibold text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => toggleSort("businessGoalAlignmentScore")}>
-                    <span className="flex items-center gap-1">Goal Align <ArrowUpDown className="w-3 h-3" /></span>
-                  </th>
-                  <th className="text-left p-2 font-semibold text-muted-foreground">Intent Fit</th>
-                  <th className="text-left p-2 font-semibold text-muted-foreground">Conv Prox</th>
-                  <th className="text-left p-2 font-semibold text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => toggleSort("finalOpportunityScore")}>
-                    <span className="flex items-center gap-1">Final Score <ArrowUpDown className="w-3 h-3" /></span>
-                  </th>
-                  <th className="text-left p-2 font-semibold text-muted-foreground">Page Type</th>
-                  <th className="text-left p-2 font-semibold text-muted-foreground">Status</th>
+                  {([
+                    { label: "Keyword", field: "keyword", sticky: true },
+                    { label: "Cluster", field: "clusterName" },
+                    { label: "Intent", field: "dominantIntent" },
+                    { label: "Volume", field: "estimatedVolume" },
+                    { label: "Site Ranks?", field: "clientRanksForKeyword" },
+                    { label: "Competitors", field: "competitorCount" },
+                    { label: "Goal Align", field: "businessGoalAlignmentScore" },
+                    { label: "Intent Fit", field: "intentFitScore" },
+                    { label: "Conv Prox", field: "conversionProximityScore" },
+                    { label: "Final Score", field: "finalOpportunityScore" },
+                    { label: "Page Type", field: "recommendedPageType" },
+                    { label: "Status", field: "status" },
+                  ] as { label: string; field: string; sticky?: boolean }[]).map(({ label, field, sticky }) => (
+                    <th
+                      key={field}
+                      className={`text-left p-2 font-semibold text-muted-foreground cursor-pointer hover:text-foreground whitespace-nowrap select-none ${sticky ? "sticky left-8 bg-muted/50 z-10" : ""}`}
+                      onClick={() => toggleSort(field)}
+                    >
+                      <span className="flex items-center gap-1">
+                        {label}
+                        {sortBy === field
+                          ? (sortDir === "desc" ? <ArrowUpDown className="w-3 h-3 text-foreground" /> : <ArrowUpDown className="w-3 h-3 text-foreground rotate-180" />)
+                          : <ArrowUpDown className="w-3 h-3 opacity-30" />
+                        }
+                      </span>
+                    </th>
+                  ))}
                   <th className="w-8 p-2"></th>
                 </tr>
               </thead>
@@ -1282,10 +1303,10 @@ function KeywordsStep({ ws, onUpdate }: { ws: Workspace; onUpdate: (keywords: Ke
                       onClick={() => !kw.isLocked && setSelectedKw(kw)}
                       data-testid={`kw-row-${kw.id}`}
                     >
-                      <td className="p-2" onClick={e => e.stopPropagation()}>
+                      <td className="p-2 sticky left-0 bg-background z-10 border-r border-border/30" onClick={e => e.stopPropagation()}>
                         <input type="checkbox" checked={selectedIds.has(kw.id)} onChange={() => toggleSelect(kw.id)} className="rounded" />
                       </td>
-                      <td className="p-2">
+                      <td className="p-2 sticky left-8 bg-background z-10 border-r border-border/30 min-w-[160px] max-w-[240px]">
                         <div className="flex items-center gap-1 flex-wrap">
                           <span className="font-medium text-foreground">{kw.keyword}</span>
                           {kw.isLocked && <Lock className="w-2.5 h-2.5 text-muted-foreground" />}

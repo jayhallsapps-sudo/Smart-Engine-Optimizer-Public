@@ -44,7 +44,7 @@ let cachedBank: StrategyBankData | null = null;
 let bankCacheExpiry = 0;
 const CACHE_TTL_MS = 60 * 60 * 1000;
 
-async function notionProxy(path: string, options?: RequestInit): Promise<any> {
+export async function notionProxy(path: string, options?: RequestInit): Promise<any> {
   const connectors = new ReplitConnectors();
   const resp = await connectors.proxy("notion", path, {
     method: options?.method ?? "GET",
@@ -148,6 +148,26 @@ async function fetchTableRowsForBlocks(blocks: any[]): Promise<Record<string, an
   return result;
 }
 
+const CONTAINER_BLOCK_TYPES = new Set(["column_list", "column", "toggle", "synced_block", "template", "bulleted_list_item", "numbered_list_item", "quote"]);
+
+async function flattenBlocks(blocks: any[], depth = 0): Promise<any[]> {
+  if (depth > 3) return blocks;
+  const result: any[] = [];
+  await Promise.allSettled(blocks.map(async (block: any) => {
+    result.push(block);
+    const shouldExpand = block.has_children && CONTAINER_BLOCK_TYPES.has(block.type);
+    if (shouldExpand) {
+      try {
+        const childResp = await notionProxy(`/v1/blocks/${block.id}/children?page_size=100`);
+        const childBlocks = childResp.results ?? [];
+        const expanded = await flattenBlocks(childBlocks, depth + 1);
+        result.push(...expanded);
+      } catch { }
+    }
+  }));
+  return result;
+}
+
 function extractDatabaseEntries(results: any[]): StrategyBankEntry[] {
   const entries: StrategyBankEntry[] = [];
   for (const page of results) {
@@ -204,9 +224,10 @@ export async function fetchSinglePageEntries(pageId: string): Promise<PageTestRe
     if (isNotFound) {
       try {
         const blocksResult = await notionProxy(`/v1/blocks/${pageId}/children?page_size=100`);
-        const blocks = blocksResult.results ?? [];
+        const rawBlocks = blocksResult.results ?? [];
         source = "page_blocks";
 
+        const blocks = await flattenBlocks(rawBlocks);
         const tableRowsMap = await fetchTableRowsForBlocks(blocks);
         entries = extractPageBlocks(blocks, tableRowsMap);
 
@@ -216,11 +237,12 @@ export async function fetchSinglePageEntries(pageId: string): Promise<PageTestRe
           const title = childBlock.child_page?.title ?? "Untitled";
           try {
             const childResult = await notionProxy(`/v1/blocks/${childBlock.id}/children?page_size=100`);
-            const childTableRows = await fetchTableRowsForBlocks(childResult.results ?? []);
-            const childEntries = extractPageBlocks(childResult.results ?? [], childTableRows);
+            const childBlockItems = await flattenBlocks(childResult.results ?? []);
+            const childTableRows = await fetchTableRowsForBlocks(childBlockItems);
+            const childEntries = extractPageBlocks(childBlockItems, childTableRows);
             entries.push(...childEntries);
             childPageList.push({ id: childBlock.id, title, accessible: true, entries: childEntries.length });
-          } catch {
+          } catch (childErr: any) {
             childPageList.push({ id: childBlock.id, title, accessible: false, entries: 0 });
           }
         }));
@@ -323,15 +345,17 @@ async function fetchRawEntries(pageId: string, label: string): Promise<StrategyB
   } catch {
     try {
       const blocksResult = await notionProxy(`/v1/blocks/${pageId}/children?page_size=100`);
-      const blocks = blocksResult.results ?? [];
+      const rawBlocks = blocksResult.results ?? [];
+      const blocks = await flattenBlocks(rawBlocks);
       const tableRowsMap = await fetchTableRowsForBlocks(blocks);
       entries = extractPageBlocks(blocks, tableRowsMap);
 
       for (const childBlock of blocks.filter((b: any) => b.type === "child_page")) {
         try {
-          const childBlocks = await notionProxy(`/v1/blocks/${childBlock.id}/children?page_size=100`);
-          const childTableRows = await fetchTableRowsForBlocks(childBlocks.results ?? []);
-          entries.push(...extractPageBlocks(childBlocks.results ?? [], childTableRows));
+          const childResp = await notionProxy(`/v1/blocks/${childBlock.id}/children?page_size=100`);
+          const childFlat = await flattenBlocks(childResp.results ?? []);
+          const childTableRows = await fetchTableRowsForBlocks(childFlat);
+          entries.push(...extractPageBlocks(childFlat, childTableRows));
         } catch { }
       }
     } catch { }

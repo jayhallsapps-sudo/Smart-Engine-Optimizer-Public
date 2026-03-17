@@ -4361,7 +4361,7 @@ Return ONLY valid JSON:
 
         newKeywords.push({
           ...kw,
-          id: kw.id || `kw_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          id: `kw_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
           status: "pending",
           reviewState: "new_suggestion",
           isLocked: false,

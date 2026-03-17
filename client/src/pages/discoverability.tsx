@@ -75,11 +75,19 @@ interface Keyword {
   finalOpportunityScore: number;
   recommendedPageType: string;
   recommendedTargetUrl?: string;
+  pageTypeReason?: string;
   serpNotes?: string;
   status: "pending" | "approved" | "rejected" | "watchlist";
+  reviewState?: "new_suggestion" | "changed" | "unchanged" | null;
   isLocked: boolean;
   notes?: string;
   manualOverrides: Record<string, boolean>;
+  confidence?: "high" | "medium" | "low";
+  cannibalizationWarning?: string | null;
+  cannibalizationSeverity?: "low" | "medium" | "high" | null;
+  cannibalizationAction?: string | null;
+  bgaHigh?: string[];
+  bgaLow?: string[];
 }
 
 interface InternalLinkSuggestion {
@@ -88,6 +96,8 @@ interface InternalLinkSuggestion {
   supportingPages: string[];
   anchorTextSuggestions: string[];
   linkingNotes: string;
+  linkType?: string;
+  rationale?: string;
 }
 
 interface ScoringWeights {
@@ -777,12 +787,73 @@ function KeywordDetailDrawer({
                 {Object.entries(PAGE_TYPE_LABELS).map(([v, label]) => <SelectItem key={v} value={v}>{label}</SelectItem>)}
               </SelectContent>
             </Select>
+            {draft.pageTypeReason && (
+              <p className="mt-1.5 text-[11px] text-muted-foreground italic leading-snug">{draft.pageTypeReason}</p>
+            )}
           </div>
 
           <div>
             <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1 block">Recommended Target URL</label>
             <Input value={draft.recommendedTargetUrl || ""} onChange={e => setDraft(d => ({ ...d, recommendedTargetUrl: e.target.value }))} placeholder="Existing URL or /proposed-slug" className="h-8 text-xs" />
           </div>
+
+          {/* Confidence & AI explainability */}
+          {(draft.confidence || (draft.bgaHigh && draft.bgaHigh.length > 0)) && (
+            <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2.5">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">AI Explainability</p>
+              {draft.confidence && (
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-muted-foreground">Confidence:</span>
+                  <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${
+                    draft.confidence === "high" ? "bg-green-50 text-green-700 border-green-200" :
+                    draft.confidence === "medium" ? "bg-amber-50 text-amber-700 border-amber-200" :
+                    "bg-red-50 text-red-600 border-red-200"
+                  }`}>{draft.confidence.charAt(0).toUpperCase() + draft.confidence.slice(1)}</span>
+                  <span className="text-[10px] text-muted-foreground">
+                    {draft.confidence === "high" ? "— clear intent + goal match" : draft.confidence === "medium" ? "— partial signal" : "— inferred, thin data"}
+                  </span>
+                </div>
+              )}
+              {draft.bgaHigh && draft.bgaHigh.length > 0 && (
+                <div>
+                  <p className="text-[10px] text-green-700 font-medium mb-0.5">What raised alignment score:</p>
+                  {draft.bgaHigh.map((f, i) => (
+                    <p key={i} className="text-[11px] text-foreground/80 ml-2">+ {f}</p>
+                  ))}
+                </div>
+              )}
+              {draft.bgaLow && draft.bgaLow.length > 0 && (
+                <div>
+                  <p className="text-[10px] text-amber-700 font-medium mb-0.5">What tempered alignment score:</p>
+                  {draft.bgaLow.map((f, i) => (
+                    <p key={i} className="text-[11px] text-foreground/80 ml-2">− {f}</p>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Cannibalization warning */}
+          {draft.cannibalizationWarning && (
+            <div className={`rounded-lg border p-3 ${
+              draft.cannibalizationSeverity === "high" ? "border-red-200 bg-red-50" :
+              draft.cannibalizationSeverity === "medium" ? "border-amber-200 bg-amber-50" :
+              "border-yellow-200 bg-yellow-50"
+            }`}>
+              <div className="flex items-center gap-1.5 mb-1">
+                <AlertTriangle className={`w-3.5 h-3.5 ${draft.cannibalizationSeverity === "high" ? "text-red-600" : "text-amber-600"}`} />
+                <p className={`text-[10px] font-semibold uppercase tracking-wide ${draft.cannibalizationSeverity === "high" ? "text-red-700" : "text-amber-700"}`}>
+                  Cannibalization Risk — {draft.cannibalizationSeverity || "low"}
+                </p>
+              </div>
+              <p className="text-[11px] text-foreground/80 leading-snug">{draft.cannibalizationWarning}</p>
+              {draft.cannibalizationAction && (
+                <p className="mt-1 text-[11px] font-medium text-foreground/70">
+                  Action: {draft.cannibalizationAction.replace(/_/g, " ")}
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="border-t pt-4">
             <div className="flex items-center justify-between mb-3">
@@ -865,7 +936,7 @@ function KeywordsStep({ ws, onUpdate }: { ws: Workspace; onUpdate: (keywords: Ke
 
   const filtered = keywords
     .filter(k => filterCluster === "all" || k.clusterId === filterCluster)
-    .filter(k => filterStatus === "all" || k.status === filterStatus)
+    .filter(k => filterStatus === "all" || (filterStatus === "new_suggestion" ? k.reviewState === "new_suggestion" : k.status === filterStatus))
     .filter(k => filterIntent === "all" || k.dominantIntent === filterIntent)
     .sort((a, b) => {
       const va = (a as any)[sortBy] ?? 0;
@@ -959,6 +1030,7 @@ function KeywordsStep({ ws, onUpdate }: { ws: Workspace; onUpdate: (keywords: Ke
             <SelectContent>
               <SelectItem value="all">All status</SelectItem>
               {["pending", "approved", "rejected", "watchlist"].map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+              <SelectItem value="new_suggestion">New suggestions</SelectItem>
             </SelectContent>
           </Select>
           <Select value={filterIntent} onValueChange={setFilterIntent}>
@@ -1006,6 +1078,9 @@ function KeywordsStep({ ws, onUpdate }: { ws: Workspace; onUpdate: (keywords: Ke
         <span className="text-red-500">{keywords.filter(k => k.status === "rejected").length} rejected</span>
         <span className="text-amber-600">{keywords.filter(k => k.status === "watchlist").length} watchlist</span>
         <span>{keywords.filter(k => k.status === "pending").length} pending</span>
+        {keywords.filter(k => k.reviewState === "new_suggestion").length > 0 && (
+          <span className="text-purple-600 dark:text-purple-400 font-medium">{keywords.filter(k => k.reviewState === "new_suggestion").length} new suggestions</span>
+        )}
         <span className="ml-auto">Showing {filtered.length}</span>
       </div>
 
@@ -1057,11 +1132,24 @@ function KeywordsStep({ ws, onUpdate }: { ws: Workspace; onUpdate: (keywords: Ke
                         <input type="checkbox" checked={selectedIds.has(kw.id)} onChange={() => toggleSelect(kw.id)} className="rounded" />
                       </td>
                       <td className="p-2">
-                        <span className="font-medium text-foreground">{kw.keyword}</span>
-                        {kw.isLocked && <Lock className="w-2.5 h-2.5 inline ml-1 text-muted-foreground" />}
-                        {Object.keys(kw.manualOverrides).length > 0 && (
-                          <span className="ml-1 text-[9px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950 px-1 rounded">edited</span>
-                        )}
+                        <div className="flex items-center gap-1 flex-wrap">
+                          <span className="font-medium text-foreground">{kw.keyword}</span>
+                          {kw.isLocked && <Lock className="w-2.5 h-2.5 text-muted-foreground" />}
+                          {kw.reviewState === "new_suggestion" && (
+                            <span className="text-[9px] text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950 border border-purple-200 dark:border-purple-800 px-1.5 py-0.5 rounded-full font-semibold">new</span>
+                          )}
+                          {Object.keys(kw.manualOverrides).length > 0 && (
+                            <span className="text-[9px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950 px-1 rounded">edited</span>
+                          )}
+                          {kw.cannibalizationWarning && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <AlertTriangle className="w-3 h-3 text-amber-500 cursor-pointer" />
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-xs text-xs">{kw.cannibalizationWarning}</TooltipContent>
+                            </Tooltip>
+                          )}
+                        </div>
                       </td>
                       <td className="p-2 text-muted-foreground">{clusterMap[kw.clusterId] || kw.clusterId}</td>
                       <td className="p-2">
@@ -1265,7 +1353,12 @@ function InternalLinkingStep({ ws }: { ws: Workspace }) {
                 <div className="flex items-center gap-3 px-4 py-3 bg-muted/40 border-b">
                   <Link2 className="w-4 h-4 text-[#1B3A6B] dark:text-blue-400" />
                   <h3 className="text-sm font-semibold text-foreground flex-1">{s.clusterName}</h3>
-                  {cluster && (
+                  {s.linkType && (
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800">
+                      {s.linkType.replace(/_/g, " ")}
+                    </span>
+                  )}
+                  {cluster && !s.linkType && (
                     <span className="text-[10px] text-muted-foreground">{cluster.clusterRole.replace(/_/g, " ")}</span>
                   )}
                   {clusterKws.length > 0 && (
@@ -1273,6 +1366,9 @@ function InternalLinkingStep({ ws }: { ws: Workspace }) {
                   )}
                 </div>
                 <div className="px-4 py-3 space-y-3">
+                  {s.rationale && (
+                    <p className="text-xs text-foreground/80 italic leading-snug">{s.rationale}</p>
+                  )}
                   {s.supportingPages?.length > 0 && (
                     <div>
                       <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Supporting Page Types</p>
@@ -1332,38 +1428,82 @@ function InternalLinkingStep({ ws }: { ws: Workspace }) {
 
 function ExportStep({ ws }: { ws: Workspace }) {
   const { toast } = useToast();
-  const [isDownloading, setIsDownloading] = useState(false);
+  const [isDownloadingXlsx, setIsDownloadingXlsx] = useState(false);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+  const [exportMode, setExportMode] = useState<"all" | "approved">("all");
   const keywords: Keyword[] = (ws.keywords as Keyword[]) || [];
   const clusters: Cluster[] = (ws.clusters as Cluster[]) || [];
   const bp = ws.businessProfile as BusinessProfile | null;
 
   async function downloadXlsx() {
-    setIsDownloading(true);
+    setIsDownloadingXlsx(true);
     try {
-      const res = await fetch(`/api/discoverability/workspaces/${ws.id}/export-xlsx`);
+      const res = await fetch(`/api/discoverability/workspaces/${ws.id}/export-xlsx?mode=${exportMode}`);
       if (!res.ok) throw new Error("Export failed");
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `discoverability_${(ws.name || "workspace").replace(/\s+/g, "_").toLowerCase()}_${new Date().toISOString().split("T")[0]}.xlsx`;
+      a.download = `discoverability_${(ws.name || "workspace").replace(/\s+/g, "_").toLowerCase()}_${exportMode}_${new Date().toISOString().split("T")[0]}.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
-      toast({ title: "Export complete", description: "XLSX downloaded successfully." });
+      toast({ title: "XLSX exported", description: `${exportMode === "approved" ? "Approved keywords only" : "All keywords"} downloaded.` });
     } catch {
       toast({ title: "Export failed", description: "Could not download XLSX.", variant: "destructive" });
     } finally {
-      setIsDownloading(false);
+      setIsDownloadingXlsx(false);
+    }
+  }
+
+  async function downloadPdf() {
+    setIsDownloadingPdf(true);
+    try {
+      const res = await fetch(`/api/discoverability/workspaces/${ws.id}/export-pdf?mode=${exportMode}`);
+      if (!res.ok) throw new Error("PDF export failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `discoverability_${(ws.name || "workspace").replace(/\s+/g, "_").toLowerCase()}_${exportMode}_${new Date().toISOString().split("T")[0]}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast({ title: "PDF exported", description: "Keyword research report downloaded." });
+    } catch {
+      toast({ title: "PDF failed", description: "Could not generate PDF report.", variant: "destructive" });
+    } finally {
+      setIsDownloadingPdf(false);
     }
   }
 
   const changeLog = (ws.changeLog as any[]) || [];
+  const exportedKeywords = exportMode === "approved" ? keywords.filter(k => k.status === "approved") : keywords;
 
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-base font-semibold text-foreground mb-0.5">Export</h2>
         <p className="text-xs text-muted-foreground">Download your keyword research workspace for client delivery or team use.</p>
+      </div>
+
+      {/* Export mode selector */}
+      <div className="flex items-center gap-2 p-3 rounded-xl border bg-muted/30">
+        <span className="text-xs font-medium text-muted-foreground shrink-0">Export scope:</span>
+        <div className="flex gap-1.5">
+          {[
+            { value: "all", label: `All keywords (${keywords.length})` },
+            { value: "approved", label: `Approved only (${keywords.filter(k => k.status === "approved").length})` },
+          ].map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => setExportMode(opt.value as "all" | "approved")}
+              className={`text-xs px-3 py-1 rounded-full border transition-colors ${exportMode === opt.value ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:bg-muted"}`}
+              data-testid={`button-export-mode-${opt.value}`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        <span className="text-[11px] text-muted-foreground ml-auto">{exportedKeywords.length} keyword{exportedKeywords.length !== 1 ? "s" : ""} included</span>
       </div>
 
       {/* Summary stats */}
@@ -1374,7 +1514,7 @@ function ExportStep({ ws }: { ws: Workspace }) {
           { label: "Approved", value: keywords.filter(k => k.status === "approved").length, icon: CheckCircle2 },
           { label: "Pending", value: keywords.filter(k => k.status === "pending").length, icon: Clock },
           { label: "Rejected", value: keywords.filter(k => k.status === "rejected").length, icon: X },
-          { label: "Watchlist", value: keywords.filter(k => k.status === "watchlist").length, icon: Eye },
+          { label: "New Suggestions", value: keywords.filter(k => k.reviewState === "new_suggestion").length, icon: Sparkles },
         ].map(stat => {
           const Icon = stat.icon;
           return (
@@ -1396,12 +1536,26 @@ function ExportStep({ ws }: { ws: Workspace }) {
             <Download className="w-5 h-5 text-emerald-700 dark:text-emerald-400" />
           </div>
           <div className="flex-1">
-            <h3 className="text-sm font-semibold text-foreground">XLSX Export</h3>
-            <p className="text-xs text-muted-foreground">Operational workbook with 6 tabs: Summary, Clusters, Keywords, Internal Linking, Rejected/Watchlist, Scoring Weights.</p>
+            <h3 className="text-sm font-semibold text-foreground">XLSX Workbook</h3>
+            <p className="text-xs text-muted-foreground">8 tabs: Summary, Clusters, Keywords (with confidence + cannibalization), Existing Page Mapping, Internal Linking, Rejected/Watchlist, Scoring Weights, Change Log.</p>
           </div>
-          <Button onClick={downloadXlsx} disabled={isDownloading || keywords.length === 0} data-testid="button-export-xlsx">
-            {isDownloading ? <RefreshCw className="w-4 h-4 mr-1.5 animate-spin" /> : <Download className="w-4 h-4 mr-1.5" />}
-            {isDownloading ? "Exporting…" : "Download XLSX"}
+          <Button onClick={downloadXlsx} disabled={isDownloadingXlsx || keywords.length === 0} data-testid="button-export-xlsx">
+            {isDownloadingXlsx ? <RefreshCw className="w-4 h-4 mr-1.5 animate-spin" /> : <Download className="w-4 h-4 mr-1.5" />}
+            {isDownloadingXlsx ? "Exporting…" : "Download XLSX"}
+          </Button>
+        </div>
+
+        <div className="flex items-center gap-4 p-4 rounded-xl border bg-card">
+          <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 flex items-center justify-center shrink-0">
+            <FileText className="w-5 h-5 text-blue-700 dark:text-blue-400" />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-sm font-semibold text-foreground">PDF Report</h3>
+            <p className="text-xs text-muted-foreground">Client-ready keyword research report — cover, business profile, cluster overview, top opportunities, page-type recs, internal linking, and methodology.</p>
+          </div>
+          <Button variant="outline" onClick={downloadPdf} disabled={isDownloadingPdf || keywords.length === 0} data-testid="button-export-pdf">
+            {isDownloadingPdf ? <RefreshCw className="w-4 h-4 mr-1.5 animate-spin" /> : <FileText className="w-4 h-4 mr-1.5" />}
+            {isDownloadingPdf ? "Generating…" : "Download PDF"}
           </Button>
         </div>
       </div>

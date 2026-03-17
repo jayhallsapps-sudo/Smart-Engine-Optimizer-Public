@@ -451,3 +451,389 @@ export async function generateMonthlyPdf(
     doc.end();
   });
 }
+
+// ─── Discoverability Tool PDF ─────────────────────────────────────────────────
+
+const DISC_NAVY = "#1B3A6B";
+const DISC_NAVY_LIGHT = "#EBF0F8";
+const DISC_GREEN = "#16A34A";
+const DISC_AMBER = "#D97706";
+const DISC_RED = "#DC2626";
+const DISC_MUTED = "#6B7280";
+const DISC_FOOTER = "Webserv  |  32 Discovery Suite 130, Irvine, CA 92618  |  webserv.io";
+
+export interface DiscoverabilityPdfData {
+  workspaceName: string;
+  preparedBy?: string;
+  clientName?: string;
+  domain?: string;
+  businessType?: string;
+  industryCategory?: string;
+  marketType?: string;
+  locationTargets?: string[];
+  primaryServices?: string[];
+  primaryConversionGoals?: string[];
+  northStarMetric?: string;
+  isYmyl?: boolean;
+  complianceSensitivity?: string;
+  notes?: string;
+  clusters: Array<{
+    id: string; name: string; clusterType?: string;
+    clusterRole?: string; linkedBusinessGoal?: string; notes?: string;
+  }>;
+  keywords: Array<{
+    id: string; keyword: string; clusterId?: string; source?: string;
+    estimatedVolume?: string; estimatedDifficulty?: number;
+    businessGoal?: string; dominantIntent?: string;
+    finalOpportunityScore?: number; businessGoalAlignmentScore?: number;
+    intentFitScore?: number; conversionProximityScore?: number;
+    recommendedPageType?: string; recommendedTargetUrl?: string;
+    pageTypeReason?: string; serpNotes?: string; notes?: string;
+    status: string; isLocked?: boolean;
+    confidence?: string;
+    cannibalizationWarning?: string; cannibalizationSeverity?: string;
+  }>;
+  internalLinkSuggestions: Array<{
+    clusterId?: string; clusterName?: string;
+    supportingPages?: string[]; anchorTextSuggestions?: string[];
+    linkingNotes?: string; linkType?: string; rationale?: string;
+  }>;
+  changeLog: Array<{ timestamp: string; action: string; detail: string }>;
+  exportMode?: "all" | "approved" | "filtered";
+}
+
+const PAGE_TYPE_LABELS_PDF: Record<string, string> = {
+  existing_page_refresh: "Refresh Existing", new_blog: "New Blog",
+  new_service_page: "New Service Page", new_location_page: "New Location Page",
+  new_faq_page: "New FAQ", comparison_page: "Comparison Page",
+  booking_page: "Booking Page", category_hub_page: "Category Hub",
+  no_action: "No Action",
+};
+
+export async function generateDiscoverabilityPdf(data: DiscoverabilityPdfData): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: "LETTER", margin: 0, autoFirstPage: true });
+    const chunks: Buffer[] = [];
+    doc.on("data", (c: Buffer) => chunks.push(c));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+
+    const PW = 612;
+    const ML = 54;
+    const BW = PW - ML - ML;
+    const PAGE_H = 792;
+    const FOOTER_Y = PAGE_H - 32;
+    let y = 0;
+
+    function drawFooter() {
+      doc.moveTo(ML, FOOTER_Y).lineTo(ML + BW, FOOTER_Y)
+        .lineWidth(0.4).strokeColor(DISC_MUTED).stroke();
+      doc.font("Helvetica").fontSize(7).fillColor(DISC_MUTED)
+        .text(DISC_FOOTER, ML, FOOTER_Y + 6, { width: BW, align: "center", lineBreak: false });
+    }
+
+    function newPage() {
+      drawFooter();
+      doc.addPage();
+      y = 48;
+    }
+
+    function checkSpace(needed: number) {
+      if (y + needed > FOOTER_Y - 12) newPage();
+    }
+
+    function sectionHeader(title: string, num?: number) {
+      checkSpace(38);
+      const label = num !== undefined ? `${num}.  ${title}` : title;
+      doc.font("Helvetica-Bold").fontSize(12).fillColor(DISC_NAVY)
+        .text(label, ML, y, { width: BW });
+      y = doc.y + 2;
+      doc.moveTo(ML, y).lineTo(ML + BW, y).lineWidth(1.2).strokeColor(DISC_NAVY).stroke();
+      y += 8;
+    }
+
+    function bodyText(text: string, color = "#374151") {
+      checkSpace(16);
+      doc.font("Helvetica").fontSize(9).fillColor(color).text(text, ML, y, { width: BW });
+      y = doc.y + 4;
+    }
+
+    function kv(key: string, value: string) {
+      checkSpace(14);
+      doc.font("Helvetica-Bold").fontSize(8.5).fillColor("#374151")
+        .text(`${key}:  `, ML, y, { width: 130, continued: true });
+      doc.font("Helvetica").fontSize(8.5).fillColor("#374151")
+        .text(value || "—", { width: BW - 130, continued: false });
+      y = doc.y + 3;
+    }
+
+    function tableRow(cells: string[], colWidths: number[], isHeader: boolean, isEven: boolean) {
+      const rowH = 14;
+      checkSpace(rowH + 2);
+      if (isHeader) {
+        doc.rect(ML, y, BW, rowH).fill(DISC_NAVY);
+      } else if (isEven) {
+        doc.rect(ML, y, BW, rowH).fill(DISC_NAVY_LIGHT);
+      }
+      let cx = ML;
+      cells.forEach((cell, i) => {
+        const cw = colWidths[i];
+        const color = isHeader ? "#FFFFFF" : "#374151";
+        const font = isHeader ? "Helvetica-Bold" : "Helvetica";
+        doc.font(font).fontSize(7.5).fillColor(color)
+          .text(String(cell ?? "").slice(0, 60), cx + 3, y + 3, { width: cw - 6, lineBreak: false });
+        cx += cw;
+      });
+      y += rowH;
+    }
+
+    function scoreColor(s: number) {
+      return s >= 7 ? DISC_GREEN : s >= 4 ? DISC_AMBER : DISC_RED;
+    }
+
+    // ── Cover Page ────────────────────────────────────────────────────────────
+    doc.rect(0, 0, PW, 200).fill(DISC_NAVY);
+    doc.font("Helvetica-Bold").fontSize(10).fillColor("#BFD7FF")
+      .text("KEYWORD RESEARCH REPORT", ML, 52, { width: BW, characterSpacing: 1.5 });
+    doc.font("Helvetica-Bold").fontSize(22).fillColor("#FFFFFF")
+      .text(data.clientName || data.workspaceName, ML, 68, { width: BW });
+    doc.font("Helvetica").fontSize(11).fillColor("#BFD7FF")
+      .text(data.domain || "", ML, 96, { width: BW });
+    doc.font("Helvetica").fontSize(9).fillColor("#BFD7FF")
+      .text(`Workspace: ${data.workspaceName}`, ML, 114, { width: BW });
+    doc.font("Helvetica").fontSize(9).fillColor("#BFD7FF")
+      .text(`Prepared by: ${data.preparedBy || "Webserv"}   ·   ${new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}`, ML, 128, { width: BW });
+
+    doc.font("Helvetica-Bold").fontSize(9).fillColor("#374151")
+      .text("Discoverability Tool — Business-Goal-Aligned Keyword Research", ML, 220, { width: BW });
+    y = 240;
+    const approvedKws = data.keywords.filter(k => k.status === "approved");
+    const statsRows = [
+      ["Total Clusters", String(data.clusters.length)],
+      ["Total Keywords", String(data.keywords.length)],
+      ["Approved", String(approvedKws.length)],
+      ["Pending", String(data.keywords.filter(k => k.status === "pending").length)],
+      ["Watchlist", String(data.keywords.filter(k => k.status === "watchlist").length)],
+    ];
+    statsRows.forEach(([k, v]) => {
+      doc.font("Helvetica-Bold").fontSize(9).fillColor(DISC_NAVY)
+        .text(`${k}: `, ML, y, { continued: true });
+      doc.font("Helvetica").fontSize(9).fillColor("#374151").text(v);
+      y = doc.y + 3;
+    });
+    y += 12;
+    if (data.isYmyl) {
+      doc.roundedRect(ML, y, BW, 22, 3).fill("#FEF3C7");
+      doc.font("Helvetica-Bold").fontSize(8).fillColor("#92400E")
+        .text("YMYL / Regulated Industry — Trust & compliance review applied to scoring", ML + 8, y + 7, { width: BW - 16 });
+      y += 30;
+    }
+
+    // ── Business Profile ──────────────────────────────────────────────────────
+    newPage();
+    y = 48;
+    sectionHeader("Business Profile", 1);
+    kv("Client", data.clientName || "");
+    kv("Domain", data.domain || "");
+    kv("Business Type", data.businessType || "");
+    kv("Industry", data.industryCategory || "");
+    kv("Market Type", data.marketType || "");
+    kv("Locations", (data.locationTargets || []).join(", ") || "Not specified");
+    kv("Primary Services", (data.primaryServices || []).join(", ") || "");
+    kv("Conversion Goals", (data.primaryConversionGoals || []).join(", ") || "");
+    kv("North Star Metric", data.northStarMetric || "");
+    kv("YMYL / Regulated", data.isYmyl ? "Yes" : "No");
+    kv("Compliance Level", data.complianceSensitivity || "low");
+    if (data.notes) { y += 4; bodyText(`Strategic Notes: ${data.notes}`, DISC_MUTED); }
+
+    // ── Cluster Overview ──────────────────────────────────────────────────────
+    y += 12;
+    sectionHeader("Cluster Overview", 2);
+    if (data.clusters.length === 0) {
+      bodyText("No clusters defined.", DISC_MUTED);
+    } else {
+      const cols = [120, 100, 80, BW - 300];
+      tableRow(["Cluster Name", "Role", "Type", "Business Goal"], cols, true, false);
+      data.clusters.forEach((c, i) => {
+        tableRow([c.name, (c.clusterRole || "").replace(/_/g, " "), (c.clusterType || "").replace(/_/g, " "), c.linkedBusinessGoal || ""], cols, false, i % 2 === 1);
+      });
+      y += 8;
+    }
+
+    // ── Top Keyword Opportunities ─────────────────────────────────────────────
+    y += 8;
+    sectionHeader("Top Keyword Opportunities", 3);
+    const topKws = [...data.keywords]
+      .filter(k => k.status !== "rejected")
+      .sort((a, b) => (b.finalOpportunityScore || 0) - (a.finalOpportunityScore || 0))
+      .slice(0, 30);
+    if (topKws.length === 0) {
+      bodyText("No keywords available.", DISC_MUTED);
+    } else {
+      const clusterMap = Object.fromEntries(data.clusters.map(c => [c.id, c.name]));
+      const kCols = [160, 80, 60, 50, 50, BW - 400];
+      tableRow(["Keyword", "Cluster", "Intent", "Score", "Status", "Page Type"], kCols, true, false);
+      topKws.forEach((kw, i) => {
+        const clName = clusterMap[kw.clusterId || ""] || "";
+        const intent = (kw.dominantIntent || "").replace(/_/g, " ");
+        const score = (kw.finalOpportunityScore || 0).toFixed(1);
+        const pageType = PAGE_TYPE_LABELS_PDF[kw.recommendedPageType || ""] || kw.recommendedPageType || "";
+        checkSpace(14);
+        const rowH = 14;
+        if (i % 2 === 1) doc.rect(ML, y, BW, rowH).fill(DISC_NAVY_LIGHT);
+        let cx = ML;
+        const cells = [kw.keyword, clName, intent, score, kw.status, pageType];
+        cells.forEach((cell, ci) => {
+          const cw = kCols[ci];
+          let color = "#374151";
+          if (ci === 3) color = scoreColor(parseFloat(score));
+          if (ci === 4) {
+            if (kw.status === "approved") color = DISC_GREEN;
+            else if (kw.status === "rejected") color = DISC_RED;
+            else if (kw.status === "watchlist") color = DISC_AMBER;
+          }
+          const font = ci === 3 ? "Helvetica-Bold" : "Helvetica";
+          doc.font(font).fontSize(7.5).fillColor(color)
+            .text(String(cell ?? "").slice(0, 55), cx + 3, y + 3, { width: cw - 6, lineBreak: false });
+          cx += cw;
+        });
+        y += rowH;
+        // Show cannibalization warning if present
+        if (kw.cannibalizationWarning) {
+          checkSpace(12);
+          doc.font("Helvetica").fontSize(7).fillColor(DISC_AMBER)
+            .text(`  ⚠ ${kw.cannibalizationWarning}`, ML + 4, y + 1, { width: BW - 8, lineBreak: false });
+          y += 11;
+        }
+      });
+      y += 8;
+    }
+
+    // ── Page-Type Recommendations ─────────────────────────────────────────────
+    newPage();
+    sectionHeader("Page-Type Recommendations", 4);
+    const byType = topKws.reduce((acc, kw) => {
+      const t = kw.recommendedPageType || "no_action";
+      if (!acc[t]) acc[t] = [];
+      acc[t].push(kw);
+      return acc;
+    }, {} as Record<string, typeof topKws>);
+    const importantTypes = Object.entries(byType).filter(([t]) => t !== "no_action");
+    if (importantTypes.length === 0) {
+      bodyText("No page-type recommendations available.", DISC_MUTED);
+    } else {
+      importantTypes.forEach(([pageType, kws]) => {
+        checkSpace(32);
+        doc.font("Helvetica-Bold").fontSize(9).fillColor(DISC_NAVY)
+          .text(PAGE_TYPE_LABELS_PDF[pageType] || pageType, ML, y);
+        y = doc.y + 2;
+        const avg = (kws.reduce((a, k) => a + (k.finalOpportunityScore || 0), 0) / kws.length).toFixed(1);
+        doc.font("Helvetica").fontSize(8).fillColor(DISC_MUTED)
+          .text(`${kws.length} keyword${kws.length !== 1 ? "s" : ""} · avg score ${avg}`, ML, y);
+        y = doc.y + 3;
+        kws.slice(0, 5).forEach(kw => {
+          checkSpace(12);
+          doc.font("Helvetica").fontSize(8).fillColor("#374151")
+            .text(`• ${kw.keyword}`, ML + 8, y, { continued: true, width: 240 });
+          if (kw.recommendedTargetUrl) {
+            doc.font("Helvetica").fontSize(7).fillColor(DISC_MUTED)
+              .text(`  →  ${kw.recommendedTargetUrl}`, { continued: false });
+          } else {
+            doc.text("");
+          }
+          y = doc.y + 2;
+          if (kw.pageTypeReason) {
+            doc.font("Helvetica").fontSize(7).fillColor(DISC_MUTED)
+              .text(kw.pageTypeReason, ML + 16, y, { width: BW - 16 });
+            y = doc.y + 2;
+          }
+        });
+        if (kws.length > 5) {
+          doc.font("Helvetica").fontSize(7).fillColor(DISC_MUTED)
+            .text(`  +${kws.length - 5} more`, ML + 8, y);
+          y = doc.y + 2;
+        }
+        y += 8;
+      });
+    }
+
+    // ── Internal Linking & Topical Authority ──────────────────────────────────
+    if (data.internalLinkSuggestions.length > 0) {
+      checkSpace(40);
+      sectionHeader("Internal Linking & Topical Authority", 5);
+      data.internalLinkSuggestions.forEach(s => {
+        checkSpace(28);
+        doc.font("Helvetica-Bold").fontSize(9).fillColor(DISC_NAVY)
+          .text(s.clusterName || "", ML, y);
+        y = doc.y + 2;
+        if (s.rationale) {
+          doc.font("Helvetica").fontSize(8).fillColor(DISC_MUTED)
+            .text(s.rationale, ML, y, { width: BW });
+          y = doc.y + 3;
+        }
+        if (s.anchorTextSuggestions?.length) {
+          doc.font("Helvetica").fontSize(7.5).fillColor("#374151")
+            .text(`Anchor text: ${s.anchorTextSuggestions.join("  ·  ")}`, ML + 8, y, { width: BW - 8 });
+          y = doc.y + 3;
+        }
+        if (s.linkingNotes) {
+          doc.font("Helvetica").fontSize(7.5).fillColor(DISC_MUTED)
+            .text(s.linkingNotes, ML + 8, y, { width: BW - 8 });
+          y = doc.y + 3;
+        }
+        y += 6;
+      });
+    }
+
+    // ── Rejected / Watchlist ──────────────────────────────────────────────────
+    const rejectedKws = data.keywords.filter(k => k.status === "rejected" || k.status === "watchlist");
+    if (rejectedKws.length > 0) {
+      checkSpace(40);
+      sectionHeader("Rejected / Watchlist Keywords", 6);
+      const rCols = [180, 70, 50, BW - 300];
+      tableRow(["Keyword", "Cluster", "Status", "Notes / Reason"], rCols, true, false);
+      const clusterMap2 = Object.fromEntries(data.clusters.map(c => [c.id, c.name]));
+      rejectedKws.slice(0, 20).forEach((kw, i) => {
+        tableRow([kw.keyword, clusterMap2[kw.clusterId || ""] || "", kw.status, kw.notes || ""], rCols, false, i % 2 === 1);
+      });
+      y += 8;
+    }
+
+    // ── Methodology ───────────────────────────────────────────────────────────
+    checkSpace(80);
+    sectionHeader("Methodology & Scoring", rejectedKws.length > 0 ? 7 : 6);
+    bodyText("This keyword research workspace was generated using Webserv's Discoverability Tool. Opportunity scores reflect business-goal alignment, not raw search volume. Each keyword is evaluated on 10 weighted dimensions:");
+    const dims = [
+      ["Business Goal Alignment (20%)", "How directly this keyword supports the client's stated business goals and conversion outcomes."],
+      ["Intent Fit (20%)", "Whether the SERP intent matches what the client's pages can satisfy."],
+      ["Ranking Opportunity (15%)", "Realistic rankability given domain authority and competitive landscape."],
+      ["Conversion Proximity (15%)", "How close this keyword is to a transaction, lead, or booking action."],
+      ["Current Traction (10%)", "Estimated existing visibility or ranking position for this term."],
+      ["Topical Authority Value (10%)", "How much this keyword strengthens an important topical cluster."],
+      ["Content Effort (5%)", "Inverted — lower content production burden scores higher."],
+      ["Existing Coverage (5%)", "Whether the client already has a page that could be refreshed."],
+      ["Local Relevance (weighted contextually)", "Geo-relevance for local or multi-location businesses."],
+      ["Trust/Compliance Complexity (YMYL only)", "Applied only when client is in a regulated or YMYL industry."],
+    ];
+    dims.forEach(([name, desc]) => {
+      checkSpace(20);
+      doc.font("Helvetica-Bold").fontSize(8).fillColor(DISC_NAVY).text(`• ${name}`, ML + 8, y, { width: BW - 8 });
+      y = doc.y + 1;
+      doc.font("Helvetica").fontSize(7.5).fillColor(DISC_MUTED).text(desc, ML + 18, y, { width: BW - 18 });
+      y = doc.y + 4;
+    });
+    y += 6;
+    bodyText("Sources: AI-inferred baseline (Claude), supplemented by any GSC, Ahrefs, SEMrush, or manual data present in the workspace. Confidence labels (high/medium/low) indicate how much actual data supported each recommendation vs. inference.");
+
+    // ── Notes ─────────────────────────────────────────────────────────────────
+    const workspaceNotes = (data as any).workspaceNotes;
+    if (workspaceNotes) {
+      checkSpace(40);
+      sectionHeader("Notes & Overrides");
+      bodyText(workspaceNotes, "#374151");
+    }
+
+    drawFooter();
+    doc.end();
+  });
+}

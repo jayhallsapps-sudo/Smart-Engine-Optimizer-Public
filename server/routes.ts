@@ -4162,7 +4162,7 @@ export async function registerRoutes(
     } catch (err: any) { res.status(500).json({ error: err.message }); }
   });
 
-  // AI generation for keyword clusters, intent, scoring, and page-type recommendations
+  // AI generation — safe refresh: locked rows preserved, new suggestions marked for review
   app.post("/api/discoverability/workspaces/:id/generate", async (req, res) => {
     try {
       const workspace = await storage.getDiscoverabilityWorkspace(Number(req.params.id));
@@ -4177,18 +4177,24 @@ export async function registerRoutes(
       const existingKeywords = (workspace.keywords as any[]) || [];
       const existingClusters = (workspace.clusters as any[]) || [];
 
-      const systemPrompt = `You are a senior SEO strategist at Webserv. You follow Webserv's SEO philosophy:
-- Client business goals come first, before raw volume
-- Search intent and user need come before volume
-- Recommendations must be defensible, measurable, and explainable
-- Rankings are indicators; business outcomes matter more
-- YMYL logic only applies when the client or page type actually requires it
-- Never assume all clients are treatment centers or regulated industries
-
-Your task: Generate a structured keyword research workspace in JSON format.`;
+      // Separate locked vs unlocked for safe refresh
+      const lockedKeywords = existingKeywords.filter((k: any) => k.isLocked === true);
+      const lockedSet = new Set(lockedKeywords.map((k: any) => k.keyword.toLowerCase()));
 
       const isYmyl = bp?.isYmyl || false;
       const complianceSensitivity = bp?.complianceSensitivity || "low";
+
+      const systemPrompt = `You are a senior SEO strategist at Webserv. Core philosophy:
+- Client business goals come first — never raw volume
+- Intent fit before volume; conversion proximity matters more than impressions
+- Recommendations must be defensible with a clear human-readable reason
+- YMYL trust/compliance scoring only applies when explicitly flagged — never assume regulated industry
+- Local businesses get heavily boosted local signals
+- Never recommend a new page when an existing page can be refreshed
+- Cannibalization risk must be flagged whenever multiple pages could target the same intent
+- Every recommendation gets a confidence level (high/medium/low) based on how well intent and goal signals are confirmed
+
+Your task: Generate a structured keyword research workspace in JSON format.`;
 
       const userPrompt = `Generate keyword research clusters and keyword candidates for this client.
 
@@ -4210,36 +4216,55 @@ BUSINESS PROFILE:
 - Compliance Sensitivity: ${complianceSensitivity}
 - Notes: ${bp?.notes || "None"}
 
-${existingKeywords.length > 0 ? `EXISTING KEYWORDS (${existingKeywords.length} already in workspace — generate NEW ones that complement these, do not duplicate): ${existingKeywords.slice(0, 20).map((k: any) => k.keyword).join(", ")}` : ""}
+${existingKeywords.length > 0 ? `EXISTING KEYWORDS (already in workspace — do NOT duplicate these): ${existingKeywords.slice(0, 30).map((k: any) => k.keyword).join(", ")}` : ""}
 
 Generate 4-6 keyword clusters with 4-6 keyword candidates each.
 
-For each keyword, provide realistic estimated scores (0-10) for:
-- businessGoalAlignmentScore (how directly it supports stated goals)
-- intentFitScore (does SERP intent match what client can satisfy)
-- currentTractionScore (estimated existing visibility — use 3-5 for unknowns)
-- rankingOpportunityScore (realistic rankability given domain)
-- conversionProximityScore (how close to conversion/lead/booking)
-- topicalAuthorityValueScore (strengthens important cluster)
-- contentEffortScore (effort required — 1=easy, 10=heavy)
-- existingCoverageScore (likely existing page coverage)
-- localRelevanceScore (geo-relevance, weight heavily if local business)
-- trustComplianceComplexityScore (only if YMYL/regulated — else 2-3)
+For each keyword, provide:
+SCORES (0-10):
+- businessGoalAlignmentScore
+- intentFitScore
+- currentTractionScore (use 3-5 if unknown)
+- rankingOpportunityScore
+- conversionProximityScore
+- topicalAuthorityValueScore
+- contentEffortScore (1=easy, 10=heavy)
+- existingCoverageScore
+- localRelevanceScore (weight heavily for local businesses)
+- trustComplianceComplexityScore (2-3 for non-YMYL; higher only for regulated industries)
 
-Also include for each keyword:
-- dominantIntent (transactional|commercial_investigation|informational|navigational|local_intent|mixed)
-- recommendedPageType (existing_page_refresh|new_blog|new_service_page|new_location_page|new_faq_page|comparison_page|booking_page|category_hub_page|no_action)
-- serpNotes (1-2 sentence SERP analysis)
-- estimatedVolume (realistic monthly search volume range like "200-500")
-- estimatedDifficulty (0-100 KD estimate)
+EXPLAINABILITY (required):
+- dominantIntent: transactional|commercial_investigation|informational|navigational|local_intent|mixed
+- confidence: "high"|"medium"|"low" (high = clear intent signal + strong goal match; low = inferred with thin data)
+- pageTypeReason: 1-2 sentence human-readable justification for the recommended page type
+- bgaHigh: array of 2-3 brief factors that RAISED the business goal alignment score (e.g. "directly matches a core service")
+- bgaLow: array of 1-2 brief factors that LOWERED it (e.g. "weak connection to stated conversion goals") — omit if all high
 
-Scoring guidance:
-- Score businessGoalAlignmentScore highest for keywords that match core services + conversion intent
-- Do NOT boost scores just because a keyword has volume
-- For non-YMYL clients, do not apply healthcare/compliance trust rules
-- Local businesses: boost localRelevanceScore and rankingOpportunityScore for geo-targeted terms
+SERP & CANNIBALIZATION:
+- serpNotes: 1-2 sentence SERP analysis
+- cannibalizationWarning: string if risk exists, null if not (e.g. "Similar intent to /existing-page — risk of splitting ranking signals")
+- cannibalizationSeverity: "low"|"medium"|"high"|null
+- cannibalizationAction: "consolidate"|"refresh_existing"|"merge_redirect"|"review_manually"|null
 
-Return ONLY valid JSON with this structure:
+METADATA:
+- recommendedPageType: existing_page_refresh|new_blog|new_service_page|new_location_page|new_faq_page|comparison_page|booking_page|category_hub_page|no_action
+- estimatedVolume: realistic monthly range like "200-500"
+- estimatedDifficulty: 0-100 KD estimate
+
+SCORING GUIDANCE:
+- businessGoalAlignmentScore is the most important signal — weight heavily for core service keywords
+- Do NOT boost scores for volume alone
+- Prefer existing_page_refresh over new pages when coverage exists
+- For non-YMYL clients, set trustComplianceComplexityScore = 2
+- For local businesses, boost localRelevanceScore and rankingOpportunityScore on geo terms
+
+INTERNAL LINKING:
+For each cluster, provide strategic internal linking guidance:
+- linkType: "cluster_support"|"conversion_support"|"authority_reinforcement"|"local_relevance_support"
+- rationale: why source pages should link to this cluster's pages
+- anchorTextSuggestions: 3-5 precise anchor text phrases reflecting actual keyword intent
+
+Return ONLY valid JSON:
 {
   "clusters": [
     {
@@ -4248,7 +4273,7 @@ Return ONLY valid JSON with this structure:
       "clusterType": "service|location|problem_symptom|comparison|cost_pricing|amenity_experience|branded|faq_informational",
       "clusterRole": "core_revenue|support_authority|local_visibility|cro_support|brand_protection",
       "linkedBusinessGoal": "specific goal this cluster supports",
-      "notes": "why this cluster matters"
+      "notes": "strategic rationale for this cluster"
     }
   ],
   "keywords": [
@@ -4259,7 +4284,7 @@ Return ONLY valid JSON with this structure:
       "source": "ai_inferred",
       "estimatedVolume": "500-1000",
       "estimatedDifficulty": 35,
-      "businessGoal": "specific business goal this supports",
+      "businessGoal": "specific business goal",
       "businessGoalAlignmentScore": 8,
       "intentFitScore": 7,
       "currentTractionScore": 4,
@@ -4270,10 +4295,18 @@ Return ONLY valid JSON with this structure:
       "existingCoverageScore": 3,
       "localRelevanceScore": 7,
       "trustComplianceComplexityScore": 2,
+      "confidence": "medium",
       "dominantIntent": "transactional",
       "recommendedPageType": "new_service_page",
-      "serpNotes": "SERP shows primarily service pages from local providers. Strong transactional intent.",
+      "pageTypeReason": "SERP is dominated by local service pages. New dedicated page would target this cluster with transactional intent.",
+      "bgaHigh": ["matches core service", "supports booking conversion goal"],
+      "bgaLow": ["limited geo signal in keyword"],
+      "serpNotes": "SERP shows primarily service pages from local providers.",
+      "cannibalizationWarning": null,
+      "cannibalizationSeverity": null,
+      "cannibalizationAction": null,
       "status": "pending",
+      "reviewState": "new_suggestion",
       "isLocked": false,
       "notes": "",
       "manualOverrides": {}
@@ -4283,16 +4316,18 @@ Return ONLY valid JSON with this structure:
     {
       "clusterId": "cluster_uuid",
       "clusterName": "Cluster Name",
-      "supportingPages": ["suggested internal page types to link from/to"],
-      "anchorTextSuggestions": ["anchor text ideas"],
-      "linkingNotes": "brief note on internal link strategy for this cluster"
+      "linkType": "cluster_support",
+      "rationale": "Why pages in this cluster should link to and from service hubs",
+      "supportingPages": ["page type to link from", "page type to link to"],
+      "anchorTextSuggestions": ["anchor text 1", "anchor text 2"],
+      "linkingNotes": "brief topical authority strategy note"
     }
   ]
 }`;
 
       const message = await client.messages.create({
         model: "claude-opus-4-5",
-        max_tokens: 8000,
+        max_tokens: 10000,
         messages: [{ role: "user", content: userPrompt }],
         system: systemPrompt,
       });
@@ -4301,13 +4336,56 @@ Return ONLY valid JSON with this structure:
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (!jsonMatch) return res.status(500).json({ error: "Failed to parse AI response" });
 
-      const generated = JSON.parse(jsonMatch[0]);
+      let generated: any;
+      try {
+        generated = JSON.parse(jsonMatch[0]);
+      } catch {
+        return res.status(500).json({ error: "AI returned malformed JSON" });
+      }
 
-      // Merge generated with existing (new clusters + keywords appended)
-      const mergedClusters = [...existingClusters, ...(generated.clusters || [])];
-      const mergedKeywords = [...existingKeywords, ...(generated.keywords || [])];
+      // Validate required structure
+      if (!Array.isArray(generated.clusters) || !Array.isArray(generated.keywords)) {
+        return res.status(500).json({ error: "AI response missing required clusters or keywords arrays" });
+      }
 
-      // Calculate finalOpportunityScore for each keyword
+      // ── Safe refresh logic ────────────────────────────────────────────────
+      // 1. Always keep existing clusters (append new ones only)
+      const mergedClusters = [...existingClusters];
+      const existingClusterIds = new Set(existingClusters.map((c: any) => c.id));
+      for (const c of generated.clusters) {
+        if (c.id && !existingClusterIds.has(c.id)) mergedClusters.push(c);
+      }
+
+      // 2. Build keyword index by normalized text for change detection
+      const existingKwIndex = new Map(existingKeywords.map((k: any) => [k.keyword.toLowerCase().trim(), k]));
+
+      // 3. Process new keywords — skip any that would overwrite a locked row
+      const newKeywords: any[] = [];
+      for (const kw of generated.keywords) {
+        if (!kw.keyword) continue;
+        const norm = kw.keyword.toLowerCase().trim();
+        if (lockedSet.has(norm)) continue; // Never overwrite locked
+
+        const existing = existingKwIndex.get(norm);
+        if (existing) {
+          // Already exists — don't re-add; leave it as-is (safe refresh)
+          continue;
+        }
+        // Truly new keyword — mark as new_suggestion for review
+        newKeywords.push({
+          ...kw,
+          id: kw.id || `kw_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          status: "pending",
+          reviewState: "new_suggestion",
+          isLocked: false,
+          manualOverrides: {},
+        });
+      }
+
+      // 4. Merge: locked first, then existing unlocked, then new suggestions
+      const mergedKeywords = [...existingKeywords, ...newKeywords];
+
+      // 5. Score calculation — skip locked rows with manual final scores
       const weights = (workspace.scoringWeights as any) || {
         businessGoalAlignment: 20, intentFit: 20, currentTraction: 10,
         rankingOpportunity: 15, conversionProximity: 15, topicalAuthorityValue: 10,
@@ -4316,7 +4394,7 @@ Return ONLY valid JSON with this structure:
       const totalWeight = Object.values(weights).reduce((a: any, b: any) => a + b, 0);
 
       const keywordsWithFinal = mergedKeywords.map((kw: any) => {
-        if (kw.finalOpportunityScore !== undefined && kw.manualOverrides?.finalOpportunityScore) return kw;
+        if (kw.isLocked && kw.manualOverrides?.finalOpportunityScore) return kw;
         const raw =
           (kw.businessGoalAlignmentScore || 0) * (weights.businessGoalAlignment / totalWeight) +
           (kw.intentFitScore || 0) * (weights.intentFit / totalWeight) +
@@ -4329,17 +4407,18 @@ Return ONLY valid JSON with this structure:
         return { ...kw, finalOpportunityScore: Math.round(raw * 10) / 10 };
       });
 
-      // Build change log entry
       const changeLog = [...((workspace.changeLog as any[]) || []), {
         timestamp: new Date().toISOString(),
         action: "ai_generation",
-        detail: `Generated ${generated.clusters?.length || 0} clusters and ${generated.keywords?.length || 0} keywords`,
+        detail: `Generated ${generated.clusters?.length || 0} clusters · ${newKeywords.length} new keywords · ${lockedKeywords.length} locked rows preserved`,
+        lockedPreserved: lockedKeywords.length,
+        newSuggestions: newKeywords.length,
       }];
 
       const updated = await storage.updateDiscoverabilityWorkspace(Number(req.params.id), {
         clusters: mergedClusters as any,
         keywords: keywordsWithFinal as any,
-        internalLinkSuggestions: generated.internalLinkSuggestions as any,
+        internalLinkSuggestions: (generated.internalLinkSuggestions || []) as any,
         changeLog: changeLog as any,
         status: "active",
       });
@@ -4357,16 +4436,23 @@ Return ONLY valid JSON with this structure:
       const workspace = await storage.getDiscoverabilityWorkspace(Number(req.params.id));
       if (!workspace) return res.status(404).json({ error: "Workspace not found" });
 
+      const exportMode = (req.query.mode as string) || "all"; // all | approved | filtered
       const XLSX = await import("xlsx");
       const bp = workspace.businessProfile as any;
       const clusters = (workspace.clusters as any[]) || [];
-      const keywords = (workspace.keywords as any[]) || [];
+      let keywords = (workspace.keywords as any[]) || [];
       const ilSuggestions = (workspace.internalLinkSuggestions as any[]) || [];
+      const changeLogArr = (workspace.changeLog as any[]) || [];
+
+      if (exportMode === "approved") keywords = keywords.filter((k: any) => k.status === "approved");
+
       const wb = XLSX.utils.book_new();
+      const clusterMap = Object.fromEntries(clusters.map((c: any) => [c.id, c.name]));
 
       // Tab 1: Summary
       const summaryData = [
         ["Discoverability Tool — Keyword Research Workspace"],
+        ["Export Mode", exportMode],
         [""],
         ["Client", bp?.clientName || ""],
         ["Domain", bp?.domain || ""],
@@ -4380,68 +4466,114 @@ Return ONLY valid JSON with this structure:
         ["YMYL", bp?.isYmyl ? "Yes" : "No"],
         ["Compliance Sensitivity", bp?.complianceSensitivity || ""],
         ["Workspace Name", workspace.name],
+        [""],
         ["Total Clusters", clusters.length],
-        ["Total Keywords", keywords.length],
-        ["Approved Keywords", keywords.filter((k: any) => k.status === "approved").length],
-        ["Rejected Keywords", keywords.filter((k: any) => k.status === "rejected").length],
-        ["Watchlist Keywords", keywords.filter((k: any) => k.status === "watchlist").length],
+        ["Total Keywords (this export)", keywords.length],
+        ["Approved", keywords.filter((k: any) => k.status === "approved").length],
+        ["Rejected", keywords.filter((k: any) => k.status === "rejected").length],
+        ["Watchlist", keywords.filter((k: any) => k.status === "watchlist").length],
+        ["Pending", keywords.filter((k: any) => k.status === "pending").length],
+        [""],
+        ["Export Date", new Date().toISOString()],
         ["Last Updated", workspace.updatedAt?.toString() || ""],
       ];
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summaryData), "Summary");
 
       // Tab 2: Clusters
-      const clusterHeaders = ["Cluster ID", "Cluster Name", "Type", "Role", "Linked Business Goal", "Notes"];
-      const clusterRows = clusters.map((c: any) => [c.id, c.name, c.clusterType, c.clusterRole, c.linkedBusinessGoal, c.notes || ""]);
+      const clusterHeaders = ["Cluster Name", "Type", "Role", "Linked Business Goal", "KW Count", "Notes"];
+      const clusterRows = clusters.map((c: any) => {
+        const kwCount = keywords.filter((k: any) => k.clusterId === c.id).length;
+        return [c.name, (c.clusterType || "").replace(/_/g, " "), (c.clusterRole || "").replace(/_/g, " "), c.linkedBusinessGoal || "", kwCount, c.notes || ""];
+      });
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([clusterHeaders, ...clusterRows]), "Clusters");
 
       // Tab 3: Keywords (main)
       const kwHeaders = [
         "Keyword", "Cluster", "Source", "Est. Volume", "Est. Difficulty",
-        "Current Position", "Impressions", "Clicks",
-        "Business Goal", "Business Goal Align Score", "Intent", "Intent Fit Score",
-        "Traction Score", "Ranking Opp Score", "Conversion Proximity",
-        "Topical Authority Value", "Content Effort", "Existing Coverage",
-        "Local Relevance", "Trust/Compliance Complexity", "Final Opportunity Score",
-        "Recommended Page Type", "Recommended URL", "Dominant Intent", "SERP Notes",
-        "Status", "Locked", "Notes"
+        "Business Goal", "Final Score", "Goal Align", "Intent Fit", "Conv Proximity",
+        "Traction", "Ranking Opp", "Topical Auth", "Content Effort", "Existing Coverage",
+        "Local Relevance", "Trust Complexity",
+        "Intent", "Confidence", "Page Type", "Page Type Reason", "Recommended URL",
+        "Cannibalization", "Cannibal Severity", "Cannibal Action",
+        "SERP Notes", "Status", "Review State", "Locked", "Notes"
       ];
-      const clusterMap = Object.fromEntries(clusters.map((c: any) => [c.id, c.name]));
       const kwRows = keywords.map((kw: any) => [
-        kw.keyword, clusterMap[kw.clusterId] || kw.clusterId, kw.source,
-        kw.estimatedVolume || kw.searchVolume || "", kw.estimatedDifficulty || kw.difficulty || "",
-        kw.currentPosition || "", kw.impressions || "", kw.clicks || "",
-        kw.businessGoal, kw.businessGoalAlignmentScore, kw.dominantIntent, kw.intentFitScore,
-        kw.currentTractionScore, kw.rankingOpportunityScore, kw.conversionProximityScore,
-        kw.topicalAuthorityValueScore, kw.contentEffortScore, kw.existingCoverageScore,
-        kw.localRelevanceScore, kw.trustComplianceComplexityScore, kw.finalOpportunityScore,
-        kw.recommendedPageType, kw.recommendedTargetUrl || "", kw.dominantIntent,
-        kw.serpNotes || "", kw.status, kw.isLocked ? "Yes" : "No", kw.notes || ""
+        kw.keyword, clusterMap[kw.clusterId] || kw.clusterId, kw.source || "",
+        kw.estimatedVolume || "", kw.estimatedDifficulty || "",
+        kw.businessGoal || "", kw.finalOpportunityScore || "",
+        kw.businessGoalAlignmentScore || "", kw.intentFitScore || "", kw.conversionProximityScore || "",
+        kw.currentTractionScore || "", kw.rankingOpportunityScore || "", kw.topicalAuthorityValueScore || "",
+        kw.contentEffortScore || "", kw.existingCoverageScore || "",
+        kw.localRelevanceScore || "", kw.trustComplianceComplexityScore || "",
+        (kw.dominantIntent || "").replace(/_/g, " "), kw.confidence || "",
+        (kw.recommendedPageType || "").replace(/_/g, " "), kw.pageTypeReason || "", kw.recommendedTargetUrl || "",
+        kw.cannibalizationWarning || "", kw.cannibalizationSeverity || "", kw.cannibalizationAction || "",
+        kw.serpNotes || "", kw.status || "", kw.reviewState || "", kw.isLocked ? "Yes" : "No", kw.notes || ""
       ]);
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([kwHeaders, ...kwRows]), "Keywords");
 
-      // Tab 4: Internal Linking
-      const ilHeaders = ["Cluster", "Supporting Pages", "Anchor Text Suggestions", "Notes"];
+      // Tab 4: Existing Page Mapping
+      const mappingHeaders = ["Keyword", "Cluster", "Recommended Target URL", "Existing URL", "Page Type", "Coverage Score", "Cannibalization Flag", "Recommended Action"];
+      const mappingRows = keywords
+        .filter((k: any) => k.recommendedTargetUrl || k.cannibalizationWarning || k.existingCoverageScore > 4)
+        .map((kw: any) => [
+          kw.keyword,
+          clusterMap[kw.clusterId] || "",
+          kw.recommendedTargetUrl || "",
+          kw.existingPageUrl || "",
+          (kw.recommendedPageType || "").replace(/_/g, " "),
+          kw.existingCoverageScore || "",
+          kw.cannibalizationWarning || "None",
+          kw.cannibalizationAction || (kw.recommendedPageType === "existing_page_refresh" ? "refresh_existing" : ""),
+        ]);
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([mappingHeaders, ...mappingRows]), "Existing Page Mapping");
+
+      // Tab 5: Internal Linking
+      const ilHeaders = ["Cluster", "Link Type", "Rationale", "Supporting Pages", "Anchor Text Suggestions", "Notes"];
       const ilRows = ilSuggestions.map((il: any) => [
-        il.clusterName, (il.supportingPages || []).join("; "),
-        (il.anchorTextSuggestions || []).join("; "), il.linkingNotes || ""
+        il.clusterName || "", il.linkType || "", il.rationale || "",
+        (il.supportingPages || []).join("; "),
+        (il.anchorTextSuggestions || []).join("; "),
+        il.linkingNotes || "",
       ]);
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([ilHeaders, ...ilRows]), "Internal Linking");
 
-      // Tab 5: Rejected / Watchlist
-      const rejectedRows = keywords.filter((k: any) => k.status === "rejected" || k.status === "watchlist");
-      const rjHeaders = ["Status", "Keyword", "Cluster", "Reason / Notes", "Final Opportunity Score"];
-      const rjRows = rejectedRows.map((kw: any) => [kw.status, kw.keyword, clusterMap[kw.clusterId] || "", kw.notes || "", kw.finalOpportunityScore || ""]);
+      // Tab 6: Rejected / Watchlist
+      const rejectedRows = (workspace.keywords as any[]).filter((k: any) => k.status === "rejected" || k.status === "watchlist");
+      const rjHeaders = ["Status", "Keyword", "Cluster", "Final Score", "Reason / Notes"];
+      const rjRows = rejectedRows.map((kw: any) => [
+        kw.status, kw.keyword, clusterMap[kw.clusterId] || "", kw.finalOpportunityScore || "", kw.notes || ""
+      ]);
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([rjHeaders, ...rjRows]), "Rejected-Watchlist");
 
-      // Tab 6: Scoring Weights
+      // Tab 7: Scoring Weights
       const weights = (workspace.scoringWeights as any) || {
         businessGoalAlignment: 20, intentFit: 20, currentTraction: 10,
         rankingOpportunity: 15, conversionProximity: 15, topicalAuthorityValue: 10,
         contentEffort: 5, existingCoverage: 5,
       };
-      const wHeaders = ["Score Dimension", "Weight"];
-      const wRows = Object.entries(weights).map(([k, v]) => [k, v]);
+      const wHeaders = ["Score Dimension", "Weight", "Description"];
+      const wDescriptions: Record<string, string> = {
+        businessGoalAlignment: "How directly the keyword supports client's stated business goals",
+        intentFit: "Whether SERP intent matches what the client can satisfy",
+        currentTraction: "Estimated existing visibility or ranking signal",
+        rankingOpportunity: "Realistic rankability given domain and competition",
+        conversionProximity: "How close to a transaction, lead, or booking action",
+        topicalAuthorityValue: "How much this keyword strengthens topical cluster authority",
+        contentEffort: "Inverted — lower production burden scores higher",
+        existingCoverage: "Whether existing pages could be refreshed instead of creating new",
+      };
+      const wRows = Object.entries(weights).map(([k, v]) => [k.replace(/([A-Z])/g, " $1").trim(), v, wDescriptions[k] || ""]);
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([wHeaders, ...wRows]), "Scoring Weights");
+
+      // Tab 8: Change Log
+      const clHeaders = ["Timestamp", "Action", "Detail"];
+      const clRows = [...changeLogArr].reverse().map((entry: any) => [
+        new Date(entry.timestamp).toLocaleString(),
+        (entry.action || "").replace(/_/g, " "),
+        entry.detail || "",
+      ]);
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([clHeaders, ...clRows]), "Change Log");
 
       const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
       const filename = `discoverability_${(workspace.name || "workspace").replace(/\s+/g, "_").toLowerCase()}_${new Date().toISOString().split("T")[0]}.xlsx`;
@@ -4450,6 +4582,52 @@ Return ONLY valid JSON with this structure:
       res.send(buf);
     } catch (err: any) {
       console.error("[Discoverability XLSX]", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // PDF export for discoverability workspace
+  app.get("/api/discoverability/workspaces/:id/export-pdf", async (req, res) => {
+    try {
+      const workspace = await storage.getDiscoverabilityWorkspace(Number(req.params.id));
+      if (!workspace) return res.status(404).json({ error: "Workspace not found" });
+
+      const { generateDiscoverabilityPdf } = await import("./pdfGenerator");
+      const exportMode = (req.query.mode as string) || "all";
+      const bp = workspace.businessProfile as any;
+      let keywords = (workspace.keywords as any[]) || [];
+      if (exportMode === "approved") keywords = keywords.filter((k: any) => k.status === "approved");
+
+      const pdfData = {
+        workspaceName: workspace.name,
+        preparedBy: "Webserv",
+        clientName: bp?.clientName || "",
+        domain: bp?.domain || "",
+        businessType: bp?.businessType || "",
+        industryCategory: bp?.industryCategory || "",
+        marketType: bp?.marketType || "",
+        locationTargets: bp?.locationTargets || [],
+        primaryServices: bp?.primaryServices || [],
+        primaryConversionGoals: bp?.primaryConversionGoals || [],
+        northStarMetric: bp?.northStarMetric || "",
+        isYmyl: bp?.isYmyl || false,
+        complianceSensitivity: bp?.complianceSensitivity || "low",
+        notes: bp?.notes || "",
+        workspaceNotes: (workspace as any).workspaceNotes || "",
+        clusters: (workspace.clusters as any[]) || [],
+        keywords,
+        internalLinkSuggestions: (workspace.internalLinkSuggestions as any[]) || [],
+        changeLog: (workspace.changeLog as any[]) || [],
+        exportMode: exportMode as any,
+      };
+
+      const buf = await generateDiscoverabilityPdf(pdfData);
+      const filename = `discoverability_${(workspace.name || "workspace").replace(/\s+/g, "_").toLowerCase()}_${new Date().toISOString().split("T")[0]}.pdf`;
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.send(buf);
+    } catch (err: any) {
+      console.error("[Discoverability PDF]", err);
       res.status(500).json({ error: err.message });
     }
   });

@@ -309,14 +309,24 @@ function WorkspacePicker({ onSelect }: { onSelect: (ws: Workspace) => void }) {
           className="mb-6 ml-13"
           integrations={[
             {
-              id: "google-drive",
-              how: "Exported keyword research reports (PDF and XLSX) can be saved directly to a client's Google Drive folder for sharing and archival.",
-              why: "Google Drive is where clients and account managers already collaborate. Pushing exports there removes the manual download-and-share step.",
+              id: "ai-providers",
+              how: "Anthropic Claude, Groq (Llama 70b / 8b), Gemini, and OpenAI are called in a waterfall to generate keyword clusters, score each keyword on 10 business-goal dimensions, detect cannibalization, and recommend page types.",
+              why: "No single provider has guaranteed uptime or quota. The waterfall ensures keyword generation completes even when a primary model is rate-limited or down.",
             },
             {
-              id: "google-docs",
-              how: "Keyword cluster reports can be generated as structured Google Docs, making them easy to annotate and share for internal review before client delivery.",
-              why: "Google Docs enables collaborative editing and inline comments so the team can refine strategic notes before the report leaves the building.",
+              id: "gsc",
+              how: "Pulls the client's top-performing organic queries and their current ranking positions so the AI knows what the site already ranks for before generating new keyword opportunities.",
+              why: "Without real ranking data, the AI invents plausible-sounding keywords without knowing which topics already have traction — leading to wasted new-content effort on queries where you already rank.",
+            },
+            {
+              id: "ahrefs",
+              how: "Fetches the client's organic keyword rankings (keyword, position, volume, difficulty) from Ahrefs Site Explorer to ground the AI in actual keyword footprint data.",
+              why: "Ahrefs provides authoritative volume and difficulty signals that the AI uses to set realistic scores and flag high-opportunity gaps the site isn't covering yet.",
+            },
+            {
+              id: "semrush",
+              how: "Pulls keyword distribution and domain-level organic traffic estimates from SEMrush as a secondary signal when Ahrefs data is absent or incomplete.",
+              why: "SEMrush often has broader keyword coverage for certain verticals. Using it as a fallback ensures the AI has competitive context even when Ahrefs gaps exist.",
             },
           ]}
         />

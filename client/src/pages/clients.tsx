@@ -1359,9 +1359,14 @@ export default function ClientsPage() {
           <IntegrationsPanel
             integrations={[
               {
-                id: "asana",
-                how: "Each client profile can be linked to an Asana project GID, which scopes the Workflow Tracker and ACA to that client's live deliverable data.",
-                why: "A single Asana project ID is the anchor that connects SmartEO's client profile to real execution data — without it, workflow and AI features operate blind to what's actually in progress.",
+                id: "ahrefs",
+                how: "Reads the client's competing domains from Ahrefs Site Explorer to populate the competitor list on each client profile.",
+                why: "Ahrefs competitor data is more accurate than manually guessing. One click imports the domains that are actually competing for the same organic keywords.",
+              },
+              {
+                id: "ga4",
+                how: "Lists all GA4 properties accessible under the connected Google account so each client can be linked to the correct analytics property.",
+                why: "Correct GA4 property assignment is what enables all downstream GA4 data pulls in ACA, Monthly Reports, QBR, and the Dashboard. A wrong or missing link means zero analytics data.",
               },
             ]}
           />

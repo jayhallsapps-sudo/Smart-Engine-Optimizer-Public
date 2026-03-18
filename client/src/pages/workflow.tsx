@@ -1581,19 +1581,54 @@ export default function WorkflowPage() {
           <IntegrationsPanel
             integrations={[
               {
+                id: "gsc",
+                how: "Pulls query performance, page performance, top queries, and QoQ comparisons. Used by Monthly, QBR Prep, QBR Full, and Mid-Strategy reports.",
+                why: "GSC is the ground-truth source for search visibility. Every performance report needs it to show what's actually happening in Google Search.",
+              },
+              {
+                id: "ga4",
+                how: "Pulls organic session funnels, landing page performance, conversion data, and QTD/QoQ comparisons. Used by Monthly, QBR Prep, QBR Full, and Mid-Strategy reports.",
+                why: "GA4 ties search performance to business outcomes. Without it, reports show visibility but not whether that visibility converted.",
+              },
+              {
+                id: "callrail",
+                how: "Reads organic call volume and top call-driving pages for clients on CallRail. Used by Monthly, QBR Prep, and QBR Full reports.",
+                why: "Calls are the primary conversion event for most treatment center clients. Excluding them would misrepresent the true impact of SEO.",
+              },
+              {
+                id: "ctm",
+                how: "Same call-tracking signals as CallRail but for clients using CallTrackingMetrics. Used by QBR Prep reports.",
+                why: "Some clients use CTM instead of CallRail. The report generator checks for both so no call data is left out.",
+              },
+              {
+                id: "semrush",
+                how: "Pulls keyword distribution and organic overview metrics. Used by Monthly and QBR Full reports.",
+                why: "SEMrush provides competitive keyword context that GSC doesn't expose — including estimated share of voice and keyword difficulty.",
+              },
+              {
+                id: "airtable",
+                how: "Reads the client's content work log (published and in-production items) for the reporting period. Used by Bi-Weekly, Monthly, QBR Prep, and QBR Full reports.",
+                why: "Airtable is where content production is tracked. Reports without it produce empty work-accomplished sections.",
+              },
+              {
                 id: "asana",
-                how: "Reads open and closed deliverables from linked client Asana projects to auto-populate execution summaries and validate what shipped during the reporting period.",
-                why: "Asana is the source of truth for execution. Pulling from it ensures the report reflects what actually happened — not a curated summary written from memory.",
+                how: "Reads completed and upcoming tasks from the client's Asana project, grouped by work category. Used by Bi-Weekly, Monthly, QBR Prep, and QBR Full reports.",
+                why: "Asana captures technical and strategic work that never appears in Airtable. Both sources together give a complete picture of what shipped.",
               },
               {
-                id: "google-drive",
-                how: "Exports finalized report PDFs directly to the client's Google Drive folder, ready for sharing without any manual download-and-upload step.",
-                why: "Google Drive is where clients and account managers already live. Pushing reports there eliminates friction and keeps the file trail organized in one place.",
+                id: "google-sheets",
+                how: "Reads quarterly NSM (North Star Metric) goals for the client. Used by Bi-Weekly, Monthly, QBR Prep, and QBR Full reports.",
+                why: "NSM goals are the benchmark against which every performance metric is measured. Reports without them can't say whether results are on or off track.",
               },
               {
-                id: "google-docs",
-                how: "Generates an editable Google Doc from the report output so the team can annotate, comment, or adjust copy before the report goes to the client.",
-                why: "Google Docs enables real-time collaborative review. It gives account managers a chance to refine strategic language before delivery without creating a separate editing workflow.",
+                id: "notion",
+                how: "Reads the Webserv Strategy Bank for approved SOPs, playbooks, and strategic context relevant to the client. Used by QBR Prep, QBR Full, and Mid-Strategy reports.",
+                why: "Notion surfaces institutional strategy context that makes the AI-generated sections specific to Webserv's methodology rather than generic.",
+              },
+              {
+                id: "screaming-frog",
+                how: "Reads uploaded crawl data for technical findings including redirect chains, broken links, and missing tags. Used by Bi-Weekly and Mid-Strategy reports.",
+                why: "Screaming Frog is the most complete source of on-site technical data. Technical sections of any report require it to be specific rather than generic.",
               },
             ]}
           />

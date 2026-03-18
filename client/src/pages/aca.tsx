@@ -587,14 +587,64 @@ export default function AcaPage() {
           <IntegrationsPanel
             integrations={[
               {
+                id: "gsc",
+                how: "Queries search performance data including top queries, page performance, CTR opportunities, impressions without clicks, and indexation status for the selected client.",
+                why: "GSC is the only authoritative source for actual Google search visibility. Without it, ACA answers about keyword rankings or traffic drops are guesses.",
+              },
+              {
+                id: "ga4",
+                how: "Pulls organic session funnels, landing page performance, conversion movers, QTD totals, and year-over-year comparisons from the client's GA4 property.",
+                why: "GA4 connects search visibility to actual user behavior and conversions — the data needed to answer whether SEO is driving business outcomes.",
+              },
+              {
+                id: "callrail",
+                how: "Reads organic call volume, top call-driving landing pages, and call source breakdowns from CallRail for clients using that platform for call tracking.",
+                why: "Calls are often the primary conversion for treatment centers. CallRail data is required to show whether search traffic is converting to actual leads.",
+              },
+              {
+                id: "ctm",
+                how: "Reads the same call-tracking signals as CallRail (volume, sources, landing pages) for clients using CallTrackingMetrics instead.",
+                why: "CTM is used by a subset of clients. ACA checks for it automatically when CallRail is not configured so no call data is left on the table.",
+              },
+              {
+                id: "semrush",
+                how: "Pulls keyword distribution, domain-level organic rankings, and competitor visibility metrics from SEMrush for the selected client.",
+                why: "SEMrush provides third-party keyword footprint data that GSC alone can't supply, including competitive share of voice and keyword difficulty context.",
+              },
+              {
+                id: "ahrefs",
+                how: "Queries keyword rankings, backlink profile (DR, referring domains), and competitor overlap from Ahrefs Site Explorer for the selected client.",
+                why: "Ahrefs is the authoritative source for backlink authority signals. ACA uses it to answer questions about domain strength and link-building ROI.",
+              },
+              {
+                id: "gbp",
+                how: "Reads Google Business Profile metrics including local search impressions, direction requests, calls, and photo views for the client's location(s).",
+                why: "Local SEO performance is invisible without GBP data. Treatment centers with physical locations need this to track local visibility separately from organic.",
+              },
+              {
+                id: "airtable",
+                how: "Reads the client's published and in-production content work log from Airtable to ground execution questions in real deliverable records.",
+                why: "Airtable is where content production is tracked. Without it, ACA can't answer what content actually shipped or what's still in the queue.",
+              },
+              {
                 id: "asana",
-                how: "Reads live tasks, project lists, and deliverable status from linked client Asana projects to ground responses in real execution data.",
-                why: "Asana is the source of truth for what's actually shipping. Connecting it means ACA answers reflect live deliverable status — not stale or manually entered context.",
+                how: "Reads open and completed tasks from the client's linked Asana project, grouped by category (Technical SEO, Content, Local, etc.).",
+                why: "Asana is the source of truth for ongoing deliverables. It lets ACA answer what work is in flight — not just what's been published.",
+              },
+              {
+                id: "google-sheets",
+                how: "Reads the client's North Star Metric goals (NSM targets by quarter) from the shared Google Sheet used for goal-setting.",
+                why: "NSM goals are the benchmark for every performance conversation. ACA needs them to contextualize whether metrics are on track or off.",
               },
               {
                 id: "notion",
-                how: "Searches the Webserv Strategy Bank for SOPs, playbooks, behavioral health glossary entries, and client strategy notes relevant to the query.",
-                why: "Notion houses institutional knowledge that doesn't exist in structured data. Connecting it lets ACA cite approved Webserv methodology instead of generic AI reasoning.",
+                how: "Searches the Webserv Strategy Bank for relevant SOPs, playbooks, behavioral health glossary entries, and client strategy notes.",
+                why: "Notion houses institutional knowledge that doesn't exist in structured data. It lets ACA cite approved Webserv methodology rather than generic AI reasoning.",
+              },
+              {
+                id: "screaming-frog",
+                how: "Reads uploaded Screaming Frog crawl reports to surface technical issues including broken links, redirect chains, missing tags, and crawl errors.",
+                why: "Screaming Frog is the most complete source of on-site technical data. ACA uses it to answer technical audit questions with specifics, not generalities.",
               },
             ]}
           />

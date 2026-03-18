@@ -4230,6 +4230,62 @@ Notes: ${bp?.notes || "None"}`;
         ? `EXISTING KEYWORDS (do NOT duplicate): ${existingKeywords.map((k: any) => k.keyword).join(", ")}`
         : "";
 
+      // ── Fetch live data from GSC, Ahrefs, SEMrush ────────────────────────
+      let liveContext = "";
+      try {
+        const client = workspace.clientId ? await storage.getClient(workspace.clientId) : null;
+        if (client) {
+          const liveChunks: string[] = [];
+
+          // GSC: top organic queries (what the site already ranks for)
+          if (client.gscSiteUrl) {
+            try {
+              const gscResult = await queryGsc("gsc_top_queries" as any, client, "last_90_vs_prev_90");
+              if (gscResult?.tables?.[0]?.rows?.length) {
+                const rows = gscResult.tables[0].rows.slice(0, 30);
+                const lines = rows.map((r: string[]) => `  "${r[0]}" — pos ${r[1]}, clicks ${r[2]}`).join("\n");
+                liveChunks.push(`GOOGLE SEARCH CONSOLE — Top Organic Queries (last 90 days):\n${lines}`);
+              }
+            } catch (e: any) {
+              console.warn("[Discoverability] GSC pull skipped:", e.message);
+            }
+          }
+
+          // Ahrefs: organic keyword rankings
+          try {
+            const ahrefsResult = await queryAhrefs("ahrefs_keyword_rankings", client, "current");
+            if (ahrefsResult?.tables?.[0]?.rows?.length) {
+              const rows = ahrefsResult.tables[0].rows.slice(0, 30);
+              const lines = rows.map((r: string[]) => `  "${r[0]}" — pos ${r[1]}, vol ${r[2]}, KD ${r[3]}`).join("\n");
+              liveChunks.push(`AHREFS — Organic Keyword Rankings:\n${lines}`);
+            }
+          } catch (e: any) {
+            console.warn("[Discoverability] Ahrefs pull skipped:", e.message);
+          }
+
+          // SEMrush: keyword distribution / organic overview
+          try {
+            const semResult = await querySemrush("semrush_keyword_distribution" as any, client, "last_30_vs_prev_30");
+            if (semResult?.tables?.[0]?.rows?.length) {
+              const rows = semResult.tables[0].rows.slice(0, 20);
+              const lines = rows.map((r: string[]) => `  "${r[0]}" — ${r[1]} keywords`).join("\n");
+              liveChunks.push(`SEMRUSH — Keyword Distribution by Position Group:\n${lines}`);
+            } else if (semResult?.summary?.length) {
+              const lines = semResult.summary.map((s: any) => `  ${s.label}: ${s.current}`).join("\n");
+              liveChunks.push(`SEMRUSH — Organic Overview:\n${lines}`);
+            }
+          } catch (e: any) {
+            console.warn("[Discoverability] SEMrush pull skipped:", e.message);
+          }
+
+          if (liveChunks.length > 0) {
+            liveContext = `\nLIVE DATA FROM CONNECTED INTEGRATIONS (use this to ground your output in real performance — do NOT invent rankings or claim the site ranks for terms not listed here):\n\n${liveChunks.join("\n\n")}`;
+          }
+        }
+      } catch (e: any) {
+        console.warn("[Discoverability] Live data fetch error:", e.message);
+      }
+
       // ── PHASE 1: Generate clusters + internal linking ─────────────────────
       const clusterSystemPrompt = `You are a senior SEO strategist. Your task is to generate keyword research clusters and internal linking strategy in JSON format. Be thorough and strategic — business goals first, never raw volume.`;
 
@@ -4237,6 +4293,7 @@ Notes: ${bp?.notes || "None"}`;
 
 BUSINESS PROFILE:
 ${bpSummary}
+${liveContext}
 
 ${existingKwList}
 
@@ -4296,6 +4353,7 @@ Cluster Notes: ${cluster.notes}
 BUSINESS CONTEXT:
 ${bpSummary}
 Money Pages: ${moneyPages}
+${liveContext}
 
 ${existingKwList}
 
@@ -4311,7 +4369,7 @@ MANDATORY RANKING MIX — YOU MUST FOLLOW THIS EXACTLY:
 Split your 18-22 keywords into TWO explicit groups:
 
 GROUP A — "Already Ranking" (generate exactly 7-9 of these):
-These are keywords the client ALREADY ranks for somewhere in positions 1-30, based on their money pages, services, brand, and location. Set clientRanksForKeyword: true and clientEstimatedPosition to a realistic number (1-30). Every money page should inspire at least 1-2 keywords where the site ranks.
+These are keywords the client ALREADY ranks for somewhere in positions 1-30. If live GSC or Ahrefs data was provided above, USE THOSE EXACT QUERIES — do not invent ranking data that contradicts real data. Set clientRanksForKeyword: true and clientEstimatedPosition to the actual position from the live data if available, otherwise a realistic estimate (1-30). Every money page should inspire at least 1-2 keywords where the site ranks.
 
 GROUP B — "Growth Opportunities" (generate the remaining 11-13):
 These are keywords the site does NOT yet rank for. New content opportunities. Set clientRanksForKeyword: false and clientEstimatedPosition: null.

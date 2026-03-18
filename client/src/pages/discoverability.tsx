@@ -1949,7 +1949,7 @@ function WorkspaceEditor({ initialWs, onBack }: { initialWs: Workspace; onBack: 
       const updated = await res.json();
       setWs(updated);
       queryClient.invalidateQueries({ queryKey: ["/api/discoverability/workspaces"] });
-      toast({ title: "Generation complete", description: `${(updated.clusters as any[])?.length || 0} clusters · ${(updated.keywords as any[])?.length || 0} keywords generated.` });
+      toast({ title: "Generation complete", description: `${(updated.clusters as any[])?.length || 0} clusters · ${(updated.keywords as any[])?.length || 0} keywords (unlocked rows replaced, locked rows kept).` });
       setStep("keywords");
     } catch (e: any) {
       toast({ title: "Generation failed", description: e.message || "Check API key configuration.", variant: "destructive" });

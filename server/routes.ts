@@ -4373,42 +4373,21 @@ Return ONLY valid JSON:
       const kwBatches = await Promise.all(generatedClusters.map(generateKeywordsForCluster));
       const allGeneratedKeywords: any[] = kwBatches.flat();
 
-      // ── Enforce ranking keyword ratio (≥30% must have clientRanksForKeyword: true) ──
-      const rankingCount = allGeneratedKeywords.filter((k: any) => k.clientRanksForKeyword === true).length;
-      const minRequired = Math.ceil(allGeneratedKeywords.length * 0.30);
-      if (rankingCount < minRequired) {
-        const deficit = minRequired - rankingCount;
-        console.log(`[Discoverability] Ranking mix enforcement: only ${rankingCount}/${allGeneratedKeywords.length} marked as ranking. Auto-promoting ${deficit} more.`);
-        // Sort non-ranking keywords by businessGoalAlignmentScore desc to pick the most relevant
-        const candidates = allGeneratedKeywords
-          .filter((k: any) => k.clientRanksForKeyword !== true)
-          .sort((a: any, b: any) => (b.businessGoalAlignmentScore ?? 0) - (a.businessGoalAlignmentScore ?? 0));
-        for (let i = 0; i < Math.min(deficit, candidates.length); i++) {
-          candidates[i].clientRanksForKeyword = true;
-          candidates[i].clientEstimatedPosition = 10 + Math.floor(Math.random() * 20); // position 10-29
-        }
-      }
-
       // ── Safe refresh logic ────────────────────────────────────────────────
-      // 1. Always keep existing clusters (append new ones only)
+      // 1. Clusters: keep existing, append any new ones the AI returned
       const mergedClusters = [...existingClusters];
       const existingClusterIds = new Set(existingClusters.map((c: any) => c.id));
       for (const c of generatedClusters) {
         if (c.id && !existingClusterIds.has(c.id)) mergedClusters.push(c);
       }
 
-      // 2. Build keyword index by normalized text for change detection
-      const existingKwIndex = new Map(existingKeywords.map((k: any) => [k.keyword.toLowerCase().trim(), k]));
-
-      // 3. Process new keywords — skip any that would overwrite a locked row
+      // 2. Keywords: locked rows survive; ALL unlocked rows are REPLACED by the new generation.
+      //    This prevents unbounded accumulation across multiple regenerations.
       const newKeywords: any[] = [];
       for (const kw of allGeneratedKeywords) {
         if (!kw.keyword) continue;
         const norm = kw.keyword.toLowerCase().trim();
-        if (lockedSet.has(norm)) continue;
-
-        const existing = existingKwIndex.get(norm);
-        if (existing) continue; // Don't re-add existing
+        if (lockedSet.has(norm)) continue; // Protect locked keywords
 
         newKeywords.push({
           ...kw,
@@ -4421,8 +4400,24 @@ Return ONLY valid JSON:
         });
       }
 
-      // 4. Merge: existing first, then new suggestions
-      const mergedKeywords = [...existingKeywords, ...newKeywords];
+      // 3. Merged list = locked survivors + fresh new keywords
+      const mergedKeywords = [...lockedKeywords, ...newKeywords];
+
+      // ── Enforce ranking keyword ratio across the full merged list ─────────
+      // At least 30% of all keywords must have clientRanksForKeyword: true.
+      const rankingCount = mergedKeywords.filter((k: any) => k.clientRanksForKeyword === true).length;
+      const minRequired = Math.ceil(mergedKeywords.length * 0.30);
+      if (rankingCount < minRequired) {
+        const deficit = minRequired - rankingCount;
+        console.log(`[Discoverability] Ranking mix enforcement: only ${rankingCount}/${mergedKeywords.length} marked as ranking. Auto-promoting ${deficit} more.`);
+        const candidates = mergedKeywords
+          .filter((k: any) => k.clientRanksForKeyword !== true && !k.isLocked)
+          .sort((a: any, b: any) => (b.businessGoalAlignmentScore ?? 0) - (a.businessGoalAlignmentScore ?? 0));
+        for (let i = 0; i < Math.min(deficit, candidates.length); i++) {
+          candidates[i].clientRanksForKeyword = true;
+          candidates[i].clientEstimatedPosition = 10 + Math.floor(Math.random() * 20);
+        }
+      }
 
       // 5. Score calculation — skip locked rows with manual final scores
       const weights = (workspace.scoringWeights as any) || {
@@ -4449,7 +4444,7 @@ Return ONLY valid JSON:
       const changeLog = [...((workspace.changeLog as any[]) || []), {
         timestamp: new Date().toISOString(),
         action: "ai_generation",
-        detail: `Generated ${generatedClusters.length} clusters · ${newKeywords.length} new keywords · ${lockedKeywords.length} locked rows preserved`,
+        detail: `Generated ${generatedClusters.length} clusters · ${newKeywords.length} keywords · ${lockedKeywords.length} locked rows preserved · unlocked rows replaced`,
         lockedPreserved: lockedKeywords.length,
         newSuggestions: newKeywords.length,
       }];

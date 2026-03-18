@@ -40,6 +40,7 @@ import { CommentPanel } from "@/components/comments/CommentPanel";
 import { WorkflowContextBanner } from "@/components/workflow/WorkflowContextBanner";
 import { loadWorkflowContext, type WorkflowHandoffContext } from "@/lib/workflowHandoff";
 import { GuidancePanel } from "@/components/GuidancePanel";
+import { SourceReadinessBanner, MONTHLY_SOURCES } from "@/components/reports/SourceReadinessBanner";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -558,6 +559,14 @@ export default function MonthlyPage() {
               </div>
             </div>
           </div>
+
+          {/* Source Readiness */}
+          {clientId && (() => {
+            const selectedClient = (clients as Client[]).find(c => String(c.id) === clientId);
+            return selectedClient ? (
+              <SourceReadinessBanner client={selectedClient} sourceIds={MONTHLY_SOURCES} />
+            ) : null;
+          })()}
 
           {/* Generate */}
           <Button

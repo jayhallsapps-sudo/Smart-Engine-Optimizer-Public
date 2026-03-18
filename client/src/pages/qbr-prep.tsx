@@ -37,6 +37,7 @@ import { useReportSave } from "@/hooks/useReportSave";
 import { SaveStatusIndicator } from "@/components/reports/SaveStatusIndicator";
 import { ReportSaveSelector } from "@/components/reports/ReportSaveSelector";
 import { CrawlAssetSelector } from "@/components/reports/CrawlAssetSelector";
+import { SourceReadinessBanner, QBS_SOURCES } from "@/components/reports/SourceReadinessBanner";
 import { useFillInTheGaps } from "@/hooks/useFillInTheGaps";
 import { FillInTheGapsModal } from "@/components/FillInTheGapsModal";
 import { CommentPanel } from "@/components/comments/CommentPanel";
@@ -728,6 +729,14 @@ export default function QbrPrepPage() {
               </div>
             </div>
           </div>
+
+          {/* Source Readiness */}
+          {clientId && (() => {
+            const selectedClient = (clients as Client[]).find(c => String(c.id) === clientId);
+            return selectedClient ? (
+              <SourceReadinessBanner client={selectedClient} sourceIds={QBS_SOURCES} />
+            ) : null;
+          })()}
 
           <Button
             className="w-full"

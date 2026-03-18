@@ -1,0 +1,651 @@
+You are doing a focused platform audit and source-routing correction for SmartEO.
+
+Important correction before you begin:
+
+DO NOT redesign or materially change the Bi-Weekly report format.
+DO NOT redesign or materially change the QBS format.
+Those two are broadly fine structurally. What they need is correct source routing, correct naming, correct field mapping, and explicit provenance — not a new format.
+
+Your job is to audit the platform and fix source usage, integration coverage, routing logic, naming, and evaluation/report data mapping.
+
+PRIMARY GOAL
+
+Stop SmartEO from behaving like an AI-first guess engine.
+Make it behave like a source-first SEO operations system.
+
+AI may:
+- summarize
+- prioritize
+- synthesize
+- explain
+- infer carefully when labeled as inference
+
+AI may NOT:
+- invent KPI data
+- invent keyword metrics
+- invent traffic metrics
+- invent call metrics
+- invent ranking data
+- invent crawl data
+- invent benchmark scores
+- replace missing integrations with fake values
+
+If a source is missing, the system must say:
+- not connected
+- unavailable
+- stale
+- syncing
+- error
+
+Do not fill gaps with AI-made numbers.
+
+==================================================
+SCOPE OF THIS AUDIT
+==================================================
+
+Audit and fix these modules:
+
+1. ACA
+2. Discoverability Tool
+3. Monthly Report
+4. QBS
+5. QBR
+6. Mid-Strategy
+7. Dashboard
+8. Clients
+9. Setup Integrations
+
+Bi-Weekly should only be audited for source routing correctness and provenance.
+Do not change its structure unless there is a critical bug.
+
+QBS should only be audited for source routing correctness, evidence logic, naming cleanup, and provenance.
+Do not redesign its structure unless there is a critical bug.
+
+==================================================
+NON-NEGOTIABLE NAMING FIXES
+==================================================
+
+Rename everywhere:
+- “QBR Prep” → “QBS”
+- “QBR Full” → “QBR”
+
+Remove “QBR Prep” from:
+- UI labels
+- routes
+- cards
+- prompts
+- feature registry
+- DB enums if applicable
+- report selectors
+- docs
+- generated output titles
+
+Backward compatibility alias may exist internally only if absolutely necessary, but it must not appear anywhere user-facing.
+
+==================================================
+GLOBAL SOURCE-OF-TRUTH RULES
+==================================================
+
+Keyword / search visibility / clicks / impressions / CTR / average position
+- Primary: Google Search Console
+- Secondary: SEMrush
+- Tertiary: Ahrefs
+- AI role: interpretation only
+
+Sessions / landing page sessions / conversions / engagement
+- Primary: GA4
+- Secondary: Looker if directly sourced from GA4
+- AI role: interpretation only
+
+Calls / answered calls / qualified calls / call source / duration / tagged lead states
+- Primary: CallRail
+- Secondary: CallTrackingMetrics
+- Tertiary: Nimbata
+- AI role: interpretation only
+
+Backlinks / referring domains / DR / organic keywords / organic traffic / competitor SEO comparisons
+- Primary: Ahrefs
+- Secondary: SEMrush
+- AI role: interpretation only
+
+Crawl / technical SEO / metadata / internal links / directives / templates / indexability
+- Primary: Screaming Frog
+- Secondary: SEMrush Site Audit
+- AI role: prioritization only
+
+Tasks / deliverables / work completed / next steps
+- Primary: Asana
+- Secondary: Airtable
+- Tertiary: Notion
+- AI role: summarize and dedupe only
+
+Local SEO / profile activity / reviews / map interactions
+- Primary: Google Business Profile
+
+Trackers / pacing sheets / benchmark sheets / evaluation sheets / NSM sheets
+- Primary: Google Sheets
+- Secondary: Airtable
+
+Documents / stored reports / decks / exports / source docs
+- Primary: Google Drive
+
+==================================================
+VERY IMPORTANT CORRECTION ABOUT MID-STRATEGY / EVALUATION
+==================================================
+
+The evaluation spreadsheets and screenshots are NOT optional reference material.
+They define required functionality.
+
+The evaluation system clearly includes:
+
+A. Page-category rollups / pivot logic
+Examples shown in the screenshots:
+- Page Category
+- # of Pages
+- SUM of Clicks
+- SUM of Total Sessions
+- Clicks per page
+- Share of GSC Clicks
+- Sessions per page
+- Share of Sessions
+
+B. URL-level crawl + performance + inspection + benchmark logic
+The screenshots clearly show a large joined evaluation sheet including:
+- URL
+- page category
+- content type
+- status code
+- indexability
+- titles
+- meta descriptions
+- H1/H2
+- crawl depth
+- inlinks / outlinks
+- GA4 metrics
+- GSC metrics
+- URL inspection fields
+- mobile usability
+- rich results
+- DR
+- referring domains
+- backlinks
+- organic traffic
+- organic keywords
+- top 10 keywords
+- informational keywords
+- featured snippet / AIO terms
+- AI visibility metrics
+- keyword velocity
+- snippet velocity
+- RD velocity
+- content velocity
+- yields
+- densities
+- final score
+- average rank
+- overall rank
+
+C. Formula logic
+The screenshots show explicit spreadsheet formula-driven evaluation fields and rankings.
+That means Mid-Strategy must support:
+- field-level mappings
+- deterministic formulas
+- rollups
+- exports
+- benchmark scoring
+- category analysis
+- homepage concentration analysis
+- missing-middle-of-funnel analysis
+
+Do not treat Mid-Strategy as a generic strategy summary.
+Treat it as a benchmark and evaluation engine.
+
+==================================================
+FEATURE-BY-FEATURE AUDIT OUTPUT REQUIRED
+==================================================
+
+For EACH of these features:
+- ACA
+- Discoverability Tool
+- Monthly Report
+- QBS
+- QBR
+- Mid-Strategy
+- Dashboard
+- Clients
+- Setup Integrations
+- Bi-Weekly (source audit only)
+
+Return this exact structure:
+
+{
+  feature_name,
+  intended_purpose,
+  current_state,
+  issues_found: [],
+  wrong_source_usage: [],
+  missing_integrations: [],
+  required_fields: [],
+  calculations_required: [],
+  ui_changes_required: [],
+  backend_changes_required: [],
+  tests_required: [],
+  acceptance_criteria: []
+}
+
+==================================================
+FEATURE RULES
+==================================================
+
+1. ACA
+Purpose:
+Multi-source question answering and synthesis across connected client data, docs, SOPs, and stored platform context.
+
+Must:
+- retrieve from real sources first
+- cite sources used
+- separate sourced answer vs inferred answer vs missing-data answer
+- never fabricate metrics
+
+Required output contract:
+- answer
+- sources_used[]
+- data_gaps[]
+- confidence_level
+- recommended_next_action
+
+2. Discoverability Tool
+This is one of the biggest failures right now.
+
+Must use:
+1. GSC first
+2. GA4 second
+3. Ahrefs / SEMrush only as enrichment or fallback
+4. AI only for interpretation
+
+Must support:
+- query-level GSC data
+- page-level GSC data
+- GA4 landing-page sessions
+- page category rollups
+- clicks_per_page
+- share_of_gsc_clicks
+- sessions_per_page
+- share_of_sessions
+- branded vs non-branded tagging where possible
+- top gaining pages
+- top declining pages
+- query cluster logic
+- export to evaluation sheets
+
+Required formulas:
+- clicks_per_page = category_clicks / number_of_pages
+- share_of_gsc_clicks = category_clicks / total_clicks
+- sessions_per_page = category_sessions / number_of_pages
+- share_of_sessions = category_sessions / total_sessions
+
+Category rollup logic must use:
+- Screaming Frog crawl + URL classifier for inventory/category
+- GSC page data for clicks
+- GA4 landing-page data for sessions
+
+Do not use AI-estimated keyword metrics here. Ever.
+
+3. Bi-Weekly
+DO NOT redesign the format.
+Only verify and correct source routing.
+
+Keep structure:
+- Purpose
+- Performance Pulse
+- Progress & Quick Wins
+- Partnership & Alignment
+
+Source rules:
+- KPI pulse from Google Sheets NSM tracker, fed by GA4 and call platform data
+- work completed / next from Asana and/or Airtable
+- technical notes from Screaming Frog and optionally Asana
+- local SEO from Asana / GBP if connected
+
+Audit only:
+- correct source routing
+- provenance display
+- readiness validation
+- fail states
+
+4. Monthly Report
+This likely needs real correction.
+
+Respect actual rendered monthly structure.
+Keep it constrained to official monthly reporting logic.
+
+Must support:
+- Executive KPI overview
+- Keyword cluster shifts
+- Conversion & content impact
+- Strategic initiatives & next month focus
+
+Do not bloat into extra random slides unless explicitly enabled as optional internal modules.
+
+Required sources:
+- GA4
+- GSC
+- CallRail / CTM / Nimbata where applicable
+- Google Sheets NSM tracker
+- Asana
+- Airtable
+- GBP where relevant
+- SEMrush / Ahrefs only where appropriate
+
+5. QBS
+DO NOT redesign the format.
+Audit source routing, evidence handling, naming, and provenance only.
+
+QBS must:
+- remain source-backed
+- show evidence for recommendations
+- separate fact vs inference
+- pull from appropriate source hierarchy
+- use correct naming only: QBS
+
+6. QBR
+This is the full quarterly business review.
+
+Must support:
+- Performance Review
+- Strategy Overview
+- Strategic Plan
+- Roadmap & Alignment
+- Partnership Items
+
+Required sources:
+- GA4
+- GSC
+- CallRail / CTM / Nimbata
+- GBP
+- Google Sheets NSM tracker
+- Ahrefs
+- SEMrush
+- Screaming Frog
+- Asana / Airtable / Drive as needed
+
+7. Mid-Strategy
+Treat as a real benchmark / evaluation engine.
+
+Must support:
+- competitive benchmark comparisons
+- crawl evaluation
+- category click distribution
+- category session distribution
+- homepage concentration analysis
+- missing middle-of-funnel detection
+- site structure recommendation logic
+- export-ready evaluation sheet logic
+
+Required field groups include at minimum:
+
+Domain / age / archive
+- WHOIS registration date
+- domain age
+- first archive date
+- archive age
+
+Authority / SEO
+- DR
+- referring domains
+- backlinks
+- indexed pages
+- organic traffic
+- organic keywords
+- top 10 keywords
+- informational keywords
+- featured snippet / AIO keywords
+
+AI / answer engine visibility
+- AI visibility score
+- mentions in AI responses
+- cited sources
+
+Velocity / yield / density / scoring
+- keyword velocity
+- snippet velocity
+- RD velocity
+- content velocity
+- KW yield
+- snippet yield
+- mention rate
+- RD yield
+- content yield
+- backlink density
+- informational density
+- final score
+- average rank
+- overall rank
+
+URL evaluation / crawl join
+- URL
+- page category
+- content type
+- status code
+- indexability
+- title
+- meta description
+- H1 / H2
+- word count
+- crawl depth
+- inlinks / outlinks
+- GA4 views / sessions / engagement if mapped
+- GSC clicks / impressions / CTR / position
+- URL inspection coverage / indexing / crawl / rich result flags
+- mobile usability
+- AMP / semantic / structured data fields if present
+
+Use deterministic formulas where required.
+Do not make benchmark scoring subjective if formulas exist.
+
+8. Dashboard
+This is one of the biggest failures right now.
+
+Must include properly normalized call data from:
+- CallRail
+- CTM
+- Nimbata
+
+Dashboard must support:
+- Organic Sessions
+- GSC Clicks
+- GSC Impressions
+- CTR
+- Avg Position
+- Calls
+- Answered Calls
+- Qualified Calls
+- VOBs if tagged
+- GBP interactions
+- top landing pages
+- top conversion pages
+- top query clusters
+- technical health summary
+- integration health
+- source labels on each metric
+
+Call normalization schema:
+- provider
+- date
+- source_name / source bucket
+- answered boolean
+- duration
+- qualified boolean or threshold
+- VOB / VVOB / tagged state if available
+- landing page if available
+- campaign/source metadata if available
+
+9. Clients
+Audit for:
+- connected integrations per client
+- report eligibility by source coverage
+- drive/sheets linkage
+- call provider mapping
+- competitive set storage
+- NSM tracker linkage
+- evaluation workbook linkage
+- notes / flags / relationship fields
+
+10. Setup Integrations
+Nimbata must be included.
+
+Each integration must expose:
+- auth flow
+- auth status
+- scope verification
+- test connection
+- last sync
+- mapped clients
+- expected entities
+- field availability
+- sync logs
+- error logs
+
+Required integrations:
+- GA4
+- GSC
+- CallRail
+- CTM
+- Nimbata
+- Ahrefs
+- SEMrush
+- Airtable
+- Asana
+- Notion
+- Google Sheets
+- GBP
+- Google Drive
+
+==================================================
+ARCHITECTURE YOU MUST IMPLEMENT OR REFINE
+==================================================
+
+Implement or refactor toward these concepts:
+
+- IntegrationProvider
+- ClientIntegration
+- SyncJob
+- SyncHealth
+- MetricFieldMap
+- ReportRequirement
+- ReportTemplate
+- ReportReadinessValidator
+- DataProvenanceLog
+- CallMetricNormalized
+- SearchMetricNormalized
+- CrawlMetricNormalized
+- SourcePriorityResolver
+- FeatureAuditResult
+
+==================================================
+REPORT READINESS VALIDATION
+==================================================
+
+Before any report or tool renders source-backed metrics, validate source readiness.
+
+Examples:
+
+Bi-Weekly readiness:
+- NSM tracker linked
+- GA4-backed sessions available
+- call provider present or explicit no-call-data state
+- Asana or Airtable available
+
+Monthly readiness:
+- GA4
+- GSC
+- NSM sheet
+- task system
+- call source if call metrics are shown
+
+Discoverability readiness:
+- GSC required
+- GA4 strongly expected
+- crawl inventory required for category rollups
+
+Mid-Strategy readiness:
+- Screaming Frog required
+- GSC required
+- benchmark sources required for authority metrics
+- GA4 required for session distribution logic
+
+If required sources are missing:
+- do not guess
+- show exact missing dependencies
+- show partial render capability if possible
+
+==================================================
+TESTING REQUIREMENTS
+==================================================
+
+Add tests for:
+- source hierarchy resolution
+- missing integration handling
+- provenance display
+- readiness validation
+- Discoverability Tool GSC/GA4-first routing
+- dashboard call-provider normalization
+- Nimbata support
+- QBS naming cleanup
+- QBR naming cleanup
+- Mid-Strategy formula correctness
+- category rollup calculations
+- monthly report source correctness
+- bi-weekly source correctness without structural redesign
+
+==================================================
+VERY IMPORTANT EXECUTION PRIORITY
+==================================================
+
+Priority 1
+- fix naming: QBS / QBR
+- fix Discoverability Tool routing
+- fix Dashboard call data routing
+- add Nimbata integration
+- add source provenance states
+- add readiness validators
+
+Priority 2
+- fix Monthly source mapping and output logic
+- fix QBR source mapping and output logic
+- fix Mid-Strategy evaluation engine routing and formula layer
+
+Priority 3
+- audit ACA, Clients, Setup Integrations deeply
+- add sync health and audit logs
+
+Priority 4
+- cleanup and hardening
+
+==================================================
+RETURN FORMAT
+==================================================
+
+Return all of the following:
+
+A. feature-by-feature audit table
+B. remediation backlog by priority
+C. changed backend architecture
+D. changed frontend components / routes / services
+E. integration registry
+F. source map by feature and report
+G. tests added
+H. blockers requiring credentials or external scopes
+
+Do not return a fluffy summary.
+Do not give broad strategy prose.
+Be field-level, source-level, and implementation-level.
+
+Hard rules:
+- Bi-Weekly: source audit only, no redesign
+- QBS: source audit + naming cleanup only, no redesign
+- Discoverability Tool: GSC + GA4 first, no fake AI metrics
+- Dashboard: normalize CallRail / CTM / Nimbata
+- Mid-Strategy: use evaluation sheet logic, crawl joins, formulas, benchmark scoring
+- Monthly, QBR, and integrations: likely need deeper fixes
+- If a source is missing, mark it clearly instead of inventing numbers

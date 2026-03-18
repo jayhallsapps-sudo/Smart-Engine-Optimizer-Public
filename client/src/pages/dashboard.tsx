@@ -118,6 +118,7 @@ interface ClientDashboardData {
   clientName: string;
   lastUpdated: string;
   connectedServices: string[];
+  callProvider: string | null;
   metrics: DashboardMetric[];
 }
 
@@ -150,6 +151,7 @@ const SERVICE_LABELS: Record<string, { label: string; color: string }> = {
   ga4: { label: "GA4", color: "bg-orange-500" },
   callrail: { label: "CallRail", color: "bg-green-600" },
   ctm: { label: "CTM", color: "bg-teal-600" },
+  nimbata: { label: "Nimbata", color: "bg-purple-600" },
   semrush: { label: "SEMrush", color: "bg-red-600" },
   gbp: { label: "GBP", color: "bg-blue-500" },
   airtable: { label: "Airtable", color: "bg-cyan-700" },
@@ -1259,9 +1261,40 @@ function ClientCard({
             ) : grouped.length > 0 ? (
               grouped.map(({ group, metrics }) => (
                 <div key={group}>
-                  <p className={`text-[9px] font-bold uppercase tracking-widest mb-2 ${GROUP_COLORS[group] ?? "text-white/40"}`}>
-                    {group}
-                  </p>
+                  <div className="flex items-center gap-2 mb-2">
+                    <p className={`text-[9px] font-bold uppercase tracking-widest ${GROUP_COLORS[group] ?? "text-white/40"}`}>
+                      {group}
+                    </p>
+                    {group === "Calls" && data?.callProvider && (
+                      <span
+                        className="text-[8px] font-semibold px-1.5 py-0.5 rounded text-white"
+                        style={{
+                          background: data.callProvider === "CallRail"
+                            ? "rgba(22,163,74,0.4)"
+                            : data.callProvider === "CTM"
+                            ? "rgba(20,184,166,0.4)"
+                            : "rgba(147,51,234,0.4)",
+                          border: "1px solid",
+                          borderColor: data.callProvider === "CallRail"
+                            ? "rgba(22,163,74,0.5)"
+                            : data.callProvider === "CTM"
+                            ? "rgba(20,184,166,0.5)"
+                            : "rgba(147,51,234,0.5)",
+                        }}
+                        data-testid={`badge-call-provider-${client.id}`}
+                      >
+                        {data.callProvider}
+                      </span>
+                    )}
+                    {group === "Calls" && !data?.callProvider && (
+                      <span
+                        className="text-[8px] font-medium px-1.5 py-0.5 rounded"
+                        style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.3)", border: "1px solid rgba(255,255,255,0.08)" }}
+                      >
+                        no tracker
+                      </span>
+                    )}
+                  </div>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     {metrics.map(m => (
                       <MetricTile

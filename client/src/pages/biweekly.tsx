@@ -38,6 +38,7 @@ import { useReportSave } from "@/hooks/useReportSave";
 import { SaveStatusIndicator } from "@/components/reports/SaveStatusIndicator";
 import { ReportSaveSelector } from "@/components/reports/ReportSaveSelector";
 import { CrawlAssetSelector } from "@/components/reports/CrawlAssetSelector";
+import { SourceReadinessBanner, BIWEEKLY_SOURCES } from "@/components/reports/SourceReadinessBanner";
 
 function toYMD(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -503,6 +504,14 @@ export default function BiweeklyPage() {
               />
             </div>
           )}
+
+          {/* Source Readiness */}
+          {clientId && (() => {
+            const selectedClient = (clients as Client[]).find(c => String(c.id) === clientId);
+            return selectedClient ? (
+              <SourceReadinessBanner client={selectedClient} sourceIds={BIWEEKLY_SOURCES} />
+            ) : null;
+          })()}
 
           {/* Generate */}
           <Button

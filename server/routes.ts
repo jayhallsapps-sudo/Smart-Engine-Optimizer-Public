@@ -1973,31 +1973,31 @@ export async function registerRoutes(
 
       res.json({ reportData });
     } catch (err: any) {
-      console.error("QBR Prep V2 generation error:", err);
-      res.status(500).json({ message: "Failed to generate QBR Prep: " + err.message });
+      console.error("QBS generation error:", err);
+      res.status(500).json({ message: "Failed to generate QBS: " + err.message });
     }
   });
 
   app.post("/api/reports/qbr-prep/docx-v2", async (req, res) => {
     const t0 = Date.now();
     const { reportData, edits, hiddenSections = {}, hiddenTables = {} } = req.body;
-    const validErr = validateExportPayload("QBR Prep DOCX", reportData, ["meta", "section1Goals"]);
-    if (validErr) { logExport("QBR Prep DOCX", t0, false, validErr); return res.status(400).json({ message: validErr }); }
+    const validErr = validateExportPayload("QBS DOCX", reportData, ["meta", "section1Goals"]);
+    if (validErr) { logExport("QBS DOCX", t0, false, validErr); return res.status(400).json({ message: validErr }); }
     const readiness = validateQbrPrepExportReadiness(reportData, edits ?? {});
     if (!readiness.canExport) {
-      logExport("QBR Prep DOCX", t0, false, readiness.reasons.join("; "));
+      logExport("QBS DOCX", t0, false, readiness.reasons.join("; "));
       return res.status(422).json({ ok: false, code: readiness.code, reasons: readiness.reasons });
     }
     try {
       const buffer = await generateQbrPrepV2Docx(injectQbrPrepCustomRows(reportData, edits), edits, hiddenSections, hiddenTables);
       const slug = (reportData.meta?.site ?? "report").toLowerCase().replace(/\s+/g, "_");
       const filename = `QBS_${slug}_${reportData.meta?.planningQuarter?.replace(/\s+/g, "_") ?? "report"}.docx`;
-      logExport("QBR Prep DOCX", t0, true);
+      logExport("QBS DOCX", t0, true);
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
       res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
       res.send(buffer);
     } catch (err: any) {
-      logExport("QBR Prep DOCX", t0, false, err.message);
+      logExport("QBS DOCX", t0, false, err.message);
       res.status(500).json({ message: "Failed to generate DOCX: " + err.message });
     }
   });
@@ -2014,7 +2014,7 @@ export async function registerRoutes(
       const { ReplitConnectors } = await import("@replit/connectors-sdk");
       const connectors = new ReplitConnectors();
 
-      const filename = (reportTitle ?? "QBR Prep Report") + ".docx";
+      const filename = (reportTitle ?? "QBS Report") + ".docx";
       const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
       // ── Step 1: Initiate a resumable upload session (small body — safe through proxy) ──
@@ -2065,7 +2065,7 @@ export async function registerRoutes(
       const driveFile = await uploadRes.json() as { id: string; name: string; webViewLink: string };
       res.json({ success: true, fileId: driveFile.id, fileName: driveFile.name, webViewLink: driveFile.webViewLink });
     } catch (err: any) {
-      console.error("QBR Prep V2 Drive upload error:", err);
+      console.error("QBS Drive upload error:", err);
       res.status(500).json({ message: "Upload failed: " + err.message });
     }
   });
@@ -2073,11 +2073,11 @@ export async function registerRoutes(
   app.post("/api/reports/qbr-prep/preview-pdf", async (req, res) => {
     const t0 = Date.now();
     const { reportData, edits } = req.body;
-    const validErr = validateExportPayload("QBR Prep PDF", reportData, ["meta"]);
-    if (validErr) { logExport("QBR Prep PDF", t0, false, validErr); return res.status(400).json({ message: validErr }); }
+    const validErr = validateExportPayload("QBS PDF", reportData, ["meta"]);
+    if (validErr) { logExport("QBS PDF", t0, false, validErr); return res.status(400).json({ message: validErr }); }
     const readiness = validateQbrPrepExportReadiness(reportData, edits ?? {});
     if (!readiness.canExport) {
-      logExport("QBR Prep PDF", t0, false, readiness.reasons.join("; "));
+      logExport("QBS PDF", t0, false, readiness.reasons.join("; "));
       return res.status(422).json({ ok: false, code: readiness.code, reasons: readiness.reasons });
     }
     const id = "qbr-prep-" + Date.now();
@@ -2086,13 +2086,13 @@ export async function registerRoutes(
       const buffer = await generatePdfViaPuppeteer(id, "qbr-prep-print");
       printCache.delete(id);
       const slug = (reportData.meta?.site ?? "report").toLowerCase().replace(/\s+/g, "_");
-      logExport("QBR Prep PDF", t0, true);
+      logExport("QBS PDF", t0, true);
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `attachment; filename="${slug}_qbr_prep.pdf"`);
       res.send(buffer);
     } catch (err: any) {
       printCache.delete(id);
-      logExport("QBR Prep PDF", t0, false, err.message);
+      logExport("QBS PDF", t0, false, err.message);
       res.status(500).json({ message: "PDF generation failed: " + err.message });
     }
   });
@@ -2385,7 +2385,7 @@ export async function registerRoutes(
       }
       res.json(output);
     } catch (err: any) {
-      console.error("QBR Full generation error:", err);
+      console.error("QBR generation error:", err);
       res.status(500).json({ message: "Failed to generate QBR report: " + err.message });
     }
   });
@@ -2393,7 +2393,7 @@ export async function registerRoutes(
   app.post("/api/reports/qbr-full/pptx", async (req, res) => {
     const t0 = Date.now();
     const { json, edits } = req.body as { json: any; edits?: Record<string, string> };
-    if (!json || !json.slides?.length) { logExport("QBR Full PPTX", t0, false, "No slides"); return res.status(400).json({ message: "No slide data found. Generate the report first." }); }
+    if (!json || !json.slides?.length) { logExport("QBR PPTX", t0, false, "No slides"); return res.status(400).json({ message: "No slide data found. Generate the report first." }); }
     try {
       const sections: SectionData[] = (json.slides ?? [])
         .filter((s: any) => s.type !== "title" && s.type !== "divider")
@@ -2413,12 +2413,12 @@ export async function registerRoutes(
       const buffer = await generatePptx(clientName, reportTitle, generatedAt, sections);
       const slug = clientName.toLowerCase().replace(/\s+/g, "_");
       const qtrSlug = (json.quarter_label ?? "qbr").replace(/\s/g, "_");
-      logExport("QBR Full PPTX", t0, true);
+      logExport("QBR PPTX", t0, true);
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
       res.setHeader("Content-Disposition", `attachment; filename="${slug}_QBR_${qtrSlug}.pptx"`);
       res.send(buffer);
     } catch (err: any) {
-      logExport("QBR Full PPTX", t0, false, err.message);
+      logExport("QBR PPTX", t0, false, err.message);
       res.status(500).json({ message: "Failed to generate PPTX: " + err.message });
     }
   });
@@ -2877,7 +2877,16 @@ export async function registerRoutes(
       ? "callrail_qoq_organic_calls"
       : client.ctmAccountId
       ? "ctm_qoq_organic_calls"
+      : client.nimbataAccountId
+      ? "callrail_qoq_organic_calls"
       : "callrail_qoq_organic_calls";
+    const callProvider = client.callrailCompanyId
+      ? "CallRail"
+      : client.ctmAccountId
+      ? "CTM"
+      : client.nimbataAccountId
+      ? "Nimbata"
+      : null;
 
     const [gscResult, ga4Result, callsResult] = await Promise.all([
       runCommand("gsc_qoq_queries"),
@@ -2912,6 +2921,7 @@ export async function registerRoutes(
     if (client.ga4PropertyId) connectedServices.push("ga4");
     if (client.callrailCompanyId) connectedServices.push("callrail");
     if (client.ctmAccountId) connectedServices.push("ctm");
+    if (client.nimbataAccountId) connectedServices.push("nimbata");
     const semrushCreds = await storage.getApiCredentialsByService("semrush").catch(() => []);
     if (semrushCreds.length > 0) connectedServices.push("semrush");
     if (client.ahrefsProjectUrl) connectedServices.push("ahrefs");
@@ -2923,6 +2933,7 @@ export async function registerRoutes(
       clientName: client.name,
       lastUpdated: new Date().toISOString(),
       connectedServices,
+      callProvider,
       metrics,
     });
   });
@@ -3016,6 +3027,7 @@ export async function registerRoutes(
     if (client.ga4PropertyId) connectedServices.push("ga4");
     if (client.callrailCompanyId) connectedServices.push("callrail");
     if (client.ctmAccountId) connectedServices.push("ctm");
+    if (client.nimbataAccountId) connectedServices.push("nimbata");
     if (hasSemrush) connectedServices.push("semrush");
     if (client.ahrefsProjectUrl) connectedServices.push("ahrefs");
     if (client.gbpLocationName) connectedServices.push("gbp");
@@ -4365,14 +4377,27 @@ Rules:
 - For non-YMYL: trustComplianceComplexityScore = 2
 - When recommendedPageType = existing_page_refresh, set recommendedTargetUrl to the specific money page path that should be refreshed
 
+VOLUME AND DIFFICULTY — CRITICAL SOURCE RULE:
+- DO NOT invent searchVolume or kd (keyword difficulty) numbers.
+- searchVolume and kd must only come from live Ahrefs or SEMrush data provided above.
+- If no live Ahrefs/SEMrush data was provided for a keyword, set searchVolume to null and kd to null.
+- Never fabricate plausible-sounding volume numbers (e.g. "200-500", "1000-2000"). This pollutes the research with AI guesses that users mistake for real data.
+
+POSITION / RANKING DATA — CRITICAL SOURCE RULE:
+- clientCurrentPosition must only be set if live GSC or Ahrefs data above confirmed the exact position.
+- If GSC data showed position: set clientCurrentPosition to that number and positionSource to "GSC".
+- If Ahrefs data showed position: set clientCurrentPosition to that number and positionSource to "Ahrefs".
+- If neither source confirmed position: set clientCurrentPosition to null and positionSource to null.
+- Never fabricate a position for a keyword not confirmed in live data. This is the most damaging form of AI fabrication in this tool.
+
 MANDATORY RANKING MIX — YOU MUST FOLLOW THIS EXACTLY:
 Split your 18-22 keywords into TWO explicit groups:
 
 GROUP A — "Already Ranking" (generate exactly 7-9 of these):
-These are keywords the client ALREADY ranks for somewhere in positions 1-30. If live GSC or Ahrefs data was provided above, USE THOSE EXACT QUERIES — do not invent ranking data that contradicts real data. Set clientRanksForKeyword: true and clientEstimatedPosition to the actual position from the live data if available, otherwise a realistic estimate (1-30). Every money page should inspire at least 1-2 keywords where the site ranks.
+These are keywords the client ALREADY ranks for, confirmed by live GSC or Ahrefs data provided above. USE THOSE EXACT QUERIES from the live data — do not invent ranking data that contradicts or supplements the real data beyond what was provided. Set clientRanksForKeyword: true. If the live data showed a position, populate clientCurrentPosition and positionSource.
 
 GROUP B — "Growth Opportunities" (generate the remaining 11-13):
-These are keywords the site does NOT yet rank for. New content opportunities. Set clientRanksForKeyword: false and clientEstimatedPosition: null.
+These are keywords the site does NOT yet rank for. New content opportunities. Set clientRanksForKeyword: false, clientCurrentPosition: null, positionSource: null.
 
 CRITICAL: Do NOT set clientRanksForKeyword: false for all keywords. If your output has fewer than 6 keywords with clientRanksForKeyword: true, you have failed this requirement. Check your work before returning.
 
@@ -4385,8 +4410,8 @@ Return ONLY valid JSON:
       "clusterId": "${cluster.id}",
       "source": "ai_inferred",
       "businessGoal": "specific goal",
-      "estimatedVolume": "200-500",
-      "estimatedDifficulty": 35,
+      "searchVolume": null,
+      "kd": null,
       "businessGoalAlignmentScore": 8,
       "intentFitScore": 7,
       "currentTractionScore": 4,
@@ -4406,7 +4431,8 @@ Return ONLY valid JSON:
       "bgaLow": [],
       "serpNotes": "One sentence SERP note.",
       "clientRanksForKeyword": true,
-      "clientEstimatedPosition": 14,
+      "clientCurrentPosition": null,
+      "positionSource": null,
       "competitorRankingDomains": ["${competitorList.split(",")[0]?.trim() || ""}"],
       "cannibalizationWarning": null,
       "cannibalizationSeverity": null,

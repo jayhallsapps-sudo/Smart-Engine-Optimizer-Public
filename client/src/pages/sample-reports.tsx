@@ -67,7 +67,7 @@ const SAMPLE_REPORTS: SampleReport[] = [
     format: "docx",
     formatIcon: "docx",
     endpoint: "/api/reports/qbr-prep/sample",
-    filename: "Sample_QBRPrep_AcmePlumbing.docx",
+    filename: "Sample_QBS_AcmePlumbing.docx",
     icon: Sparkles,
     sections: ["Executive Summary (Wins + Top Opportunities)", "Content Opportunities", "Technical Opportunities", "CRO Opportunities", "Local SEO Opportunities"],
   },

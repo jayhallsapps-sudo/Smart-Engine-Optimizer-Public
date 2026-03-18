@@ -54,9 +54,12 @@ interface Keyword {
   keyword: string;
   clusterId: string;
   source: string;
-  estimatedVolume?: string;
-  estimatedDifficulty?: number;
-  searchVolume?: number;
+  /** @deprecated use searchVolume */
+  estimatedVolume?: string | null;
+  /** @deprecated use kd */
+  estimatedDifficulty?: number | null;
+  searchVolume?: number | null;
+  kd?: number | null;
   difficulty?: number;
   currentPosition?: number;
   impressions?: number;
@@ -90,7 +93,10 @@ interface Keyword {
   bgaHigh?: string[];
   bgaLow?: string[];
   clientRanksForKeyword?: boolean | null;
+  /** @deprecated use clientCurrentPosition */
   clientEstimatedPosition?: number | null;
+  clientCurrentPosition?: number | null;
+  positionSource?: "GSC" | "Ahrefs" | null;
   competitorRankingDomains?: string[];
 }
 
@@ -911,12 +917,32 @@ function KeywordDetailDrawer({
               </Select>
             </div>
             <div>
-              <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1 block">Est. Volume</label>
-              <Input value={draft.estimatedVolume || ""} onChange={e => setDraft(d => ({ ...d, estimatedVolume: e.target.value }))} placeholder="e.g. 200-500" className="h-8 text-xs" />
+              <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1 block">
+                Volume
+                <span className="ml-1 normal-case font-normal text-muted-foreground/60">(Ahrefs/SEMrush only)</span>
+              </label>
+              <Input
+                type="number"
+                value={draft.searchVolume ?? ""}
+                onChange={e => setDraft(d => ({ ...d, searchVolume: e.target.value === "" ? null : Number(e.target.value) }))}
+                placeholder="—  not available without source"
+                className="h-8 text-xs"
+              />
             </div>
             <div>
-              <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1 block">Est. Difficulty (0–100)</label>
-              <Input type="number" min={0} max={100} value={draft.estimatedDifficulty || ""} onChange={e => setDraft(d => ({ ...d, estimatedDifficulty: Number(e.target.value) }))} className="h-8 text-xs" />
+              <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1 block">
+                KD (0–100)
+                <span className="ml-1 normal-case font-normal text-muted-foreground/60">(Ahrefs/SEMrush only)</span>
+              </label>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                value={draft.kd ?? ""}
+                onChange={e => setDraft(d => ({ ...d, kd: e.target.value === "" ? null : Number(e.target.value) }))}
+                placeholder="—  not available without source"
+                className="h-8 text-xs"
+              />
             </div>
             <div>
               <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1 block">Current Position</label>
@@ -1138,10 +1164,12 @@ function KeywordsStep({ ws, onUpdate }: { ws: Workspace; onUpdate: (keywords: Ke
 
   function getSortValue(k: Keyword, field: string): string | number {
     if (field === "clusterName") return clusterMap[k.clusterId] || "";
-    if (field === "estimatedVolume") {
-      const v = k.estimatedVolume || k.searchVolume || "0";
-      return parseInt(String(v).split("-")[0].replace(/[^\d]/g, "") || "0", 10);
+    if (field === "searchVolume") {
+      const v = k.searchVolume ?? k.estimatedVolume ?? null;
+      if (v === null) return -1;
+      return typeof v === "number" ? v : parseInt(String(v).split("-")[0].replace(/[^\d]/g, "") || "0", 10);
     }
+    if (field === "kd") return k.kd ?? k.estimatedDifficulty ?? -1;
     if (field === "competitorCount") return (k.competitorRankingDomains?.length ?? 0);
     if (field === "clientRanksForKeyword") return k.clientRanksForKeyword === true ? 1 : 0;
     return (k as any)[field] ?? "";
@@ -1340,7 +1368,7 @@ function KeywordsStep({ ws, onUpdate }: { ws: Workspace; onUpdate: (keywords: Ke
                     { label: "Keyword", field: "keyword", sticky: true },
                     { label: "Cluster", field: "clusterName" },
                     { label: "Intent", field: "dominantIntent" },
-                    { label: "Volume", field: "estimatedVolume" },
+                    { label: "Volume", field: "searchVolume" },
                     { label: "Site Ranks?", field: "clientRanksForKeyword" },
                     { label: "Competitors", field: "competitorCount" },
                     { label: "Goal Align", field: "businessGoalAlignmentScore" },
@@ -1408,17 +1436,45 @@ function KeywordsStep({ ws, onUpdate }: { ws: Workspace; onUpdate: (keywords: Ke
                           {kw.dominantIntent?.replace(/_/g, " ")}
                         </span>
                       </td>
-                      <td className="p-2 text-muted-foreground">{kw.estimatedVolume || kw.searchVolume || "—"}</td>
+                      <td className="p-2">
+                        {(() => {
+                          const vol = kw.searchVolume ?? null;
+                          if (vol === null || vol === undefined) {
+                            return (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="text-muted-foreground/50 cursor-default">—</span>
+                                </TooltipTrigger>
+                                <TooltipContent className="text-xs">Volume not available — connect Ahrefs or SEMrush to populate</TooltipContent>
+                              </Tooltip>
+                            );
+                          }
+                          return <span className="text-foreground">{vol.toLocaleString()}</span>;
+                        })()}
+                      </td>
                       <td className="p-2">
                         {kw.clientRanksForKeyword === true ? (
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium text-xs cursor-default">
+                              <span className="inline-flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium text-xs cursor-default">
                                 <CheckCircle2 className="w-3.5 h-3.5" />
-                                {kw.clientEstimatedPosition ? `#${kw.clientEstimatedPosition}` : "Yes"}
+                                {(kw.clientCurrentPosition ?? kw.clientEstimatedPosition)
+                                  ? `#${kw.clientCurrentPosition ?? kw.clientEstimatedPosition}`
+                                  : "Yes"}
+                                {kw.positionSource && (
+                                  <span className="text-[9px] font-normal text-emerald-500 bg-emerald-50 dark:bg-emerald-950 border border-emerald-200 dark:border-emerald-800 px-1 py-0 rounded">
+                                    {kw.positionSource}
+                                  </span>
+                                )}
                               </span>
                             </TooltipTrigger>
-                            <TooltipContent className="text-xs">Client estimated to rank{kw.clientEstimatedPosition ? ` around position #${kw.clientEstimatedPosition}` : " in top 30"}</TooltipContent>
+                            <TooltipContent className="text-xs">
+                              {kw.positionSource
+                                ? `Confirmed at position #${kw.clientCurrentPosition ?? kw.clientEstimatedPosition} via ${kw.positionSource}`
+                                : (kw.clientCurrentPosition ?? kw.clientEstimatedPosition)
+                                  ? `Position #${kw.clientCurrentPosition ?? kw.clientEstimatedPosition} — source unconfirmed`
+                                  : "Client confirmed to rank — no exact position data available"}
+                            </TooltipContent>
                           </Tooltip>
                         ) : kw.clientRanksForKeyword === false ? (
                           <span className="text-xs text-muted-foreground">Not ranking</span>

@@ -1582,47 +1582,47 @@ export default function WorkflowPage() {
             integrations={[
               {
                 id: "gsc",
-                how: "Pulls query performance, page performance, top queries, and QoQ comparisons. Used by Monthly, QBR Prep, QBR Full, and Mid-Strategy reports.",
+                how: "Pulls query performance, page performance, top queries, and QoQ comparisons. Used by Monthly, QBS, QBR, and Mid-Strategy reports.",
                 why: "GSC is the ground-truth source for search visibility. Every performance report needs it to show what's actually happening in Google Search.",
               },
               {
                 id: "ga4",
-                how: "Pulls organic session funnels, landing page performance, conversion data, and QTD/QoQ comparisons. Used by Monthly, QBR Prep, QBR Full, and Mid-Strategy reports.",
+                how: "Pulls organic session funnels, landing page performance, conversion data, and QTD/QoQ comparisons. Used by Monthly, QBS, QBR, and Mid-Strategy reports.",
                 why: "GA4 ties search performance to business outcomes. Without it, reports show visibility but not whether that visibility converted.",
               },
               {
                 id: "callrail",
-                how: "Reads organic call volume and top call-driving pages for clients on CallRail. Used by Monthly, QBR Prep, and QBR Full reports.",
+                how: "Reads organic call volume and top call-driving pages for clients on CallRail. Used by Monthly, QBS, and QBR reports.",
                 why: "Calls are the primary conversion event for most treatment center clients. Excluding them would misrepresent the true impact of SEO.",
               },
               {
                 id: "ctm",
-                how: "Same call-tracking signals as CallRail but for clients using CallTrackingMetrics. Used by QBR Prep reports.",
+                how: "Same call-tracking signals as CallRail but for clients using CallTrackingMetrics. Used by QBS and QBR reports.",
                 why: "Some clients use CTM instead of CallRail. The report generator checks for both so no call data is left out.",
               },
               {
                 id: "semrush",
-                how: "Pulls keyword distribution and organic overview metrics. Used by Monthly and QBR Full reports.",
+                how: "Pulls keyword distribution and organic overview metrics. Used by Monthly and QBR reports.",
                 why: "SEMrush provides competitive keyword context that GSC doesn't expose — including estimated share of voice and keyword difficulty.",
               },
               {
                 id: "airtable",
-                how: "Reads the client's content work log (published and in-production items) for the reporting period. Used by Bi-Weekly, Monthly, QBR Prep, and QBR Full reports.",
+                how: "Reads the client's content work log (published and in-production items) for the reporting period. Used by Bi-Weekly, Monthly, QBS, and QBR reports.",
                 why: "Airtable is where content production is tracked. Reports without it produce empty work-accomplished sections.",
               },
               {
                 id: "asana",
-                how: "Reads completed and upcoming tasks from the client's Asana project, grouped by work category. Used by Bi-Weekly, Monthly, QBR Prep, and QBR Full reports.",
+                how: "Reads completed and upcoming tasks from the client's Asana project, grouped by work category. Used by Bi-Weekly, Monthly, QBS, and QBR reports.",
                 why: "Asana captures technical and strategic work that never appears in Airtable. Both sources together give a complete picture of what shipped.",
               },
               {
                 id: "google-sheets",
-                how: "Reads quarterly NSM (North Star Metric) goals for the client. Used by Bi-Weekly, Monthly, QBR Prep, and QBR Full reports.",
+                how: "Reads quarterly NSM (North Star Metric) goals for the client. Used by Bi-Weekly, Monthly, QBS, and QBR reports.",
                 why: "NSM goals are the benchmark against which every performance metric is measured. Reports without them can't say whether results are on or off track.",
               },
               {
                 id: "notion",
-                how: "Reads the Webserv Strategy Bank for approved SOPs, playbooks, and strategic context relevant to the client. Used by QBR Prep, QBR Full, and Mid-Strategy reports.",
+                how: "Reads the Webserv Strategy Bank for approved SOPs, playbooks, and strategic context relevant to the client. Used by QBS, QBR, and Mid-Strategy reports.",
                 why: "Notion surfaces institutional strategy context that makes the AI-generated sections specific to Webserv's methodology rather than generic.",
               },
               {

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { IntegrationsPanel } from "@/components/IntegrationsPanel";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -1354,7 +1355,16 @@ export default function ClientsPage() {
       <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
         <div>
           <h1 className="text-xl font-semibold" style={{ color: "#0369A1" }} data-testid="text-clients-title">Client Dashboards</h1>
-          <p className="text-sm text-muted-foreground">Manage your recovery & addiction centre clients and their data source configurations.</p>
+          <p className="text-sm text-muted-foreground mb-3">Manage your recovery & addiction centre clients and their data source configurations.</p>
+          <IntegrationsPanel
+            integrations={[
+              {
+                id: "asana",
+                how: "Each client profile can be linked to an Asana project GID, which scopes the Workflow Tracker and ACA to that client's live deliverable data.",
+                why: "A single Asana project ID is the anchor that connects SmartEO's client profile to real execution data — without it, workflow and AI features operate blind to what's actually in progress.",
+              },
+            ]}
+          />
         </div>
         <div className="flex items-center gap-2">
           <Button

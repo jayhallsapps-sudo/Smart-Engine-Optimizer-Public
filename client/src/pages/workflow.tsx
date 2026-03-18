@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo, createContext, useContext } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
+import { IntegrationsPanel } from "@/components/IntegrationsPanel";
 import {
   ChevronRight,
   ChevronLeft,
@@ -1573,6 +1574,31 @@ export default function WorkflowPage() {
   return (
     <div className="flex flex-col h-full overflow-hidden bg-background" data-testid="page-workflow">
       <StepperHeader currentStep={state.step} />
+
+      {/* Integrations panel — shown at the top of the workflow */}
+      <div className="shrink-0 border-b bg-muted/20">
+        <div className="px-6 py-2.5">
+          <IntegrationsPanel
+            integrations={[
+              {
+                id: "asana",
+                how: "Reads open and closed deliverables from linked client Asana projects to auto-populate execution summaries and validate what shipped during the reporting period.",
+                why: "Asana is the source of truth for execution. Pulling from it ensures the report reflects what actually happened — not a curated summary written from memory.",
+              },
+              {
+                id: "google-drive",
+                how: "Exports finalized report PDFs directly to the client's Google Drive folder, ready for sharing without any manual download-and-upload step.",
+                why: "Google Drive is where clients and account managers already live. Pushing reports there eliminates friction and keeps the file trail organized in one place.",
+              },
+              {
+                id: "google-docs",
+                how: "Generates an editable Google Doc from the report output so the team can annotate, comment, or adjust copy before the report goes to the client.",
+                why: "Google Docs enables real-time collaborative review. It gives account managers a chance to refine strategic language before delivery without creating a separate editing workflow.",
+              },
+            ]}
+          />
+        </div>
+      </div>
 
       {/* Restore banner — shown when a saved session was loaded on mount */}
       {restoredAt !== null && (

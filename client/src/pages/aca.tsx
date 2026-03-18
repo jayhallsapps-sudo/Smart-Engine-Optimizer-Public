@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { IntegrationsPanel } from "@/components/IntegrationsPanel";
 import {
   Send,
   Loader2,
@@ -577,6 +578,26 @@ export default function AcaPage() {
               New chat
             </button>
           )}
+        </div>
+      </div>
+
+      {/* Integrations panel */}
+      <div className="shrink-0 border-b">
+        <div className="max-w-[900px] mx-auto w-full px-6 py-3">
+          <IntegrationsPanel
+            integrations={[
+              {
+                id: "asana",
+                how: "Reads live tasks, project lists, and deliverable status from linked client Asana projects to ground responses in real execution data.",
+                why: "Asana is the source of truth for what's actually shipping. Connecting it means ACA answers reflect live deliverable status — not stale or manually entered context.",
+              },
+              {
+                id: "notion",
+                how: "Searches the Webserv Strategy Bank for SOPs, playbooks, behavioral health glossary entries, and client strategy notes relevant to the query.",
+                why: "Notion houses institutional knowledge that doesn't exist in structured data. Connecting it lets ACA cite approved Webserv methodology instead of generic AI reasoning.",
+              },
+            ]}
+          />
         </div>
       </div>
 

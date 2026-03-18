@@ -16,6 +16,7 @@ import {
   ArrowUpDown, ArrowUp, ArrowDown, Filter, MoreHorizontal, RefreshCw, X, BookOpen,
   TrendingUp, Target, Globe, MapPin, Zap,
 } from "lucide-react";
+import { IntegrationsPanel } from "@/components/IntegrationsPanel";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -300,9 +301,25 @@ function WorkspacePicker({ onSelect }: { onSelect: (ws: Workspace) => void }) {
             <p className="text-xs text-muted-foreground">Keyword Research Engine — Webserv SEO Workflow</p>
           </div>
         </div>
-        <p className="text-sm text-muted-foreground mb-6 ml-13">
+        <p className="text-sm text-muted-foreground mb-3 ml-13">
           Structured keyword research aligned to client business goals, search intent, and conversion outcomes.
         </p>
+
+        <IntegrationsPanel
+          className="mb-6 ml-13"
+          integrations={[
+            {
+              id: "google-drive",
+              how: "Exported keyword research reports (PDF and XLSX) can be saved directly to a client's Google Drive folder for sharing and archival.",
+              why: "Google Drive is where clients and account managers already collaborate. Pushing exports there removes the manual download-and-share step.",
+            },
+            {
+              id: "google-docs",
+              how: "Keyword cluster reports can be generated as structured Google Docs, making them easy to annotate and share for internal review before client delivery.",
+              why: "Google Docs enables collaborative editing and inline comments so the team can refine strategic notes before the report leaves the building.",
+            },
+          ]}
+        />
 
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold text-foreground">Research Workspaces</h2>

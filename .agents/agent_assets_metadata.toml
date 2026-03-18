@@ -24,3 +24,9 @@ id = "BtgiTEcPKuHjTn3uAof2h"
 uri = "file://bliss_qbr_prep_proof.pdf"
 type = "pdf"
 title = "Bliss Recovery — QBR Prep PDF (415KB)"
+
+[[outputs]]
+id = "V2gMMmY7ppUrTEIdNFYC7"
+uri = "file://AUDIT.md"
+type = "text"
+title = "SmartEO Platform Audit — Full Evidence Tables"

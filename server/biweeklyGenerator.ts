@@ -364,6 +364,9 @@ export async function generateBiweekly(input: {
   const sfPrioritiesRich: BulletItem[] = sfPriorities.map(t => ({ text: t, source: hasSf ? "Screaming Frog" : undefined }));
   const techNext: BulletItem[] = sfPrioritiesRich.length > 0 ? sfPrioritiesRich : [...asanaTechNext];
 
+  const asanaLocalDid: BulletItem[] = (asanaCompletedByCategory["Local SEO"] ?? []).map(t => ({ text: t.name, source: "Asana" }));
+  const asanaLocalNext: BulletItem[] = (asanaUpcomingByCategory["Local SEO"] ?? []).map(t => ({ text: t.name, source: "Asana" }));
+
   const workLog: NonNullable<DocxSection["workLog"]> = [
     makeRow(
       "Content",
@@ -388,10 +391,10 @@ export async function generateBiweekly(input: {
     ),
     makeRow(
       "Local SEO",
-      [],
-      [],
-      "Add local SEO / GBP progress from the last two weeks.",
-      "Add upcoming GBP / local SEO priorities."
+      asanaLocalDid,
+      asanaLocalNext,
+      "No local SEO / GBP work completed this period.",
+      "No upcoming local SEO work scheduled yet."
     ),
   ];
 

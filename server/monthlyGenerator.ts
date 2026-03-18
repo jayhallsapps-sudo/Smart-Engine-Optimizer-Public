@@ -143,6 +143,7 @@ export async function generateMonthly(input: {
     gscDailyTrend,
     ga4DailyTrend,
     nsmResult,
+    ctSummaryResult,
   ] = await Promise.allSettled([
     handlesGscCommand("gsc_qoq_queries" as any)
       ? queryGsc("gsc_qoq_queries" as any, client, calMonthRange)
@@ -183,6 +184,10 @@ export async function generateMonthly(input: {
     fetchGscDailyTrend(client, calMonthRange),
     fetchGa4DailyTrend(client, calMonthRange),
     fetchNsmGoalsForSpecificQuarter(client.name, Math.ceil(input.month / 3), input.year).catch(() => null),
+    // CallRail source breakdown — used for "Top Conversion Sources" slide
+    handlesCallRailCommand("callrail_summary" as any)
+      ? queryCallRail("callrail_summary" as any, client, calMonthRange)
+      : Promise.resolve(null),
   ]);
 
   const slides: Slide[] = [];
@@ -275,6 +280,33 @@ export async function generateMonthly(input: {
             { label: "Organic Calls", current: "Manual entry needed" },
           ],
   });
+
+  // ─── SLIDE 2b: Top Conversion Sources ───────────────────────────
+  // Primary: CallRail source breakdown (callrail_summary → tables[0] = "Calls by Source")
+  // Shows which tracking sources (Google My Business, Organic Search, etc.) generated calls.
+  if (ctSummaryResult.status === "fulfilled" && ctSummaryResult.value) {
+    const sourceTables = (ctSummaryResult.value as any).tables ?? [];
+    if (sourceTables.length > 0 && sourceTables[0].rows?.length > 0) {
+      const totalCalls = sourceTables[0].rows.reduce((sum: number, r: any[]) => {
+        return sum + (parseInt(String(r[1] ?? "0").replace(/,/g, ""), 10) || 0);
+      }, 0);
+      const enhancedRows = sourceTables[0].rows.map((r: any[]) => {
+        const cnt = parseInt(String(r[1] ?? "0").replace(/,/g, ""), 10) || 0;
+        const share = totalCalls > 0 ? `${Math.round((cnt / totalCalls) * 100)}%` : "—";
+        return [...r, share];
+      });
+      slides.push({
+        id: "conversion_sources",
+        type: "table",
+        title: "Top Conversion Sources",
+        subtitle: `${label} — Calls by Tracking Source (CallRail)`,
+        table: {
+          headers: [...sourceTables[0].headers, "Share"],
+          rows: enhancedRows,
+        },
+      });
+    }
+  }
 
   // ─── SLIDE 3: Top Organic Queries ────────────────────────────────
   if (gscQueries.status === "fulfilled" && gscQueries.value) {
@@ -657,6 +689,39 @@ export async function generateMonthly(input: {
     return true;
   });
 
+  // ─── SLIDE 8b: Supporting Strategic Initiatives ──────────────────
+  // Primary: Asana (tasks grouped by category/section with completion status)
+  // Shows initiative area, tasks completed vs. upcoming, and pacing status.
+  if (asanaData) {
+    const allCategories = new Set([
+      ...Object.keys(asanaCompletedByCategory),
+      ...Object.keys(asanaUpcomingByCategory),
+    ]);
+    const initiativeRows: string[][] = [];
+    for (const cat of allCategories) {
+      const completed = (asanaCompletedByCategory[cat] ?? []).length;
+      const upcoming = (asanaUpcomingByCategory[cat] ?? []).length;
+      const status = completed > 0 && upcoming === 0 ? "Complete" : completed > 0 ? "In Progress" : "Planned";
+      const taskNames = [
+        ...(asanaCompletedByCategory[cat] ?? []).slice(0, 2).map(t => t.name),
+        ...(asanaUpcomingByCategory[cat] ?? []).slice(0, 1).map(t => `[Next] ${t.name}`),
+      ].join("; ") || "—";
+      initiativeRows.push([cat, status, String(completed), String(upcoming), taskNames]);
+    }
+    if (initiativeRows.length > 0) {
+      slides.push({
+        id: "strategic_initiatives",
+        type: "table",
+        title: "Supporting Strategic Initiatives",
+        subtitle: `${label} — Asana Work Progress by Category`,
+        table: {
+          headers: ["Initiative Area", "Status", "Completed", "Upcoming", "Key Tasks"],
+          rows: initiativeRows,
+        },
+      });
+    }
+  }
+
   slides.push({
     id: "work_completed",
     type: workLogRows.length > 0 ? "table" : "bullets",
@@ -664,7 +729,7 @@ export async function generateMonthly(input: {
     ...(workLogRows.length > 0
       ? {
           table: {
-            headers: ["Area", "Task / Deliverable", "Notes"],
+            headers: ["Type", "Task / Deliverable", "URL / Notes"],
             rows: workLogRows.map(r => [r.area, r.task, r.notes]),
           },
         }

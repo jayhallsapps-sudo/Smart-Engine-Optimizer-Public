@@ -936,7 +936,7 @@ export async function generateQbrFull(input: {
       });
     }
   } catch (qssbErr: any) {
-    console.warn("[QBR Full] QSSB/Strategy Bank fetch failed:", qssbErr.message);
+    console.warn("[QBR] QSSB/Strategy Bank fetch failed:", qssbErr.message);
   }
 
   return {

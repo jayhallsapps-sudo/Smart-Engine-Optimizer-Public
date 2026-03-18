@@ -223,21 +223,21 @@ export function validateMonthly(client: Client): ValidatorResult {
     source: "Google Search Console",
     field: "gscSiteUrl",
     status: client.gscSiteUrl ? "connected" : "missing_required",
-    label: "GSC — organic queries + pages",
+    label: "GSC — PRIMARY: clicks, impressions, CTR, avg position, landing-page search performance",
     usedBy: [
-      "Slide 2: Total Clicks, Total Impressions summary metrics",
-      "Slide 3: Top Organic Queries table (query, clicks, Δclicks, impressions, CTR, position)",
-      "Slide 3b: Query Groups topic clustering (200 queries)",
-      "Slide 5: Top Landing Pages (clicks, Δclicks, impressions, Δimpressions, CTR, position)",
-      "Slide 6: Top Pages by Clicks bar chart",
-      "Slide 9 (gsc_daily_trend): Daily clicks+impressions trend chart",
+      "Slide 2: Total Clicks, Total Impressions (PRIMARY — GSC is sole source)",
+      "Slide 3: Top Organic Queries (clicks, Δclicks, impressions, CTR, position — GSC only)",
+      "Slide 3b: Query Groups topic clustering 200 queries (GSC only)",
+      "Slide 5: Top Landing Pages (clicks, Δclicks, impressions, Δimpressions, CTR, position — GSC primary; GA4 fallback for sessions)",
+      "Slide 6: Top Pages by Clicks bar chart (GSC only)",
+      "Slide 9 (gsc_daily_trend): Daily clicks+impressions trend chart (GSC only)",
     ],
   });
   if (!client.gscSiteUrl) {
     blocks.push({
       condition: "GSC not configured",
       missingField: "gscSiteUrl",
-      consequence: "Slides 3, 3b, 5, 6, daily trend all fall back to 'Manual entry needed'",
+      consequence: "Slides 3, 3b, 5, 6, daily trend all fall back to '—' (no data available)",
       uiBehavior: "Report generates with placeholder rows; SourceReadinessBanner shows amber GSC chip",
     });
   }
@@ -259,7 +259,7 @@ export function validateMonthly(client: Client): ValidatorResult {
     blocks.push({
       condition: "GA4 not configured",
       missingField: "ga4PropertyId",
-      consequence: "Slide 2 shows 'Manual entry needed' for sessions/conversions; Slide 4 QTD values are empty",
+      consequence: "Slide 2 shows '—' for sessions/conversions; Slide 4 QTD values are empty",
       uiBehavior: "Report generates with placeholder values; performance slide incomplete",
     });
   }
@@ -285,10 +285,11 @@ export function validateMonthly(client: Client): ValidatorResult {
     source: "CallTrackingMetrics",
     field: "ctmAccountId",
     status: hasCtm ? "connected" : "missing_optional",
-    label: "CTM — organic call count [Monthly generator does NOT route CTM — BUG]",
+    label: "CTM (CallTrackingMetrics) — organic call count",
     usedBy: [
-      "CURRENTLY UNROUTED: Monthly generator imports only queryCallRail, not queryCtm",
-      "BUG: CTM clients get 'Manual entry needed' for all call slides even when ctmAccountId is set",
+      "Slide 2: Organic Calls metric (routes CallRail → CTM → null)",
+      "Slide 2b: Top Conversion Sources (CTM call landing pages)",
+      "Slide 4: QTD Calls (routes CallRail → CTM → null)",
     ],
   });
 
@@ -296,19 +297,15 @@ export function validateMonthly(client: Client): ValidatorResult {
     partials.push({
       condition: "No call tracker configured",
       missingField: "callrailCompanyId + ctmAccountId both absent",
-      consequence: "Slide 2 call metric is empty; Slide 2b (Top Conversion Sources) not generated; Slide 4 QTD Calls is 'Manual entry needed'",
+      consequence: "Slide 2 call metric is empty; Slide 2b (Top Conversion Sources) not generated; Slide 4 QTD Calls is '—'",
       slidesAffected: ["performance", "conversion_sources", "qtd_kpi — Qualified Calls row"],
-      fallback: "Placeholder text 'Manual entry needed'",
+      fallback: "Fields show '—'",
     });
   }
 
   if (hasCtm && !hasCallRail) {
-    blocks.push({
-      condition: "Client uses CTM but Monthly generator does not import queryCtm",
-      missingField: "queryCtm import in monthlyGenerator.ts",
-      consequence: "All call slides show 'Manual entry needed' despite CTM being configured",
-      uiBehavior: "BUG — fix requires adding CTM routing to parallel fetch block in generateMonthly()",
-    });
+    // CTM routing is wired — generateMonthly() routes CallRail → CTM → null
+    warnings.push("CTM client (ctmAccountId) detected — call slides route through queryCtm(). Verify ctmAccountId is correct in client settings.");
   }
 
   // SEMrush
@@ -316,16 +313,17 @@ export function validateMonthly(client: Client): ValidatorResult {
     source: "SEMrush",
     field: "semrushProjectId",
     status: (client as any).semrushProjectId ? "connected" : "missing_optional",
-    label: "SEMrush — keyword visibility distribution (position buckets)",
+    label: "SEMrush — SUPPLEMENTAL: keyword visibility distribution / external rank context (30-day rolling window)",
     usedBy: [
-      "Slide 7: Keyword Visibility Distribution (semrush_keyword_distribution, ~30-day rolling window)",
+      "Slide 7: Keyword Visibility Distribution — position buckets (semrush_keyword_distribution, ~30-day rolling, NOT calendar month)",
+      "NOTE: GSC is primary for clicks/impressions/CTR/avg position. SEMrush is supplemental for position-bucket distribution only.",
     ],
   });
   if (!(client as any).semrushProjectId) {
     partials.push({
       condition: "SEMrush not configured",
       missingField: "semrushProjectId",
-      consequence: "Slide 7 falls back to 'Manual entry needed'",
+      consequence: "Slide 7 shows '—' (keyword distribution unavailable)",
       slidesAffected: ["keywords"],
       fallback: "Table with placeholder row",
     });
@@ -473,8 +471,8 @@ export function validateQbr(client: Client): ValidatorResult {
     source: "Google Search Console",
     field: "gscSiteUrl",
     status: client.gscSiteUrl ? "connected" : "missing_required",
-    label: "GSC — same as QBS but used in QBR full generator",
-    usedBy: ["Same routing as qbrPrepGenerator.ts"],
+    label: "GSC — PRIMARY: search performance data for QBR generator",
+    usedBy: ["Clicks, impressions, CTR, avg position, landing-page search performance — GSC is sole source"],
   });
 
   sources.push({
@@ -486,12 +484,12 @@ export function validateQbr(client: Client): ValidatorResult {
   });
 
   warnings.push(
-    "QBR Full (qbrFullGenerator.ts) shares data-fetching patterns with QBS but is a separate generator. " +
-    "Verify that qbrFullGenerator.ts has the same source routing as qbrPrepGenerator.ts."
+    "QBR (qbrFullGenerator.ts) shares data-fetching patterns with QBS but is a separate generator. " +
+    "CTM routing (CallRail → CTM → null) is wired in both generators."
   );
 
   return {
-    report: "QBR (Full)",
+    report: "QBR",
     canRender: true,
     blockingConditions: blocks,
     partialConditions: partials,

@@ -160,7 +160,7 @@ export default function QbrFullPage() {
     mutationFn: async (params?: { gapAnswers?: any[]; gapSessionId?: number }) => {
       if (!clientId) throw new Error("Select a client first");
       if (!validateAmInputs()) throw new Error("Please fill in all required AM Inputs fields");
-      const res = await apiRequest("POST", "/api/reports/qbr-full/generate", {
+      const res = await apiRequest("POST", "/api/reports/qbr/generate", {
         clientId: Number(clientId),
         quarter: Number(quarter),
         year: Number(year),
@@ -226,7 +226,7 @@ export default function QbrFullPage() {
   const downloadMut = useMutation({
     mutationFn: async () => {
       if (!report) throw new Error("Generate report first");
-      const res = await apiRequest("POST", "/api/reports/qbr-full/pptx", { json: report, edits });
+      const res = await apiRequest("POST", "/api/reports/qbr/pptx", { json: report, edits });
       if (!res.ok) throw new Error((await res.json()).message ?? "Export failed");
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -247,7 +247,7 @@ export default function QbrFullPage() {
     if (!report) return;
     setIsUploading(true);
     try {
-      const res = await apiRequest("POST", "/api/reports/qbr-full/upload-to-drive", { json: report, edits });
+      const res = await apiRequest("POST", "/api/reports/qbr/upload-to-drive", { json: report, edits });
       const data = await res.json();
       if (data.webViewLink) {
         toast({

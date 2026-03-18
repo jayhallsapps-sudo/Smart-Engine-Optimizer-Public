@@ -2,6 +2,7 @@ import type { Client, Command, CommandResult } from "@shared/schema";
 import { storage } from "./storage";
 import { decrypt } from "./encryption";
 import { dateRangeToGoogleDates, pctDelta, fmtDelta } from "./googleToken";
+import { normalizeCallRailCall } from "./callNormalizer";
 
 async function getCallRailKey(): Promise<string | null> {
   const creds = await storage.getApiCredentialsByService("callrail");
@@ -179,10 +180,8 @@ export async function queryCallRail(
       ]);
 
       const filterOrganic = (calls: any[]): number =>
-        calls.filter((c: any) => {
-          const src = (c.source_name ?? "").toLowerCase();
-          return organicSources.some(s => src.includes(s.toLowerCase()));
-        }).length;
+        calls.map((c: any) => normalizeCallRailCall(c, organicSources))
+             .filter(nc => nc.isOrganic !== false).length;
 
       const currTotal = filterOrganic(currData.calls ?? []);
       const prevTotal = filterOrganic(prevData.calls ?? []);
@@ -210,10 +209,8 @@ export async function queryCallRail(
       const calls = data.calls ?? [];
       const byPage: Record<string, number> = {};
       for (const call of calls) {
-        const page = call.landing_page_url ?? "unknown";
-        const src = (call.source_name ?? "").toLowerCase();
-        const isOrganic = organicSources.length === 0 || organicSources.some(s => src.includes(s.toLowerCase()));
-        if (isOrganic) byPage[page] = (byPage[page] ?? 0) + 1;
+        const nc = normalizeCallRailCall(call, organicSources);
+        if (nc.isOrganic !== false) byPage[nc.landingPage ?? "unknown"] = (byPage[nc.landingPage ?? "unknown"] ?? 0) + 1;
       }
 
       const tableRows = Object.entries(byPage)

@@ -60,6 +60,7 @@ import { generateQbrPrepV2Docx } from "./qbrPrepDocxGenerator";
 import { analyzeReportGaps, loadSEOHQContext, type AccountContext } from "./gapAnalysisEngine";
 import { resolveClientMonthlyCredits, CLIENT_MONTHLY_CREDIT_MAP } from "./clientCreditMap";
 import { validateQbrPrepExportReadiness } from "./qbrPrepExportValidator";
+import { validateMonthly, validateQbr } from "./reportValidators";
 
 
 // Section → data-commands map is now derived from the report registry.
@@ -2251,6 +2252,10 @@ export async function registerRoutes(
     const amValidation = validateAmInputs(req.body);
     if ("error" in amValidation) return res.status(400).json({ message: amValidation.error });
 
+    // Pre-flight source validation — attached to response as sourceReadiness
+    const clientForValidation = await storage.getClient(Number(clientId));
+    const sourceReadiness = clientForValidation ? validateMonthly(clientForValidation) : null;
+
     try {
       const output = await generateMonthly({
         clientId: Number(clientId),
@@ -2265,7 +2270,7 @@ export async function registerRoutes(
       if (gapAnswers?.length && gapSessionId) {
         storage.updateGapSession(Number(gapSessionId), { answerUsage: getAnswerUsageMap(gapAnswers) }).catch(() => {});
       }
-      res.json(output);
+      res.json({ ...output, sourceReadiness });
     } catch (err: any) {
       console.error("Monthly generation error:", err);
       res.status(500).json({ message: "Failed to generate Monthly report: " + err.message });
@@ -2362,12 +2367,16 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/reports/qbr-full/generate", async (req, res) => {
+  app.post("/api/reports/qbr/generate", async (req, res) => {
     const { clientId, quarter, year, timezone, amInputs, currentCrawlAssetId, comparisonCrawlAssetId, gapAnswers, gapSessionId } = req.body;
     if (!clientId || !quarter || !year) return res.status(400).json({ message: "clientId, quarter, year are required" });
 
     const amValidation = validateAmInputs(req.body);
     if ("error" in amValidation) return res.status(400).json({ message: amValidation.error });
+
+    // Pre-flight source validation — attached to response as sourceReadiness
+    const clientForValidation = await storage.getClient(Number(clientId));
+    const sourceReadiness = clientForValidation ? validateQbr(clientForValidation) : null;
 
     try {
       const output = await generateQbrFull({
@@ -2383,14 +2392,14 @@ export async function registerRoutes(
       if (gapAnswers?.length && gapSessionId) {
         storage.updateGapSession(Number(gapSessionId), { answerUsage: getAnswerUsageMap(gapAnswers) }).catch(() => {});
       }
-      res.json(output);
+      res.json({ ...output, sourceReadiness });
     } catch (err: any) {
       console.error("QBR generation error:", err);
       res.status(500).json({ message: "Failed to generate QBR report: " + err.message });
     }
   });
 
-  app.post("/api/reports/qbr-full/pptx", async (req, res) => {
+  app.post("/api/reports/qbr/pptx", async (req, res) => {
     const t0 = Date.now();
     const { json, edits } = req.body as { json: any; edits?: Record<string, string> };
     if (!json || !json.slides?.length) { logExport("QBR PPTX", t0, false, "No slides"); return res.status(400).json({ message: "No slide data found. Generate the report first." }); }
@@ -2423,7 +2432,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/reports/qbr-full/upload-to-drive", async (req, res) => {
+  app.post("/api/reports/qbr/upload-to-drive", async (req, res) => {
     const { json, edits } = req.body as { json: any; edits?: Record<string, string> };
     if (!json) return res.status(400).json({ message: "json is required" });
     try {

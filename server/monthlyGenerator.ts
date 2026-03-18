@@ -641,7 +641,7 @@ export async function generateMonthly(input: {
       id: "keywords",
       type: "table",
       title: "Keyword Visibility Distribution",
-      subtitle: `${label} — Position Ranges (SEMrush, ~30-day window)`,
+      subtitle: `${label} — Position Ranges (SEMrush supplemental — 30-day rolling window; GSC is primary for clicks/impressions/CTR/position)`,
       table:
         tables.length > 0
           ? { headers: tables[0].headers, rows: tables[0].rows }

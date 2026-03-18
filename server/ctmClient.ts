@@ -2,6 +2,7 @@ import type { Client, Command, CommandResult } from "@shared/schema";
 import { storage } from "./storage";
 import { decrypt } from "./encryption";
 import { dateRangeToGoogleDates, pctDelta, fmtDelta } from "./googleToken";
+import { normalizeCtmCall } from "./callNormalizer";
 
 async function getCtmCreds(): Promise<{ apiKey: string; apiSecret: string } | null> {
   const creds = await storage.getApiCredentialsByService("call_tracking_metrics");
@@ -92,10 +93,8 @@ export async function queryCtm(
       ]);
 
       const filterOrganic = (calls: any[]): number =>
-        calls.filter(c => {
-          const src = (c.traffic_source ?? c.source ?? "").toLowerCase();
-          return organicSources.some(s => src.includes(s.toLowerCase()));
-        }).length;
+        calls.map((c: any) => normalizeCtmCall(c, organicSources))
+             .filter(nc => nc.isOrganic !== false).length;
 
       const currTotal = filterOrganic(currData.calls ?? []);
       const prevTotal = filterOrganic(prevData.calls ?? []);

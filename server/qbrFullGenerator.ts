@@ -2,6 +2,7 @@ import { storage } from "./storage";
 import { queryGsc, handlesGscCommand } from "./gscClient";
 import { queryGa4, handlesGa4Command } from "./ga4Client";
 import { queryCallRail, handlesCallRailCommand } from "./callrailClient";
+import { queryCtm, handlesCtmCommand } from "./ctmClient";
 import { querySemrush, handlesSemrushCommand } from "./semrushClient";
 import { fetchAirtableWorkLog } from "./airtable";
 import { fetchAsanaWorkLog, groupAsanaTasks } from "./asanaClient";
@@ -48,7 +49,7 @@ export interface QbrFullReportJson {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const MNE = "Manual entry needed";
+const MNE = "—";
 
 function cap(s: string) { return s.charAt(0).toUpperCase() + s.slice(1); }
 function end(s: string) { return /[.!?]$/.test(s.trim()) ? s : `${s}.`; }
@@ -133,7 +134,7 @@ interface GoalResult { goal: string; rationale: string; }
 type SummaryMetric = { label: string; current: string; previous?: string; delta?: string; deltaPercent?: string; isPositive?: boolean };
 
 function smartProjectGoal(metric: SummaryMetric | undefined): GoalResult {
-  const noData: GoalResult = { goal: MNE, rationale: "No current data — manual entry needed" };
+  const noData: GoalResult = { goal: MNE, rationale: "No current data — goal not calculable" };
   if (!metric) return noData;
 
   const curr = parseFormatted(metric.current);
@@ -188,9 +189,9 @@ function smartProjectGoal(metric: SummaryMetric | undefined): GoalResult {
 
 // Smart projection for GSC avg position (inverted: lower is better)
 function smartProjectPosition(metric: SummaryMetric | undefined): GoalResult {
-  if (!metric) return { goal: MNE, rationale: "No position data — manual entry needed" };
+  if (!metric) return { goal: MNE, rationale: "No position data — goal not calculable" };
   const curr = parseFormatted(metric.current);
-  if (curr === null) return { goal: MNE, rationale: "No position data — manual entry needed" };
+  if (curr === null) return { goal: MNE, rationale: "No position data — goal not calculable" };
 
   const hasPrev = metric.previous && metric.previous !== MNE && metric.previous !== "—";
   if (!hasPrev) {
@@ -274,9 +275,11 @@ export async function generateQbrFull(input: {
     handlesGa4Command("organic_landing_pages" as any)
       ? queryGa4("organic_landing_pages" as any, client, calQtrRange)
       : queryGa4("organic_landing_pages" as any, client, "last_90_vs_prev_90"),
-    handlesCallRailCommand("organic_calls" as any)
-      ? queryCallRail("organic_calls" as any, client, calQtrRange)
-      : queryCallRail("organic_calls" as any, client, "last_90_vs_prev_90"),
+    client.callrailCompanyId && handlesCallRailCommand("callrail_qoq_organic_calls" as any)
+      ? queryCallRail("callrail_qoq_organic_calls" as any, client, calQtrRange)
+      : (client as any).ctmAccountId && handlesCtmCommand("ctm_qoq_organic_calls" as any)
+        ? queryCtm("ctm_qoq_organic_calls" as any, client, calQtrRange)
+        : Promise.resolve(null),
     handlesSemrushCommand("semrush_organic_overview" as any)
       ? querySemrush("semrush_organic_overview" as any, client, "last_30_vs_prev_30")
       : Promise.resolve(null),
@@ -484,7 +487,7 @@ export async function generateQbrFull(input: {
   if (norm(am.amThoughts)) liftBullets.push(`AM Focus: ${norm(am.amThoughts)}`);
 
   if (liftBullets.length < 3) {
-    liftBullets.push(`${MNE} — Add narrative summary of the biggest SEO growth driver(s) this quarter.`);
+    liftBullets.push("No data source connected — connect GSC, GA4, and call tracking to populate performance highlights.");
   }
 
   slides.push({
@@ -533,7 +536,7 @@ export async function generateQbrFull(input: {
     const creditTypes = [...new Set(workRows.map(r => String(r[0])))];
     efficiencyBullets.push(`${workRows.length} deliverables completed across ${creditTypes.length} credit type(s): ${creditTypes.slice(0, 4).join(", ")}.`);
   } else {
-    efficiencyBullets.push(`${MNE} — Total deliverables completed this quarter.`);
+    efficiencyBullets.push("— No work log data. Connect Airtable or Asana to populate deliverable count.");
   }
 
   // Clicks-per-task efficiency if available
@@ -548,7 +551,7 @@ export async function generateQbrFull(input: {
   if (callsMetric?.current) {
     efficiencyBullets.push(`Organic call volume: ${callsMetric.current} — driven without paid channel support.`);
   } else {
-    efficiencyBullets.push(`${MNE} — Organic call volume this quarter.`);
+    efficiencyBullets.push("— Organic call volume not available. Connect CallRail or CTM to populate.");
   }
 
   // GA4 conversion rate proxy
@@ -564,7 +567,7 @@ export async function generateQbrFull(input: {
   if (norm(am.contextAnomalies)) efficiencyBullets.push(norm(am.contextAnomalies)!);
 
   if (efficiencyBullets.length < 3) {
-    efficiencyBullets.push(`${MNE} — SEO efficiency / leverage metrics for this quarter.`);
+    efficiencyBullets.push("— Connect data sources (GA4, CallRail/CTM, Airtable/Asana) to populate SEO efficiency metrics.");
   }
 
   slides.push({
@@ -636,8 +639,8 @@ export async function generateQbrFull(input: {
       table: { headers: competitorHeaders, rows: competitorRows.slice(0, 15) },
     });
   } else {
-    competitorBullets.push(`${MNE} — Competitor keyword rankings and share-of-voice data.`);
-    competitorBullets.push(`${MNE} — AI Overview / SGE visibility observations for target queries.`);
+    competitorBullets.push("— Competitor keyword rankings not available. Connect SEMrush to populate share-of-voice data.");
+    competitorBullets.push("— AI Overview / SGE visibility: no automated data source. Add manual observations in AM Inputs.");
     if (!norm(am.competitorObservations)) {
       competitorBullets.push("Note: Connect SEMrush in Setup, or add competitive observations in AM Inputs.");
     }
@@ -675,8 +678,8 @@ export async function generateQbrFull(input: {
   }
 
   if (challengeBullets.length < 2) {
-    challengeBullets.push(`${MNE} — Main technical or structural challenge(s) blocking organic growth this quarter.`);
-    challengeBullets.push(`${MNE} — Add crawl-based findings (Screaming Frog) in the Crawl Assets section to populate this slide automatically.`);
+    challengeBullets.push("— No technical challenge data available. Add crawl-based findings via Crawl Assets or enter in AM Inputs.");
+    challengeBullets.push("— Upload a Screaming Frog crawl in the Crawl Assets section to auto-populate technical findings.");
   }
 
   challengeBullets.push("Behavioral health treatment queries face strict YMYL scrutiny — authority signals and content depth remain critical for rankings.");
@@ -709,7 +712,7 @@ export async function generateQbrFull(input: {
       : `Organic call volume declined ${callsMetric.delta} QoQ — investigate conversion path friction and GBP optimization.`
     );
   } else {
-    opportunityBullets.push(`${MNE} — Organic call volume opportunity context.`);
+    opportunityBullets.push("— Organic call volume: connect CallRail or CTM to populate call trend data.");
   }
 
   opportunityBullets.push("Structured data / FAQ schema on key treatment pages can improve SERP real estate and reduce AI Overview displacement.");
@@ -851,7 +854,7 @@ export async function generateQbrFull(input: {
     });
   } else {
     const roadmapBullets: string[] = [
-      `${MNE} — Connect Airtable or Asana in Setup to pull live roadmap data.`,
+      "— No roadmap data. Connect Airtable or Asana in Setup to pull live roadmap data.",
       "Priority 1: Launch treatment hub pages for top-performing query clusters.",
       "Priority 2: Technical audit remediation — crawl errors, schema, Core Web Vitals.",
       "Priority 3: GBP optimization across all active service locations.",

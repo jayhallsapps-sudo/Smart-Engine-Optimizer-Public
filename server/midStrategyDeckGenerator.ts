@@ -438,7 +438,7 @@ export async function generateMidStrategyDeck(
       { key: "title_client_name", label: "Client Name", value: clientName, type: "heading" },
       { key: "title_tagline", label: "Tagline", value: "Building durable organic performance with purpose.", type: "paragraph" },
       { key: "title_date", label: "Date", value: deck.reportDate || new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }), type: "date" },
-      { key: "title_prepared_by", label: "Prepared By", value: deck.preparedBy || "Manual entry needed", type: "prepared_by" },
+      { key: "title_prepared_by", label: "Prepared By", value: deck.preparedBy || "—", type: "prepared_by" },
     ],
     citationTrace: { sourceSheet: "deck_meta", generatedAt },
   });

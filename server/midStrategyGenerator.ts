@@ -9,8 +9,8 @@ import type { Slide } from "../client/src/components/report-preview/pptx-preview
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const MNE = "Manual entry needed";
 const DASH = "—";
+const MNE = DASH;
 
 // ─── Input / Output Interfaces ────────────────────────────────────────────────
 

@@ -43,6 +43,7 @@ import {
   XCircle,
   FileText,
   Files,
+  Info,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { Client, EvalBatch } from "@shared/schema";
@@ -107,9 +108,9 @@ const RAW_METRICS = [
   { key: "organicKeywords", label: "Org Keywords", type: "number", width: 105 },
   { key: "top10Keywords", label: "Top 10 KW", type: "number", width: 95 },
   { key: "indexedPages", label: "Indexed Pg", type: "number", width: 95 },
-  { key: "aiVisibilityScore", label: "AI Vis Score", type: "number", width: 100 },
-  { key: "aiMentions", label: "AI Mentions", type: "number", width: 98 },
-  { key: "citedSources", label: "Cited Sources", type: "number", width: 105 },
+  { key: "aiVisibilityScore", label: "AI Vis Score", type: "number", width: 100, tooltip: "SEMrush AI Toolkit not integrated — enter manually from SEMrush AI Overview report. Shows as — until populated." },
+  { key: "aiMentions", label: "AI Mentions", type: "number", width: 98, tooltip: "SEMrush AI Toolkit not integrated — enter manually. Count of AI Overview mentions for tracked queries." },
+  { key: "citedSources", label: "Cited Sources", type: "number", width: 105, tooltip: "SEMrush AI Toolkit not integrated — enter manually. Count of sources cited in AI Overviews for this domain." },
   { key: "informationalKeywords", label: "Info KW", type: "number", width: 80 },
   { key: "featuredSnippets", label: "Feat Snippets", type: "number", width: 110 },
 ];
@@ -123,7 +124,7 @@ const DERIVED_METRICS = [
   { key: "contentVelocity", label: "Content Vel." },
   { key: "kwYield", label: "KW Yield" },
   { key: "snippetYield", label: "Snip Yield" },
-  { key: "mentionRate", label: "Mention Rate" },
+  { key: "mentionRate", label: "Mention Rate", tooltip: "aiMentions ÷ citedSources — shows as — if either field is blank (SEMrush AI Toolkit required)" },
   { key: "rdYield", label: "RD Yield" },
   { key: "contentYield", label: "Content Yield" },
   { key: "backlinkDensity", label: "BL Density" },
@@ -213,8 +214,30 @@ function MainEvalTab({ batch }: { batch: EvalBatch }) {
               <TableHead className="w-10 text-center sticky left-0 bg-muted/40 z-10">Type</TableHead>
               <TableHead className="min-w-[120px] sticky left-10 bg-muted/40 z-10">Name</TableHead>
               <TableHead className="min-w-[140px]">Website</TableHead>
-              {RAW_METRICS.map(m => <TableHead key={m.key} className="text-center" style={{ minWidth: m.width }}>{m.label}</TableHead>)}
-              {DERIVED_METRICS.map(m => <TableHead key={m.key} className="text-center bg-blue-50/50 dark:bg-blue-900/10 min-w-[90px]">{m.label}</TableHead>)}
+              {RAW_METRICS.map(m => (
+                <TableHead key={m.key} className="text-center" style={{ minWidth: m.width }}>
+                  <span className="flex items-center justify-center gap-0.5">
+                    {m.label}
+                    {(m as any).tooltip && (
+                      <span title={(m as any).tooltip} className="cursor-help">
+                        <Info className="w-2.5 h-2.5 text-amber-500 inline-block" />
+                      </span>
+                    )}
+                  </span>
+                </TableHead>
+              ))}
+              {DERIVED_METRICS.map(m => (
+                <TableHead key={m.key} className="text-center bg-blue-50/50 dark:bg-blue-900/10 min-w-[90px]">
+                  <span className="flex items-center justify-center gap-0.5">
+                    {m.label}
+                    {(m as any).tooltip && (
+                      <span title={(m as any).tooltip} className="cursor-help">
+                        <Info className="w-2.5 h-2.5 text-amber-500 inline-block" />
+                      </span>
+                    )}
+                  </span>
+                </TableHead>
+              ))}
               <TableHead className="w-10 text-center">Del</TableHead>
             </TableRow>
           </TableHeader>

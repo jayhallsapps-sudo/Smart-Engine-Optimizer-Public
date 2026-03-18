@@ -161,7 +161,7 @@ import {
   type NavAccessibility,
 } from "./qbrPrepHelpers";
 
-const ME = "Manual entry needed";
+const ME = "—";
 const NOT_FOUND = "Not found on site";
 
 function pctDeltaLocal(current: number, previous: number): string {
@@ -1801,14 +1801,14 @@ export function generateSection2(
         source: "Priority Pages (Configured)",
         whatsConverting: `${moneyPages.length} priority page${moneyPages.length !== 1 ? "s" : ""} configured — no live tracking data`,
         notes: `Directional inference: Source attribution is not yet confirmed by live tracking data, but the configured priority pages suggest where conversion activity is most likely occurring. Until tracking is active, the source mix cannot be quantified — meaning any channel that is actually driving conversions remains invisible in the data and its relative contribution is being undervalued.`,
-        dataSource: "Manual entry needed",
+        dataSource: "—",
       });
     } else {
       topConvertingSources.push({
         source: ME,
         whatsConverting: "No call tracking or GA4 conversion source data available for this account",
         notes: `Directional inference: The absence of source data means conversion attribution is entirely blind at this stage — the account may be generating admissions-intent activity across multiple channels, but without tracking in place, there is no signal to distinguish which sources are performing and which are incidental. This creates a planning blind spot that affects both prioritisation and investment decisions.`,
-        dataSource: "Manual entry needed",
+        dataSource: "—",
       });
     }
   }
@@ -2146,7 +2146,7 @@ function generateSection3(
       exampleQueries: ME,
       connectionToAdmits: ME,
       insight: `${ME}: GSC query data unavailable`,
-      dataSource: "Manual entry needed",
+      dataSource: ME,
     });
   }
 
@@ -2157,7 +2157,7 @@ function generateSection3(
       ctr: "—",
       connectionToAdmits: ME,
       insight: `${ME}: GSC page data unavailable`,
-      dataSource: "Manual entry needed",
+      dataSource: ME,
     });
   }
 
@@ -2627,7 +2627,7 @@ function addNetNewAmPriorities(
       reason: amCtx.hypothesisSummary
         ? `Strategic focus this quarter: ${amCtx.hypothesisSummary.slice(0, 100).replace(/\.$/, "")}. Local signals are a compounding factor for treatment center visibility in geo-targeted searches.`
         : "Local presence improvements compound with organic rankings — GBP signals, local citations, and location content reinforce market-area authority",
-      source: "Manual entry needed",
+      source: "—",
     });
   }
 
@@ -2655,7 +2655,7 @@ function addNetNewAmPriorities(
       tier: "Tier 3",
       action: "Audit and improve LCP, CLS, and FID scores on primary service and admissions pages to meet Google's performance threshold",
       reason: "Slow load times on high-intent pages suppress both rankings and on-site conversion rates — LCP, CLS, and FID improvements directly impact user experience signals.",
-      source: "Manual entry needed",
+      source: "—",
     });
   }
 
@@ -2668,7 +2668,7 @@ function addNetNewAmPriorities(
       tier: "Tier 3",
       action: "Implement LocalBusiness, MedicalOrganization, and FAQ schema on core service and admissions pages",
       reason: "Schema markup improves SERP feature eligibility and helps Google confirm treatment center entity context across service and admissions pages.",
-      source: "Manual entry needed",
+      source: "—",
     });
   }
 
@@ -2682,7 +2682,7 @@ function addNetNewAmPriorities(
       tier: "Tier 3",
       action: "Audit non-indexable pages — identify any Levels of Care, location, or content pages accidentally excluded from Google's index and remove incorrect noindex tags",
       reason: "Non-indexable pages cannot rank regardless of content quality. A single Levels of Care page accidentally noindexed represents zero organic traffic potential",
-      source: "Manual entry needed",
+      source: "—",
     });
   }
 
@@ -2697,7 +2697,7 @@ function addNetNewAmPriorities(
       reason: amCtx.hypothesisSummary
         ? `AM focus area: ${amCtx.hypothesisSummary.slice(0, 90).replace(/\.$/, "")}. Cannibalization dilutes authority on core Levels of Care pages.`
         : "Pages competing for the same keywords split ranking signals — consolidation protects the primary Levels of Care page hierarchy",
-      source: "Manual entry needed",
+      source: "—",
     });
   }
 }

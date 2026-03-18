@@ -285,10 +285,10 @@ export async function generateMonthly(input: {
       perfMetrics.length > 0
         ? perfMetrics
         : [
-            { label: "Organic Sessions", current: "Manual entry needed" },
-            { label: "Conversions", current: "Manual entry needed" },
-            { label: "Organic Clicks", current: "Manual entry needed" },
-            { label: "Organic Calls", current: "Manual entry needed" },
+            { label: "Organic Sessions", current: "—", sourceNote: "Connect GA4 to populate" },
+            { label: "Conversions", current: "—", sourceNote: "Connect GA4 to populate" },
+            { label: "Organic Clicks", current: "—", sourceNote: "Connect GSC to populate" },
+            { label: "Organic Calls", current: "—", sourceNote: "Connect CallRail or CTM to populate" },
           ],
   });
 
@@ -333,7 +333,8 @@ export async function generateMonthly(input: {
           ? { headers: tables[0].headers, rows: tables[0].rows }
           : {
               headers: ["Query", "Clicks", "Impressions", "CTR", "Position"],
-              rows: [["Manual entry needed", "—", "—", "—", "—"]],
+              rows: [["—", "—", "—", "—", "—"]],
+              sourceNote: "GSC connected but no rows returned for this period",
             },
     });
   } else {
@@ -344,8 +345,9 @@ export async function generateMonthly(input: {
       subtitle: `${label} — Ranked by Clicks`,
       table: {
         headers: ["Query", "Clicks", "Impressions", "CTR", "Position"],
-        rows: [["Manual entry needed", "—", "—", "—", "—"]],
+        rows: [["—", "—", "—", "—", "—"]],
       },
+      sourceNote: "GSC not connected — connect Google Search Console to populate",
     });
   }
 
@@ -439,12 +441,11 @@ export async function generateMonthly(input: {
       : [];
 
   const qtdSessions =
-    ga4QtdSummary.find((s: any) => /session/i.test(s.label))?.current ?? "Manual entry needed";
+    ga4QtdSummary.find((s: any) => /session/i.test(s.label))?.current ?? "—";
   const qtdConversions =
-    ga4QtdSummary.find((s: any) => /conver|admit|lead/i.test(s.label))?.current ??
-    "Manual entry needed";
+    ga4QtdSummary.find((s: any) => /conver|admit|lead/i.test(s.label))?.current ?? "—";
   const qtdCalls =
-    ctQtdSummary.find((s: any) => /call/i.test(s.label))?.current ?? "Manual entry needed";
+    ctQtdSummary.find((s: any) => /call/i.test(s.label))?.current ?? "—";
 
   const qNum = Math.ceil(input.month / 3);
   const qtdLabel = `Q${qNum} ${input.year} to date`;
@@ -480,21 +481,21 @@ export async function generateMonthly(input: {
     [
       "Organic Sessions",
       qtdSessions,
-      sessGoal ?? "Manual entry needed",
+      sessGoal ?? "—",
       sessGoal ? pctToGoal(qtdSessions, sessGoal) : ME,
       sessGoal ? onTrackStatus(qtdSessions, sessGoal) : ME,
     ],
     [
       "Organic Conversions / Leads",
       qtdConversions,
-      "Manual entry needed",
+      "—",
       ME,
       ME,
     ],
     [
       `Qualified ${mvpType}`,
       mvpActual,
-      mvpGoal ?? "Manual entry needed",
+      mvpGoal ?? "—",
       mvpGoal ? pctToGoal(mvpActual, mvpGoal) : ME,
       mvpGoal ? onTrackStatus(mvpActual, mvpGoal) : ME,
     ]
@@ -552,8 +553,9 @@ export async function generateMonthly(input: {
         subtitle: `${label} — Organic Clicks`,
         table: {
           headers: ["Page", "Clicks", "Δ Clicks", "Impressions", "Δ Impressions", "# Queries", "CTR", "Avg Position"],
-          rows: [["Manual entry needed", "—", "—", "—", "—", "—", "—", "—"]],
+          rows: [["—", "—", "—", "—", "—", "—", "—", "—"]],
         },
+        sourceNote: "GSC connected but no page rows returned for this period",
       });
     }
   } else if (ga4Landing.status === "fulfilled" && ga4Landing.value) {
@@ -568,8 +570,9 @@ export async function generateMonthly(input: {
           ? { headers: tables[0].headers, rows: tables[0].rows }
           : {
               headers: ["Page", "Sessions", "Conversions", "CVR"],
-              rows: [["Manual entry needed", "—", "—", "—"]],
+              rows: [["—", "—", "—", "—"]],
             },
+      ...(tables.length === 0 ? { sourceNote: "GA4 connected but no landing page rows returned" } : {}),
     });
   } else {
     slides.push({
@@ -579,8 +582,9 @@ export async function generateMonthly(input: {
       subtitle: `${label} — Organic Performance`,
       table: {
         headers: ["Page", "Clicks", "Δ Clicks", "Impressions", "Δ Impressions", "# Queries", "CTR", "Avg Position"],
-        rows: [["Manual entry needed", "—", "—", "—", "—", "—", "—", "—"]],
+        rows: [["—", "—", "—", "—", "—", "—", "—", "—"]],
       },
+      sourceNote: "GSC not connected — connect Google Search Console to populate",
     });
   }
 
@@ -609,8 +613,9 @@ export async function generateMonthly(input: {
         subtitle: `${label} — GSC Organic`,
         table: {
           headers: ["Page", "Clicks", "Impressions", "CTR", "Position"],
-          rows: [["Manual entry needed", "—", "—", "—", "—"]],
+          rows: [["—", "—", "—", "—", "—"]],
         },
+        sourceNote: "GSC connected but no page rows returned for this period",
       });
     }
   } else {
@@ -621,8 +626,9 @@ export async function generateMonthly(input: {
       subtitle: `${label} — GSC Organic`,
       table: {
         headers: ["Page", "Clicks", "Impressions", "CTR", "Position"],
-        rows: [["Manual entry needed", "—", "—", "—", "—"]],
+        rows: [["—", "—", "—", "—", "—"]],
       },
+      sourceNote: "GSC not connected — connect Google Search Console to populate",
     });
   }
 
@@ -641,8 +647,9 @@ export async function generateMonthly(input: {
           ? { headers: tables[0].headers, rows: tables[0].rows }
           : {
               headers: ["Position Range", "Keywords", "Share"],
-              rows: [["Manual entry needed", "—", "—"]],
+              rows: [["—", "—", "—"]],
             },
+      ...(tables.length === 0 ? { sourceNote: "SEMrush connected but no keyword distribution rows returned" } : {}),
     });
   } else {
     slides.push({
@@ -652,8 +659,9 @@ export async function generateMonthly(input: {
       subtitle: `${label} — Position Ranges`,
       table: {
         headers: ["Position Range", "Keywords", "Share"],
-        rows: [["Manual entry needed", "—", "—"]],
+        rows: [["—", "—", "—"]],
       },
+      sourceNote: "SEMrush not connected — connect SEMrush to populate keyword distribution",
     });
   }
 
@@ -746,7 +754,7 @@ export async function generateMonthly(input: {
           },
         }
       : {
-          bullets: ["Manual entry needed — connect Airtable or Asana to pull live work log data."],
+          bullets: ["— No work log data available. Connect Airtable or Asana in Setup to populate."],
         }),
   });
 

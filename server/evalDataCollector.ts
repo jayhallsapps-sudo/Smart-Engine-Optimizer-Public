@@ -13,7 +13,7 @@ import { extractDomain } from "./googleToken";
 import { classifyUrl, DEFAULT_CATEGORY_RULES, type CategoryRule } from "./evalMetricRegistry";
 
 const DASH = "—";
-const MNE = "Manual entry needed";
+const MNE = "—";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

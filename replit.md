@@ -55,7 +55,12 @@ SmartEO integrates with the following services:
 -   **Google Docs** (for QSSB via Replit connector)
 -   **Notion** (for Strategy Bank via Replit connector)
 -   **Google Sheets** (NSM Tracker – via Google Drive Replit connector)
--   **Groq** (API key — fallback LLM for /ACA/ when Claude is unavailable due to billing/quota)
+-   **Groq** (API key — fallback LLM, free tier)
+-   **Gemini** (API key — Google AI, second fallback, free tier via AI Studio)
+-   **OpenAI** (API key — final fallback)
+
+## AI Provider Chain
+All AI features (Discoverability keyword generation, ACA chat) route through `server/aiProvider.ts` which tries providers in this order: **Anthropic (Claude Sonnet) → Groq (Llama 3.3 70B) → Gemini (gemini-1.5-flash) → OpenAI (GPT-4o)**. Any provider with a missing or failing API key is skipped automatically. The active provider is shown in the global footer as a live indicator polling `/api/ai/status`.
 
 ## /ACA/ (AI Chat Assistant)
-The `/aca` page provides a natural language chat interface. It uses Claude (Anthropic) as the primary LLM and automatically falls back to Groq (Llama 3.3 70B) when Claude is unavailable due to billing or quota errors. The fallback is fully transparent — no LLM branding is shown to the user. Voice input is supported via the browser's Web Speech API (microphone button in the input area, hidden if the browser doesn't support SpeechRecognition). Both Claude and Groq support the same tool-use loop for querying live data from connected integrations.
+The `/aca` page provides a natural language chat interface. It uses Claude (Anthropic) as the primary LLM and automatically falls back to Groq → Gemini → OpenAI when Claude is unavailable. The fallback is fully transparent — no LLM branding is shown to the user. Voice input is supported via the browser's Web Speech API (microphone button in the input area, hidden if the browser doesn't support SpeechRecognition).

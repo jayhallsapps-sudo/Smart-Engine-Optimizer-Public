@@ -1,5 +1,5 @@
 import type { Client, Command, CommandResult } from "@shared/schema";
-import { getGoogleAccessToken } from "./googleToken";
+import { tryWithGoogleTokens } from "./googleToken";
 
 async function gbpGet(accessToken: string, url: string): Promise<any> {
   const resp = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
@@ -17,10 +17,8 @@ export async function queryGbp(
   const gbpLocationName = (client as any).gbpLocationName as string | undefined;
   if (!gbpLocationName) return null;
 
-  const accessToken = await getGoogleAccessToken("google_business_profile");
-  if (!accessToken) return null;
-
   try {
+    return await tryWithGoogleTokens("google_business_profile", async (accessToken) => {
     const [reviewsData, insightsData] = await Promise.all([
       gbpGet(accessToken, `https://mybusiness.googleapis.com/v4/${gbpLocationName}/reviews?pageSize=5`),
       gbpGet(accessToken, `https://businessprofileperformance.googleapis.com/v1/${gbpLocationName}:fetchMultiDailyMetricsTimeSeries?dailyMetrics=CALL_CLICKS&dailyMetrics=WEBSITE_CLICKS&dailyMetrics=DIRECTION_REQUESTS&dailyRange.startDate.year=2024&dailyRange.startDate.month=1&dailyRange.startDate.day=1&dailyRange.endDate.year=2024&dailyRange.endDate.month=3&dailyRange.endDate.day=31`).catch(() => null),
@@ -49,6 +47,7 @@ export async function queryGbp(
       ],
       tables: recentReviewRows.length ? [{ title: "Recent Reviews", headers: ["Reviewer", "Stars", "Comment", "Date"], rows: recentReviewRows }] : [],
     };
+    });
   } catch (err: any) {
     console.error(`[GBP] ${command} error:`, err.message);
     throw err;

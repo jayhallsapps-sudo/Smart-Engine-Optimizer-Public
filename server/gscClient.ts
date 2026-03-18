@@ -1,5 +1,5 @@
 import type { Client, Command, CommandResult } from "@shared/schema";
-import { getGoogleAccessToken, dateRangeToGoogleDates, pctDelta, fmtDelta } from "./googleToken";
+import { tryWithGoogleTokens, dateRangeToGoogleDates, pctDelta, fmtDelta } from "./googleToken";
 
 async function gscQuery(
   accessToken: string,
@@ -36,8 +36,6 @@ export async function queryGsc(
   dateRange: string
 ): Promise<CommandResult | null> {
   if (!client.gscSiteUrl) return null;
-  const accessToken = await getGoogleAccessToken("google_search_console");
-  if (!accessToken) return null;
 
   const { startDate, endDate, prevStartDate, prevEndDate } = dateRangeToGoogleDates(dateRange);
   const siteUrl = client.gscSiteUrl;
@@ -49,6 +47,7 @@ export async function queryGsc(
   }
 
   try {
+    return await tryWithGoogleTokens("google_search_console", async (accessToken) => {
     if (command === "gsc_top_queries" || command === "gsc_qoq_queries") {
       const [currRows, prevRows] = await Promise.all([
         gscQuery(accessToken, siteUrl, startDate, endDate, ["query"], 25),
@@ -173,6 +172,7 @@ export async function queryGsc(
     }
 
     return null;
+    });
   } catch (err: any) {
     console.error(`[GSC] ${command} error:`, err.message);
     throw err;
@@ -184,18 +184,18 @@ export async function fetchGscQueryRowsForTopicClustering(
   dateRange: string
 ): Promise<{ currentRows: any[]; previousRows: any[] }> {
   if (!client.gscSiteUrl) return { currentRows: [], previousRows: [] };
-  const accessToken = await getGoogleAccessToken("google_search_console");
-  if (!accessToken) return { currentRows: [], previousRows: [] };
 
   const { startDate, endDate, prevStartDate, prevEndDate } = dateRangeToGoogleDates(dateRange);
   const siteUrl = client.gscSiteUrl;
 
   try {
+    return await tryWithGoogleTokens("google_search_console", async (accessToken) => {
     const [currRows, prevRows] = await Promise.all([
       gscQuery(accessToken, siteUrl, startDate, endDate, ["query"], 200),
       gscQuery(accessToken, siteUrl, prevStartDate, prevEndDate, ["query"], 200),
     ]);
     return { currentRows: currRows, previousRows: prevRows };
+    });
   } catch (err: any) {
     console.error(`[GSC] fetchGscQueryRowsForTopicClustering error:`, err.message);
     return { currentRows: [], previousRows: [] };
@@ -213,13 +213,12 @@ export async function fetchGscDailyTrend(
   dateRange: string
 ): Promise<{ current: DailyTrendPoint[]; previous: DailyTrendPoint[] }> {
   if (!client.gscSiteUrl) return { current: [], previous: [] };
-  const accessToken = await getGoogleAccessToken("google_search_console");
-  if (!accessToken) return { current: [], previous: [] };
 
   const { startDate, endDate, prevStartDate, prevEndDate } = dateRangeToGoogleDates(dateRange);
   const siteUrl = client.gscSiteUrl;
 
   try {
+    return await tryWithGoogleTokens("google_search_console", async (accessToken) => {
     const [currRows, prevRows] = await Promise.all([
       gscQuery(accessToken, siteUrl, startDate, endDate, ["date"], 5000),
       gscQuery(accessToken, siteUrl, prevStartDate, prevEndDate, ["date"], 5000),
@@ -228,6 +227,7 @@ export async function fetchGscDailyTrend(
       rows.map(r => ({ date: r.keys[0], clicks: r.clicks ?? 0, impressions: r.impressions ?? 0 }))
         .sort((a, b) => a.date.localeCompare(b.date));
     return { current: toPoints(currRows), previous: toPoints(prevRows) };
+    });
   } catch (err: any) {
     console.error("[GSC] fetchGscDailyTrend error:", err.message);
     return { current: [], previous: [] };

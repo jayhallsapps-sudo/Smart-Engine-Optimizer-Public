@@ -1,5 +1,5 @@
 import type { Client, Command, CommandResult } from "@shared/schema";
-import { getGoogleAccessToken, dateRangeToGoogleDates, pctDelta, fmtDelta } from "./googleToken";
+import { tryWithGoogleTokens, dateRangeToGoogleDates, pctDelta, fmtDelta } from "./googleToken";
 
 async function runReport(
   accessToken: string,
@@ -50,14 +50,13 @@ export async function queryGa4(
   dateRange: string
 ): Promise<CommandResult | null> {
   if (!client.ga4PropertyId) return null;
-  const accessToken = await getGoogleAccessToken("google_analytics_4");
-  if (!accessToken) return null;
 
   const { startDate, endDate, prevStartDate, prevEndDate } = dateRangeToGoogleDates(dateRange);
   const propertyId = client.ga4PropertyId;
   const leadEvents = client.leadEvents ?? [];
 
   try {
+    return await tryWithGoogleTokens("google_analytics_4", async (accessToken) => {
     if (command === "ga4_combined_funnel" || command === "ga4_qoq_organic_funnel") {
       const data = await runReport(accessToken, propertyId, {
         dateRanges: [
@@ -278,6 +277,7 @@ export async function queryGa4(
     }
 
     return null;
+    });
   } catch (err: any) {
     console.error(`[GA4] ${command} error:`, err.message);
     throw err;
@@ -295,13 +295,12 @@ export async function fetchGa4DailyTrend(
   dateRange: string
 ): Promise<{ current: Ga4DailyTrendPoint[]; previous: Ga4DailyTrendPoint[] }> {
   if (!client.ga4PropertyId) return { current: [], previous: [] };
-  const accessToken = await getGoogleAccessToken("google_analytics_4");
-  if (!accessToken) return { current: [], previous: [] };
 
   const { startDate, endDate, prevStartDate, prevEndDate } = dateRangeToGoogleDates(dateRange);
   const propertyId = client.ga4PropertyId;
 
   try {
+    return await tryWithGoogleTokens("google_analytics_4", async (accessToken) => {
     const [currData, prevData] = await Promise.all([
       runReport(accessToken, propertyId, {
         dateRanges: [{ startDate, endDate }],
@@ -329,6 +328,7 @@ export async function fetchGa4DailyTrend(
       })).sort((a, b) => a.date.localeCompare(b.date));
 
     return { current: toPoints(currData), previous: toPoints(prevData) };
+    });
   } catch (err: any) {
     console.error("[GA4] fetchGa4DailyTrend error:", err.message);
     return { current: [], previous: [] };

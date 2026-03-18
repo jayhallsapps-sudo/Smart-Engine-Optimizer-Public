@@ -54,6 +54,54 @@ export async function getAllGoogleAccessTokens(service: string): Promise<string[
   return tokens;
 }
 
+/**
+ * Try an API call with every stored credential for a Google service, returning
+ * the first successful result. Skips credentials that result in permission
+ * errors or decryption failures and moves on to the next. Throws the last
+ * error if every credential fails.
+ */
+export async function tryWithGoogleTokens<T>(
+  service: string,
+  fn: (accessToken: string) => Promise<T>
+): Promise<T> {
+  const creds = await storage.getApiCredentialsByService(service);
+  if (!creds.length) throw new Error(`No credentials stored for ${service}`);
+
+  let lastError: Error = new Error(`No valid credentials for ${service}`);
+
+  for (const cred of creds) {
+    let refreshToken: string;
+    try {
+      refreshToken = decrypt(cred.encryptedValue);
+    } catch (err) {
+      console.warn(`[googleToken] Skipping ${service} credential id=${cred.id} — decrypt failed`);
+      continue;
+    }
+
+    const accessToken = await refreshToAccessToken(refreshToken);
+    if (!accessToken) {
+      console.warn(`[googleToken] Skipping ${service} credential id=${cred.id} — token refresh failed`);
+      continue;
+    }
+
+    try {
+      return await fn(accessToken);
+    } catch (err: any) {
+      lastError = err;
+      const msg = (err.message || "").toLowerCase();
+      const isPermission = msg.includes("permission") || msg.includes("forbidden") || msg.includes("403") || msg.includes("not authorized") || msg.includes("insufficient");
+      if (isPermission) {
+        console.warn(`[googleToken] ${service} credential id=${cred.id} lacks permission — trying next account`);
+        continue;
+      }
+      // Non-permission errors (network, bad request, etc.) — throw immediately
+      throw err;
+    }
+  }
+
+  throw lastError;
+}
+
 export function extractDomain(url: string | null | undefined): string | null {
   if (!url) return null;
   try {

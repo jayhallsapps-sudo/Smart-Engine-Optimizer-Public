@@ -412,7 +412,7 @@ const ACA_TOOLS: Anthropic.Tool[] = [
   },
   {
     name: "query_website",
-    description: "Fetch and analyze a client's live website for SEO issues. Retrieves page HTML and extracts meta tags, headings, content structure, internal/external links, and on-page SEO signals. Also pulls the most recent Screaming Frog crawl data if available.",
+    description: "Fetch and analyze a client's live website page HTML for on-page SEO signals: meta tags, headings, content structure, internal/external links. Use ONLY for on-page content analysis. Do NOT use for traffic, rankings, conversions, clicks, impressions, CTR, or page performance — those require query_google_search_console or query_google_analytics instead.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -725,6 +725,25 @@ You have access to live data from all connected integrations:
 - Asana: open tasks, project status
 - Google Sheets (NSM Tracker): North Star Metric goals, sessions/MVP targets, on-track status
 - Notion (Strategy Bank): strategy recommendations, playbooks, service offerings
+
+TOOL ROUTING — follow this exactly. The wrong tool returns useless data:
+- Page traffic, clicks, impressions, CTR, search position, keyword rankings → query_google_search_console
+- Organic sessions, conversions, conversion rate, landing page performance, leads from organic → query_google_analytics
+- Phone calls, call volume, call-driving pages → query_callrail or query_ctm (whichever is configured)
+- Keyword footprint, competitor rankings, share of voice → query_semrush or query_ahrefs
+- Local search visibility, GBP reviews/calls/directions → query_gbp
+- Technical issues, crawl errors, Core Web Vitals → query_screaming_frog
+- Work completed, deliverables shipped → get_airtable_work_log
+- Open tasks → get_asana_tasks
+- Goals, targets, on-track status → get_nsm_goals
+- Strategy notes, playbook recommendations → get_notion_strategy_bank
+- Page HTML content, meta tags, heading structure, on-page copy → query_website
+- NEVER use query_website to answer performance, traffic, ranking, or conversion questions. It only reads HTML — it cannot tell you how pages perform in search or what converts.
+
+Questions about "weak pages," "underperforming pages," or "low conversion pages":
+→ Call query_google_search_console with gsc_qoq_pages to see which pages have poor CTR, low clicks, or bad positions
+→ Then call query_google_analytics with ga4_landing_pages_by_conversions and ga4_landing_pages_by_sessions for conversion data
+→ Do NOT call query_website for this — it has no traffic or conversion data
 
 IMPORTANT RULES:
 1. ALWAYS call the appropriate tool(s) before answering any data question. Never guess or make up numbers.

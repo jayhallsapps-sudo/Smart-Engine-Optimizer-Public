@@ -82,61 +82,77 @@ export async function callAIJson(
   }
 
   if (process.env.GROQ_API_KEY) {
-    try {
-      console.log("[AI] Trying provider: groq");
-      increment("groq");
+    // Try Groq models in order — 70b is higher quality but has a 100k TPD limit;
+    // 8b-instant has a 500k TPD limit and is faster, so it serves as a reliable fallback.
+    const groqModels = process.env.GROQ_MODEL
+      ? [process.env.GROQ_MODEL]
+      : ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"];
+    for (const model of groqModels) {
       try {
-        const groq = new OpenAI({
-          apiKey: process.env.GROQ_API_KEY,
-          baseURL: "https://api.groq.com/openai/v1",
-        });
-        const model = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
-        const completion = await groq.chat.completions.create({
-          model,
-          max_tokens: Math.min(maxTokens, 8000),
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt },
-          ],
-          response_format: { type: "json_object" },
-        });
-        const text = completion.choices[0].message.content || "";
-        const result = JSON.parse(text);
-        return { result, provider: "groq" };
-      } finally {
-        decrement("groq");
+        console.log(`[AI] Trying provider: groq (${model})`);
+        increment("groq");
+        try {
+          const groq = new OpenAI({
+            apiKey: process.env.GROQ_API_KEY,
+            baseURL: "https://api.groq.com/openai/v1",
+          });
+          const completion = await groq.chat.completions.create({
+            model,
+            max_tokens: Math.min(maxTokens, 8000),
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: userPrompt },
+            ],
+            response_format: { type: "json_object" },
+          });
+          const text = completion.choices[0].message.content || "";
+          const result = JSON.parse(text);
+          return { result, provider: "groq" };
+        } finally {
+          decrement("groq");
+        }
+      } catch (err: any) {
+        console.error(`[AI] Groq (${model}) failed:`, err?.status ?? "", err?.message?.slice(0, 200));
+        // Only continue to next model on rate-limit errors (429); propagate other errors
+        if (err?.status !== 429) break;
       }
-    } catch (err: any) {
-      console.error("[AI] Groq failed:", err?.status ?? "", err?.message?.slice(0, 200));
     }
   }
 
   if (process.env.GEMINI_API_KEY) {
-    try {
-      console.log("[AI] Trying provider: gemini");
-      increment("gemini");
+    // Try Gemini models in order — flash is fastest, flash-8b has separate quota limits
+    const geminiModels = process.env.GEMINI_MODEL
+      ? [process.env.GEMINI_MODEL]
+      : ["gemini-2.0-flash", "gemini-1.5-flash-8b"];
+    for (const modelName of geminiModels) {
       try {
-        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({
-          model: process.env.GEMINI_MODEL || "gemini-2.0-flash",
-          generationConfig: {
-            responseMimeType: "application/json",
-            maxOutputTokens: maxTokens,
-          },
-          systemInstruction: systemPrompt + "\n\nIMPORTANT: Return ONLY valid JSON with no markdown code blocks or extra commentary.",
-        });
-        const chat = model.startChat();
-        const response = await chat.sendMessage(userPrompt);
-        const text = response.response.text();
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) throw new Error("No JSON object in Gemini response");
-        const result = JSON.parse(jsonMatch[0]);
-        return { result, provider: "gemini" };
-      } finally {
-        decrement("gemini");
+        console.log(`[AI] Trying provider: gemini (${modelName})`);
+        increment("gemini");
+        try {
+          const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+          const model = genAI.getGenerativeModel({
+            model: modelName,
+            generationConfig: {
+              responseMimeType: "application/json",
+              maxOutputTokens: maxTokens,
+            },
+            systemInstruction: systemPrompt + "\n\nIMPORTANT: Return ONLY valid JSON with no markdown code blocks or extra commentary.",
+          });
+          const chat = model.startChat();
+          const response = await chat.sendMessage(userPrompt);
+          const text = response.response.text();
+          const jsonMatch = text.match(/\{[\s\S]*\}/);
+          if (!jsonMatch) throw new Error("No JSON object in Gemini response");
+          const result = JSON.parse(jsonMatch[0]);
+          return { result, provider: "gemini" };
+        } finally {
+          decrement("gemini");
+        }
+      } catch (err: any) {
+        console.error(`[AI] Gemini (${modelName}) failed:`, err?.status ?? "", err?.message?.slice(0, 200));
+        // Only continue to next model on rate-limit (429) or not-found (404) errors
+        if (err?.status !== 429 && err?.status !== 404) break;
       }
-    } catch (err: any) {
-      console.error("[AI] Gemini failed:", err?.status ?? "", err?.message?.slice(0, 200));
     }
   }
 

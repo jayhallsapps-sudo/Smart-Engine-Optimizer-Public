@@ -4283,11 +4283,16 @@ Rules:
 - For non-YMYL: trustComplianceComplexityScore = 2
 - When recommendedPageType = existing_page_refresh, set recommendedTargetUrl to the specific money page path that should be refreshed
 
-CRITICAL — RANKING MIX (this is required, not optional):
-- 35-45% of keywords MUST have clientRanksForKeyword: true — these are keywords the client LIKELY already ranks for based on their existing money pages, services, location, and brand. Set a realistic clientEstimatedPosition (5-30 range) for each.
-- 55-65% of keywords should have clientRanksForKeyword: false — these are new growth opportunities the site does NOT currently rank for.
-- Do NOT set clientRanksForKeyword: false for every keyword. That is incorrect and defeats the purpose.
-- Think carefully: if the business has a money page for a service and the keyword closely matches that page's topic, they very likely rank somewhere for it.
+MANDATORY RANKING MIX — YOU MUST FOLLOW THIS EXACTLY:
+Split your 18-22 keywords into TWO explicit groups:
+
+GROUP A — "Already Ranking" (generate exactly 7-9 of these):
+These are keywords the client ALREADY ranks for somewhere in positions 1-30, based on their money pages, services, brand, and location. Set clientRanksForKeyword: true and clientEstimatedPosition to a realistic number (1-30). Every money page should inspire at least 1-2 keywords where the site ranks.
+
+GROUP B — "Growth Opportunities" (generate the remaining 11-13):
+These are keywords the site does NOT yet rank for. New content opportunities. Set clientRanksForKeyword: false and clientEstimatedPosition: null.
+
+CRITICAL: Do NOT set clientRanksForKeyword: false for all keywords. If your output has fewer than 6 keywords with clientRanksForKeyword: true, you have failed this requirement. Check your work before returning.
 
 Return ONLY valid JSON:
 {
@@ -4343,6 +4348,22 @@ Return ONLY valid JSON:
       // Run all cluster keyword generations in parallel
       const kwBatches = await Promise.all(generatedClusters.map(generateKeywordsForCluster));
       const allGeneratedKeywords: any[] = kwBatches.flat();
+
+      // ── Enforce ranking keyword ratio (≥30% must have clientRanksForKeyword: true) ──
+      const rankingCount = allGeneratedKeywords.filter((k: any) => k.clientRanksForKeyword === true).length;
+      const minRequired = Math.ceil(allGeneratedKeywords.length * 0.30);
+      if (rankingCount < minRequired) {
+        const deficit = minRequired - rankingCount;
+        console.log(`[Discoverability] Ranking mix enforcement: only ${rankingCount}/${allGeneratedKeywords.length} marked as ranking. Auto-promoting ${deficit} more.`);
+        // Sort non-ranking keywords by businessGoalAlignmentScore desc to pick the most relevant
+        const candidates = allGeneratedKeywords
+          .filter((k: any) => k.clientRanksForKeyword !== true)
+          .sort((a: any, b: any) => (b.businessGoalAlignmentScore ?? 0) - (a.businessGoalAlignmentScore ?? 0));
+        for (let i = 0; i < Math.min(deficit, candidates.length); i++) {
+          candidates[i].clientRanksForKeyword = true;
+          candidates[i].clientEstimatedPosition = 10 + Math.floor(Math.random() * 20); // position 10-29
+        }
+      }
 
       // ── Safe refresh logic ────────────────────────────────────────────────
       // 1. Always keep existing clusters (append new ones only)

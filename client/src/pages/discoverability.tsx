@@ -13,7 +13,7 @@ import {
   Search, Plus, Trash2, Download, Sparkles, ChevronRight, Check,
   Building2, Layers, BarChart3, FileText, Link2, Star, Settings,
   Edit3, Lock, Unlock, Eye, AlertTriangle, CheckCircle2, Clock,
-  ArrowUpDown, Filter, MoreHorizontal, RefreshCw, X, BookOpen,
+  ArrowUpDown, ArrowUp, ArrowDown, Filter, MoreHorizontal, RefreshCw, X, BookOpen,
   TrendingUp, Target, Globe, MapPin, Zap,
 } from "lucide-react";
 
@@ -1079,6 +1079,34 @@ function KeywordsStep({ ws, onUpdate }: { ws: Workspace; onUpdate: (keywords: Ke
 
   const [newKeyword, setNewKeyword] = useState("");
 
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const mirrorRef = useRef<HTMLDivElement>(null);
+  const tableRef = useRef<HTMLTableElement>(null);
+  const [tableScrollWidth, setTableScrollWidth] = useState(0);
+  const isSyncing = useRef(false);
+
+  useEffect(() => {
+    const el = tableRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setTableScrollWidth(el.scrollWidth));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  function handleMainScroll(e: React.UIEvent<HTMLDivElement>) {
+    if (isSyncing.current) return;
+    isSyncing.current = true;
+    if (mirrorRef.current) mirrorRef.current.scrollLeft = e.currentTarget.scrollLeft;
+    requestAnimationFrame(() => { isSyncing.current = false; });
+  }
+
+  function handleMirrorScroll(e: React.UIEvent<HTMLDivElement>) {
+    if (isSyncing.current) return;
+    isSyncing.current = true;
+    if (scrollRef.current) scrollRef.current.scrollLeft = e.currentTarget.scrollLeft;
+    requestAnimationFrame(() => { isSyncing.current = false; });
+  }
+
   const clusterMap = Object.fromEntries(clusters.map(c => [c.id, c.name]));
 
   function getSortValue(k: Keyword, field: string): string | number {
@@ -1260,10 +1288,24 @@ function KeywordsStep({ ws, onUpdate }: { ws: Workspace; onUpdate: (keywords: Ke
         </div>
       ) : (
         <div className="border rounded-lg overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-max w-full text-xs" data-testid="keywords-table">
-              <thead>
-                <tr className="border-b bg-muted/50">
+          {/* Top scrollbar mirror — keeps scrollbar always visible without scrolling to bottom */}
+          <div
+            ref={mirrorRef}
+            onScroll={handleMirrorScroll}
+            className="overflow-x-auto border-b border-border/40"
+            style={{ height: 14 }}
+          >
+            <div style={{ width: tableScrollWidth || "100%", height: 1 }} />
+          </div>
+          <div
+            ref={scrollRef}
+            onScroll={handleMainScroll}
+            className="overflow-x-auto overflow-y-auto"
+            style={{ maxHeight: 620 }}
+          >
+            <table ref={tableRef} className="min-w-max w-full text-xs" data-testid="keywords-table">
+              <thead className="sticky top-0 z-20">
+                <tr className="border-b bg-muted/80 backdrop-blur-sm">
                   <th className="w-8 p-2 sticky left-0 bg-muted/50 z-10">
                     <input type="checkbox" checked={selectedIds.size === filtered.length && filtered.length > 0} onChange={toggleSelectAll} className="rounded" data-testid="checkbox-select-all" />
                   </th>
@@ -1289,8 +1331,10 @@ function KeywordsStep({ ws, onUpdate }: { ws: Workspace; onUpdate: (keywords: Ke
                       <span className="flex items-center gap-1">
                         {label}
                         {sortBy === field
-                          ? (sortDir === "desc" ? <ArrowUpDown className="w-3 h-3 text-foreground" /> : <ArrowUpDown className="w-3 h-3 text-foreground rotate-180" />)
-                          : <ArrowUpDown className="w-3 h-3 opacity-30" />
+                          ? (sortDir === "desc"
+                              ? <ArrowDown className="w-3 h-3 text-primary" />
+                              : <ArrowUp className="w-3 h-3 text-primary" />)
+                          : <ArrowUpDown className="w-3 h-3 opacity-25" />
                         }
                       </span>
                     </th>

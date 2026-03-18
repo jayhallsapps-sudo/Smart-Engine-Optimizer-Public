@@ -4149,7 +4149,31 @@ export async function registerRoutes(
     try {
       const workspace = await storage.getDiscoverabilityWorkspace(Number(req.params.id));
       if (!workspace) return res.status(404).json({ error: "Workspace not found" });
-      res.json(workspace);
+
+      // Fix any duplicate keyword IDs in legacy data before sending to client
+      const keywords = (workspace.keywords as any[]) || [];
+      const seenIds = new Set<string>();
+      let hadDuplicates = false;
+      const fixedKeywords = keywords.map((kw: any) => {
+        const id = kw.id as string;
+        // Re-generate if ID is missing, short (legacy integer style), or already seen
+        if (!id || /^kw_\d+$/.test(id) || seenIds.has(id)) {
+          hadDuplicates = true;
+          const newId = `kw_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+          seenIds.add(newId);
+          return { ...kw, id: newId };
+        }
+        seenIds.add(id);
+        return kw;
+      });
+
+      if (hadDuplicates) {
+        // Persist the cleaned IDs so they don't re-appear on next load
+        await storage.updateDiscoverabilityWorkspace(Number(req.params.id), { keywords: fixedKeywords });
+        res.json({ ...workspace, keywords: fixedKeywords });
+      } else {
+        res.json(workspace);
+      }
     } catch (err: any) { res.status(500).json({ error: err.message }); }
   });
 

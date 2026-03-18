@@ -47,28 +47,65 @@ export async function queryCtm(
 
   try {
     if (command === "ctm_qoq_organic_calls") {
+      // Fetch full call list and filter by organic source terms client-side.
+      // total_entries would count ALL calls; we need organic-only count.
+      // If no organicSources terms are configured, total_entries is used as fallback.
+      if (organicSources.length === 0) {
+        // No organic filter configured — fall back to total_entries count
+        const [currData, prevData] = await Promise.all([
+          ctmGet(creds.apiKey, creds.apiSecret, `accounts/${accountId}/calls`, {
+            start_date: startDate,
+            end_date: endDate,
+            per_page: "1",
+          }),
+          ctmGet(creds.apiKey, creds.apiSecret, `accounts/${accountId}/calls`, {
+            start_date: prevStartDate,
+            end_date: prevEndDate,
+            per_page: "1",
+          }),
+        ]);
+        const currTotal = currData.total_entries ?? 0;
+        const prevTotal = prevData.total_entries ?? 0;
+        return {
+          command,
+          clientName: client.name,
+          dateRange,
+          summary: [
+            { label: "Total CTM Calls", current: fmtN(currTotal), previous: fmtN(prevTotal), delta: fmtDelta(currTotal, prevTotal), deltaPercent: pctDelta(currTotal, prevTotal), isPositive: currTotal >= prevTotal },
+          ],
+          tables: [],
+        };
+      }
+
+      // Fetch full lists and apply organic source filter
       const [currData, prevData] = await Promise.all([
         ctmGet(creds.apiKey, creds.apiSecret, `accounts/${accountId}/calls`, {
           start_date: startDate,
           end_date: endDate,
-          per_page: "1",
+          per_page: "250",
         }),
         ctmGet(creds.apiKey, creds.apiSecret, `accounts/${accountId}/calls`, {
           start_date: prevStartDate,
           end_date: prevEndDate,
-          per_page: "1",
+          per_page: "250",
         }),
       ]);
 
-      const currTotal = currData.total_entries ?? 0;
-      const prevTotal = prevData.total_entries ?? 0;
+      const filterOrganic = (calls: any[]): number =>
+        calls.filter(c => {
+          const src = (c.traffic_source ?? c.source ?? "").toLowerCase();
+          return organicSources.some(s => src.includes(s.toLowerCase()));
+        }).length;
+
+      const currTotal = filterOrganic(currData.calls ?? []);
+      const prevTotal = filterOrganic(prevData.calls ?? []);
 
       return {
         command,
         clientName: client.name,
         dateRange,
         summary: [
-          { label: "Total CTM Calls", current: fmtN(currTotal), previous: fmtN(prevTotal), delta: fmtDelta(currTotal, prevTotal), deltaPercent: pctDelta(currTotal, prevTotal), isPositive: currTotal >= prevTotal },
+          { label: "Organic CTM Calls", current: fmtN(currTotal), previous: fmtN(prevTotal), delta: fmtDelta(currTotal, prevTotal), deltaPercent: pctDelta(currTotal, prevTotal), isPositive: currTotal >= prevTotal },
         ],
         tables: [],
       };

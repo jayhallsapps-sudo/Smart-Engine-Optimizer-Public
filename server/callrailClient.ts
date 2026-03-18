@@ -78,7 +78,7 @@ export async function queryCallRail(
   const companyFilter = { company_id: companyId };
 
   try {
-    if (command === "callrail_summary" || command === "callrail_qoq_organic_calls") {
+    if (command === "callrail_summary") {
       const [currData, prevData] = await Promise.all([
         callRailGet(apiKey, callsPath, {
           ...companyFilter,
@@ -102,18 +102,16 @@ export async function queryCallRail(
         { label: "Total Calls", current: fmtN(currTotal), previous: fmtN(prevTotal), delta: fmtDelta(currTotal, prevTotal), deltaPercent: pctDelta(currTotal, prevTotal), isPositive: currTotal >= prevTotal },
       ];
 
-      if (command === "callrail_summary") {
-        const answeredData = await callRailGet(apiKey, callsPath, {
-          ...companyFilter,
-          start_date: startDate,
-          end_date: endDate,
-          answered: "true",
-          per_page: "1",
-        });
-        const answered = answeredData.total_records ?? 0;
-        const answeredRate = currTotal > 0 ? (answered / currTotal) * 100 : 0;
-        summary.push({ label: "Answered Rate", current: `${answeredRate.toFixed(1)}%`, previous: "—", delta: "—", deltaPercent: "—", isPositive: answeredRate > 80 });
-      }
+      const answeredData = await callRailGet(apiKey, callsPath, {
+        ...companyFilter,
+        start_date: startDate,
+        end_date: endDate,
+        answered: "true",
+        per_page: "1",
+      });
+      const answered = answeredData.total_records ?? 0;
+      const answeredRate = currTotal > 0 ? (answered / currTotal) * 100 : 0;
+      summary.push({ label: "Answered Rate", current: `${answeredRate.toFixed(1)}%`, previous: "—", delta: "—", deltaPercent: "—", isPositive: answeredRate > 80 });
 
       const calls = currData.calls ?? [];
       const bySource: Record<string, number> = {};
@@ -129,6 +127,74 @@ export async function queryCallRail(
         dateRange,
         summary,
         tables: sourceRows.length ? [{ title: "Calls by Source", headers: ["Source", "Calls"], rows: sourceRows }] : [],
+      };
+    }
+
+    if (command === "callrail_qoq_organic_calls") {
+      // If no organic source terms are configured, fall back to total_records (all calls)
+      if (organicSources.length === 0) {
+        const [currData, prevData] = await Promise.all([
+          callRailGet(apiKey, callsPath, {
+            ...companyFilter,
+            start_date: startDate,
+            end_date: endDate,
+            per_page: "1",
+          }),
+          callRailGet(apiKey, callsPath, {
+            ...companyFilter,
+            start_date: prevStartDate,
+            end_date: prevEndDate,
+            per_page: "1",
+          }),
+        ]);
+        const currTotal = currData.total_records ?? 0;
+        const prevTotal = prevData.total_records ?? 0;
+        return {
+          command,
+          clientName: client.name,
+          dateRange,
+          summary: [
+            { label: "Total Calls", current: fmtN(currTotal), previous: fmtN(prevTotal), delta: fmtDelta(currTotal, prevTotal), deltaPercent: pctDelta(currTotal, prevTotal), isPositive: currTotal >= prevTotal },
+          ],
+          tables: [],
+        };
+      }
+
+      // Organic filter configured — fetch full list and filter client-side
+      const [currData, prevData] = await Promise.all([
+        callRailGet(apiKey, callsPath, {
+          ...companyFilter,
+          start_date: startDate,
+          end_date: endDate,
+          per_page: "250",
+          fields: "source_name",
+        }),
+        callRailGet(apiKey, callsPath, {
+          ...companyFilter,
+          start_date: prevStartDate,
+          end_date: prevEndDate,
+          per_page: "250",
+          fields: "source_name",
+        }),
+      ]);
+
+      const filterOrganic = (calls: any[]): number =>
+        calls.filter((c: any) => {
+          const src = (c.source_name ?? "").toLowerCase();
+          return organicSources.some(s => src.includes(s.toLowerCase()));
+        }).length;
+
+      const currTotal = filterOrganic(currData.calls ?? []);
+      const prevTotal = filterOrganic(prevData.calls ?? []);
+
+      return {
+        command,
+        clientName: client.name,
+        dateRange,
+        summary: [
+          { label: "Organic Calls", current: fmtN(currTotal), previous: fmtN(prevTotal), delta: fmtDelta(currTotal, prevTotal), deltaPercent: pctDelta(currTotal, prevTotal), isPositive: currTotal >= prevTotal },
+        ],
+        tables: [],
       };
     }
 

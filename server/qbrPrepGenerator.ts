@@ -323,7 +323,7 @@ export async function generateQbrPrep(input: QbrPrepInput): Promise<QbrPrepOutpu
   const sfAvailable = allSfReports.length > 0;
 
   const callrailCreds = await storage.getApiCredentialsByService("callrail").catch(() => []);
-  const ctmCreds = await storage.getApiCredentialsByService("ctm").catch(() => []);
+  const ctmCreds = await storage.getApiCredentialsByService("call_tracking_metrics").catch(() => []);
   const callTrackingAvailable = (callrailCreds.length > 0 && !!client.callrailCompanyId) ||
     (ctmCreds.length > 0 && !!(client as any).ctmAccountId);
 

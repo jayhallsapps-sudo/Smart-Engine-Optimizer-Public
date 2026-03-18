@@ -2,6 +2,7 @@ import { storage } from "./storage";
 import { queryGsc, handlesGscCommand, fetchGscQueryRowsForTopicClustering, fetchGscDailyTrend } from "./gscClient";
 import { queryGa4, handlesGa4Command, fetchGa4DailyTrend } from "./ga4Client";
 import { queryCallRail, handlesCallRailCommand } from "./callrailClient";
+import { queryCtm, handlesCtmCommand } from "./ctmClient";
 import { querySemrush, handlesSemrushCommand } from "./semrushClient";
 import { fetchAirtableWorkLog } from "./airtable";
 import { fetchAsanaWorkLog, asanaSectionToCategory, groupAsanaTasks } from "./asanaClient";
@@ -157,9 +158,12 @@ export async function generateMonthly(input: {
     handlesGa4Command("ga4_qoq_organic_landing_pages" as any)
       ? queryGa4("ga4_qoq_organic_landing_pages" as any, client, calMonthRange)
       : Promise.resolve(null),
-    handlesCallRailCommand("callrail_qoq_organic_calls" as any)
+    // Call tracking: route CallRail if configured; fall back to CTM
+    client.callrailCompanyId && handlesCallRailCommand("callrail_qoq_organic_calls" as any)
       ? queryCallRail("callrail_qoq_organic_calls" as any, client, calMonthRange)
-      : Promise.resolve(null),
+      : (client as any).ctmAccountId && handlesCtmCommand("ctm_qoq_organic_calls" as any)
+        ? queryCtm("ctm_qoq_organic_calls" as any, client, calMonthRange)
+        : Promise.resolve(null),
     // SEMrush does not support calendar month windows via current integration;
     // falls back to rolling 30-day window which is the best available approximation.
     handlesSemrushCommand("semrush_keyword_distribution" as any)
@@ -173,10 +177,12 @@ export async function generateMonthly(input: {
     handlesGa4Command("ga4_qoq_organic_funnel" as any)
       ? queryGa4("ga4_qoq_organic_funnel" as any, client, calQtdRange)
       : Promise.resolve(null),
-    // QTD calls for Slide 4 — CallRail QTD
-    handlesCallRailCommand("callrail_qoq_organic_calls" as any)
+    // QTD calls for Slide 4 — CallRail QTD (or CTM fallback)
+    client.callrailCompanyId && handlesCallRailCommand("callrail_qoq_organic_calls" as any)
       ? queryCallRail("callrail_qoq_organic_calls" as any, client, calQtdRange)
-      : Promise.resolve(null),
+      : (client as any).ctmAccountId && handlesCtmCommand("ctm_qoq_organic_calls" as any)
+        ? queryCtm("ctm_qoq_organic_calls" as any, client, calQtdRange)
+        : Promise.resolve(null),
     handlesGscCommand("gsc_query_to_page_map" as any)
       ? queryGsc("gsc_query_to_page_map" as any, client, calMonthRange)
       : Promise.resolve(null),
@@ -184,10 +190,14 @@ export async function generateMonthly(input: {
     fetchGscDailyTrend(client, calMonthRange),
     fetchGa4DailyTrend(client, calMonthRange),
     fetchNsmGoalsForSpecificQuarter(client.name, Math.ceil(input.month / 3), input.year).catch(() => null),
-    // CallRail source breakdown — used for "Top Conversion Sources" slide
-    handlesCallRailCommand("callrail_summary" as any)
+    // Call source breakdown — used for "Top Conversion Sources" slide
+    // CallRail: callrail_summary gives source-level breakdown
+    // CTM: ctm_qoq_sources gives source-level breakdown
+    client.callrailCompanyId && handlesCallRailCommand("callrail_summary" as any)
       ? queryCallRail("callrail_summary" as any, client, calMonthRange)
-      : Promise.resolve(null),
+      : (client as any).ctmAccountId && handlesCtmCommand("ctm_qoq_sources" as any)
+        ? queryCtm("ctm_qoq_sources" as any, client, calMonthRange)
+        : Promise.resolve(null),
   ]);
 
   const slides: Slide[] = [];
@@ -239,6 +249,7 @@ export async function generateMonthly(input: {
   }
   if (ctResult.status === "fulfilled" && ctResult.value) {
     const summary = (ctResult.value as any).summary ?? [];
+    const callSource = client.callrailCompanyId ? "CallRail" : (client as any).ctmAccountId ? "CTM" : "Calls";
     perfMetrics.push(
       ...summary.slice(0, 1).map((s: any) => ({
         label: s.label,
@@ -246,7 +257,7 @@ export async function generateMonthly(input: {
         previous: s.previous,
         delta: s.deltaPercent,
         isPositive: s.isPositive,
-        source: "CallRail",
+        source: callSource,
       }))
     );
   }
@@ -295,11 +306,12 @@ export async function generateMonthly(input: {
         const share = totalCalls > 0 ? `${Math.round((cnt / totalCalls) * 100)}%` : "—";
         return [...r, share];
       });
+      const callProviderLabel = client.callrailCompanyId ? "CallRail" : (client as any).ctmAccountId ? "CTM" : "Call Tracker";
       slides.push({
         id: "conversion_sources",
         type: "table",
         title: "Top Conversion Sources",
-        subtitle: `${label} — Calls by Tracking Source (CallRail)`,
+        subtitle: `${label} — Calls by Tracking Source (${callProviderLabel})`,
         table: {
           headers: [...sourceTables[0].headers, "Share"],
           rows: enhancedRows,

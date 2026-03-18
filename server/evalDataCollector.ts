@@ -262,6 +262,8 @@ export function computeRanks(rows: Array<{ metrics: any; computed: any }>): Arra
     "informationalKeywords", "featuredSnippets",
     "age", "archiveAge", "kwVelocity", "snippetVelocity", "rdVelocity", "contentVelocity",
     "kwYield", "snippetYield", "rdYield", "contentYield", "backlinkDensity",
+    "informationalDensity", // higher informational density = better (more informational content proportion)
+    "mentionRate",          // higher AI mention rate = better
   ];
 
   const allMetrics = [...new Set([...Object.keys(rows[0]?.metrics ?? {}), ...Object.keys(rows[0]?.computed ?? {})])];

@@ -1096,11 +1096,16 @@ function KeywordsStep({ ws, onUpdate }: { ws: Workspace; onUpdate: (keywords: Ke
     .filter(k => filterCluster === "all" || k.clusterId === filterCluster)
     .filter(k => filterStatus === "all" || (filterStatus === "new_suggestion" ? k.reviewState === "new_suggestion" : k.status === filterStatus))
     .filter(k => filterIntent === "all" || k.dominantIntent === filterIntent)
+    .slice()
     .sort((a, b) => {
       const va = getSortValue(a, sortBy);
       const vb = getSortValue(b, sortBy);
-      if (typeof va === "string") return sortDir === "asc" ? va.localeCompare(String(vb)) : String(vb).localeCompare(va);
-      return sortDir === "asc" ? (va as number) - (vb as number) : (vb as number) - (va as number);
+      let cmp: number;
+      if (typeof va === "string") cmp = sortDir === "asc" ? va.localeCompare(String(vb)) : String(vb).localeCompare(va);
+      else cmp = sortDir === "asc" ? (va as number) - (vb as number) : (vb as number) - (va as number);
+      if (cmp !== 0) return cmp;
+      // Tiebreaker: always sort by finalOpportunityScore desc
+      return (b.finalOpportunityScore ?? 0) - (a.finalOpportunityScore ?? 0);
     });
 
   function toggleSort(col: typeof sortBy) {

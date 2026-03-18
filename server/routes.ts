@@ -4283,6 +4283,12 @@ Rules:
 - For non-YMYL: trustComplianceComplexityScore = 2
 - When recommendedPageType = existing_page_refresh, set recommendedTargetUrl to the specific money page path that should be refreshed
 
+CRITICAL — RANKING MIX (this is required, not optional):
+- 35-45% of keywords MUST have clientRanksForKeyword: true — these are keywords the client LIKELY already ranks for based on their existing money pages, services, location, and brand. Set a realistic clientEstimatedPosition (5-30 range) for each.
+- 55-65% of keywords should have clientRanksForKeyword: false — these are new growth opportunities the site does NOT currently rank for.
+- Do NOT set clientRanksForKeyword: false for every keyword. That is incorrect and defeats the purpose.
+- Think carefully: if the business has a money page for a service and the keyword closely matches that page's topic, they very likely rank somewhere for it.
+
 Return ONLY valid JSON:
 {
   "keywords": [
@@ -4312,8 +4318,8 @@ Return ONLY valid JSON:
       "bgaHigh": ["matches core service"],
       "bgaLow": [],
       "serpNotes": "One sentence SERP note.",
-      "clientRanksForKeyword": false,
-      "clientEstimatedPosition": null,
+      "clientRanksForKeyword": true,
+      "clientEstimatedPosition": 14,
       "competitorRankingDomains": ["${competitorList.split(",")[0]?.trim() || ""}"],
       "cannibalizationWarning": null,
       "cannibalizationSeverity": null,

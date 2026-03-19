@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -62,6 +62,7 @@ export default function MidStrategyPage() {
   const { toast } = useToast();
 
   const [clientId, setClientId] = useState(() => new URLSearchParams(window.location.search).get("client") ?? "");
+  const loadIdRef = useRef<string | null>(new URLSearchParams(window.location.search).get("load"));
   const [report, setReport] = useState<any>(null);
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [isUploading, setIsUploading] = useState(false);
@@ -118,6 +119,35 @@ export default function MidStrategyPage() {
       comparisonCrawlAssetId: comparisonCrawlId,
     };
   }
+
+  useEffect(() => {
+    const savedId = loadIdRef.current;
+    if (!savedId || !clientId) return;
+    loadIdRef.current = null;
+    import("@/lib/queryClient").then(({ apiRequest: apiFn }) =>
+      apiFn("GET", `/api/saved-reports/${savedId}`)
+        .then(r => r.json())
+        .then(saved => {
+          const savedEdits = (saved.editsJson as Record<string, string>) ?? {};
+          setReport(saved.generatedReportJson);
+          setEdits(savedEdits);
+          editsRef.current = savedEdits;
+          setBuildStep("built");
+          reportSave.setSavedReportId(saved.id);
+          reportSave.pendingPayloadRef.current = {
+            reportData: saved.generatedReportJson,
+            edits: savedEdits,
+            meta: {
+              reportPeriodLabel: saved.reportPeriodLabel,
+              currentCrawlAssetId: saved.currentCrawlAssetId,
+              comparisonCrawlAssetId: saved.comparisonCrawlAssetId,
+            },
+          };
+          toast({ title: "Report loaded" });
+        })
+        .catch(() => {})
+    );
+  }, [clientId]);
 
   function handleClientChange(val: string) {
     setClientId(val);

@@ -160,6 +160,7 @@ export default function QbrPrepPage() {
   const rqClient = useQueryClient();
 
   const [clientId, setClientId] = useState<string>(() => new URLSearchParams(window.location.search).get("client") ?? "");
+  const loadIdRef = useRef<string | null>(new URLSearchParams(window.location.search).get("load"));
   const [generationDate, setGenerationDate] = useState(new Date().toISOString().split("T")[0]);
   const [sentiment, setSentiment] = useState<string>("");
   const [amThoughts, setAmThoughts] = useState("");
@@ -227,6 +228,46 @@ export default function QbrPrepPage() {
     setEdits({});
     setDataOrigin(null);
     reportSave.setSavedReportId(null);
+  }, [clientId]);
+
+  useEffect(() => {
+    const savedId = loadIdRef.current;
+    if (!savedId || !clientId) return;
+    loadIdRef.current = null;
+    import("@/lib/queryClient").then(({ apiRequest: apiFn }) =>
+      apiFn("GET", `/api/saved-reports/${savedId}`)
+        .then(r => r.json())
+        .then(saved => {
+          const savedEdits = (saved.editsJson as Record<string, string>) ?? {};
+          const { hs, ht, clean } = extractVisFromEdits(savedEdits);
+          setHiddenSections(hs);
+          setHiddenTables(ht);
+          const currentClient = clients.find(c => String(c.id) === clientId);
+          const migratedData = migrateSection2DeadEnd(saved.generatedReportJson, currentClient?.moneyPages ?? []);
+          setReportData(migratedData);
+          setEdits(clean);
+          setDataOrigin("saved");
+          reportSave.setSavedReportId(saved.id);
+          reportSave.pendingPayloadRef.current = {
+            reportData: migratedData,
+            edits: savedEdits,
+            meta: {
+              reportPeriodLabel: saved.reportPeriodLabel,
+              planningQuarter: saved.planningQuarter,
+              planningYear: saved.planningYear,
+              currentCrawlAssetId: saved.currentCrawlAssetId,
+            },
+          };
+          const savedInputs = saved.generatedReportJson?.sourceSnapshot?.manualInputs ?? {};
+          if (savedInputs.sentiment || savedInputs.clientSentiment) setSentiment(savedInputs.clientSentiment ?? savedInputs.sentiment ?? "");
+          if (savedInputs.amThoughts || savedInputs.hypothesis) setAmThoughts(savedInputs.amThoughts ?? savedInputs.hypothesis ?? "");
+          if (savedInputs.prevQtrAssessment) setPrevQtrAssessment(savedInputs.prevQtrAssessment ?? "");
+          if (savedInputs.priorityChecks || savedInputs.auditNotes) setPriorityChecks(savedInputs.priorityChecks ?? savedInputs.auditNotes ?? "");
+          if (savedInputs.clientNotes) setClientNotes(savedInputs.clientNotes ?? "");
+          toast({ title: "Report loaded" });
+        })
+        .catch(() => {})
+    );
   }, [clientId]);
 
   const selectedCrawl = crawlAssets.find(a => a.id === currentCrawlId);

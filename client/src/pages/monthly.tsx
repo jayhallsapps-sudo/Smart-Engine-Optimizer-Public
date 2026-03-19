@@ -56,6 +56,7 @@ export default function MonthlyPage() {
   const now = new Date();
 
   const [clientId, setClientId] = useState(() => new URLSearchParams(window.location.search).get("client") ?? "");
+  const loadIdRef = useRef<string | null>(new URLSearchParams(window.location.search).get("load"));
   const [month, setMonth] = useState(String(now.getMonth() + 1));
   const [year, setYear] = useState(String(THIS_YEAR));
   const [report, setReport] = useState<any>(null);
@@ -112,6 +113,36 @@ export default function MonthlyPage() {
   reportRef.current = report;
   const editsRef = useRef(edits);
   editsRef.current = edits;
+
+  useEffect(() => {
+    const savedId = loadIdRef.current;
+    if (!savedId || !clientId) return;
+    loadIdRef.current = null;
+    import("@/lib/queryClient").then(({ apiRequest }) =>
+      apiRequest("GET", `/api/saved-reports/${savedId}`)
+        .then(r => r.json())
+        .then(saved => {
+          const savedEdits = (saved.editsJson as Record<string, string>) ?? {};
+          setReport(saved.generatedReportJson);
+          setEdits(savedEdits);
+          editsRef.current = savedEdits;
+          reportSave.setSavedReportId(saved.id);
+          reportSave.pendingPayloadRef.current = {
+            reportData: saved.generatedReportJson,
+            edits: savedEdits,
+            meta: {
+              reportPeriodLabel: saved.reportPeriodLabel,
+              analysisWindowStart: saved.analysisWindowStart,
+              analysisWindowEnd: saved.analysisWindowEnd,
+              currentCrawlAssetId: saved.currentCrawlAssetId,
+              comparisonCrawlAssetId: saved.comparisonCrawlAssetId,
+            },
+          };
+          toast({ title: "Report loaded" });
+        })
+        .catch(() => {})
+    );
+  }, [clientId]);
 
   function getMeta(overrideReport?: any) {
     const r = overrideReport ?? reportRef.current;

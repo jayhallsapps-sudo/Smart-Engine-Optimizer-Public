@@ -53,6 +53,7 @@ export default function QbrFullPage() {
   const { toast } = useToast();
 
   const [clientId, setClientId] = useState(() => new URLSearchParams(window.location.search).get("client") ?? "");
+  const loadIdRef = useRef<string | null>(new URLSearchParams(window.location.search).get("load"));
   const [quarter, setQuarter] = useState(String(currentQuarter()));
   const [year, setYear] = useState(String(THIS_YEAR));
   const [report, setReport] = useState<any>(null);
@@ -131,6 +132,36 @@ export default function QbrFullPage() {
   reportRef.current = report;
   const editsRef = useRef(edits);
   editsRef.current = edits;
+
+  useEffect(() => {
+    const savedId = loadIdRef.current;
+    if (!savedId || !clientId) return;
+    loadIdRef.current = null;
+    import("@/lib/queryClient").then(({ apiRequest }) =>
+      apiRequest("GET", `/api/saved-reports/${savedId}`)
+        .then(r => r.json())
+        .then(saved => {
+          const savedEdits = (saved.editsJson as Record<string, string>) ?? {};
+          setReport(saved.generatedReportJson);
+          setEdits(savedEdits);
+          editsRef.current = savedEdits;
+          reportSave.setSavedReportId(saved.id);
+          reportSave.pendingPayloadRef.current = {
+            reportData: saved.generatedReportJson,
+            edits: savedEdits,
+            meta: {
+              reportPeriodLabel: saved.reportPeriodLabel,
+              planningQuarter: saved.planningQuarter,
+              planningYear: saved.planningYear,
+              currentCrawlAssetId: saved.currentCrawlAssetId,
+              comparisonCrawlAssetId: saved.comparisonCrawlAssetId,
+            },
+          };
+          toast({ title: "Report loaded" });
+        })
+        .catch(() => {})
+    );
+  }, [clientId]);
 
   function getMeta(overrideReport?: any) {
     const r = overrideReport ?? reportRef.current;

@@ -21,6 +21,7 @@ export interface UseReportSaveOptions {
   clientId: number | null | undefined;
   initialSavedId?: number | null;
   debounceMs?: number;
+  onCreated?: (id: number) => void;
 }
 
 export interface UseReportSaveReturn {
@@ -41,6 +42,7 @@ export function useReportSave({
   clientId,
   initialSavedId = null,
   debounceMs = 2000,
+  onCreated,
 }: UseReportSaveOptions): UseReportSaveReturn {
   const [savedReportId, setSavedReportId] = useState<number | null>(initialSavedId ?? null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved");
@@ -52,6 +54,9 @@ export function useReportSave({
     edits: Record<string, string>;
     meta: SaveMeta;
   } | null>(null);
+
+  const onCreatedRef = useRef(onCreated);
+  onCreatedRef.current = onCreated;
 
   const updateSavedReportIdRef = useCallback((id: number | null) => {
     savedReportIdRef.current = id;
@@ -66,6 +71,7 @@ export function useReportSave({
     onSuccess: (data, variables) => {
       updateSavedReportIdRef(data.id);
       setSaveStatus("saved");
+      onCreatedRef.current?.(data.id);
       queryClient.invalidateQueries({
         predicate: (q) => {
           const key = q.queryKey[0];

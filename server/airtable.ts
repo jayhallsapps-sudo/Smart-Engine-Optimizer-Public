@@ -141,8 +141,13 @@ export async function fetchAirtableWorkLog(
   const params = new URLSearchParams({ maxRecords: "200" });
   if (resolvedViewParam) params.set("view", resolvedViewParam);
 
-  if (startDate && endDate && viewIntent !== "production") {
-    const formula = `AND(IS_AFTER({Published Date}, "${startDate}"), IS_BEFORE({Published Date}, "${endDate}"))`;
+  if (startDate && endDate) {
+    let formula: string;
+    if (viewIntent === "production") {
+      formula = `AND(IS_BEFORE({Due}, DATEADD("${endDate}", 1, 'days')), NOT(IS_BEFORE({Due}, "${startDate}")))`;
+    } else {
+      formula = `AND(IS_AFTER({Published Date}, "${startDate}"), IS_BEFORE({Published Date}, DATEADD("${endDate}", 1, 'days')))`;
+    }
     params.set("filterByFormula", formula);
   }
 

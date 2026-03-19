@@ -334,8 +334,12 @@ export async function generateBiweekly(input: {
     ];
   }
 
-  const snapshotKey = `sf_snapshot_${clientId}`;
-  const prevSnapshotRaw = await storage.getSetting(snapshotKey);
+  const currentSnapshotKey = `sf_snapshot_${clientId}_${startDate}`;
+  const prevSnapshotKey = `sf_snapshot_${clientId}_prev`;
+  const currentSnapshotRaw = await storage.getSetting(currentSnapshotKey);
+  const prevSnapshotRaw = currentSnapshotRaw
+    ? currentSnapshotRaw
+    : await storage.getSetting(prevSnapshotKey);
   const prevSnapshot: SfIssueCounts & { date?: string } | null = prevSnapshotRaw ? JSON.parse(prevSnapshotRaw) : null;
 
   const sfDidItems: BulletItem[] = [];
@@ -416,7 +420,11 @@ export async function generateBiweekly(input: {
   });
 
   if (sfCounts) {
-    await storage.setSetting(snapshotKey, JSON.stringify({ ...sfCounts, date: now.toISOString() }));
+    const snapshotPayload = JSON.stringify({ ...sfCounts, date: now.toISOString(), periodStart: startDate });
+    await storage.setSetting(currentSnapshotKey, snapshotPayload);
+    if (!currentSnapshotRaw) {
+      await storage.setSetting(prevSnapshotKey, snapshotPayload);
+    }
   }
 
   const internalAmNotes = buildInternalAmNotes({

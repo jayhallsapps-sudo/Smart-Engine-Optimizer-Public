@@ -2,6 +2,7 @@ import { storage } from "./storage";
 import { fetchAirtableWorkLog } from "./airtable";
 import { fetchNsmGoals } from "./sheetsClient";
 import { fetchAsanaWorkLog, asanaSectionToCategory, groupAsanaTasks } from "./asanaClient";
+import { callAIJson } from "./aiProvider";
 import type { WorkLogItem } from "./airtable";
 import type { DocxSection } from "../client/src/components/report-preview/docx-preview";
 
@@ -14,6 +15,24 @@ export interface BiweeklyReportJson {
   generated_at: string;
   sections: DocxSection[];
   internalAmNotes?: InternalAmNotes;
+  sourceFacts?: BiweeklySourceFacts;
+}
+
+export interface BiweeklySourceFacts {
+  windowLabel: string;
+  newContentDid: string[];
+  newContentNext: string[];
+  optDid: string[];
+  optNext: string[];
+  techDid: string[];
+  techNext: string[];
+  localDid: string[];
+  localNext: string[];
+  hasSf: boolean;
+  noAirtable: boolean;
+  sfIssueCounts: SfIssueCounts | null;
+  aiNarrationUsed: boolean;
+  aiNarrationProvider?: string;
 }
 
 export interface InternalAmNotes {
@@ -196,6 +215,137 @@ function buildInternalAmNotes(params: {
   return { storyToTell, talkingPoints, missingInputs, risksCarryForwards, clientQuestions };
 }
 
+// ─── AI Narration Layer ───────────────────────────────────────────────────────
+
+interface NarratedSections {
+  content: { whatWeDid: string[]; whatsNext: string[] };
+  optimization: { whatWeDid: string[]; whatsNext: string[] };
+  technical: { whatWeDid: string[]; whatsNext: string[] };
+  local: { whatWeDid: string[]; whatsNext: string[] };
+}
+
+async function narrateBiweeklySections(params: {
+  clientName: string;
+  windowLabel: string;
+  newContentDid: BulletItem[];
+  newContentNext: BulletItem[];
+  optDid: BulletItem[];
+  optNext: BulletItem[];
+  techDid: BulletItem[];
+  techNext: BulletItem[];
+  localDid: BulletItem[];
+  localNext: BulletItem[];
+}): Promise<{ narration: NarratedSections; provider: string } | null> {
+  const hasAI = !!(
+    process.env.ANTHROPIC_API_KEY ||
+    process.env.GROQ_API_KEY ||
+    process.env.GEMINI_API_KEY ||
+    process.env.OPENAI_API_KEY
+  );
+  if (!hasAI) return null;
+
+  const allRaw = [
+    ...params.newContentDid, ...params.newContentNext,
+    ...params.optDid, ...params.optNext,
+    ...params.techDid, ...params.techNext,
+    ...params.localDid, ...params.localNext,
+  ];
+  if (allRaw.length === 0) return null;
+
+  const evidence = {
+    client: params.clientName,
+    reportingPeriod: params.windowLabel,
+    content: {
+      completedThisPeriod: params.newContentDid.map(i => i.text),
+      upcomingNextPeriod: params.newContentNext.map(i => i.text),
+    },
+    optimization: {
+      completedThisPeriod: params.optDid.map(i => i.text),
+      upcomingNextPeriod: params.optNext.map(i => i.text),
+    },
+    technical: {
+      completedThisPeriod: params.techDid.map(i => i.text),
+      upcomingNextPeriod: params.techNext.map(i => i.text),
+    },
+    local: {
+      completedThisPeriod: params.localDid.map(i => i.text),
+      upcomingNextPeriod: params.localNext.map(i => i.text),
+    },
+  };
+
+  const systemPrompt = `You are a senior SEO account manager at Webserv, a digital marketing agency specializing in healthcare and addiction treatment clients. You write bi-weekly SEO meeting reports — clear, specific, and grounded in actual work completed.
+
+YOUR WRITING STANDARDS:
+- Name the actual deliverable when provided (article titles, page names, task names, issue counts)
+- Explain WHY the work matters in concrete SEO or business terms
+- Each bullet is 1–2 tight sentences max
+- No filler, no hype, no vague agency-speak
+- Do NOT write: "we continued optimizing", "we made progress", "we focused on", "we worked on"
+- DO write: specific actions, specific pages, specific outcomes or expected impact
+- If the work speaks for itself (e.g. "Published 'X article'"), lead with the deliverable name
+
+SECTION RULES:
+- content.whatWeDid: narrate NEW articles/pages published or completed. Lead with the piece name when given.
+- content.whatsNext: narrate what content is being written or planned next. Name the specific article/topic.
+- optimization.whatWeDid: narrate specific page improvements made (title tags, meta, structure, CRO changes).
+- optimization.whatsNext: narrate what optimization work is queued up next.
+- technical.whatWeDid: narrate specific technical fixes completed (crawl issues resolved, redirects fixed, etc).
+- technical.whatsNext: narrate upcoming technical priorities with brief rationale.
+- local.whatWeDid: narrate GBP or local SEO work completed.
+- local.whatsNext: narrate upcoming local/GBP priorities.
+
+FALLBACK RULE: If a section has zero items in the evidence, return an empty array for that sub-key. Do NOT invent content or write generic filler.`;
+
+  const userPrompt = `Transform these raw work log items into polished client-facing bullets for ${params.clientName}'s bi-weekly SEO report covering ${params.windowLabel}.
+
+RAW EVIDENCE PACKET:
+${JSON.stringify(evidence, null, 2)}
+
+Return ONLY a JSON object. Use 1–3 bullets per non-empty section. Empty sections must use empty arrays.
+
+{
+  "content": { "whatWeDid": [], "whatsNext": [] },
+  "optimization": { "whatWeDid": [], "whatsNext": [] },
+  "technical": { "whatWeDid": [], "whatsNext": [] },
+  "local": { "whatWeDid": [], "whatsNext": [] }
+}`;
+
+  try {
+    const { result, provider } = await callAIJson(systemPrompt, userPrompt, { maxOutputTokens: 1500 });
+
+    const sections = ["content", "optimization", "technical", "local"] as const;
+    for (const s of sections) {
+      if (!result[s] || typeof result[s] !== "object") result[s] = { whatWeDid: [], whatsNext: [] };
+      if (!Array.isArray(result[s].whatWeDid)) result[s].whatWeDid = [];
+      if (!Array.isArray(result[s].whatsNext)) result[s].whatsNext = [];
+      result[s].whatWeDid = result[s].whatWeDid.filter((b: any) => typeof b === "string" && b.trim());
+      result[s].whatsNext = result[s].whatsNext.filter((b: any) => typeof b === "string" && b.trim());
+    }
+
+    console.log(`[BiweeklyGenerator] AI narration succeeded via ${provider}. Sections narrated: content(${result.content.whatWeDid.length}did/${result.content.whatsNext.length}next), opt(${result.optimization.whatWeDid.length}/${result.optimization.whatsNext.length}), tech(${result.technical.whatWeDid.length}/${result.technical.whatsNext.length}), local(${result.local.whatWeDid.length}/${result.local.whatsNext.length})`);
+
+    return { narration: result as NarratedSections, provider };
+  } catch (err: any) {
+    console.warn("[BiweeklyGenerator] AI narration failed, falling back to raw task titles:", err?.message?.slice(0, 120));
+    return null;
+  }
+}
+
+function applyNarration(
+  narrated: string[],
+  rawItems: BulletItem[],
+  source: string
+): BulletItem[] {
+  if (narrated.length === 0 || rawItems.length === 0) return rawItems;
+  return narrated.map((text, idx) => ({
+    text,
+    url: rawItems.length === 1 && idx === 0 ? rawItems[0].url : undefined,
+    source,
+  }));
+}
+
+// ─── Main generator ───────────────────────────────────────────────────────────
+
 export async function generateBiweekly(input: {
   clientId: number;
   startDate: string;
@@ -371,32 +521,57 @@ export async function generateBiweekly(input: {
   const asanaLocalDid: BulletItem[] = (asanaCompletedByCategory["Local SEO"] ?? []).map(t => ({ text: t.name, source: "Asana" }));
   const asanaLocalNext: BulletItem[] = (asanaUpcomingByCategory["Local SEO"] ?? []).map(t => ({ text: t.name, source: "Asana" }));
 
+  // ── AI narration: synthesize raw task titles into client-ready copy ──────────
+  const narrationResult = await narrateBiweeklySections({
+    clientName: client.name,
+    windowLabel,
+    newContentDid,
+    newContentNext,
+    optDid,
+    optNext,
+    techDid,
+    techNext,
+    localDid: asanaLocalDid,
+    localNext: asanaLocalNext,
+  });
+
+  const n = narrationResult?.narration;
+
+  const finalNewContentDid  = n ? applyNarration(n.content.whatWeDid,       newContentDid,   "Airtable")                       : newContentDid;
+  const finalNewContentNext = n ? applyNarration(n.content.whatsNext,        newContentNext,  "Airtable")                       : newContentNext;
+  const finalOptDid         = n ? applyNarration(n.optimization.whatWeDid,   optDid,          "Airtable")                       : optDid;
+  const finalOptNext        = n ? applyNarration(n.optimization.whatsNext,   optNext,         "Airtable")                       : optNext;
+  const finalTechDid        = n ? applyNarration(n.technical.whatWeDid,      techDid,         hasSf ? "Screaming Frog" : "Asana") : techDid;
+  const finalTechNext       = n ? applyNarration(n.technical.whatsNext,      techNext,        hasSf ? "Screaming Frog" : "Asana") : techNext;
+  const finalLocalDid       = n ? applyNarration(n.local.whatWeDid,          asanaLocalDid,   "Asana")                          : asanaLocalDid;
+  const finalLocalNext      = n ? applyNarration(n.local.whatsNext,          asanaLocalNext,  "Asana")                          : asanaLocalNext;
+
   const workLog: NonNullable<DocxSection["workLog"]> = [
     makeRow(
       "Content",
-      newContentDid,
-      newContentNext,
+      finalNewContentDid,
+      finalNewContentNext,
       "No content published this period.",
       "No upcoming content scheduled yet."
     ),
     makeRow(
       "Optimization",
-      optDid,
-      optNext,
+      finalOptDid,
+      finalOptNext,
       "No optimization work completed this period.",
       "No upcoming optimization work scheduled yet."
     ),
     makeRow(
       "Technical SEO",
-      techDid,
-      techNext,
+      finalTechDid,
+      finalTechNext,
       "Add technical maintenance completed during this period.",
       techNext[0]?.text ?? "Review Core Web Vitals for top landing pages."
     ),
     makeRow(
       "Local SEO",
-      asanaLocalDid,
-      asanaLocalNext,
+      finalLocalDid,
+      finalLocalNext,
       "No local SEO / GBP work completed this period.",
       "No upcoming local SEO work scheduled yet."
     ),
@@ -439,6 +614,23 @@ export async function generateBiweekly(input: {
     windowLabel,
   });
 
+  const sourceFacts: BiweeklySourceFacts = {
+    windowLabel,
+    newContentDid: newContentDid.map(i => i.text),
+    newContentNext: newContentNext.map(i => i.text),
+    optDid: optDid.map(i => i.text),
+    optNext: optNext.map(i => i.text),
+    techDid: techDid.map(i => i.text),
+    techNext: techNext.map(i => i.text),
+    localDid: asanaLocalDid.map(i => i.text),
+    localNext: asanaLocalNext.map(i => i.text),
+    hasSf,
+    noAirtable,
+    sfIssueCounts: sfCounts,
+    aiNarrationUsed: !!narrationResult,
+    aiNarrationProvider: narrationResult?.provider,
+  };
+
   return {
     report_title: "SEO Bi-weekly Meeting",
     client_name: client.name,
@@ -448,5 +640,6 @@ export async function generateBiweekly(input: {
     generated_at: now.toISOString(),
     sections,
     internalAmNotes,
+    sourceFacts,
   };
 }

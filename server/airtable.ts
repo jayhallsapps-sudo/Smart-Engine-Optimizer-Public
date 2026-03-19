@@ -144,9 +144,11 @@ export async function fetchAirtableWorkLog(
   if (startDate && endDate) {
     let formula: string;
     if (viewIntent === "production") {
-      formula = `AND(IS_BEFORE({Due}, DATEADD("${endDate}", 1, 'days')), NOT(IS_BEFORE({Due}, "${startDate}")))`;
+      // Inclusive date range on Due field (try Due first, then Published Date as fallback)
+      formula = `AND(IS_BEFORE({Due}, DATEADD('${endDate}', 1, 'days')), NOT(IS_BEFORE({Due}, '${startDate}')))`;
     } else {
-      formula = `AND(IS_AFTER({Published Date}, "${startDate}"), IS_BEFORE({Published Date}, DATEADD("${endDate}", 1, 'days')))`;
+      // Published view: inclusive start date (NOT IS_BEFORE = >= startDate), inclusive end date via DATEADD
+      formula = `AND(NOT(IS_BEFORE({Published Date}, '${startDate}')), IS_BEFORE({Published Date}, DATEADD('${endDate}', 1, 'days')))`;
     }
     params.set("filterByFormula", formula);
   }

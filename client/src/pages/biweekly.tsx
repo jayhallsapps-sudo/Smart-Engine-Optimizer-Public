@@ -181,10 +181,29 @@ function AcaChatPanel({ clientId, clientName, report, edits }: {
   );
 }
 
-function InternalAmNotesPanel({ notes }: { notes: any }) {
+function SourceEvidenceRow({ label, items, emptyLabel }: { label: string; items: string[]; emptyLabel?: string }) {
+  if (items.length === 0 && !emptyLabel) return null;
+  return (
+    <div>
+      <span className="font-semibold text-muted-foreground">{label}: </span>
+      {items.length === 0
+        ? <span className="italic text-muted-foreground">{emptyLabel ?? "none"}</span>
+        : items.map((t, i) => (
+            <span key={i} className="inline-block bg-muted rounded px-1 py-0.5 mr-1 mb-0.5">{t}</span>
+          ))
+      }
+    </div>
+  );
+}
+
+function InternalAmNotesPanel({ notes, sourceFacts, edits }: { notes: any; sourceFacts?: any; edits?: Record<string, string> }) {
+  const [showEvidence, setShowEvidence] = useState(false);
+
   if (!notes) return (
     <div className="p-4 text-sm text-muted-foreground">Generate a report to see internal AM notes.</div>
   );
+
+  const editedKeys = edits ? Object.keys(edits) : [];
 
   return (
     <div className="p-4 space-y-4 overflow-y-auto h-full">
@@ -242,6 +261,56 @@ function InternalAmNotesPanel({ notes }: { notes: any }) {
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {sourceFacts && (
+        <div className="border border-border rounded-md overflow-hidden">
+          <button
+            className="w-full flex items-center justify-between px-3 py-2 bg-muted/60 hover:bg-muted text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
+            onClick={() => setShowEvidence(v => !v)}
+            data-testid="button-toggle-source-evidence"
+          >
+            <span>Source Evidence Debug</span>
+            <span>{showEvidence ? "▲" : "▼"}</span>
+          </button>
+          {showEvidence && (
+            <div className="p-3 space-y-3 text-[10px] font-mono">
+              <div className="flex gap-3 flex-wrap">
+                <span className={`px-2 py-0.5 rounded text-white text-[10px] ${sourceFacts.aiNarrationUsed ? "bg-green-600" : "bg-amber-600"}`}>
+                  AI Narration: {sourceFacts.aiNarrationUsed ? `✓ ${sourceFacts.aiNarrationProvider}` : "✗ fallback to raw titles"}
+                </span>
+                <span className={`px-2 py-0.5 rounded text-white text-[10px] ${sourceFacts.noAirtable ? "bg-red-600" : "bg-green-600"}`}>
+                  Airtable: {sourceFacts.noAirtable ? "✗ not configured" : "✓ connected"}
+                </span>
+                <span className={`px-2 py-0.5 rounded text-white text-[10px] ${sourceFacts.hasSf ? "bg-green-600" : "bg-amber-600"}`}>
+                  SF Crawl: {sourceFacts.hasSf ? "✓ uploaded" : "✗ not uploaded"}
+                </span>
+                {editedKeys.length > 0 && (
+                  <span className="px-2 py-0.5 rounded text-white text-[10px] bg-blue-600">
+                    Manual edits: {editedKeys.length} field{editedKeys.length !== 1 ? "s" : ""}
+                  </span>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <SourceEvidenceRow label="Content Did (raw)" items={sourceFacts.newContentDid ?? []} emptyLabel="no records matched" />
+                <SourceEvidenceRow label="Content Next (raw)" items={sourceFacts.newContentNext ?? []} emptyLabel="no records matched" />
+                <SourceEvidenceRow label="Opt Did (raw)" items={sourceFacts.optDid ?? []} emptyLabel="no records matched" />
+                <SourceEvidenceRow label="Opt Next (raw)" items={sourceFacts.optNext ?? []} emptyLabel="no records matched" />
+                <SourceEvidenceRow label="Tech Did (raw)" items={sourceFacts.techDid ?? []} emptyLabel="no SF/Asana data" />
+                <SourceEvidenceRow label="Tech Next (raw)" items={sourceFacts.techNext ?? []} emptyLabel="estimated fallback" />
+                <SourceEvidenceRow label="Local Did (raw)" items={sourceFacts.localDid ?? []} emptyLabel="no Asana data" />
+                <SourceEvidenceRow label="Local Next (raw)" items={sourceFacts.localNext ?? []} emptyLabel="no Asana data" />
+                {sourceFacts.sfIssueCounts && (
+                  <div>
+                    <span className="font-semibold text-muted-foreground">SF Issue Counts: </span>
+                    <span>Canonical {sourceFacts.sfIssueCounts.canonical} · 404s {sourceFacts.sfIssueCounts.errors404} · Oversized Images {sourceFacts.sfIssueCounts.images} · Missing Meta {sourceFacts.sfIssueCounts.missingMeta}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -638,7 +707,7 @@ export default function BiweeklyPage() {
             />
           </TabsContent>
           <TabsContent value="notes" className="flex-1 min-h-0 overflow-y-auto mt-0">
-            <InternalAmNotesPanel notes={report?.internalAmNotes} />
+            <InternalAmNotesPanel notes={report?.internalAmNotes} sourceFacts={report?.sourceFacts} edits={edits} />
           </TabsContent>
         </Tabs>
       </div>

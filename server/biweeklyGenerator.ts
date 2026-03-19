@@ -56,16 +56,25 @@ function makeWindowLabel(start: string, end: string): string {
   return `${fmtDate(parseDateStr(start))} – ${fmtDate(parseDateStr(end))}`;
 }
 
-function isOptimizationItem(item: WorkLogItem): boolean {
-  return (
-    item.task.toLowerCase().includes("optimization") ||
-    item.creditType === "Optimization" ||
-    item.creditType === "CRO Update"
-  );
+const GOOGLE_DOC_URL_RE = /docs\.google\.com|drive\.google\.com/i;
+
+function hasContentDoc(item: WorkLogItem): boolean {
+  return !!(item.contentDocUrl && GOOGLE_DOC_URL_RE.test(item.contentDocUrl));
 }
 
 function isNewContentItem(item: WorkLogItem): boolean {
-  return !isOptimizationItem(item);
+  // Primary signal: Written Content Doc URL present with a Google Docs/Drive link
+  // → it is new content that was written and given a doc.
+  if (item.contentDocUrl !== undefined) {
+    return hasContentDoc(item);
+  }
+  // Fallback for older records or integrations that don't supply the field:
+  // use creditType, but explicitly exclude known optimization types.
+  return item.creditType !== "Optimization" && item.creditType !== "CRO Update";
+}
+
+function isOptimizationItem(item: WorkLogItem): boolean {
+  return !isNewContentItem(item);
 }
 
 function parseSfCanonicalIssues(headers: string[], data: Record<string, any>[]): number {
@@ -433,6 +442,12 @@ export async function generateBiweekly(input: {
   const publishedOptimization = publishedItems.filter(i => isOptimizationItem(i));
   const productionContent = productionItems.filter(i => isNewContentItem(i));
   const productionOptimization = productionItems.filter(i => isOptimizationItem(i));
+
+  console.log(
+    `[Biweekly] Content/Opt split — published: ${publishedContent.length} content, ${publishedOptimization.length} opt` +
+    ` | production: ${productionContent.length} content, ${productionOptimization.length} opt` +
+    ` | contentDocUrl signal used: ${[...publishedItems, ...productionItems].filter(i => i.contentDocUrl !== undefined).length}/${publishedItems.length + productionItems.length} records`
+  );
 
   const asanaData = asanaResult.status === "fulfilled" && asanaResult.value && (asanaResult.value as any).success
     ? (asanaResult.value as { success: true; completed: import("./asanaClient").AsanaTask[]; upcoming: import("./asanaClient").AsanaTask[] })

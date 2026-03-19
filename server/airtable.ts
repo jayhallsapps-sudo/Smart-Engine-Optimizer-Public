@@ -7,6 +7,7 @@ export interface WorkLogItem {
   creditType: string;
   date: string;
   url?: string;
+  contentDocUrl?: string;
   status?: string;
   statusLabel?: string;
 }
@@ -195,12 +196,19 @@ export async function fetchAirtableWorkLog(
       const rawCreditType = String(f["Credit Type"] ?? "Other").trim();
       const creditType = CREDIT_TYPE_ORDER.includes(rawCreditType) ? rawCreditType : "Other";
       const rawStatus = f["Status"] ? String(f["Status"]).trim() : undefined;
+      const rawContentDocUrl =
+        f["Written Content Doc URL"] ??
+        f["Content Doc URL"] ??
+        f["Written Content Doc"] ??
+        undefined;
+      const contentDocUrl = rawContentDocUrl ? String(rawContentDocUrl).trim() : undefined;
       return {
         id: r.id,
         task: String(f["Name"] ?? f["Task"] ?? f["Description"] ?? "Untitled").trim(),
         creditType,
         date: String(f["Due"] ?? f["Date"] ?? "").trim(),
         url: f["Final URL"] ?? f["URL"] ?? f["Page URL"] ?? undefined,
+        contentDocUrl: contentDocUrl || undefined,
         status: rawStatus,
         statusLabel: rawStatus ? getStatusLabel(rawStatus) : undefined,
       };

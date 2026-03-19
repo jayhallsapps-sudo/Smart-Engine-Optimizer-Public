@@ -19,7 +19,7 @@ import type { Client, SavedReport } from "@shared/schema";
 const TYPE_LABELS: Record<string, string> = {
   biweekly: "Bi-Weekly",
   monthly: "Monthly",
-  qbr: "QBR",
+  qbr_full: "QBR",
   qbr_prep: "QBS",
   mid_strategy: "Mid-Strategy",
 };
@@ -27,18 +27,27 @@ const TYPE_LABELS: Record<string, string> = {
 const TYPE_COLORS: Record<string, string> = {
   biweekly: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
   monthly: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300",
-  qbr: "bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300",
+  qbr_full: "bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300",
   qbr_prep: "bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-300",
   mid_strategy: "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300",
 };
 
+const TYPE_NORMALIZE: Record<string, string> = {
+  qbr: "qbr_full",
+  mid_strategy_seo: "mid_strategy",
+};
+
+function normalizeType(t: string): string {
+  return TYPE_NORMALIZE[t] ?? t;
+}
+
 function loadHref(report: SavedReport): string {
   const base = `?client=${report.clientId}&load=${report.id}`;
-  switch (report.reportType) {
+  switch (normalizeType(report.reportType)) {
     case "biweekly":     return `/biweekly${base}`;
     case "monthly":      return `/monthly${base}`;
     case "qbr_prep":     return `/qbr-prep${base}`;
-    case "qbr":          return `/qbr${base}`;
+    case "qbr_full":     return `/qbr${base}`;
     case "mid_strategy": return `/mid-strategy${base}`;
     default:             return `/biweekly${base}`;
   }
@@ -72,7 +81,7 @@ export default function SavedReportsPage() {
   });
 
   const filtered = reports
-    .filter(r => typeFilter === "all" || r.reportType === typeFilter)
+    .filter(r => typeFilter === "all" || normalizeType(r.reportType) === typeFilter)
     .slice()
     .sort((a, b) => {
       const ta = new Date(a.lastSavedAt ?? a.createdAt ?? 0).getTime();
@@ -82,7 +91,7 @@ export default function SavedReportsPage() {
 
   const grouped: Record<string, SavedReport[]> = {};
   for (const r of filtered) {
-    const key = r.reportType;
+    const key = normalizeType(r.reportType);
     if (!grouped[key]) grouped[key] = [];
     grouped[key].push(r);
   }
@@ -160,8 +169,8 @@ export default function SavedReportsPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-sm font-medium truncate">{r.reportName}</span>
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${TYPE_COLORS[r.reportType] ?? "bg-muted text-muted-foreground"}`}>
-                            {TYPE_LABELS[r.reportType] ?? r.reportType}
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${TYPE_COLORS[normalizeType(r.reportType)] ?? "bg-muted text-muted-foreground"}`}>
+                            {TYPE_LABELS[normalizeType(r.reportType)] ?? r.reportType}
                           </span>
                         </div>
                         <div className="flex items-center gap-3 mt-0.5 text-[11px] text-muted-foreground">

@@ -271,6 +271,7 @@ export async function registerRoutes(
   ];
   app.use("/api", (req: Request, res: Response, next: NextFunction) => {
     if (AUTH_PUBLIC_PATHS.some(p => req.path === p || req.path.startsWith(p + "?") || (p.endsWith("/") && req.path.startsWith(p)))) return next();
+    if (req.method === "GET" && /^\/saved-reports\/\d+\/download$/.test(req.path)) return next();
     const provided = req.headers["x-internal-token"];
     if (provided !== INTERNAL_TOKEN) {
       return res.status(401).json({ message: "Unauthorized" });
@@ -3196,6 +3197,129 @@ export async function registerRoutes(
       res.json(report);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/saved-reports/:id/download", async (req, res) => {
+    try {
+      const report = await getSavedReportById(Number(req.params.id));
+      if (!report) return res.status(404).json({ message: "Not found" });
+      const json = report.generatedReportJson as any;
+      const edits = (report.editsJson as Record<string, string>) ?? {};
+      const rawType = report.reportType;
+      const type = rawType === "mid_strategy_seo" ? "mid_strategy" : rawType === "qbr" ? "qbr_full" : rawType;
+
+      switch (type) {
+        case "biweekly": {
+          const sections: SectionData[] = (json.sections ?? []).map((s: any) => {
+            const items: any[] = [];
+            if (s.metrics?.length) items.push({ summary: s.metrics.map((m: any) => ({ label: m.label, current: m.current, previous: m.previous ?? "—", deltaPercent: m.delta ?? "—", isPositive: m.isPositive ?? true })) });
+            if (s.bullets?.length) items.push({ manualText: (s.bullets as string[]).map((b: string, bi: number) => edits[`${s.id}_bullet_${bi}`] ?? b).filter(Boolean).join("\n") });
+            if (s.workLog?.length) {
+              const baseRows = (s.workLog as any[]).map((r: any, ri: number) => ({ area: r.area, whatWeDid: edits[`${s.id}_worklog_${ri}_did`] ?? r.whatWeDid, whatsNext: edits[`${s.id}_worklog_${ri}_next`] ?? r.whatsNext, items: r.items, nextItems: r.nextItems }));
+              const crProgress = parseCustomRowsFromEdits(edits, `${s.id}_progress`);
+              const allRows = [...baseRows, ...crProgress.map((cr: string[]) => ({ area: cr[0] ?? "", whatWeDid: cr[1] ?? "", whatsNext: cr[2] ?? "" }))];
+              items.push({ tableRows: allRows });
+            }
+            if (s.table) items.push({ tables: [{ title: s.title, headers: s.table.headers, rows: s.table.rows }] });
+            if (s.technicalTable) {
+              const tbl = s.technicalTable as { headers: string[]; rows: string[][] };
+              const resolvedRows = (tbl.rows ?? []).map((row: string[], ri: number) => row.map((cell: string, ci: number) => edits[`${s.id}_tech_${ri}_${ci}`] ?? cell));
+              const crTech = parseCustomRowsFromEdits(edits, `${s.id}_technical`);
+              items.push({ tables: [{ title: s.title ?? "", headers: tbl.headers, rows: [...resolvedRows, ...crTech] }] });
+            }
+            return { sectionId: s.id, title: s.title ?? "", items };
+          });
+          const clientName = edits["client_name"] ?? json.client_name ?? "Client";
+          const preparedBy = edits["preparedBy"] ?? json.preparedBy ?? "";
+          const date = edits["report_date"] ?? json.date ?? new Date().toLocaleDateString("en-US");
+          const buffer = await generateBiweeklyDocx(clientName, preparedBy, date, sections);
+          const slug = clientName.toLowerCase().replace(/\s+/g, "_");
+          const filename = `${slug}_biweekly_${date.replace(/[\s,]/g, "_")}.docx`;
+          res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+          res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+          return res.send(buffer);
+        }
+        case "monthly": {
+          const sections: SectionData[] = (json.slides ?? []).filter((s: any) => s.type !== "title").map((s: any, idx: number) => {
+            const items: any[] = [];
+            if (s.metrics?.length) items.push({ summary: s.metrics.map((m: any) => ({ label: m.label, current: m.current, previous: m.previous ?? "—", deltaPercent: m.delta ?? "—", isPositive: m.isPositive ?? true })) });
+            const commentary = edits[`${s.id}_commentary`] ?? s.commentary;
+            if (commentary) items.push({ manualText: commentary });
+            if (s.table) { const resolvedRows = (s.table.rows as any[][]).map((row: any[], ri: number) => row.map((cell: any, ci: number) => edits[`${s.id}_cell_${ri}_${ci}`] ?? String(cell))); const tableKey = s.type === "scorecard" ? `${s.id}_scorecard` : `${s.id}_table`; const crRows = parseCustomRowsFromEdits(edits, tableKey); items.push({ tables: [{ title: edits[`${s.id}_subtitle`] ?? s.subtitle ?? "", headers: s.table.headers, rows: [...resolvedRows, ...crRows] }] }); }
+            if (s.bullets) items.push({ manualText: (s.bullets as string[]).map((b: string, bi: number) => edits[`${s.id}_bullet_${bi}`] ?? b).join("\n") });
+            return { sectionId: `slide_${idx}`, title: edits[`${s.id}_title`] ?? s.title ?? "", items };
+          });
+          const clientName = edits["title_client"] ?? json.client_name ?? "Client";
+          const reportTitle = edits["title_title"] ?? json.report_title ?? "Monthly Report";
+          const generatedAt = json.generated_at ? new Date(json.generated_at).toLocaleDateString("en-US") : new Date().toLocaleDateString("en-US");
+          const buffer = await generatePptx(clientName, reportTitle, generatedAt, sections);
+          const slug = clientName.toLowerCase().replace(/\s+/g, "_");
+          const monthSlug = (json.month_label ?? "report").replace(/\s/g, "_");
+          res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
+          res.setHeader("Content-Disposition", `attachment; filename="${slug}_monthly_${monthSlug}.pptx"`);
+          return res.send(buffer);
+        }
+        case "qbr_full": {
+          const sections: SectionData[] = (json.slides ?? [])
+            .filter((s: any) => s.type !== "title" && s.type !== "divider")
+            .map((s: any, idx: number) => {
+              const items: any[] = [];
+              if (s.metrics?.length) items.push({ summary: s.metrics.map((m: any) => ({ label: m.label, current: m.current, previous: m.previous ?? "—", deltaPercent: m.delta ?? "—", isPositive: m.isPositive ?? true })) });
+              const commentary = edits[`${s.id}_commentary`] ?? s.commentary;
+              if (commentary) items.push({ manualText: commentary });
+              if (s.table) { const resolvedRows = (s.table.rows as any[][]).map((row: any[], ri: number) => row.map((cell: any, ci: number) => edits[`${s.id}_cell_${ri}_${ci}`] ?? String(cell))); const tableKey = s.type === "scorecard" ? `${s.id}_scorecard` : `${s.id}_table`; const crRows = parseCustomRowsFromEdits(edits, tableKey); items.push({ tables: [{ title: edits[`${s.id}_subtitle`] ?? s.subtitle ?? "", headers: s.table.headers, rows: [...resolvedRows, ...crRows] }] }); }
+              if (s.bullets) items.push({ manualText: (s.bullets as string[]).map((b: string, bi: number) => edits[`${s.id}_bullet_${bi}`] ?? b).join("\n") });
+              if (s.leftContent?.table) items.push({ tables: [{ title: "", headers: s.leftContent.table.headers, rows: s.leftContent.table.rows }] });
+              return { sectionId: `slide_${idx}`, title: edits[`${s.id}_title`] ?? s.title ?? "", items };
+            });
+          const clientName = edits["s01_title_client"] ?? json.client_name ?? "Client";
+          const reportTitle = edits["s01_title_title"] ?? json.report_title ?? "QBR Report";
+          const generatedAt = json.generated_at ? new Date(json.generated_at).toLocaleDateString("en-US") : new Date().toLocaleDateString("en-US");
+          const buffer = await generatePptx(clientName, reportTitle, generatedAt, sections);
+          const slug = clientName.toLowerCase().replace(/\s+/g, "_");
+          const qtrSlug = (json.quarter_label ?? "qbr").replace(/\s/g, "_");
+          res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
+          res.setHeader("Content-Disposition", `attachment; filename="${slug}_QBR_${qtrSlug}.pptx"`);
+          return res.send(buffer);
+        }
+        case "mid_strategy": {
+          const sections: SectionData[] = (json.slides ?? [])
+            .filter((s: any) => s.type !== "title" && s.exportAllowed !== false)
+            .map((s: any, idx: number) => {
+              const items: any[] = [];
+              if (s.metrics?.length) items.push({ summary: s.metrics.map((m: any) => ({ label: m.label, current: m.current, previous: m.previous ?? "—", deltaPercent: m.delta ?? "—", isPositive: m.isPositive ?? true })) });
+              const comm = edits[`${s.id}_commentary`] ?? s.commentary;
+              if (comm) items.push({ manualText: comm });
+              if (s.table) { const resolvedRows = (s.table.rows as any[][]).map((row: any[], ri: number) => row.map((cell: any, ci: number) => edits[`${s.id}_cell_${ri}_${ci}`] ?? String(cell))); const tableKey = s.type === "scorecard" ? `${s.id}_scorecard` : `${s.id}_table`; const crRows = parseCustomRowsFromEdits(edits, tableKey); items.push({ tables: [{ title: edits[`${s.id}_subtitle`] ?? s.subtitle ?? "", headers: s.table.headers, rows: [...resolvedRows, ...crRows] }] }); }
+              if (s.bullets) items.push({ manualText: (s.bullets as string[]).map((b: string, bi: number) => edits[`${s.id}_bullet_${bi}`] ?? b).join("\n") });
+              if (s.leftContent?.bullets) items.push({ manualText: (s.leftContent.bullets as string[]).map((b: string) => `• ${b}`).join("\n") });
+              if (s.rightContent?.bullets) items.push({ manualText: (s.rightContent.bullets as string[]).map((b: string) => `• ${b}`).join("\n") });
+              return { sectionId: `slide_${idx}`, title: edits[`${s.id}_title`] ?? s.title ?? "", items };
+            });
+          const clientName = json.client_name ?? "Client";
+          const reportTitle = json.report_title ?? "Mid-Strategy SEO Report";
+          const generatedAt = json.generated_at ? new Date(json.generated_at).toLocaleDateString("en-US") : new Date().toLocaleDateString("en-US");
+          const buffer = await generateMidStrategyPptx(clientName, reportTitle, generatedAt, sections);
+          const slug = clientName.toLowerCase().replace(/\s+/g, "_");
+          res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
+          res.setHeader("Content-Disposition", `attachment; filename="${slug}_Mid_Strategy.pptx"`);
+          return res.send(buffer);
+        }
+        case "qbr_prep": {
+          const buffer = await generateQbrPrepV2Docx(injectQbrPrepCustomRows(json, edits), edits, {}, {});
+          const slug = (json.meta?.site ?? "report").toLowerCase().replace(/\s+/g, "_");
+          const filename = `QBS_${slug}_${(json.meta?.planningQuarter ?? "report").replace(/\s+/g, "_")}.docx`;
+          res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+          res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+          return res.send(buffer);
+        }
+        default:
+          return res.status(400).json({ message: `Unknown report type: ${rawType}` });
+      }
+    } catch (err: any) {
+      console.error("Download saved report error:", err);
+      res.status(500).json({ message: "Download failed: " + err.message });
     }
   });
 

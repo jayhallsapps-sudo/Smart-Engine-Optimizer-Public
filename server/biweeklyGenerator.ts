@@ -565,15 +565,17 @@ export async function generateBiweekly(input: {
       "Technical SEO",
       finalTechDid,
       finalTechNext,
-      "Ongoing technical maintenance monitored this period.",
-      techNext[0]?.text ?? "Review Core Web Vitals for top landing pages."
+      hasSf
+        ? "No completed technical fixes were logged for this reporting window. Active issues identified in the latest crawl are under review."
+        : "No completed technical SEO work was logged for this reporting window.",
+      techNext[0]?.text ?? "Review Core Web Vitals scores and resolve any crawl errors flagged in the latest Screaming Frog audit."
     ),
     makeRow(
       "Local SEO",
       finalLocalDid,
       finalLocalNext,
-      "No local SEO / GBP work completed this period.",
-      "No upcoming local SEO work scheduled yet."
+      "No local SEO or Google Business Profile updates were completed this period.",
+      "No upcoming local SEO work has been scheduled yet."
     ),
   ];
 

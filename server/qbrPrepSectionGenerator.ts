@@ -994,6 +994,22 @@ export async function generateQbrPrepReport(input: QbrPrepGenerateInput): Promis
     report.additionalOpportunities = additionalOpportunities;
   }
 
+  report.sourceFacts = {
+    windowLabel: meta.analysisWindow ?? "",
+    aiNarrationUsed: false,
+    aiNarrationProvider: null,
+    fallbackTriggered: false,
+    promptVersion: "v2026-03-19",
+    generatedAt: report.generationMeta?.generatedAt ?? new Date().toISOString(),
+    dataSourcesUsed: dataSources,
+    missingDataKeys: finalMissing,
+    hasGsc: dataSources.some(s => /gsc|search.console/i.test(s)),
+    hasGa4: dataSources.some(s => /ga4|analytics/i.test(s)),
+    hasCalls: dataSources.some(s => /call/i.test(s)),
+    hasSf: sfData.length > 0,
+    sfRows: sfData.length,
+  };
+
   return report;
 }
 

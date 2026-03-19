@@ -10,6 +10,7 @@ import { clusterQueriesByTopic, topicAdmitConnection } from "./qbrPrepHelpers";
 import { fetchNsmGoalsForSpecificQuarter } from "./sheetsClient";
 import type { Slide } from "../client/src/components/report-preview/pptx-preview";
 import { type GapContext } from "./gapAnswerContext";
+import { narrateWorkLog, narratePriorities, type MonthlySourceFacts, NARRATION_PROMPT_VERSION } from "./reportNarration";
 
 export interface MonthlyAmInputs {
   clientSentiment?: string;
@@ -38,6 +39,7 @@ export interface MonthlyReportJson {
   month_label: string;
   generated_at: string;
   slides: Slide[];
+  sourceFacts?: MonthlySourceFacts;
 }
 
 function monthLabel(month: number, year: number): string {
@@ -709,6 +711,25 @@ export async function generateMonthly(input: {
     return true;
   });
 
+  // ─── AI Narration: Work Log ───────────────────────────────────────
+  const rawWorkItems = workLogRows.map(r => ({ area: r.area, task: r.task, url: r.notes !== "—" ? r.notes : undefined }));
+  let narrationProvider: string | null = null;
+  let narrationFallback = false;
+  if (rawWorkItems.length > 0) {
+    try {
+      const narRes = await narrateWorkLog(rawWorkItems, label, "monthly");
+      if (narRes.narratedRows.length === rawWorkItems.length) {
+        workLogRows = workLogRows.map((r, i) => ({ ...r, task: narRes.narratedRows[i].task }));
+      }
+      narrationProvider = narRes.provider;
+      narrationFallback = narRes.fallbackTriggered;
+      console.log(`[Monthly] Work log narration: ${narRes.fallbackTriggered ? "deterministic fallback" : `AI via ${narRes.provider}`}. ${rawWorkItems.length} items processed.`);
+    } catch (e: any) {
+      console.warn("[Monthly] Work log narration failed:", e.message);
+      narrationFallback = true;
+    }
+  }
+
   // ─── SLIDE 8b: Supporting Strategic Initiatives ──────────────────
   // Primary: Asana (tasks grouped by category/section with completion status)
   // Shows initiative area, tasks completed vs. upcoming, and pacing status.
@@ -759,72 +780,86 @@ export async function generateMonthly(input: {
   });
 
   // ─── SLIDE 9: Next Month Priorities ──────────────────────────────
-  const nextMonthBullets: string[] = [];
-
-  // Use Asana upcoming tasks for realistic priorities
+  // Phase 1: Collect raw task names from all automated sources
+  const rawAsanaNextBullets: string[] = [];
   for (const [, tasks] of Object.entries(asanaUpcomingByCategory)) {
-    nextMonthBullets.push(...tasks.slice(0, 3).map(t => t.name));
+    rawAsanaNextBullets.push(...tasks.slice(0, 3).map(t => t.name));
   }
 
-  // Enrich from AM inputs if provided
-  if (am.focusNextMonth) {
-    nextMonthBullets.unshift(am.focusNextMonth);
-  }
-
-  // Performance-driven priorities when Asana data is thin
-  if (nextMonthBullets.length < 3) {
+  // Phase 2: Data-driven fallbacks when Asana data is thin
+  const dataDrivenFallbacks: string[] = [];
+  if (rawAsanaNextBullets.length < 3) {
     if (
       gscQueries.status === "fulfilled" &&
       gscQueries.value &&
       (gscQueries.value as any).summary?.some((s: any) => !s.isPositive)
     ) {
-      nextMonthBullets.push("Investigate declining query positions and refresh underperforming pages.");
+      dataDrivenFallbacks.push("Investigate declining query positions and refresh underperforming pages.");
     }
     if (
       ga4Funnel.status === "fulfilled" &&
       ga4Funnel.value &&
       (ga4Funnel.value as any).summary?.find((s: any) => /cvr|conversion/i.test(s.label) && !s.isPositive)
     ) {
-      nextMonthBullets.push("Review conversion rate drop on key landing pages and test CTA improvements.");
+      dataDrivenFallbacks.push("Review conversion rate drop on key landing pages and test CTA improvements.");
     }
     if (input.currentCrawlAssetId) {
-      nextMonthBullets.push(
-        "Review current crawl findings for technical issues and address top-priority items."
-      );
+      dataDrivenFallbacks.push("Review current crawl findings for technical issues and address top-priority items.");
     }
     if (input.comparisonCrawlAssetId) {
-      nextMonthBullets.push(
-        "Compare current vs. prior crawl to track technical remediation progress."
-      );
+      dataDrivenFallbacks.push("Compare current vs. prior crawl to track technical remediation progress.");
     }
   }
 
-  // Fallback bullets if still empty
+  const rawNextMonth = [...rawAsanaNextBullets, ...dataDrivenFallbacks];
+
+  // Phase 3: AI narration for asana-sourced bullets (not AM inputs, not data-driven)
+  let narratedNextBullets = rawAsanaNextBullets;
+  if (rawAsanaNextBullets.length > 0) {
+    try {
+      const nextNarRes = await narratePriorities(rawAsanaNextBullets, label, "monthly_next");
+      if (nextNarRes.bullets.length > 0) narratedNextBullets = nextNarRes.bullets;
+      if (!narrationProvider) narrationProvider = nextNarRes.provider;
+      if (nextNarRes.fallbackTriggered) narrationFallback = true;
+      console.log(`[Monthly] Next-month priority narration: ${nextNarRes.fallbackTriggered ? "deterministic fallback" : `AI via ${nextNarRes.provider}`}. ${rawAsanaNextBullets.length} bullets.`);
+    } catch (e: any) {
+      console.warn("[Monthly] Priority narration failed:", e.message);
+      narrationFallback = true;
+    }
+  }
+
+  // Phase 4: Assemble final bullets list
+  const nextMonthBullets: string[] = [];
+
+  // AM focus first
+  if (am.focusNextMonth) nextMonthBullets.unshift(am.focusNextMonth);
+
+  // Narrated Asana bullets
+  nextMonthBullets.push(...narratedNextBullets);
+
+  // Data-driven fallbacks (already clean copy)
+  nextMonthBullets.push(...dataDrivenFallbacks);
+
+  // Hard fallback if still empty
   if (nextMonthBullets.length === 0) {
     nextMonthBullets.push(
-      "Continue publishing scheduled content pieces.",
-      "Review and resolve technical SEO findings from latest crawl.",
-      "Monitor keyword ranking changes and adjust content strategy as needed.",
-      "Review QTD KPI goals with leadership ahead of next planning cycle."
+      "Publish next scheduled content pieces per the content calendar.",
+      "Resolve technical SEO issues identified in the most recent crawl.",
+      "Monitor keyword ranking changes and adjust on-page optimization as needed.",
+      "Review QTD KPI progress ahead of the next planning cycle."
     );
   }
 
+  // AM override annotations (appended last, not narrated)
   if (am.priorityChecks?.trim()) {
     const note = am.priorityChecks.trim();
-    const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-    const end = (s: string) => /[.!?]$/.test(s) ? s : `${s}.`;
-    nextMonthBullets.push(`Technical note: ${end(cap(note))}`);
+    const capStr = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+    const endStr = (s: string) => /[.!?]$/.test(s) ? s : `${s}.`;
+    nextMonthBullets.push(`Technical note: ${endStr(capStr(note))}`);
   }
-
-  if (am.leadershipNote) {
-    nextMonthBullets.push(`Leadership note: ${am.leadershipNote}`);
-  }
-  if (am.amThoughts?.trim()) {
-    nextMonthBullets.push(`Strategic focus: ${am.amThoughts}`);
-  }
-  if (am.clientNotes?.trim()) {
-    nextMonthBullets.push(`Client notes: ${am.clientNotes.trim()}`);
-  }
+  if (am.leadershipNote) nextMonthBullets.push(`Leadership note: ${am.leadershipNote}`);
+  if (am.amThoughts?.trim()) nextMonthBullets.push(`Strategic focus: ${am.amThoughts}`);
+  if (am.clientNotes?.trim()) nextMonthBullets.push(`Client notes: ${am.clientNotes.trim()}`);
 
   const nextMonthName = new Date(input.year, input.month, 1).toLocaleDateString("en-US", {
     month: "long",
@@ -896,11 +931,34 @@ export async function generateMonthly(input: {
     }
   }
 
+  const sourceFacts: MonthlySourceFacts = {
+    windowLabel: label,
+    aiNarrationUsed: rawWorkItems.length > 0 || rawAsanaNextBullets.length > 0,
+    aiNarrationProvider: narrationProvider,
+    fallbackTriggered: narrationFallback,
+    promptVersion: NARRATION_PROMPT_VERSION,
+    generatedAt: now.toISOString(),
+    airtableRecords: airtableResult.status === "fulfilled" && airtableResult.value?.success
+      ? Object.values((airtableResult.value as any).data?.byCreditType ?? {}).reduce((s: number, v: any) => s + (Array.isArray(v) ? v.length : 0), 0)
+      : 0,
+    asanaCompleted: asanaData
+      ? Object.values(asanaCompletedByCategory).reduce((s, v) => s + v.length, 0)
+      : 0,
+    asanaUpcoming: asanaData
+      ? Object.values(asanaUpcomingByCategory).reduce((s, v) => s + v.length, 0)
+      : 0,
+    hasGsc: gscQueries.status === "fulfilled" && !!gscQueries.value,
+    hasGa4: ga4Funnel.status === "fulfilled" && !!ga4Funnel.value,
+    rawWorkLogItems: rawWorkItems,
+    rawNextPriorityItems: rawNextMonth,
+  };
+
   return {
     report_title: `SEO Monthly Report — ${label}`,
     client_name: client.name,
     month_label: label,
     generated_at: now.toISOString(),
     slides,
+    sourceFacts,
   };
 }

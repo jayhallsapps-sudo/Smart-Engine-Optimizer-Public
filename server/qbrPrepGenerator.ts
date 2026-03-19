@@ -3,6 +3,7 @@ import { getGoogleAccessToken } from "./googleToken";
 import { decrypt } from "./encryption";
 import type { Client, GapAnswer } from "@shared/schema";
 import { type GapContext, buildGapContext } from "./gapAnswerContext";
+import { type QbrPrepSourceFacts, NARRATION_PROMPT_VERSION } from "./reportNarration";
 
 export type PastQuarter =
   | "Q1" | "Q2" | "Q3" | "Q4"
@@ -71,6 +72,7 @@ export interface QbrPrepJson {
     top_opportunities: TopOpportunity[];
   };
   opportunity_backlog: OpportunityCategory[];
+  sourceFacts?: QbrPrepSourceFacts;
 }
 
 export interface QbrPrepOutput {
@@ -1942,6 +1944,24 @@ export async function generateQbrPrep(input: QbrPrepInput): Promise<QbrPrepOutpu
     }
   }
 
+  const generatedAt = new Date().toISOString();
+
+  const sourceFacts: QbrPrepSourceFacts = {
+    windowLabel: `${pastWindowLabel} → ${futureLabel}`,
+    aiNarrationUsed: false,
+    aiNarrationProvider: null,
+    fallbackTriggered: false,
+    promptVersion: NARRATION_PROMPT_VERSION,
+    generatedAt,
+    hasGsc: gscAvailable,
+    hasGa4: ga4Available,
+    hasSf: sfAvailable,
+    totalOpportunities: allOpps.length,
+    opportunityCategories: allCategories.length,
+    winCount: allWins.length,
+    categoryNames: allCategories.map(c => c.category_name),
+  };
+
   const json: QbrPrepJson = {
     report_title: `QBR Prep – ${client.name} – ${pastWindowLabel} → Plan for ${futureLabel}`,
     client_name: client.name,
@@ -1949,12 +1969,13 @@ export async function generateQbrPrep(input: QbrPrepInput): Promise<QbrPrepOutpu
     past_start: pastStart,
     past_end: pastEnd,
     future_window_label: futureLabel,
-    generated_at: new Date().toISOString(),
+    generated_at: generatedAt,
     executive_summary: {
       wins: allWins.slice(0, 3),
       top_opportunities: topOpps.slice(0, 5),
     },
     opportunity_backlog: allCategories,
+    sourceFacts,
   };
 
   const markdown = buildMarkdown(json);

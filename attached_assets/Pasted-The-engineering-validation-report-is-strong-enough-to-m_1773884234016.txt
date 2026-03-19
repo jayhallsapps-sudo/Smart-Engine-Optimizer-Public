@@ -1,0 +1,126 @@
+The engineering validation report is strong enough to move forward.
+
+Biweekly is now in a much better place.
+
+But the report matrix shows the real remaining problem:
+only biweekly has the full narration stack.
+Monthly, QBR Full, QBR Prep, and Mid-Strategy still rely on weaker output paths.
+
+I want you to now extend the same evidence-first narration architecture across the rest of the reporting system.
+
+SCOPE
+Apply the same pattern used for biweekly to:
+- Monthly
+- QBR Full
+- QBR Prep
+- Mid-Strategy
+
+GOAL
+Every report type must have:
+1. raw source evidence packet
+2. narration layer
+3. persisted sourceFacts
+4. strict fallback rules
+5. debug visibility
+
+REQUIREMENTS
+
+1. MONTHLY
+Monthly must not output raw task strings.
+It must:
+- narrate completed work clearly
+- explain what changed
+- explain why it matters
+- connect activity to measurable trends or strategic adjustments where evidence exists
+- avoid generic “continued efforts” language
+
+2. QBR FULL
+QBR Full must narrate:
+- performance trends
+- strategic wins/losses
+- technical and content priorities
+- opportunities and risks
+- client-facing executive summary language grounded in actual inputs
+
+3. QBR PREP
+QBR Prep can be more internal, but still must:
+- translate raw evidence into usable strategic notes
+- identify likely talking points
+- surface anomalies, wins, risks, and required explanations
+
+4. MID-STRATEGY
+Mid-Strategy must narrate:
+- what is changing in performance or execution
+- what needs to be adjusted
+- what priorities should shift next
+
+5. SOURCEFACTS
+For every report type, persist:
+- matched source record IDs
+- normalized evidence packet
+- provider used
+- narration used true/false
+- prompt version
+- generated timestamp
+
+6. DEBUG PANEL
+For every report type, add a debug/evidence panel showing:
+- provider used
+- narration used
+- matched record counts by section
+- normalized evidence packet
+- fallback triggered yes/no
+- manual edits count
+- source IDs where available
+
+7. STRICTER FALLBACK LANGUAGE
+Replace vague filler with honest, specific fallback wording.
+
+Examples:
+Bad:
+- “Ongoing technical maintenance monitored this period.”
+- “Continued optimization efforts are underway.”
+
+Better:
+- “No completed technical fixes were logged during this reporting window; current focus is on resolving 4xx errors and pagination issues identified in the latest crawl.”
+- “No optimization updates were completed during this period.”
+
+8. DETERMINISTIC NON-AI FALLBACK FORMATTER
+Add a non-AI formatter so that when AI is unavailable, raw task titles do NOT display verbatim unless absolutely necessary.
+
+For example:
+Raw:
+- “Optimization – Title tag and meta description updates – /drug-rehab-los-angeles/”
+
+Deterministic fallback:
+- “Completed title tag and meta description updates on /drug-rehab-los-angeles/.”
+
+AI should remain preferred.
+But non-AI fallback should still produce clean client-safe wording.
+
+9. TESTING
+Run and show:
+- one real example for each report type
+- raw evidence
+- narrated output
+- saved reload result
+- fallback behavior when AI is disabled
+- proof visible cells show narrated/fallback-clean text, not raw task strings
+
+10. DELIVERABLE FORMAT
+Return:
+1. Executive summary
+2. Report-type-by-report-type root cause and fix summary
+3. Files changed
+4. Before/after examples for every report type
+5. Test evidence
+6. Remaining risks
+7. Exact UI tests for me
+
+IMPORTANT
+Do not stop after wiring narration to one more report.
+Finish the entire report matrix.
+
+Also tighten biweekly fallback language while you are in there.
+“Ongoing technical maintenance monitored this period” is still too vague.
+Replace vague fallback copy throughout the app with honest, specific wording.

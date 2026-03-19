@@ -246,6 +246,7 @@ export interface QbrPrepReportData {
   gapContext?: GapContext;
   sourceSnapshot: SourceSnapshot;
   generationMeta: GenerationMeta;
+  sourceFacts?: Record<string, any>;
 }
 
 export const MANUAL_ENTRY = "Manual entry needed";

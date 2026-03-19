@@ -36,6 +36,7 @@ import { SaveStatusIndicator } from "@/components/reports/SaveStatusIndicator";
 import { ReportSaveSelector } from "@/components/reports/ReportSaveSelector";
 import { CrawlAssetSelector } from "@/components/reports/CrawlAssetSelector";
 import { Checkbox } from "@/components/ui/checkbox";
+import { SourceDebugPanel } from "@/components/reports/SourceDebugPanel";
 
 // Confidence label badge for slides
 function ConfidenceLabel({ confidence }: { confidence?: string }) {
@@ -618,6 +619,7 @@ export default function MidStrategyPage() {
                 onEdit={handleEdit}
               />
             </div>
+            <SourceDebugPanel sourceFacts={(report as any).sourceFacts} />
           </div>
         )}
       </div>

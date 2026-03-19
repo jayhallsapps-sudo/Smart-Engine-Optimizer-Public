@@ -6,6 +6,7 @@ import { extractDomain } from "./googleToken";
 import { fetchQssbData } from "./qssbClient";
 import { fetchStrategyBank } from "./notionClient";
 import type { Slide } from "../client/src/components/report-preview/pptx-preview";
+import { type MidStrategySourceFacts, NARRATION_PROMPT_VERSION } from "./reportNarration";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -73,6 +74,7 @@ export interface WorkbookState {
 export interface MidStrategyReportJson {
   report_title: string; client_name: string; report_date: string;
   generated_at: string; workbook: WorkbookState; slides: Slide[];
+  sourceFacts?: MidStrategySourceFacts;
 }
 
 // ─── Finding Model ─────────────────────────────────────────────────────────────
@@ -1111,12 +1113,30 @@ export async function generateMidStrategy(input: MidStrategyInput): Promise<MidS
     console.warn("[Mid-Strategy] QSSB/Strategy Bank fetch failed:", err.message);
   }
 
+  const generatedAt = new Date().toISOString();
+
+  const sourceFacts: MidStrategySourceFacts = {
+    windowLabel: fmtDate(sources.today),
+    aiNarrationUsed: false,
+    aiNarrationProvider: null,
+    fallbackTriggered: false,
+    promptVersion: NARRATION_PROMPT_VERSION,
+    generatedAt,
+    crawlUrlCount: sources.crawlRows?.length ?? 0,
+    hasGa4: !!(sources.client as any).ga4PropertyId,
+    hasGsc: !!(sources.client as any).gscSiteUrl,
+    integrationGapCount: integrationGaps.length,
+    slideCount: slides.length,
+    dataSourcesUsed: workbook.buildStatus?.dataSourcesUsed ?? [],
+  };
+
   return {
     report_title: "Content & SEO Mid-Strategy Check-in",
     client_name: sources.client.name,
     report_date: fmtDate(sources.today),
-    generated_at: new Date().toISOString(),
+    generated_at: generatedAt,
     workbook,
     slides,
+    sourceFacts,
   };
 }

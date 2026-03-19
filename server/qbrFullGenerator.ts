@@ -11,6 +11,7 @@ import { fetchStrategyBank } from "./notionClient";
 import { fetchNsmGoalsForSpecificQuarter } from "./sheetsClient";
 import type { Slide } from "../client/src/components/report-preview/pptx-preview";
 import { type GapContext } from "./gapAnswerContext";
+import { narrateWorkLog, type QbrFullSourceFacts, NARRATION_PROMPT_VERSION } from "./reportNarration";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -45,6 +46,7 @@ export interface QbrFullReportJson {
   year: number;
   generated_at: string;
   slides: Slide[];
+  sourceFacts?: QbrFullSourceFacts;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -326,11 +328,28 @@ export async function generateQbrFull(input: {
     }
   }
 
-  const workRows = airtableRows.length > 0
-    ? airtableRows.map(r => [r.area, r.task, r.url])
-    : asanaRows.length > 0
-      ? asanaRows.map(r => [r.area, r.task, "—"])
-      : [];
+  const rawWorkItems = airtableRows.length > 0
+    ? airtableRows.map(r => ({ area: r.area, task: r.task, url: r.url !== "—" ? r.url : undefined }))
+    : asanaRows.map(r => ({ area: r.area, task: r.task }));
+
+  let workRows = rawWorkItems.map(r => [r.area, r.task, r.url ?? "—"]);
+  let qbrNarrationProvider: string | null = null;
+  let qbrNarrationFallback = false;
+
+  if (rawWorkItems.length > 0) {
+    try {
+      const narRes = await narrateWorkLog(rawWorkItems, qLabel, "qbr_full");
+      if (narRes.narratedRows.length === rawWorkItems.length) {
+        workRows = narRes.narratedRows.map(r => [r.area, r.task, r.url ?? "—"]);
+      }
+      qbrNarrationProvider = narRes.provider;
+      qbrNarrationFallback = narRes.fallbackTriggered;
+      console.log(`[QBR Full] Work log narration: ${narRes.fallbackTriggered ? "deterministic fallback" : `AI via ${narRes.provider}`}. ${rawWorkItems.length} items.`);
+    } catch (e: any) {
+      console.warn("[QBR Full] Work log narration failed:", e.message);
+      qbrNarrationFallback = true;
+    }
+  }
 
   // Build organic sessions QoQ from GSC or GA4
   const organicSessionsMetric = ga4Summary[0] ?? gscQueriesSummary[0];
@@ -939,6 +958,21 @@ export async function generateQbrFull(input: {
     console.warn("[QBR] QSSB/Strategy Bank fetch failed:", qssbErr.message);
   }
 
+  const sourceFacts: QbrFullSourceFacts = {
+    windowLabel: qLabel,
+    aiNarrationUsed: rawWorkItems.length > 0,
+    aiNarrationProvider: qbrNarrationProvider,
+    fallbackTriggered: qbrNarrationFallback,
+    promptVersion: NARRATION_PROMPT_VERSION,
+    generatedAt: now.toISOString(),
+    airtableRecords: airtableRows.length,
+    asanaRecords: asanaRows.length,
+    hasGsc: gscQueries.status === "fulfilled" && !!gscQueries.value,
+    hasGa4: ga4Funnel.status === "fulfilled" && !!ga4Funnel.value,
+    hasCalls: ctResult.status === "fulfilled" && !!ctResult.value,
+    rawWorkLogItems: rawWorkItems,
+  };
+
   return {
     report_title: `QBR — ${qLabel}`,
     client_name: client.name,
@@ -947,5 +981,6 @@ export async function generateQbrFull(input: {
     year: input.year,
     generated_at: now.toISOString(),
     slides,
+    sourceFacts,
   };
 }

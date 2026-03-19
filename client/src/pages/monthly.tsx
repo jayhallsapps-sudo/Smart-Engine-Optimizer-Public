@@ -38,6 +38,7 @@ import { ClarificationTrail } from "@/components/ClarificationTrail";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CommentPanel } from "@/components/comments/CommentPanel";
 import { WorkflowContextBanner } from "@/components/workflow/WorkflowContextBanner";
+import { SourceDebugPanel } from "@/components/reports/SourceDebugPanel";
 import { loadWorkflowContext, type WorkflowHandoffContext } from "@/lib/workflowHandoff";
 import { GuidancePanel } from "@/components/GuidancePanel";
 import { SourceReadinessBanner, MONTHLY_SOURCES } from "@/components/reports/SourceReadinessBanner";
@@ -666,11 +667,14 @@ export default function MonthlyPage() {
         )}
 
         {report && !generateMut.isPending && (
-          <PptxPreview
-            slides={report.slides ?? []}
-            edits={edits}
-            onEdit={handleEdit}
-          />
+          <>
+            <PptxPreview
+              slides={report.slides ?? []}
+              edits={edits}
+              onEdit={handleEdit}
+            />
+            <SourceDebugPanel sourceFacts={(report as any).sourceFacts} />
+          </>
         )}
       </div>
 

@@ -38,6 +38,7 @@ import { ClarificationTrail } from "@/components/ClarificationTrail";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CommentPanel } from "@/components/comments/CommentPanel";
 import { QbsContextBanner } from "@/components/qbs/QbsContextBanner";
+import { SourceDebugPanel } from "@/components/reports/SourceDebugPanel";
 import { selectQbsSource } from "@/lib/qbsQbrMapping";
 import { GuidancePanel } from "@/components/GuidancePanel";
 
@@ -702,11 +703,14 @@ export default function QbrFullPage() {
         )}
 
         {report && !generateMut.isPending && (
-          <PptxPreview
-            slides={report.slides ?? []}
-            edits={edits}
-            onEdit={handleEdit}
-          />
+          <>
+            <PptxPreview
+              slides={report.slides ?? []}
+              edits={edits}
+              onEdit={handleEdit}
+            />
+            <SourceDebugPanel sourceFacts={(report as any).sourceFacts} />
+          </>
         )}
       </div>
 

@@ -42,6 +42,7 @@ import { useFillInTheGaps } from "@/hooks/useFillInTheGaps";
 import { FillInTheGapsModal } from "@/components/FillInTheGapsModal";
 import { CommentPanel } from "@/components/comments/CommentPanel";
 import { WorkflowContextBanner } from "@/components/workflow/WorkflowContextBanner";
+import { SourceDebugPanel } from "@/components/reports/SourceDebugPanel";
 import { loadWorkflowContext, type WorkflowHandoffContext } from "@/lib/workflowHandoff";
 import { ClarificationTrail } from "@/components/ClarificationTrail";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -988,6 +989,7 @@ export default function QbrPrepPage() {
             onToggleTable={toggleTable}
           />
         )}
+        {reportData && <SourceDebugPanel sourceFacts={(reportData as any).sourceFacts} />}
       </div>
       </div>
 

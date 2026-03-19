@@ -1,0 +1,202 @@
+We are not done.
+
+Your own verification package says the monthly report is only PARTIALLY FIXED. Good. Now fix the remaining gaps completely.
+
+Do not summarize. Do not reassure. Implement the remaining fixes.
+
+IMPORTANT CONTEXT
+I am attaching the actual header image assets so you have no excuse to approximate the swoosh/header anymore.
+
+Use the attached files as the source-of-truth visual assets for the header treatment:
+- HEADER_IMAGE_trans_deck.png
+- HEADER_IMAGE_trans.png
+
+These assets are now available to you. Use them.
+
+MANDATORY REMAINING FIXES
+
+1. REPLACE THE FAKE SWOOSH WITH THE REAL HEADER ASSET
+Right now the monthly slide system is still using a hand-coded SVG approximation of the swoosh/header.
+That is not acceptable.
+
+You must:
+- stop using the hand-coded SVG swoosh approximation for monthly slides
+- use the real uploaded Webserv header asset instead
+- make the monthly deck header treatment visually match the approved report system as closely as possible
+- use the deck-specific header asset where appropriate if that is the cleaner fit for 16:9 slides
+- preserve crisp rendering in PDF output
+
+If needed:
+- use HEADER_IMAGE_trans_deck.png for slide/deck layout
+- use HEADER_IMAGE_trans.png where the non-deck proportion is more appropriate
+- choose intentionally, not randomly
+
+Do not keep the SVG version if the real asset can be used.
+
+2. USE THE REAL WEBSERV BRAND ASSET, NOT HARDCODED TEXT
+Your own audit says the monthly slide system still renders "Webserv" as plain text instead of using the real asset path.
+
+That must be fixed.
+
+You must:
+- integrate the actual Webserv header/logo asset into the monthly slide system
+- remove hardcoded text-only branding from slide headers wherever the asset should appear
+- stop relying on plain text "Webserv" inside the swoosh/header area
+- use the same asset-driven branding logic as the approved system
+
+If the existing system already uses /api/template/header in biweekly/QBR flows, reuse that logic if appropriate.
+If the attached image assets are the better direct source for deck rendering, wire them properly.
+
+Do not leave monthly as text-branding.
+
+3. MONTHLY TABLES MUST MATCH THE BIWEEKLY TABLE SYSTEM
+Your audit confirmed the tables still do not match.
+
+Current problem:
+- monthly table headers are red-tinted with red header text
+- biweekly uses restrained neutral/gray header treatment
+- monthly and biweekly are still independently styled
+
+That must be corrected.
+
+You must:
+- remove the red-tinted monthly table header treatment
+- make monthly table headers match the biweekly table header behavior
+- match header background, header text color, font weight, casing behavior, border behavior, row padding, spacing, and density as closely as possible
+- use one shared branded table system for monthly and biweekly wherever technically possible
+
+Specifically:
+- if biweekly uses neutral gray header styling, monthly must do the same
+- if monthly needs minor scaling adjustments because slide format is smaller, preserve the same style logic while adjusting only for size
+- do not keep monthly table headers visually louder than biweekly
+
+4. STOP LEAVING THE SLIDE SYSTEM MONOLITHIC
+Your audit confirmed the requested slide/report primitives do not actually exist and the system is still monolithic case blocks inside SlideRenderer.
+
+That is not acceptable for a shared report system.
+
+Refactor the slide/report architecture so the system becomes maintainable and consistent.
+
+Create or extract real components for at minimum:
+- ReportPageShell
+- ReportTopHeader or ReportTopSwoosh
+- ReportTitleBlock
+- ReportSectionHeader
+- ReportTable
+- ReportMetricCard
+- ReportNarrativeCallout
+- ReportFooter
+
+And create/extract real monthly slide components for at minimum:
+- MonthlyTitleSlide
+- MonthlyKpiSlide
+- MonthlyConversionSlide
+- MonthlyTrendSlide
+- MonthlyClusterSlide
+- MonthlyInitiativesSlide
+- MonthlyAuditProgressSlide
+- MonthlyNextStepsSlide
+
+Do not leave the report system as giant inline case blocks if it can be cleanly refactored.
+The point is not abstraction for its own sake.
+The point is system fidelity, shared styling, easier QA, and no more drift between report types.
+
+5. KEEP WHAT IS ALREADY FIXED
+Do not regress any of the items that are already passing.
+
+Must remain fixed:
+- no browser/export helper banner
+- no print instructions in final output
+- no "+ Add row"
+- no admin controls in report output
+- no invented blue theme
+- red-accented brand family instead of navy-heavy monthly look
+- clean slide-by-slide export behavior
+- clean neutral page background
+- metric cards no longer blue
+- chart labels no longer navy
+
+6. DO NOT DODGE THE EXPORT IMPLEMENTATION
+The current browser-print slide route is acceptable only if the output is clean, page-accurate, and free of app UI.
+
+Keep or improve it, but do not regress it.
+
+Requirements:
+- one slide per page
+- consistent 16:9 dimensions
+- no clipping
+- no app UI
+- no admin controls
+- correct header image rendering
+- correct footer rendering
+- clean print-to-PDF results
+
+If image rendering needs print-specific handling, solve that properly.
+
+7. MONTHLY MUST FOLLOW THIS AUTHORITY SPLIT
+Do not lose the rule:
+
+- ADR monthly report = structure, sequence, content logic
+- completed biweekly system report = visual system
+- attached header image assets = approved top header visual reference for deck output
+
+Monthly must end up as:
+ADR structure + biweekly visual system + real header asset
+
+8. REQUIRED OUTPUT AFTER IMPLEMENTATION
+After fixing the remaining issues, do not give me another shallow summary.
+
+I want a proper proof package with these sections:
+
+A. EXECUTIVE STATUS
+Start with exactly one:
+- FULLY FIXED
+- PARTIALLY FIXED
+- NOT FIXED
+
+B. REMAINING GAP CHECKLIST
+Specifically re-test and report PASS/PARTIAL/FAIL for:
+- real header asset used instead of SVG approximation
+- real Webserv branding asset used instead of hardcoded text
+- monthly table header style now matches biweekly
+- monthly and biweekly now share a branded table system
+- report primitives extracted from monolithic SlideRenderer
+- monthly slide components extracted from monolithic SlideRenderer
+- no regressions on previously passing items
+
+C. SCREENSHOT EVIDENCE
+Provide screenshots for at least:
+- title slide
+- one inner content slide with header image visible
+- one table slide
+- one chart slide
+- one final slide / priorities slide
+
+D. FILE-BY-FILE CHANGE LOG
+List every file changed and explain why.
+
+E. COMPONENT MAP
+Show old vs new architecture again, but this time it should reflect the actual extracted components.
+
+F. BRANDING PROOF
+Show exactly how the real asset is now being loaded/rendered.
+State whether the monthly system is still using any hardcoded "Webserv" text in places where the asset should be used.
+
+G. TABLE SYSTEM PROOF
+Show exactly how monthly and biweekly now share the same table styling logic/component.
+
+H. FINAL BLUNT ASSESSMENT
+Say clearly whether the monthly report is now:
+- ADR in structure
+- biweekly in visual language
+- using the real header/logo asset
+- unified with the rest of the Webserv report system
+
+NON-NEGOTIABLE RULES
+- Do not keep the fake SVG header if the real asset can be used.
+- Do not keep red monthly table headers if biweekly uses neutral ones.
+- Do not leave branding as hardcoded text.
+- Do not leave the report architecture monolithic.
+- Do not tell me it is fixed without evidence.
+
+Implement the remaining fixes now.

@@ -1,0 +1,207 @@
+Your summary is not sufficient. It describes a few implementation changes, but it does not prove the monthly report template is actually fixed.
+
+I do not want a general “all tests passed” statement.
+I want a hard verification package against the exact acceptance criteria.
+
+You need to provide a much more detailed output with evidence.
+
+REQUIRED RESPONSE FORMAT
+
+1. EXECUTIVE RESULT
+Start with one of these only:
+- FULLY FIXED
+- PARTIALLY FIXED
+- NOT FIXED
+
+Do not say “all tests passed” unless you prove it with the checklist below.
+
+2. ACCEPTANCE CRITERIA CHECKLIST
+Go through every requirement one by one and mark each as:
+- PASS
+- PARTIAL
+- FAIL
+
+For each item, include:
+- what was changed
+- what file/component controls it
+- what evidence proves it
+
+You must cover all of these:
+
+A. No browser/export helper banner in final output
+B. No print instructions in final PDF
+C. No “+ Add row” or admin controls in final report
+D. No invented blue theme anywhere in monthly
+E. Correct Webserv logo asset used, not text fallback
+F. Biweekly swoosh/header treatment applied consistently
+G. Monthly slide/page structure follows ADR logic
+H. Monthly tables visually match the shared biweekly table system
+I. Typography hierarchy matches the shared report system
+J. Header/body text color behavior matches the shared report system
+K. Footer treatment matches the shared report system
+L. Monthly now exports as true slide pages, not a long cleaned-up app page
+M. Monthly reads like a strategic client deck, not a dashboard printout
+
+3. SCREENSHOT EVIDENCE
+Provide screenshot evidence for every monthly slide after the refactor.
+I need:
+- title slide screenshot
+- KPI slide screenshot
+- conversion slide screenshot
+- trend/GSC slide screenshot
+- query group / cluster slide screenshot
+- initiatives slide screenshot
+- audit/content progress slide screenshot
+- next steps slide screenshot
+
+For each screenshot, label:
+- slide name
+- which authority it is following structurally from ADR
+- which design system elements are inherited from biweekly
+
+4. BEFORE / AFTER PROOF
+For each major area below, show before vs after:
+- title slide
+- KPI cards
+- table styling
+- chart slide
+- top header / swoosh
+- footer
+- export behavior
+
+I do not want vague descriptions like “cleaner” or “more aligned.”
+Be specific about what changed visually and structurally.
+
+5. FILE-BY-FILE CHANGE LOG
+List every file changed.
+
+For each file include:
+- exact file name
+- why it was changed
+- what problem it fixes
+- whether it is shared-system code or monthly-only code
+
+I want this grouped as:
+- shared design system files
+- monthly slide files
+- export/render files
+- chart/table component files
+- branding/assets files
+
+6. COMPONENT MAPPING
+Show the actual before/after component architecture.
+
+Format it like this:
+OLD:
+- component/file
+- purpose
+- why it caused the wrong behavior
+
+NEW:
+- component/file
+- purpose
+- whether it is shared with biweekly
+- what acceptance criteria it satisfies
+
+I specifically want to see:
+- ReportPageShell
+- ReportTopSwoosh
+- ReportTitleBlock
+- ReportSectionHeader
+- ReportTable
+- ReportMetricCard
+- ReportNarrativeCallout
+- ReportFooter
+- MonthlyTitleSlide
+- MonthlyKpiSlide
+- MonthlyConversionSlide
+- MonthlyTrendSlide
+- MonthlyClusterSlide
+- MonthlyInitiativesSlide
+- MonthlyAuditProgressSlide
+- MonthlyNextStepsSlide
+
+If any of these do not exist, say so explicitly and explain what equivalent exists.
+
+7. TOKEN CLEANUP PROOF
+Show the actual design token cleanup.
+
+I want:
+- old monthly tokens that caused the wrong look
+- new shared tokens now in use
+- proof that legacy blue/navy monthly theme tokens are removed, not merely overridden in a few spots
+
+Be explicit about:
+- page background
+- primary text
+- secondary text
+- accent red
+- divider red
+- positive green
+- negative red
+- table header background
+- table body background
+- footer text
+- border color
+
+8. BRANDING PROOF
+You must explicitly answer:
+- Is the real Webserv logo asset now being used?
+- What file/path provides it?
+- Where was text fallback previously happening?
+- Was text fallback removed or only left as a failure fallback?
+
+If the real logo asset is still not being used, say FAIL.
+
+9. EXPORT PIPELINE PROOF
+This part is critical.
+
+You must explain whether the monthly report is now:
+- a true slide/page renderer
+or
+- still a web page being cleaned up for print
+
+Do not dodge this.
+
+I want:
+- which route/component renders the monthly report for export
+- how page boundaries are defined
+- how slide-by-slide PDF output is achieved
+- whether UI/admin components are excluded at render-time or merely hidden with CSS
+- whether the export path is actually separated from the app page path
+
+If the system is still fundamentally printing a web page, say PARTIAL or FAIL.
+
+10. TABLE SYSTEM PROOF
+Show exactly how monthly tables now inherit the same shared table system as biweekly.
+
+I want:
+- shared table component name
+- styling source
+- proof that monthly is not independently styling tables anymore
+- proof that header styling, row padding, borders, spacing, and text hierarchy match the shared system
+
+11. VISUAL QA JUDGMENT
+After all technical proof, give a blunt assessment for each of these:
+- ADR structural match: PASS / PARTIAL / FAIL
+- Biweekly visual match: PASS / PARTIAL / FAIL
+- Unified Webserv system feel: PASS / PARTIAL / FAIL
+
+Then explain the remaining gaps honestly.
+
+12. FINAL DELIVERABLE
+At the end, give me:
+- a short list of what is unquestionably fixed
+- a short list of what is still uncertain
+- a short list of what is still not correct, if anything
+
+IMPORTANT RULES
+- Do not give me a shallow summary.
+- Do not give me marketing language.
+- Do not tell me “all tests passed” without proving each acceptance criterion.
+- Do not just list code changes.
+- Prove the visual and structural result.
+- If anything is only partially solved, say PARTIAL.
+- If anything is still wrong, say FAIL.
+
+I need verification, not reassurance.

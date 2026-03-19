@@ -71,7 +71,7 @@ const MODULES: ModuleCard[] = [
   {
     id: "clients",
     icon: Zap,
-    label: "Client Dashboards",
+    label: "Client Integrations",
     description: "Manage client configurations, connected data sources, and account details.",
     href: "/clients",
     status: "live",

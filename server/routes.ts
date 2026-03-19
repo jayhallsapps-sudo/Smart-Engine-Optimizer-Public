@@ -272,6 +272,7 @@ export async function registerRoutes(
   app.use("/api", (req: Request, res: Response, next: NextFunction) => {
     if (AUTH_PUBLIC_PATHS.some(p => req.path === p || req.path.startsWith(p + "?") || (p.endsWith("/") && req.path.startsWith(p)))) return next();
     if (req.method === "GET" && /^\/saved-reports\/\d+\/download$/.test(req.path)) return next();
+    if (req.method === "GET" && /^\/saved-reports\/\d+\/pdf$/.test(req.path)) return next();
     const provided = req.headers["x-internal-token"];
     if (provided !== INTERNAL_TOKEN) {
       return res.status(401).json({ message: "Unauthorized" });
@@ -3320,6 +3321,86 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("Download saved report error:", err);
       res.status(500).json({ message: "Download failed: " + err.message });
+    }
+  });
+
+  app.get("/api/saved-reports/:id/pdf", async (req, res) => {
+    try {
+      const report = await getSavedReportById(Number(req.params.id));
+      if (!report) return res.status(404).json({ message: "Not found" });
+      const json = report.generatedReportJson as any;
+      const edits = (report.editsJson as Record<string, string>) ?? {};
+      const rawType = report.reportType;
+      const type = rawType === "mid_strategy_seo" ? "mid_strategy" : rawType === "qbr" ? "qbr_full" : rawType;
+
+      const cacheId = randomUUID();
+      let renderPath: string;
+      let cacheData: any;
+      let slug: string;
+      let filename: string;
+
+      switch (type) {
+        case "biweekly": {
+          renderPath = "biweekly/pdf-render";
+          cacheData = { report: json, edits };
+          const clientName = edits["client_name"] ?? json.client_name ?? "Client";
+          slug = clientName.toLowerCase().replace(/\s+/g, "_");
+          const date = (edits["report_date"] ?? json.date ?? "").replace(/[\s,]/g, "_");
+          filename = `${slug}_biweekly_${date}.pdf`;
+          break;
+        }
+        case "monthly": {
+          renderPath = "monthly/print";
+          cacheData = { report: json, edits };
+          const clientName = edits["title_client"] ?? json.client_name ?? "Client";
+          slug = clientName.toLowerCase().replace(/\s+/g, "_");
+          const monthSlug = (json.month_label ?? "report").replace(/\s/g, "_");
+          filename = `${slug}_monthly_${monthSlug}.pdf`;
+          break;
+        }
+        case "qbr_full": {
+          renderPath = "monthly/print";
+          cacheData = { report: json, edits };
+          const clientName = edits["s01_title_client"] ?? json.client_name ?? "Client";
+          slug = clientName.toLowerCase().replace(/\s+/g, "_");
+          const qtrSlug = (json.quarter_label ?? "qbr").replace(/\s/g, "_");
+          filename = `${slug}_qbr_${qtrSlug}.pdf`;
+          break;
+        }
+        case "mid_strategy": {
+          renderPath = "mid-strategy/pdf-render";
+          const pdfJson = { ...json, slides: (json.slides ?? []).filter((s: any) => s.exportAllowed !== false) };
+          cacheData = { report: pdfJson, edits };
+          const clientName = json.client_name ?? "Client";
+          slug = clientName.toLowerCase().replace(/\s+/g, "_");
+          filename = `${slug}_Mid_Strategy.pdf`;
+          break;
+        }
+        case "qbr_prep": {
+          renderPath = "qbr-prep-print";
+          cacheData = { reportData: json, edits };
+          slug = (json.meta?.site ?? "report").toLowerCase().replace(/\s+/g, "_");
+          filename = `${slug}_qbr_prep.pdf`;
+          break;
+        }
+        default:
+          return res.status(400).json({ message: `PDF not supported for report type: ${type}` });
+      }
+
+      printCache.set(cacheId, { data: cacheData, ts: Date.now() });
+      try {
+        const buffer = await generatePdfViaPuppeteer(cacheId, renderPath);
+        printCache.delete(cacheId);
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+        return res.send(buffer);
+      } catch (pdfErr: any) {
+        printCache.delete(cacheId);
+        throw pdfErr;
+      }
+    } catch (err: any) {
+      console.error("PDF saved report error:", err);
+      res.status(500).json({ message: "PDF generation failed: " + err.message });
     }
   });
 

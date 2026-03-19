@@ -61,7 +61,7 @@ export default function MonthlyPrint() {
         <span style={{ fontWeight: 600 }}>Ready to export</span>
         <span style={{ opacity: 0.8 }}>— The print dialog will open automatically. Choose <strong>"Save as PDF"</strong> as the destination. Set page size to <strong>Custom (720×405)</strong> for best results.</span>
       </div>
-      <div style={{ background: "white" }}>
+      <div data-report-root style={{ background: "white" }}>
         {slides.map((slide) => (
           <div
             key={slide.id}

@@ -2,8 +2,9 @@ import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
 
-const BLUE = "#1B3A6B";
-const ACCENT = "#3B82F6";
+const RED = "#C0392B";
+const CHART_PALETTE_1 = "#C0392B";
+const CHART_PALETTE_2 = "#2563EB";
 const GREEN = "#16A34A";
 
 interface ChartDataPoint {
@@ -20,10 +21,10 @@ interface ReportBarChartProps {
 }
 
 export function ReportBarChart({ data, keys, colors, height = 220, title }: ReportBarChartProps) {
-  const palette = colors ?? [BLUE, ACCENT, GREEN, "#D97706", "#7C3AED"];
+  const palette = colors ?? [CHART_PALETTE_1, CHART_PALETTE_2, GREEN, "#D97706", "#7C3AED"];
   return (
     <div>
-      {title && <div className="text-xs font-semibold text-[#1B3A6B] mb-1 uppercase tracking-wide">{title}</div>}
+      {title && <div style={{ fontSize: 10, fontWeight: 700, color: RED, marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.06em" }}>{title}</div>}
       <ResponsiveContainer width="100%" height={height}>
         <BarChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
@@ -49,10 +50,10 @@ interface ReportLineChartProps {
 }
 
 export function ReportLineChart({ data, keys, colors, height = 220, title }: ReportLineChartProps) {
-  const palette = colors ?? [BLUE, ACCENT, GREEN, "#D97706", "#7C3AED"];
+  const palette = colors ?? [CHART_PALETTE_1, CHART_PALETTE_2, GREEN, "#D97706", "#7C3AED"];
   return (
     <div>
-      {title && <div className="text-xs font-semibold text-[#1B3A6B] mb-1 uppercase tracking-wide">{title}</div>}
+      {title && <div style={{ fontSize: 10, fontWeight: 700, color: RED, marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.06em" }}>{title}</div>}
       <ResponsiveContainer width="100%" height={height}>
         <LineChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
@@ -93,21 +94,21 @@ export function MetricCard({ label, current, previous, delta, isPositive, source
   const dColor = isPositive ? "#16A34A" : "#DC2626";
   const sc = source ? (SOURCE_COLORS[source] ?? { bg: "#F3F4F6", text: "#374151" }) : null;
   return (
-    <div className="bg-[#E8F0FE] border border-[#D1D5DB] rounded-lg p-3 flex flex-col gap-0.5 min-w-0">
-      <div className="flex items-center justify-between gap-1">
-        <div className="text-[10px] text-[#6B7280] font-medium uppercase tracking-wide truncate">{label}</div>
+    <div style={{ background: "white", border: "1px solid #E5E7EB", borderTop: `3px solid ${RED}`, borderRadius: 6, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 4 }}>
+        <div style={{ fontSize: 9, color: "#6B7280", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</div>
         {sc && (
           <span style={{ background: sc.bg, color: sc.text, fontSize: 7, fontWeight: 600, padding: "1px 4px", borderRadius: 3, whiteSpace: "nowrap" }}>
             {source}
           </span>
         )}
       </div>
-      <div className="text-xl font-bold text-[#1F2937] truncate">{current}</div>
+      <div style={{ fontSize: 22, fontWeight: 800, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{current}</div>
       {previous && (
-        <div className="text-[10px] text-[#6B7280]">
+        <div style={{ fontSize: 9, color: "#6B7280" }}>
           vs {previous}
           {delta && (
-            <span style={{ color: dColor }} className="ml-1 font-semibold">
+            <span style={{ color: dColor, marginLeft: 4, fontWeight: 700 }}>
               {arrow} {delta}
             </span>
           )}

@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { History, ArrowRight, Trash2, CalendarDays } from "lucide-react";
+import { History, ArrowRight, Trash2, CalendarDays, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { Client, SavedReport } from "@shared/schema";
 
@@ -181,6 +181,21 @@ export default function SavedReportsPage() {
                           <span>{clientName(r.clientId)}</span>
                         </div>
                       </div>
+                      <a
+                        href={`/api/saved-reports/${r.id}/download`}
+                        target="_blank"
+                        rel="noreferrer"
+                        data-testid={`btn-download-report-${r.id}`}
+                      >
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground shrink-0"
+                          title="Download report file"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                        </Button>
+                      </a>
                       <Link href={loadHref(r)}>
                         <Button
                           size="sm"

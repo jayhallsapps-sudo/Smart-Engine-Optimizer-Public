@@ -565,7 +565,7 @@ export async function generateBiweekly(input: {
       "Technical SEO",
       finalTechDid,
       finalTechNext,
-      "Add technical maintenance completed during this period.",
+      "Ongoing technical maintenance monitored this period.",
       techNext[0]?.text ?? "Review Core Web Vitals for top landing pages."
     ),
     makeRow(

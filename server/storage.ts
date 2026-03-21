@@ -149,6 +149,7 @@ export interface IStorage {
 
   // Eval Competitor Rows
   getEvalCompetitorRows(evalBatchId: number): Promise<EvalCompetitorRow[]>;
+  getEvalCompetitorRow(id: number): Promise<EvalCompetitorRow | null>;
   upsertEvalCompetitorRow(data: InsertEvalCompetitorRow & { id?: number }): Promise<EvalCompetitorRow>;
   deleteEvalCompetitorRow(id: number): Promise<boolean>;
   replaceEvalCompetitorRows(evalBatchId: number, rows: Omit<InsertEvalCompetitorRow, "evalBatchId">[]): Promise<EvalCompetitorRow[]>;
@@ -657,6 +658,11 @@ export class DatabaseStorage implements IStorage {
 
   async getEvalCompetitorRows(evalBatchId: number): Promise<EvalCompetitorRow[]> {
     return db.select().from(evalCompetitorRows).where(eq(evalCompetitorRows.evalBatchId, evalBatchId)).orderBy(evalCompetitorRows.rowOrder);
+  }
+
+  async getEvalCompetitorRow(id: number): Promise<EvalCompetitorRow | null> {
+    const [row] = await db.select().from(evalCompetitorRows).where(eq(evalCompetitorRows.id, id));
+    return row ?? null;
   }
 
   async upsertEvalCompetitorRow(data: InsertEvalCompetitorRow & { id?: number }): Promise<EvalCompetitorRow> {

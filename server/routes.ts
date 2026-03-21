@@ -4242,6 +4242,50 @@ export async function registerRoutes(
     } catch (err: any) { res.status(500).json({ error: err.message }); }
   });
 
+  // ─── Per-row metric refresh ──────────────────────────────────────────────────
+
+  app.post("/api/eval-competitor-rows/:id/refresh", async (req, res) => {
+    try {
+      const rowId = Number(req.params.id);
+      const row = await storage.getEvalCompetitorRow(rowId);
+      if (!row) return res.status(404).json({ error: "Row not found" });
+
+      const { fetchCompetitorEvalMetrics, computeDerivedMetrics, computeRanks } = await import("./evalDataCollector");
+      const fetched = await fetchCompetitorEvalMetrics(row.websiteUrl ?? "");
+
+      const existing = (row.metrics as any) ?? {};
+      const updated: Record<string, any> = {
+        ...existing,
+        dr: fetched.dr,
+        referringDomains: fetched.referringDomains,
+        backlinks: fetched.backlinks,
+        organicTraffic: fetched.organicTraffic,
+        organicKeywords: fetched.organicKeywords,
+        top10Keywords: fetched.top10Keywords,
+        indexedPages: fetched.indexedPages,
+        featuredSnippets: fetched.featuredSnippets,
+        informationalKeywords: fetched.informationalKeywords,
+        whoisReg: fetched.whoisReg !== "—" ? fetched.whoisReg : (existing.whoisReg ?? "—"),
+        firstArchive: fetched.firstArchive !== "—" ? fetched.firstArchive : (existing.firstArchive ?? "—"),
+      };
+      const computed = computeDerivedMetrics(updated);
+      const saved = await storage.upsertEvalCompetitorRow({ ...row, metrics: updated, computed } as any);
+
+      // Recompute ranks across all rows in this batch
+      const allRows = await storage.getEvalCompetitorRows((row as any).evalBatchId);
+      const withComputed = allRows.map(r => ({
+        ...r,
+        computed: computeDerivedMetrics({ ...((r.metrics as any) ?? {}), ...((r.computed as any) ?? {}) }),
+      }));
+      const ranks = computeRanks(withComputed.map(r => ({ metrics: r.metrics, computed: r.computed })));
+      for (let i = 0; i < allRows.length; i++) {
+        if (allRows[i]?.id) await storage.upsertEvalCompetitorRow({ ...allRows[i], ranks: ranks[i] ?? {} } as any);
+      }
+
+      res.json(saved);
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
   // ─── Eval Crawl Rows ────────────────────────────────────────────────────────
 
   app.get("/api/eval-batches/:batchId/crawl-rows", async (req, res) => {
@@ -4351,7 +4395,7 @@ export async function registerRoutes(
         computeDerivedMetrics, computeRanks,
         enrichCrawlRowsWithPerformance,
         buildClicksDistribution, buildTrafficDistribution,
-        fetchCompetitorEvalMetrics,
+        fetchCompetitorEvalMetrics, fetchClientGscMetrics,
       } = await import("./evalDataCollector");
       const { extractDomain } = await import("./googleToken");
 
@@ -4369,40 +4413,57 @@ export async function registerRoutes(
         })),
       ];
 
-      // Fetch Ahrefs + SEMrush data for all rows in parallel
-      const fetchResults = await Promise.allSettled(
-        rowDefs.map(r => fetchCompetitorEvalMetrics(r.domain))
-      );
+      // Fetch Ahrefs + SEMrush + WHOIS + Wayback data for all rows in parallel
+      const [fetchResults, clientGscResult] = await Promise.all([
+        Promise.allSettled(rowDefs.map(r => fetchCompetitorEvalMetrics(r.domain))),
+        fetchClientGscMetrics(batch.clientId),
+      ]);
 
       // Build eval_competitor_rows from the row definitions
       const rowsToInsert: Omit<import("@shared/schema").InsertEvalCompetitorRow, "evalBatchId">[] = rowDefs.map((rowDef, i) => {
         const fetched = fetchResults[i].status === "fulfilled" ? fetchResults[i].value : null;
+        const sourceTrace: Record<string, string> = {};
+
+        // For the client row: GSC data takes priority over Ahrefs for traffic/keywords
+        let organicTraffic = fetched?.organicTraffic ?? "—";
+        let organicKeywords = fetched?.organicKeywords ?? "—";
+        if (rowDef.isClient && clientGscResult) {
+          if (clientGscResult.organicTraffic !== "—") {
+            organicTraffic = clientGscResult.organicTraffic;
+            sourceTrace.organicTraffic = "gsc";
+          }
+          if (clientGscResult.organicKeywords !== "—") {
+            organicKeywords = clientGscResult.organicKeywords;
+            sourceTrace.organicKeywords = "gsc";
+          }
+        }
+
         const metrics: Record<string, any> = {
-          dr:                   fetched?.dr ?? "—",
-          referringDomains:     fetched?.referringDomains ?? "—",
-          backlinks:            fetched?.backlinks ?? "—",
-          organicTraffic:       fetched?.organicTraffic ?? "—",
-          organicKeywords:      fetched?.organicKeywords ?? "—",
-          top10Keywords:        fetched?.top10Keywords ?? "—",
-          indexedPages:         fetched?.indexedPages ?? "—",
-          featuredSnippets:     fetched?.featuredSnippets ?? "—",
+          dr:                    fetched?.dr ?? "—",
+          referringDomains:      fetched?.referringDomains ?? "—",
+          backlinks:             fetched?.backlinks ?? "—",
+          organicTraffic,
+          organicKeywords,
+          top10Keywords:         fetched?.top10Keywords ?? "—",
+          indexedPages:          fetched?.indexedPages ?? "—",
+          featuredSnippets:      fetched?.featuredSnippets ?? "—",
           informationalKeywords: fetched?.informationalKeywords ?? "—",
-          // Manual-entry fields (no API source)
-          aiVisibilityScore:    "—",
-          aiMentions:           "—",
-          citedSources:         "—",
-          whoisReg:             "—",
-          firstArchive:         "—",
+          aiVisibilityScore:     "—",
+          aiMentions:            "—",
+          citedSources:          "—",
+          whoisReg:              fetched?.whoisReg ?? "—",
+          firstArchive:          fetched?.firstArchive ?? "—",
         };
         const computed = computeDerivedMetrics(metrics);
-        const sourceTrace: Record<string, string> = {};
         if (fetched?.dr !== "—") { sourceTrace.dr = "ahrefs"; sourceTrace.referringDomains = "ahrefs"; sourceTrace.backlinks = "ahrefs"; }
-        if (fetched?.organicTraffic !== "—") sourceTrace.organicTraffic = "ahrefs";
-        if (fetched?.organicKeywords !== "—") sourceTrace.organicKeywords = "ahrefs";
+        if (!sourceTrace.organicTraffic && fetched?.organicTraffic !== "—") sourceTrace.organicTraffic = "ahrefs";
+        if (!sourceTrace.organicKeywords && fetched?.organicKeywords !== "—") sourceTrace.organicKeywords = "ahrefs";
         if (fetched?.top10Keywords !== "—") sourceTrace.top10Keywords = "ahrefs";
         if (fetched?.indexedPages !== "—") sourceTrace.indexedPages = "semrush";
         if (fetched?.featuredSnippets !== "—") sourceTrace.featuredSnippets = "semrush";
         if (fetched?.informationalKeywords !== "—") sourceTrace.informationalKeywords = "semrush";
+        if (fetched?.whoisReg !== "—") sourceTrace.whoisReg = "rdap";
+        if (fetched?.firstArchive !== "—") sourceTrace.firstArchive = "wayback";
         return {
           rowOrder: rowDef.rowOrder,
           isClient: rowDef.isClient,
@@ -4601,6 +4662,53 @@ export async function registerRoutes(
         data: { numPages: r.numPages, sumSessions: r.sumSessions, sessionsPerPage: r.sessionsPerPage, shareOfSessions: r.shareOfSessions },
       })));
       res.json({ clicksDistRows: clicksDist.length, trafficDistRows: trafficDist.length });
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  // ─── Eval Structural Issues ──────────────────────────────────────────────────
+
+  app.get("/api/eval-batches/:batchId/structural-issues", async (req, res) => {
+    try {
+      const batchId = Number(req.params.batchId);
+      const allRows = await storage.getEvalCrawlRows(batchId);
+      if (allRows.length === 0) return res.json([]);
+      const { computeStructuralIssues } = await import("./evalDataCollector");
+      const issues = computeStructuralIssues(allRows.map(r => ({
+        url: r.url,
+        pageCategory: r.pageCategory,
+        statusCode: r.statusCode,
+        h1: r.h1,
+        metaDesc: r.metaDesc,
+        pageTitle: r.pageTitle,
+        wordCount: r.wordCount,
+        indexability: r.indexability,
+        canonical: r.canonical,
+        inlinks: r.inlinks,
+        crawlFields: r.crawlFields,
+      })));
+      res.json(issues);
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  // ─── Eval Keyword Gap ────────────────────────────────────────────────────────
+
+  app.get("/api/eval-batches/:batchId/keyword-gap", async (req, res) => {
+    try {
+      const batchId = Number(req.params.batchId);
+      const batch = await storage.getEvalBatch(batchId);
+      if (!batch) return res.status(404).json({ error: "Batch not found" });
+
+      const rows = await storage.getEvalCompetitorRows(batchId);
+      const clientRow = rows.find((r: any) => r.isClient);
+      const compRows = rows.filter((r: any) => !r.isClient);
+      if (!clientRow) return res.json([]);
+
+      const { fetchKeywordGap } = await import("./evalDataCollector");
+      const gaps = await fetchKeywordGap(
+        clientRow.websiteUrl ?? "",
+        compRows.map(r => r.websiteUrl ?? "").filter(Boolean),
+      );
+      res.json(gaps);
     } catch (err: any) { res.status(500).json({ error: err.message }); }
   });
 

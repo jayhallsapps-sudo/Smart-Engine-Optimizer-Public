@@ -30,7 +30,7 @@ import {
   Loader2,
   BarChart3,
   Globe,
-  FileUp,
+  Files,
   Check,
   X,
   PieChart,
@@ -42,8 +42,12 @@ import {
   CheckCircle2,
   XCircle,
   FileText,
-  Files,
   Info,
+  Download,
+  ChevronDown,
+  ChevronRight,
+  SearchCode,
+  ShieldAlert,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { Client, EvalBatch } from "@shared/schema";
@@ -66,7 +70,16 @@ function fmtNum(n: number | string | undefined | null): string {
   return Math.round(num).toString();
 }
 
-/** Parse one or more CSV files, merging rows. Skips duplicate URLs. */
+/** Display metric value — appends % for density/rate metrics */
+function fmtMetric(key: string, val: string | undefined | null): string {
+  if (!val || val === "—") return "—";
+  if (key === "mentionRate" || key === "informationalDensity") {
+    const n = Number(val);
+    return isNaN(n) ? val : `${n}%`;
+  }
+  return val;
+}
+
 async function parseMultipleCsvFiles(files: FileList | File[]): Promise<{ rows: any[]; sourceLabel: string }> {
   const fileArr = Array.from(files);
   const allRows: any[] = [];
@@ -98,19 +111,21 @@ async function parseMultipleCsvFiles(files: FileList | File[]): Promise<{ rows: 
   return { rows: allRows, sourceLabel: fileArr.length === 1 ? fileArr[0].name : `${fileArr.length} files merged` };
 }
 
+// ─── Raw / Derived metric definitions ────────────────────────────────────────
+
 const RAW_METRICS = [
-  { key: "whoisReg", label: "WHOIS Reg", type: "date", width: 100 },
-  { key: "firstArchive", label: "First Archive", type: "date", width: 110 },
+  { key: "whoisReg", label: "WHOIS Reg", type: "date", width: 100, tooltip: "Auto-fetched via RDAP. Edit manually if incorrect." },
+  { key: "firstArchive", label: "First Archive", type: "date", width: 110, tooltip: "Oldest Wayback Machine snapshot. Auto-fetched." },
   { key: "dr", label: "DR", type: "number", width: 60 },
   { key: "referringDomains", label: "Ref Domains", type: "number", width: 100 },
   { key: "backlinks", label: "Backlinks", type: "number", width: 90 },
-  { key: "organicTraffic", label: "Org Traffic", type: "number", width: 100 },
-  { key: "organicKeywords", label: "Org Keywords", type: "number", width: 105 },
-  { key: "top10Keywords", label: "Top 10 KW", type: "number", width: 95 },
+  { key: "organicTraffic", label: "Org Traffic", type: "number", width: 100, tooltip: "Client row uses GSC clicks (3-month); competitors use Ahrefs." },
+  { key: "organicKeywords", label: "Org Keywords", type: "number", width: 105, tooltip: "Client row uses GSC unique pages (3-month); competitors use Ahrefs." },
+  { key: "top10Keywords", label: "Top 10 KW", type: "number", width: 95, tooltip: "Ahrefs Top 1-3 + Top 4-10 combined." },
   { key: "indexedPages", label: "Indexed Pg", type: "number", width: 95 },
-  { key: "aiVisibilityScore", label: "AI Vis Score", type: "number", width: 100, tooltip: "SEMrush AI Toolkit not integrated — enter manually from SEMrush AI Overview report. Shows as — until populated." },
-  { key: "aiMentions", label: "AI Mentions", type: "number", width: 98, tooltip: "SEMrush AI Toolkit not integrated — enter manually. Count of AI Overview mentions for tracked queries." },
-  { key: "citedSources", label: "Cited Sources", type: "number", width: 105, tooltip: "SEMrush AI Toolkit not integrated — enter manually. Count of sources cited in AI Overviews for this domain." },
+  { key: "aiVisibilityScore", label: "AI Vis Score", type: "number", width: 100, tooltip: "SEMrush AI Toolkit — enter manually from SEMrush AI Overview report." },
+  { key: "aiMentions", label: "AI Mentions", type: "number", width: 98, tooltip: "Enter manually. Count of AI Overview mentions for tracked queries." },
+  { key: "citedSources", label: "Cited Sources", type: "number", width: 105, tooltip: "Enter manually. Count of cited sources in AI Overviews for this domain." },
   { key: "informationalKeywords", label: "Info KW", type: "number", width: 80 },
   { key: "featuredSnippets", label: "Feat Snippets", type: "number", width: 110 },
 ];
@@ -124,13 +139,20 @@ const DERIVED_METRICS = [
   { key: "contentVelocity", label: "Content Vel." },
   { key: "kwYield", label: "KW Yield" },
   { key: "snippetYield", label: "Snip Yield" },
-  { key: "mentionRate", label: "Mention Rate", tooltip: "aiMentions ÷ citedSources — shows as — if either field is blank (SEMrush AI Toolkit required)" },
+  { key: "mentionRate", label: "Mention Rate", tooltip: "aiMentions ÷ citedSources × 100 (requires manual AI fields)" },
   { key: "rdYield", label: "RD Yield" },
   { key: "contentYield", label: "Content Yield" },
   { key: "backlinkDensity", label: "BL Density" },
-  { key: "informationalDensity", label: "Info Density" },
-  { key: "finalScore", label: "Final Score" },
-  { key: "averageRank", label: "Avg Rank" },
+  { key: "informationalDensity", label: "Info Density", tooltip: "Informational KW ÷ Organic KW × 100" },
+  { key: "finalScore", label: "Final Score", tooltip: "Weighted rank across key benchmarks (DR×2, traffic×2, keywords×1.5…)" },
+  { key: "averageRank", label: "Avg Rank", tooltip: "Simple mean of all individual metric rank positions" },
+];
+
+const PAGE_CATEGORIES = [
+  "Home", "Insurance & Admissions", "Blog & Resources", "Substance Use Conditions",
+  "Mental Health Conditions", "Detox", "Residential Treatment", "PHP & IOP",
+  "Outpatient & Aftercare", "Therapies & Modalities", "About & Trust",
+  "Luxury Experience", "Legal & Utility", "Other",
 ];
 
 // ─── Inline Cell Editor ───────────────────────────────────────────────────────
@@ -170,6 +192,29 @@ function RankBadge({ rank, total }: { rank: string; total: number }) {
   return <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${cls}`}>#{n}</span>;
 }
 
+// ─── CSV Export ───────────────────────────────────────────────────────────────
+
+function exportMainEvalCsv(rows: any[]) {
+  const headers = ["Type", "Name", "Website", ...RAW_METRICS.map(m => m.label), ...DERIVED_METRICS.map(m => m.label)];
+  const csvRows = rows.map(row => [
+    row.isClient ? "Client" : "Competitor",
+    row.name ?? "",
+    row.websiteUrl ?? "",
+    ...RAW_METRICS.map(m => row.metrics?.[m.key] ?? ""),
+    ...DERIVED_METRICS.map(m => {
+      const val = row.computed?.[m.key] ?? row.ranks?.[m.key] ?? "";
+      return fmtMetric(m.key, val);
+    }),
+  ]);
+  const csv = [headers, ...csvRows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `eval-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
 // ─── Main Evaluation Tab ──────────────────────────────────────────────────────
 
 function MainEvalTab({ batch }: { batch: EvalBatch }) {
@@ -191,6 +236,10 @@ function MainEvalTab({ batch }: { batch: EvalBatch }) {
     mutationFn: ({ id, ...rest }: { id: number; [k: string]: any }) => apiRequest("PATCH", `/api/eval-competitor-rows/${id}`, rest),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/eval-batches", batch.id, "competitors"] }),
   });
+  const refreshRowMut = useMutation({
+    mutationFn: (id: number) => apiRequest("POST", `/api/eval-competitor-rows/${id}/refresh`, {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/eval-batches", batch.id, "competitors"] }),
+  });
 
   function handleCellChange(row: any, metricKey: string, value: string) {
     updateCellMut.mutate({ id: row.id, metrics: { ...(row.metrics ?? {}), [metricKey]: value } });
@@ -203,9 +252,14 @@ function MainEvalTab({ batch }: { batch: EvalBatch }) {
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">{rows.length} rows · Click any cell to edit manually</p>
-        <Button variant="outline" size="sm" onClick={() => addRowMut.mutate({ isClient: false, name: "", websiteUrl: "", metrics: {}, rowOrder: rows.length })} data-testid="button-add-competitor-row">
-          <Plus className="w-3.5 h-3.5 mr-1" /> Add Row
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => exportMainEvalCsv(rows)} data-testid="button-export-csv">
+            <Download className="w-3.5 h-3.5 mr-1" /> Export CSV
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => addRowMut.mutate({ isClient: false, name: "", websiteUrl: "", metrics: {}, rowOrder: rows.length })} data-testid="button-add-competitor-row">
+            <Plus className="w-3.5 h-3.5 mr-1" /> Add Row
+          </Button>
+        </div>
       </div>
       <div className="overflow-x-auto rounded-md border">
         <Table>
@@ -238,7 +292,7 @@ function MainEvalTab({ batch }: { batch: EvalBatch }) {
                   </span>
                 </TableHead>
               ))}
-              <TableHead className="w-10 text-center">Del</TableHead>
+              <TableHead className="w-16 text-center">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -262,13 +316,25 @@ function MainEvalTab({ batch }: { batch: EvalBatch }) {
                   <TableCell key={m.key} className="text-center p-1 bg-blue-50/30 dark:bg-blue-900/10">
                     {m.key === "finalScore" || m.key === "averageRank"
                       ? <RankBadge rank={row.ranks?.[m.key] ?? row.computed?.[m.key] ?? "—"} total={total} />
-                      : <span className="text-xs text-muted-foreground">{row.computed?.[m.key] ?? "—"}</span>}
+                      : <span className="text-xs text-muted-foreground">{fmtMetric(m.key, row.computed?.[m.key] ?? "—")}</span>}
                   </TableCell>
                 ))}
                 <TableCell className="text-center p-1">
-                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive" onClick={() => deleteRowMut.mutate(row.id)} data-testid={`button-delete-row-${row.id}`}>
-                    <Trash2 className="w-3 h-3" />
-                  </Button>
+                  <div className="flex items-center justify-center gap-0.5">
+                    <Button
+                      variant="ghost" size="sm"
+                      className="h-6 w-6 p-0 text-muted-foreground hover:text-primary"
+                      title="Re-fetch Ahrefs/SEMrush/WHOIS/Wayback for this row"
+                      onClick={() => refreshRowMut.mutate(row.id)}
+                      disabled={refreshRowMut.isPending}
+                      data-testid={`button-refresh-row-${row.id}`}
+                    >
+                      {refreshRowMut.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                    </Button>
+                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive" onClick={() => deleteRowMut.mutate(row.id)} data-testid={`button-delete-row-${row.id}`}>
+                      <Trash2 className="w-3 h-3" />
+                    </Button>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
@@ -286,6 +352,7 @@ function CrawlDataTab({ batch }: { batch: EvalBatch }) {
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [categoryEditId, setCategoryEditId] = useState<number | null>(null);
 
   const { data: rows = [], isLoading } = useQuery<any[]>({
     queryKey: ["/api/eval-batches", batch.id, "crawl-rows"],
@@ -301,6 +368,15 @@ function CrawlDataTab({ batch }: { batch: EvalBatch }) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/eval-batches", batch.id, "summary"] });
       toast({ title: "Distribution tables refreshed" });
+    },
+  });
+
+  const updateCategoryMut = useMutation({
+    mutationFn: ({ id, category }: { id: number; category: string }) =>
+      apiRequest("PATCH", `/api/eval-crawl-rows/${id}/category`, { category }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/eval-batches", batch.id, "crawl-rows"] });
+      setCategoryEditId(null);
     },
   });
 
@@ -324,7 +400,7 @@ function CrawlDataTab({ batch }: { batch: EvalBatch }) {
     }
   }
 
-  const crawlHeaders = rows.length > 0 ? Object.keys(rows[0]?.crawlFields ?? {}).slice(0, 12) : [];
+  const crawlHeaders = rows.length > 0 ? Object.keys(rows[0]?.crawlFields ?? {}).slice(0, 8) : [];
 
   return (
     <div className="space-y-4">
@@ -357,9 +433,11 @@ function CrawlDataTab({ batch }: { batch: EvalBatch }) {
             <TableHeader>
               <TableRow className="bg-muted/40 text-[10px]">
                 <TableHead className="min-w-[260px] sticky left-0 bg-muted/40">URL</TableHead>
-                <TableHead>Category</TableHead>
+                <TableHead className="min-w-[140px]">Category</TableHead>
                 <TableHead className="text-center">GSC Clicks</TableHead>
-                <TableHead className="text-center">GSC Impressions</TableHead>
+                <TableHead className="text-center">GSC Impr.</TableHead>
+                <TableHead className="text-center">GSC CTR</TableHead>
+                <TableHead className="text-center">GSC Pos.</TableHead>
                 <TableHead className="text-center">GA4 Sessions</TableHead>
                 <TableHead className="text-center">Status</TableHead>
                 {crawlHeaders.map(h => <TableHead key={h} className="text-center">{h}</TableHead>)}
@@ -369,9 +447,41 @@ function CrawlDataTab({ batch }: { batch: EvalBatch }) {
               {rows.map((row: any, i: number) => (
                 <TableRow key={row.id ?? i} data-testid={`row-crawl-${i}`}>
                   <TableCell className="text-xs font-mono truncate max-w-[260px] sticky left-0 bg-background">{row.url}</TableCell>
-                  <TableCell><Badge variant="outline" className="text-[9px]">{row.pageCategory ?? "—"}</Badge></TableCell>
+                  <TableCell className="min-w-[140px]">
+                    {categoryEditId === row.id ? (
+                      <Select
+                        value={row.pageCategory ?? "Other"}
+                        onValueChange={v => updateCategoryMut.mutate({ id: row.id, category: v })}
+                      >
+                        <SelectTrigger className="h-6 text-[10px] w-full" data-testid={`select-category-${row.id}`}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {PAGE_CATEGORIES.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Badge
+                        variant="outline"
+                        className="text-[9px] cursor-pointer hover:border-primary"
+                        onClick={() => setCategoryEditId(row.id)}
+                        title="Click to change category"
+                        data-testid={`badge-category-${i}`}
+                      >
+                        {row.pageCategory ?? "—"}
+                      </Badge>
+                    )}
+                  </TableCell>
                   <TableCell className="text-center text-xs">{fmtNum(row.performanceFields?.gscClicks)}</TableCell>
                   <TableCell className="text-center text-xs">{fmtNum(row.performanceFields?.gscImpressions)}</TableCell>
+                  <TableCell className="text-center text-xs">
+                    {row.performanceFields?.gscCtr != null && row.performanceFields.gscCtr !== 0
+                      ? `${row.performanceFields.gscCtr}%` : "—"}
+                  </TableCell>
+                  <TableCell className="text-center text-xs">
+                    {row.performanceFields?.gscPosition != null && row.performanceFields.gscPosition !== 0
+                      ? row.performanceFields.gscPosition : "—"}
+                  </TableCell>
                   <TableCell className="text-center text-xs">{fmtNum(row.performanceFields?.ga4Sessions)}</TableCell>
                   <TableCell className="text-center text-xs">{row.statusCode ?? "—"}</TableCell>
                   {crawlHeaders.map(h => <TableCell key={h} className="text-center text-xs">{String(row.crawlFields?.[h] ?? "—").slice(0, 40)}</TableCell>)}
@@ -385,12 +495,20 @@ function CrawlDataTab({ batch }: { batch: EvalBatch }) {
   );
 }
 
-// ─── Distribution Tab ─────────────────────────────────────────────────────────
+// ─── Distribution Tab (with drill-down) ──────────────────────────────────────
 
 function DistributionTab({ batch, tableType }: { batch: EvalBatch; tableType: "clicks_dist" | "traffic_dist" }) {
+  const [expanded, setExpanded] = useState<string | null>(null);
   const { data: rows = [], isLoading } = useQuery<any[]>({
     queryKey: ["/api/eval-batches", batch.id, "summary", tableType],
     queryFn: () => authedGet(`/api/eval-batches/${batch.id}/summary/${tableType}`),
+  });
+
+  // Load crawl rows for drill-down
+  const { data: crawlRows = [] } = useQuery<any[]>({
+    queryKey: ["/api/eval-batches", batch.id, "crawl-rows"],
+    queryFn: () => authedGet(`/api/eval-batches/${batch.id}/crawl-rows`),
+    enabled: expanded !== null,
   });
 
   const isClicks = tableType === "clicks_dist";
@@ -405,23 +523,247 @@ function DistributionTab({ batch, tableType }: { batch: EvalBatch; tableType: "c
   );
 
   return (
-    <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">{rows.length} page categories · {isClicks ? "Organic clicks" : "GA4 sessions"} by category</p>
-      <div className="space-y-2">
-        {rows.map((r: any) => {
-          const val = Number(isClicks ? r.data?.sumClicks : r.data?.sumSessions) || 0;
-          const pct = totalVal > 0 ? Math.round((val / totalVal) * 100) : 0;
-          return (
-            <div key={r.category ?? r.id} className="flex items-center gap-3 text-sm" data-testid={`dist-row-${r.category}`}>
-              <div className="w-32 shrink-0 text-xs font-medium truncate">{r.category}</div>
+    <div className="space-y-2">
+      <p className="text-sm text-muted-foreground">{rows.length} page categories · {isClicks ? "Organic clicks" : "GA4 sessions"} by category · Click a row to drill down</p>
+      {rows.map((r: any) => {
+        const val = Number(isClicks ? r.data?.sumClicks : r.data?.sumSessions) || 0;
+        const perPage = Number(isClicks ? r.data?.clicksPerPage : r.data?.sessionsPerPage) || 0;
+        const pct = totalVal > 0 ? Math.round((val / totalVal) * 100) : 0;
+        const cat = r.category ?? r.id;
+        const isOpen = expanded === cat;
+        const catPages = crawlRows.filter((cr: any) => cr.pageCategory === cat)
+          .sort((a: any, b: any) => {
+            const av = Number(isClicks ? a.performanceFields?.gscClicks : a.performanceFields?.ga4Sessions) || 0;
+            const bv = Number(isClicks ? b.performanceFields?.gscClicks : b.performanceFields?.ga4Sessions) || 0;
+            return bv - av;
+          });
+
+        return (
+          <div key={cat} className="border rounded-md overflow-hidden" data-testid={`dist-row-${cat}`}>
+            <div
+              className="flex items-center gap-3 text-sm p-2 cursor-pointer hover:bg-muted/30 transition-colors"
+              onClick={() => setExpanded(isOpen ? null : cat)}
+            >
+              {isOpen ? <ChevronDown className="w-3.5 h-3.5 shrink-0 text-muted-foreground" /> : <ChevronRight className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />}
+              <div className="w-36 shrink-0 text-xs font-medium truncate">{cat}</div>
               <div className="flex-1 relative h-5 bg-muted rounded overflow-hidden">
                 <div className="absolute inset-y-0 left-0 bg-primary/30 rounded" style={{ width: `${pct}%` }} />
                 <span className="absolute inset-0 flex items-center pl-2 text-[10px] text-foreground font-medium">{pct}% · {fmtNum(val)} {isClicks ? "clicks" : "sessions"}</span>
               </div>
-              <span className="text-xs text-muted-foreground w-16 text-right shrink-0">{r.data?.numPages ?? 0} pages</span>
+              <div className="text-right shrink-0 w-32">
+                <span className="text-xs text-muted-foreground">{r.data?.numPages ?? 0} pages</span>
+                {perPage > 0 && <span className="text-[10px] text-muted-foreground block">{fmtNum(perPage)} {isClicks ? "clicks" : "sessions"}/page</span>}
+              </div>
             </div>
-          );
-        })}
+            {isOpen && catPages.length > 0 && (
+              <div className="border-t bg-muted/10 px-2 py-1 max-h-48 overflow-y-auto">
+                <table className="w-full text-[10px]">
+                  <thead><tr className="text-muted-foreground"><th className="text-left py-1 pr-2">URL</th><th className="text-right w-20">{isClicks ? "Clicks" : "Sessions"}</th><th className="text-right w-20">{isClicks ? "Impressions" : "GSC Clicks"}</th></tr></thead>
+                  <tbody>
+                    {catPages.slice(0, 20).map((p: any, pi: number) => (
+                      <tr key={pi} className="border-t border-muted/20">
+                        <td className="py-0.5 pr-2 font-mono truncate max-w-[300px]">{p.url}</td>
+                        <td className="text-right">{fmtNum(isClicks ? p.performanceFields?.gscClicks : p.performanceFields?.ga4Sessions)}</td>
+                        <td className="text-right text-muted-foreground">{fmtNum(isClicks ? p.performanceFields?.gscImpressions : p.performanceFields?.gscClicks)}</td>
+                      </tr>
+                    ))}
+                    {catPages.length > 20 && <tr><td colSpan={3} className="text-muted-foreground py-1">…and {catPages.length - 20} more</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Structural Issues Tab ────────────────────────────────────────────────────
+
+function StructuralIssuesTab({ batch }: { batch: EvalBatch }) {
+  const [expandedIssue, setExpandedIssue] = useState<number | null>(null);
+  const { data: issues = [], isLoading } = useQuery<any[]>({
+    queryKey: ["/api/eval-batches", batch.id, "structural-issues"],
+    queryFn: () => authedGet(`/api/eval-batches/${batch.id}/structural-issues`),
+  });
+
+  const sevColor = (s: string) => s === "error"
+    ? "bg-red-100 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400"
+    : s === "warning"
+    ? "bg-yellow-100 text-yellow-700 border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-400"
+    : "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400";
+
+  if (isLoading) return <div className="flex items-center gap-2 p-6 text-muted-foreground text-sm"><Loader2 className="w-4 h-4 animate-spin" /> Loading...</div>;
+
+  if (issues.length === 0) return (
+    <div className="border border-dashed rounded-lg p-8 text-center text-muted-foreground">
+      <ShieldAlert className="w-8 h-8 mx-auto mb-2 opacity-30" />
+      <p className="text-sm">No structural issues detected, or no crawl data uploaded yet.</p>
+    </div>
+  );
+
+  const errors = issues.filter((i: any) => i.severity === "error").length;
+  const warnings = issues.filter((i: any) => i.severity === "warning").length;
+  const opps = issues.filter((i: any) => i.severity === "opportunity").length;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-3 flex-wrap">
+        <p className="text-sm text-muted-foreground">{issues.length} issues detected · </p>
+        {errors > 0 && <Badge className="bg-red-100 text-red-700 border-red-200">{errors} Errors</Badge>}
+        {warnings > 0 && <Badge className="bg-yellow-100 text-yellow-700 border-yellow-200">{warnings} Warnings</Badge>}
+        {opps > 0 && <Badge className="bg-blue-100 text-blue-700 border-blue-200">{opps} Opportunities</Badge>}
+      </div>
+      <div className="space-y-2">
+        {issues.map((issue: any, idx: number) => (
+          <div key={idx} className={`border rounded-md overflow-hidden`}>
+            <div
+              className="flex items-start gap-3 p-3 cursor-pointer hover:bg-muted/20"
+              onClick={() => setExpandedIssue(expandedIssue === idx ? null : idx)}
+            >
+              {expandedIssue === idx ? <ChevronDown className="w-4 h-4 mt-0.5 shrink-0" /> : <ChevronRight className="w-4 h-4 mt-0.5 shrink-0" />}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge variant="outline" className={`text-[9px] px-1.5 py-0 ${sevColor(issue.severity)}`}>{issue.severity.toUpperCase()}</Badge>
+                  <Badge variant="outline" className="text-[9px] px-1.5 py-0">{issue.category}</Badge>
+                  <span className="text-sm font-medium">{issue.issue}</span>
+                </div>
+              </div>
+              <span className="text-xs font-bold text-muted-foreground shrink-0">{issue.count} page{issue.count !== 1 ? "s" : ""}</span>
+            </div>
+            {expandedIssue === idx && issue.urls?.length > 0 && (
+              <div className="border-t bg-muted/10 px-3 py-2">
+                <p className="text-[10px] text-muted-foreground mb-1">Affected URLs (up to 10 shown):</p>
+                <div className="space-y-0.5">
+                  {issue.urls.map((url: string, ui: number) => (
+                    <div key={ui} className="text-[10px] font-mono text-foreground truncate">{url}</div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Keyword Gap Tab ──────────────────────────────────────────────────────────
+
+function KeywordGapTab({ batch }: { batch: EvalBatch }) {
+  const [loading, setLoading] = useState(false);
+  const [gaps, setGaps] = useState<any[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function loadGap() {
+    setLoading(true);
+    setError(null);
+    try {
+      const headers = await getAuthHeaders();
+      const r = await fetch(`/api/eval-batches/${batch.id}/keyword-gap`, { headers });
+      if (!r.ok) throw new Error(`${r.status}: ${r.statusText}`);
+      const data = await r.json();
+      setGaps(data);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (gaps === null && !loading) {
+    return (
+      <div className="border border-dashed rounded-lg p-8 text-center space-y-3">
+        <SearchCode className="w-8 h-8 mx-auto opacity-30" />
+        <p className="text-sm text-muted-foreground">Find keywords where competitors rank top 10 but your client ranks below 20 or not at all.</p>
+        <p className="text-xs text-muted-foreground">Requires SEMrush API key and at least one competitor in this batch.</p>
+        <Button onClick={loadGap} size="sm" data-testid="button-load-keyword-gap">
+          <SearchCode className="w-3.5 h-3.5 mr-1.5" /> Analyze Keyword Gaps
+        </Button>
+      </div>
+    );
+  }
+
+  if (loading) return (
+    <div className="flex flex-col items-center gap-3 p-8 text-muted-foreground">
+      <Loader2 className="w-6 h-6 animate-spin" />
+      <p className="text-sm">Fetching keywords from SEMrush for each competitor…</p>
+    </div>
+  );
+
+  if (error) return (
+    <div className="border border-destructive/30 rounded-lg p-6 text-center space-y-2">
+      <XCircle className="w-6 h-6 mx-auto text-destructive opacity-60" />
+      <p className="text-sm text-destructive">{error}</p>
+      <Button variant="outline" size="sm" onClick={loadGap}>Retry</Button>
+    </div>
+  );
+
+  if (!gaps || gaps.length === 0) return (
+    <div className="border border-dashed rounded-lg p-8 text-center text-muted-foreground">
+      <CheckCircle2 className="w-8 h-8 mx-auto mb-2 opacity-30" />
+      <p className="text-sm">No significant keyword gaps found (or SEMrush key not configured).</p>
+      <Button variant="outline" size="sm" className="mt-3" onClick={loadGap}>Re-analyze</Button>
+    </div>
+  );
+
+  const exportGapCsv = () => {
+    const headers = ["Keyword", "Monthly Volume", "Client Position", "Competitor", "Comp. Position"];
+    const csvRows = gaps.flatMap((g: any) =>
+      (g.competitors ?? []).map((c: any) => [g.keyword, g.volume, g.clientPos, c.domain, c.pos])
+    );
+    const csv = [headers, ...csvRows].map(r => r.map((v: any) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `keyword-gap-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">{gaps.length} keyword gaps found · Competitors rank top 10 · Client ranks below 20</p>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={exportGapCsv} data-testid="button-export-gap-csv">
+            <Download className="w-3.5 h-3.5 mr-1" /> Export CSV
+          </Button>
+          <Button variant="outline" size="sm" onClick={loadGap} data-testid="button-refresh-gap">
+            <RefreshCw className="w-3.5 h-3.5 mr-1" /> Re-analyze
+          </Button>
+        </div>
+      </div>
+      <div className="overflow-x-auto rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/40 text-[10px]">
+              <TableHead className="min-w-[200px]">Keyword</TableHead>
+              <TableHead className="text-right w-28">Monthly Volume</TableHead>
+              <TableHead className="text-center w-28">Client Rank</TableHead>
+              <TableHead className="min-w-[200px]">Top Competitor (Rank)</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {gaps.map((g: any, i: number) => (
+              <TableRow key={i} data-testid={`row-gap-${i}`}>
+                <TableCell className="text-xs font-medium">{g.keyword}</TableCell>
+                <TableCell className="text-right text-xs">{fmtNum(g.volume)}</TableCell>
+                <TableCell className="text-center">
+                  {g.clientPos === "—" || !g.clientPos
+                    ? <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">Not ranking</span>
+                    : <span className="text-[10px] text-orange-600 bg-orange-50 dark:bg-orange-900/20 px-1.5 py-0.5 rounded">#{g.clientPos}</span>}
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground">
+                  {(g.competitors ?? []).slice(0, 2).map((c: any, ci: number) => (
+                    <span key={ci}>{ci > 0 ? " · " : ""}{c.domain} <span className="text-green-600 font-medium">#{c.pos}</span></span>
+                  ))}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       </div>
     </div>
   );
@@ -431,15 +773,18 @@ function DistributionTab({ batch, tableType }: { batch: EvalBatch; tableType: "c
 
 function GeneratingPanel({ batch, onDone }: { batch: EvalBatch; onDone: (b: EvalBatch) => void }) {
   const qc = useQueryClient();
+  const [step, setStep] = useState(0);
 
   useEffect(() => {
-    const interval = setInterval(async () => {
+    const stepTimer = setInterval(() => setStep(s => Math.min(s + 1, 3)), 8000);
+    const pollTimer = setInterval(async () => {
       try {
         const headers = await getAuthHeaders();
         const r = await fetch(`/api/eval-batches/${batch.id}/status`, { headers });
         const data = await r.json();
         if (data.enrichmentStatus === "generated" || data.enrichmentStatus === "failed") {
-          clearInterval(interval);
+          clearInterval(pollTimer);
+          clearInterval(stepTimer);
           const headers2 = await getAuthHeaders();
           const r2 = await fetch(`/api/eval-batches/${batch.id}`, { headers: headers2 });
           const updated = await r2.json();
@@ -448,8 +793,15 @@ function GeneratingPanel({ batch, onDone }: { batch: EvalBatch; onDone: (b: Eval
         }
       } catch {}
     }, 2500);
-    return () => clearInterval(interval);
+    return () => { clearInterval(pollTimer); clearInterval(stepTimer); };
   }, [batch.id]);
+
+  const steps = [
+    "Seeding competitor rows from client info",
+    "Fetching Ahrefs, SEMrush, WHOIS & Wayback data",
+    "Enriching crawl data with GSC / GA4 performance",
+    "Computing rankings, distributions & structural issues",
+  ];
 
   return (
     <div className="flex flex-col items-center justify-center h-full gap-6 p-8">
@@ -460,14 +812,20 @@ function GeneratingPanel({ batch, onDone }: { batch: EvalBatch; onDone: (b: Eval
       <div className="text-center space-y-2">
         <h2 className="text-lg font-semibold">Generating Evaluation...</h2>
         <p className="text-sm text-muted-foreground max-w-xs">
-          Pulling Ahrefs (DR, RD, Backlinks, Traffic, Keywords) and SEMrush data for each competitor, enriching crawl rows with GSC and GA4, computing derived metrics and rankings.
+          This takes 30–60 seconds — fetching domain data for each competitor from multiple sources.
         </p>
       </div>
-      <div className="flex flex-col gap-1.5 text-xs text-muted-foreground">
-        <div className="flex items-center gap-2"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Seeding competitor rows</div>
-        <div className="flex items-center gap-2"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Fetching Ahrefs &amp; SEMrush domain data</div>
-        <div className="flex items-center gap-2"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Enriching crawl data with GSC / GA4</div>
-        <div className="flex items-center gap-2"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Computing rankings and distributions</div>
+      <div className="flex flex-col gap-2 text-xs w-full max-w-sm">
+        {steps.map((s, i) => (
+          <div key={i} className={`flex items-center gap-2 ${i <= step ? "text-foreground" : "text-muted-foreground"}`}>
+            {i < step
+              ? <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0" />
+              : i === step
+              ? <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+              : <div className="w-3.5 h-3.5 rounded-full border border-muted-foreground/30 shrink-0" />}
+            {s}
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -496,7 +854,7 @@ function FailedPanel({ batch, onRetry }: { batch: EvalBatch; onRetry: (b: EvalBa
   );
 }
 
-// ─── Generated Panel (4 tabs) ─────────────────────────────────────────────────
+// ─── Generated Panel (6 tabs) ─────────────────────────────────────────────────
 
 function GeneratedPanel({ batch }: { batch: EvalBatch }) {
   const [activeTab, setActiveTab] = useState("main-eval");
@@ -512,16 +870,20 @@ function GeneratedPanel({ batch }: { batch: EvalBatch }) {
       <p className="text-sm text-muted-foreground -mt-2">{new Date(batch.evaluationDate).toLocaleDateString()} · {(batch.dataSourcesUsed as string[] ?? []).join(", ") || "Screaming Frog"}</p>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="bg-muted/40">
+        <TabsList className="bg-muted/40 flex-wrap h-auto gap-0.5">
           <TabsTrigger value="main-eval" data-testid="tab-main-eval"><BarChart3 className="w-3.5 h-3.5 mr-1.5" /> Main Evaluation</TabsTrigger>
           <TabsTrigger value="crawl-data" data-testid="tab-crawl-data"><Globe className="w-3.5 h-3.5 mr-1.5" /> Crawl Data</TabsTrigger>
-          <TabsTrigger value="clicks-dist" data-testid="tab-clicks-dist"><Activity className="w-3.5 h-3.5 mr-1.5" /> Clicks Distribution</TabsTrigger>
-          <TabsTrigger value="traffic-dist" data-testid="tab-traffic-dist"><PieChart className="w-3.5 h-3.5 mr-1.5" /> Traffic Distribution</TabsTrigger>
+          <TabsTrigger value="clicks-dist" data-testid="tab-clicks-dist"><Activity className="w-3.5 h-3.5 mr-1.5" /> Clicks Dist.</TabsTrigger>
+          <TabsTrigger value="traffic-dist" data-testid="tab-traffic-dist"><PieChart className="w-3.5 h-3.5 mr-1.5" /> Traffic Dist.</TabsTrigger>
+          <TabsTrigger value="structural" data-testid="tab-structural"><ShieldAlert className="w-3.5 h-3.5 mr-1.5" /> Structural Issues</TabsTrigger>
+          <TabsTrigger value="keyword-gap" data-testid="tab-keyword-gap"><SearchCode className="w-3.5 h-3.5 mr-1.5" /> Keyword Gap</TabsTrigger>
         </TabsList>
         <TabsContent value="main-eval" className="mt-4"><MainEvalTab batch={batch} /></TabsContent>
         <TabsContent value="crawl-data" className="mt-4"><CrawlDataTab batch={batch} /></TabsContent>
         <TabsContent value="clicks-dist" className="mt-4"><DistributionTab batch={batch} tableType="clicks_dist" /></TabsContent>
         <TabsContent value="traffic-dist" className="mt-4"><DistributionTab batch={batch} tableType="traffic_dist" /></TabsContent>
+        <TabsContent value="structural" className="mt-4"><StructuralIssuesTab batch={batch} /></TabsContent>
+        <TabsContent value="keyword-gap" className="mt-4"><KeywordGapTab batch={batch} /></TabsContent>
       </Tabs>
     </div>
   );
@@ -874,7 +1236,6 @@ export default function EvalSheetsPage() {
           </div>
         )}
 
-        {/* Setup section appears in sidebar when a batch is selected */}
         {selectedBatch && (
           <SidebarSetup
             batch={selectedBatch}

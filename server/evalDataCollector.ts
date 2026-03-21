@@ -1,8 +1,7 @@
 /**
  * Evaluation Data Collector
  * Responsible for fetching, enriching, and computing metrics for an eval batch.
- * Handles: SEMrush, Ahrefs (via saved metrics), WHOIS, Wayback, GSC, GA4.
- * Keeps computation isolated from the slide generator.
+ * Handles: SEMrush, Ahrefs, WHOIS (RDAP), Wayback Machine (CDX), GSC, GA4.
  */
 
 import { storage } from "./storage";
@@ -13,7 +12,6 @@ import { extractDomain } from "./googleToken";
 import { classifyUrl, DEFAULT_CATEGORY_RULES, type CategoryRule } from "./evalMetricRegistry";
 
 const DASH = "—";
-const MNE = "—";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -28,8 +26,8 @@ export function fmtNum(n: number | string | undefined | null): string {
 
 export function parseNum(s: string | number | undefined | null): number {
   if (typeof s === "number") return s;
-  const cleaned = String(s ?? "").replace(/,/g, "");
-  if (!cleaned || cleaned === DASH || cleaned === MNE) return 0;
+  const cleaned = String(s ?? "").replace(/,/g, "").replace(/%$/, "");
+  if (!cleaned || cleaned === DASH || cleaned === "—") return 0;
   const m = cleaned.match(/^([\d.]+)([KMB]?)$/i);
   if (!m) return 0;
   const n = parseFloat(m[1]);
@@ -69,6 +67,55 @@ function cleanDomainForApi(url: string): string {
   return (extractDomain(url) ?? url).replace(/^www\./, "");
 }
 
+// ─── WHOIS via RDAP ───────────────────────────────────────────────────────────
+
+export async function fetchWhoisReg(domain: string): Promise<string> {
+  try {
+    const d = cleanDomainForApi(domain);
+    const resp = await fetch(`https://rdap.org/domain/${encodeURIComponent(d)}`, {
+      headers: { Accept: "application/rdap+json, application/json" },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!resp.ok) return DASH;
+    const data = await resp.json();
+    // RDAP events: look for "registration" event
+    const events: Array<{ eventAction: string; eventDate: string }> = data.events ?? [];
+    const reg = events.find(e => e.eventAction === "registration");
+    if (reg?.eventDate) {
+      // Parse ISO date to YYYY-MM-DD
+      return reg.eventDate.slice(0, 10);
+    }
+    return DASH;
+  } catch { return DASH; }
+}
+
+// ─── Wayback Machine earliest snapshot via CDX API ───────────────────────────
+
+export async function fetchFirstArchive(domain: string): Promise<string> {
+  try {
+    const d = cleanDomainForApi(domain);
+    const qs = new URLSearchParams({
+      url: d,
+      output: "json",
+      limit: "1",
+      fl: "timestamp",
+      fastLatest: "false",
+      from: "19900101",
+    }).toString();
+    const resp = await fetch(`https://web.archive.org/cdx/search/cdx?${qs}`, {
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!resp.ok) return DASH;
+    const data = await resp.json();
+    // data is [[header], [row]] or [[row]] — first row after header is oldest
+    if (!Array.isArray(data) || data.length < 2) return DASH;
+    const ts = String(data[1]?.[0] ?? "");
+    if (ts.length < 8) return DASH;
+    // Convert YYYYMMDDHHMMSS to YYYY-MM-DD
+    return `${ts.slice(0, 4)}-${ts.slice(4, 6)}-${ts.slice(6, 8)}`;
+  } catch { return DASH; }
+}
+
 // ─── SEMrush domain data ──────────────────────────────────────────────────────
 
 async function semrushDomainData(apiKey: string, domain: string): Promise<{
@@ -81,7 +128,6 @@ async function semrushDomainData(apiKey: string, domain: string): Promise<{
   try {
     const d = cleanDomainForApi(domain);
 
-    // 1. Domain ranks → organic keywords + traffic
     const rankQs = new URLSearchParams({ type: "domain_ranks", domain: d, database: "us", export_columns: "Or,Ot,Pc", key: apiKey }).toString();
     const rankResp = await fetch(`https://api.semrush.com/?${rankQs}`);
     const rankText = await rankResp.text();
@@ -98,17 +144,12 @@ async function semrushDomainData(apiKey: string, domain: string): Promise<{
       }
     }
 
-    // 2. Featured snippets — domain_organic filtered by SERP feature = Featured Snippet
     let featuredSnippets = DASH;
     try {
       const fsQs = new URLSearchParams({
-        type: "domain_organic",
-        domain: d,
-        database: "us",
-        display_limit: "5000",
-        export_columns: "Ph,Po,Fk",
-        display_filter: "%2B|Fk|Co|1",
-        key: apiKey,
+        type: "domain_organic", domain: d, database: "us",
+        display_limit: "5000", export_columns: "Ph,Po,Fk",
+        display_filter: "%2B|Fk|Co|1", key: apiKey,
       }).toString();
       const fsResp = await fetch(`https://api.semrush.com/?${fsQs}`);
       const fsText = await fsResp.text();
@@ -118,17 +159,12 @@ async function semrushDomainData(apiKey: string, domain: string): Promise<{
       }
     } catch { /* silent */ }
 
-    // 3. Informational keywords — domain_organic filtered by intent
     let informationalKeywords = DASH;
     try {
       const infoQs = new URLSearchParams({
-        type: "domain_organic",
-        domain: d,
-        database: "us",
-        display_limit: "5000",
-        export_columns: "Ph,Po,In",
-        display_filter: "%2B|In|Eq|Informational",
-        key: apiKey,
+        type: "domain_organic", domain: d, database: "us",
+        display_limit: "5000", export_columns: "Ph,Po,In",
+        display_filter: "%2B|In|Eq|Informational", key: apiKey,
       }).toString();
       const infoResp = await fetch(`https://api.semrush.com/?${infoQs}`);
       const infoText = await infoResp.text();
@@ -142,6 +178,77 @@ async function semrushDomainData(apiKey: string, domain: string): Promise<{
   } catch { return null; }
 }
 
+// ─── SEMrush keyword gap (client vs competitors) ──────────────────────────────
+
+export async function fetchKeywordGap(
+  clientDomain: string,
+  competitorDomains: string[],
+): Promise<Array<{ keyword: string; volume: number; clientPos: string; competitors: Array<{ domain: string; pos: string }> }>> {
+  const apiKey = await getSemrushKey();
+  if (!apiKey || competitorDomains.length === 0) return [];
+
+  try {
+    const clientD = cleanDomainForApi(clientDomain);
+
+    // Fetch client's top 500 ranking keywords
+    const clientQs = new URLSearchParams({
+      type: "domain_organic", domain: clientD, database: "us",
+      display_limit: "500", export_columns: "Ph,Po,Nq",
+      key: apiKey,
+    }).toString();
+    const clientResp = await fetch(`https://api.semrush.com/?${clientQs}`);
+    const clientText = await clientResp.text();
+    const clientKeywords = new Map<string, string>(); // keyword -> position
+    if (clientResp.ok && clientText && !clientText.startsWith("ERROR")) {
+      const lines = clientText.trim().split("\n").slice(1).filter(Boolean);
+      for (const line of lines) {
+        const parts = line.split(";");
+        if (parts[0]) clientKeywords.set(parts[0].trim().toLowerCase(), parts[1]?.trim() ?? DASH);
+      }
+    }
+
+    // Fetch top competitors' keywords, find gaps
+    const gaps: Array<{ keyword: string; volume: number; clientPos: string; competitors: Array<{ domain: string; pos: string }> }> = [];
+    const seen = new Set<string>();
+
+    for (const compUrl of competitorDomains.slice(0, 3)) {
+      const compD = cleanDomainForApi(compUrl);
+      const compQs = new URLSearchParams({
+        type: "domain_organic", domain: compD, database: "us",
+        display_limit: "200", export_columns: "Ph,Po,Nq",
+        display_sort: "nq_desc", key: apiKey,
+      }).toString();
+      const compResp = await fetch(`https://api.semrush.com/?${compQs}`);
+      const compText = await compResp.text();
+      if (!compResp.ok || !compText || compText.startsWith("ERROR")) continue;
+
+      const compLines = compText.trim().split("\n").slice(1).filter(Boolean);
+      for (const line of compLines) {
+        const parts = line.split(";");
+        const kw = parts[0]?.trim().toLowerCase() ?? "";
+        const pos = parts[1]?.trim() ?? DASH;
+        const vol = parseInt(parts[2]?.trim() ?? "0") || 0;
+        if (!kw || seen.has(kw)) continue;
+        const clientPos = clientKeywords.get(kw);
+        // Only include if client doesn't rank top 20 for it
+        const clientRank = parseInt(clientPos ?? "999");
+        const compRank = parseInt(pos);
+        if (compRank <= 10 && (isNaN(clientRank) || clientRank > 20) && vol > 50) {
+          seen.add(kw);
+          gaps.push({
+            keyword: kw,
+            volume: vol,
+            clientPos: clientPos ?? DASH,
+            competitors: [{ domain: compD, pos }],
+          });
+        }
+      }
+    }
+
+    return gaps.sort((a, b) => b.volume - a.volume).slice(0, 100);
+  } catch { return []; }
+}
+
 // ─── Ahrefs domain overview ───────────────────────────────────────────────────
 
 async function ahrefsOverview(token: string, domain: string): Promise<{
@@ -151,8 +258,7 @@ async function ahrefsOverview(token: string, domain: string): Promise<{
     const d = cleanDomainForApi(domain);
     const qs = new URLSearchParams({
       select: "domain_rating,backlinks,refdomains,org_keywords,org_traffic",
-      target: d,
-      mode: "domain",
+      target: d, mode: "domain",
     }).toString();
     const resp = await fetch(`https://api.ahrefs.com/v3/site-explorer/overview?${qs}`, {
       headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
@@ -168,6 +274,21 @@ async function ahrefsOverview(token: string, domain: string): Promise<{
       organicTraffic: m.org_traffic != null ? String(m.org_traffic) : DASH,
     };
   } catch (e: any) { console.error("[Ahrefs overview]", e.message); return null; }
+}
+
+async function ahrefsTop1to3Count(token: string, domain: string): Promise<string> {
+  try {
+    const d = cleanDomainForApi(domain);
+    const where = JSON.stringify({ and: [{ field: "position", is: ["gte", 1] }, { field: "position", is: ["lte", 3] }] });
+    const qs = new URLSearchParams({ select: "keyword", target: d, mode: "domain", limit: "1", where }).toString();
+    const resp = await fetch(`https://api.ahrefs.com/v3/site-explorer/organic-keywords?${qs}`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+    });
+    if (!resp.ok) return DASH;
+    const data = await resp.json();
+    const total = data.meta?.total ?? null;
+    return total !== null ? String(total) : DASH;
+  } catch { return DASH; }
 }
 
 async function ahrefsTop4to10Count(token: string, domain: string): Promise<string> {
@@ -187,53 +308,106 @@ async function ahrefsTop4to10Count(token: string, domain: string): Promise<strin
 
 // ─── Combined competitor metric fetch ─────────────────────────────────────────
 
-export async function fetchCompetitorEvalMetrics(domain: string): Promise<{
+export async function fetchCompetitorEvalMetrics(domain: string, opts?: { includeWhoisWayback?: boolean }): Promise<{
   dr: string; referringDomains: string; backlinks: string;
   organicTraffic: string; organicKeywords: string; top10Keywords: string;
   indexedPages: string; featuredSnippets: string; informationalKeywords: string;
+  whoisReg: string; firstArchive: string;
 }> {
   const blank = {
     dr: DASH, referringDomains: DASH, backlinks: DASH,
     organicTraffic: DASH, organicKeywords: DASH, top10Keywords: DASH,
     indexedPages: DASH, featuredSnippets: DASH, informationalKeywords: DASH,
+    whoisReg: DASH, firstArchive: DASH,
   };
 
   const [ahrefsToken, semrushKey] = await Promise.all([getAhrefsToken(), getSemrushKey()]);
+  const includeWW = opts?.includeWhoisWayback ?? true;
 
-  const [ahrefsResult, top10Result, semrushResult] = await Promise.allSettled([
+  const [ahrefsResult, top1to3Result, top4to10Result, semrushResult, whoisResult, archiveResult] = await Promise.allSettled([
     ahrefsToken ? ahrefsOverview(ahrefsToken, domain) : Promise.resolve(null),
+    ahrefsToken ? ahrefsTop1to3Count(ahrefsToken, domain) : Promise.resolve(DASH),
     ahrefsToken ? ahrefsTop4to10Count(ahrefsToken, domain) : Promise.resolve(DASH),
     semrushKey ? semrushDomainData(semrushKey, domain) : Promise.resolve(null),
+    includeWW ? fetchWhoisReg(domain) : Promise.resolve(DASH),
+    includeWW ? fetchFirstArchive(domain) : Promise.resolve(DASH),
   ]);
 
   const ahrefs = ahrefsResult.status === "fulfilled" ? ahrefsResult.value : null;
-  const top10 = top10Result.status === "fulfilled" ? top10Result.value : DASH;
+  const top1to3 = top1to3Result.status === "fulfilled" ? top1to3Result.value : DASH;
+  const top4to10 = top4to10Result.status === "fulfilled" ? top4to10Result.value : DASH;
   const sem = semrushResult.status === "fulfilled" ? semrushResult.value : null;
+  const whois = whoisResult.status === "fulfilled" ? whoisResult.value : DASH;
+  const archive = archiveResult.status === "fulfilled" ? archiveResult.value : DASH;
+
+  // Combine top 1-3 + top 4-10 for true top 10 count
+  const top1to3Num = top1to3 !== DASH ? parseInt(top1to3) : null;
+  const top4to10Num = top4to10 !== DASH ? parseInt(top4to10) : null;
+  const top10Combined =
+    top1to3Num !== null && top4to10Num !== null ? String(top1to3Num + top4to10Num) :
+    top1to3Num !== null ? String(top1to3Num) :
+    top4to10Num !== null ? String(top4to10Num) :
+    DASH;
 
   return {
     dr: ahrefs?.dr ?? blank.dr,
     referringDomains: ahrefs?.referringDomains ?? blank.referringDomains,
     backlinks: ahrefs?.backlinks ?? blank.backlinks,
-    // Prefer Ahrefs for org traffic/keywords; fall back to SEMrush
     organicTraffic: ahrefs?.organicTraffic !== DASH ? (ahrefs?.organicTraffic ?? blank.organicTraffic) : (sem?.organicTraffic ?? blank.organicTraffic),
     organicKeywords: ahrefs?.organicKeywords !== DASH ? (ahrefs?.organicKeywords ?? blank.organicKeywords) : (sem?.organicKeywords ?? blank.organicKeywords),
-    top10Keywords: top10,
+    top10Keywords: top10Combined,
     indexedPages: sem?.indexedPages ?? blank.indexedPages,
     featuredSnippets: sem?.featuredSnippets ?? blank.featuredSnippets,
     informationalKeywords: sem?.informationalKeywords ?? blank.informationalKeywords,
+    whoisReg: whois,
+    firstArchive: archive,
   };
+}
+
+// ─── GSC-priority client metrics ──────────────────────────────────────────────
+// For the client row: pull GSC total clicks + total unique pages as org traffic/keywords
+// This gives first-party data priority per the data-handling-rules.
+
+export async function fetchClientGscMetrics(clientId: number): Promise<{
+  organicTraffic: string;
+  organicKeywords: string;
+} | null> {
+  try {
+    const client = await storage.getClient(clientId);
+    if (!client) return null;
+
+    const today = new Date();
+    const start = new Date(today.getFullYear(), today.getMonth() - 3, 1).toISOString().slice(0, 10);
+    const end = today.toISOString().slice(0, 10);
+    const dateRange = `${start}_${end}`;
+
+    const result = await queryGsc("gsc_qoq_pages" as any, client, dateRange);
+    if (!result?.tables?.[0]) return null;
+
+    const rows = result.tables[0].rows;
+    let totalClicks = 0;
+    const kwSet = new Set<string>();
+    for (const row of rows) {
+      totalClicks += Number(row[1]) || 0;
+      if (row[0]) kwSet.add(String(row[0]));
+    }
+
+    return {
+      organicTraffic: totalClicks > 0 ? String(totalClicks) : DASH,
+      organicKeywords: kwSet.size > 0 ? String(kwSet.size) : DASH,
+    };
+  } catch { return null; }
 }
 
 // ─── Metric computation ───────────────────────────────────────────────────────
 
 export function computeDerivedMetrics(raw: Record<string, any>): Record<string, string> {
   const g = (k: string) => parseNum(raw[k]);
-  const today = new Date();
 
-  const age = raw.whoisReg ? toYears(raw.whoisReg) : null;
-  const archiveAge = raw.firstArchive ? toYears(raw.firstArchive) : null;
+  const age = raw.whoisReg && raw.whoisReg !== DASH ? toYears(raw.whoisReg) : null;
+  const archiveAge = raw.firstArchive && raw.firstArchive !== DASH ? toYears(raw.firstArchive) : null;
 
-  const derived: Record<string, string> = {
+  return {
     age: age !== null ? String(age) : DASH,
     archiveAge: archiveAge !== null ? String(archiveAge) : DASH,
     kwVelocity: age && g("organicKeywords") ? fmtNum(safeDiv(g("organicKeywords"), age)) : DASH,
@@ -242,56 +416,203 @@ export function computeDerivedMetrics(raw: Record<string, any>): Record<string, 
     contentVelocity: age && g("indexedPages") ? fmtNum(safeDiv(g("indexedPages"), age)) : DASH,
     kwYield: g("organicKeywords") ? fmtNum(safeDiv(g("organicTraffic"), g("organicKeywords"))) : DASH,
     snippetYield: g("featuredSnippets") ? fmtNum(safeDiv(g("organicTraffic"), g("featuredSnippets"))) : DASH,
-    mentionRate: g("citedSources") ? fmtNum(Math.round(safeDiv(g("aiMentions"), g("citedSources")) * 100)) + "%" : DASH,
+    // Store mention rate as plain number (not "30%") so rank engine can parse it
+    mentionRate: g("citedSources") ? String(Math.round(safeDiv(g("aiMentions"), g("citedSources")) * 100)) : DASH,
     rdYield: g("referringDomains") ? fmtNum(safeDiv(g("organicTraffic"), g("referringDomains"))) : DASH,
     contentYield: g("indexedPages") ? fmtNum(safeDiv(g("organicTraffic"), g("indexedPages"))) : DASH,
     backlinkDensity: g("referringDomains") ? fmtNum(safeDiv(g("backlinks"), g("referringDomains"))) : DASH,
-    informationalDensity: g("organicKeywords") ? fmtNum(Math.round(safeDiv(g("informationalKeywords"), g("organicKeywords")) * 100)) + "%" : DASH,
+    // Store informational density as plain number (not "30%")
+    informationalDensity: g("organicKeywords") ? String(Math.round(safeDiv(g("informationalKeywords"), g("organicKeywords")) * 100)) : DASH,
   };
-
-  return derived;
 }
 
 // ─── Rank computation ─────────────────────────────────────────────────────────
 
+// Benchmark metrics with weights for finalScore (higher weight = more important)
+const WEIGHTED_BENCHMARKS: Record<string, number> = {
+  dr: 2.0,
+  organicTraffic: 2.0,
+  organicKeywords: 1.5,
+  referringDomains: 1.5,
+  top10Keywords: 1.5,
+  featuredSnippets: 1.0,
+  indexedPages: 1.0,
+  backlinks: 1.0,
+  age: 0.5,
+  archiveAge: 0.5,
+  kwVelocity: 0.5,
+  rdVelocity: 0.5,
+  informationalKeywords: 0.5,
+};
+
 export function computeRanks(rows: Array<{ metrics: any; computed: any }>): Array<Record<string, string>> {
-  // Metrics where higher = better rank 1
   const descMetrics = [
     "dr", "referringDomains", "backlinks", "organicTraffic", "organicKeywords",
     "top10Keywords", "indexedPages", "aiVisibilityScore", "aiMentions", "citedSources",
     "informationalKeywords", "featuredSnippets",
     "age", "archiveAge", "kwVelocity", "snippetVelocity", "rdVelocity", "contentVelocity",
     "kwYield", "snippetYield", "rdYield", "contentYield", "backlinkDensity",
-    "informationalDensity", // higher informational density = better (more informational content proportion)
-    "mentionRate",          // higher AI mention rate = better
+    "informationalDensity", "mentionRate",
   ];
 
-  const allMetrics = [...new Set([...Object.keys(rows[0]?.metrics ?? {}), ...Object.keys(rows[0]?.computed ?? {})])];
+  const allMetrics = [...new Set([
+    ...Object.keys(rows[0]?.metrics ?? {}),
+    ...Object.keys(rows[0]?.computed ?? {}),
+  ])].filter(k => k !== "finalScore" && k !== "averageRank");
+
   const result: Array<Record<string, string>> = rows.map(() => ({}));
 
   for (const key of allMetrics) {
     const vals = rows.map(r => parseNum((r.metrics as any)[key] ?? (r.computed as any)[key]));
-    const sorted = [...vals].map((v, i) => ({ i, v })).filter(x => x.v > 0).sort((a, b) => descMetrics.includes(key) ? b.v - a.v : a.v - b.v);
+    const sorted = [...vals].map((v, i) => ({ i, v }))
+      .filter(x => x.v > 0)
+      .sort((a, b) => descMetrics.includes(key) ? b.v - a.v : a.v - b.v);
     for (let ri = 0; ri < rows.length; ri++) {
       const pos = sorted.findIndex(x => x.i === ri);
       result[ri][key] = pos >= 0 ? String(pos + 1) : DASH;
     }
   }
 
-  // Average rank and final score
+  // averageRank = simple mean of all individual metric ranks
+  // finalScore  = weighted mean using only key benchmark metrics
   for (let ri = 0; ri < rows.length; ri++) {
-    const rankVals = Object.values(result[ri]).map(v => parseInt(v)).filter(n => !isNaN(n) && n > 0);
-    if (rankVals.length > 0) {
-      const avg = Math.round(rankVals.reduce((a, b) => a + b, 0) / rankVals.length * 10) / 10;
+    const allRankVals = Object.entries(result[ri])
+      .map(([, v]) => parseInt(v))
+      .filter(n => !isNaN(n) && n > 0);
+
+    if (allRankVals.length > 0) {
+      const avg = Math.round(allRankVals.reduce((a, b) => a + b, 0) / allRankVals.length * 10) / 10;
       result[ri].averageRank = String(avg);
-      result[ri].finalScore = String(avg);
     } else {
       result[ri].averageRank = DASH;
-      result[ri].finalScore = DASH;
     }
+
+    // Weighted finalScore
+    let weightedSum = 0;
+    let totalWeight = 0;
+    for (const [metric, weight] of Object.entries(WEIGHTED_BENCHMARKS)) {
+      const rankStr = result[ri][metric];
+      const rankNum = parseInt(rankStr ?? "");
+      if (!isNaN(rankNum) && rankNum > 0) {
+        weightedSum += rankNum * weight;
+        totalWeight += weight;
+      }
+    }
+    result[ri].finalScore = totalWeight > 0
+      ? String(Math.round((weightedSum / totalWeight) * 10) / 10)
+      : DASH;
   }
 
   return result;
+}
+
+// ─── Structural issues computation ────────────────────────────────────────────
+
+export interface StructuralIssue {
+  severity: "error" | "warning" | "opportunity";
+  category: string;
+  issue: string;
+  count: number;
+  urls: string[];
+}
+
+export function computeStructuralIssues(
+  crawlRows: Array<{
+    url: string;
+    pageCategory: string;
+    statusCode: number | null;
+    h1: string | null;
+    metaDesc: string | null;
+    pageTitle: string | null;
+    wordCount: number | null;
+    indexability: string | null;
+    canonical: string | null;
+    inlinks: number | null;
+    crawlFields: any;
+  }>
+): StructuralIssue[] {
+  const issues: StructuralIssue[] = [];
+
+  // Helper to get Tier from category
+  const isTier1 = (cat: string) => ["Insurance & Admissions", "Detox", "Residential Treatment", "PHP & IOP"].includes(cat);
+  const isTier2 = (cat: string) => ["Therapies & Modalities", "About & Trust", "Outpatient & Aftercare", "Mental Health Conditions", "Substance Use Conditions"].includes(cat);
+
+  // 4XX / 5XX errors
+  const errors4xx = crawlRows.filter(r => r.statusCode && r.statusCode >= 400 && r.statusCode < 500);
+  const errors5xx = crawlRows.filter(r => r.statusCode && r.statusCode >= 500);
+  if (errors4xx.length > 0) issues.push({ severity: "error", category: "Crawl & Index", issue: "4XX client errors", count: errors4xx.length, urls: errors4xx.map(r => r.url).slice(0, 10) });
+  if (errors5xx.length > 0) issues.push({ severity: "error", category: "Crawl & Index", issue: "5XX server errors", count: errors5xx.length, urls: errors5xx.map(r => r.url).slice(0, 10) });
+
+  // Non-indexable pages (excluding Legal & Utility which are expected)
+  const nonIndexable = crawlRows.filter(r =>
+    r.indexability && r.indexability !== "Indexable" && r.pageCategory !== "Legal & Utility"
+  );
+  const tier1NonIndexable = nonIndexable.filter(r => isTier1(r.pageCategory));
+  if (tier1NonIndexable.length > 0) issues.push({ severity: "error", category: "Crawl & Index", issue: "Non-indexable Tier 1 pages", count: tier1NonIndexable.length, urls: tier1NonIndexable.map(r => r.url).slice(0, 10) });
+  const otherNonIndexable = nonIndexable.filter(r => !isTier1(r.pageCategory));
+  if (otherNonIndexable.length > 0) issues.push({ severity: "warning", category: "Crawl & Index", issue: "Non-indexable pages (non-Tier 1)", count: otherNonIndexable.length, urls: otherNonIndexable.map(r => r.url).slice(0, 10) });
+
+  // Missing H1
+  const missingH1 = crawlRows.filter(r => !r.h1 || r.h1.trim() === "");
+  const tier1MissingH1 = missingH1.filter(r => isTier1(r.pageCategory));
+  const tier2MissingH1 = missingH1.filter(r => isTier2(r.pageCategory));
+  if (tier1MissingH1.length > 0) issues.push({ severity: "error", category: "Content Quality", issue: "Missing H1 on Tier 1 pages", count: tier1MissingH1.length, urls: tier1MissingH1.map(r => r.url).slice(0, 10) });
+  if (tier2MissingH1.length > 0) issues.push({ severity: "warning", category: "Content Quality", issue: "Missing H1 on Tier 2 pages", count: tier2MissingH1.length, urls: tier2MissingH1.map(r => r.url).slice(0, 10) });
+
+  // Missing meta description
+  const missingMeta = crawlRows.filter(r => !r.metaDesc || r.metaDesc.trim() === "");
+  const tier1MissingMeta = missingMeta.filter(r => isTier1(r.pageCategory));
+  if (tier1MissingMeta.length > 0) issues.push({ severity: "warning", category: "Content Quality", issue: "Missing meta description on Tier 1 pages", count: tier1MissingMeta.length, urls: tier1MissingMeta.map(r => r.url).slice(0, 10) });
+  const allMissingMeta = missingMeta.filter(r => r.pageCategory !== "Legal & Utility");
+  if (allMissingMeta.length > 5) issues.push({ severity: "opportunity", category: "Content Quality", issue: "Missing meta descriptions site-wide", count: allMissingMeta.length, urls: allMissingMeta.map(r => r.url).slice(0, 10) });
+
+  // Orphaned or weakly linked pages (< 2 inlinks), excluding home
+  const weaklyLinked = crawlRows.filter(r =>
+    r.url && r.url !== "/" && !r.url.match(/\/$/) &&
+    r.inlinks !== null && r.inlinks < 2 &&
+    (isTier1(r.pageCategory) || isTier2(r.pageCategory))
+  );
+  if (weaklyLinked.length > 0) issues.push({ severity: "warning", category: "Internal Linking", issue: "Priority pages with fewer than 2 inlinks", count: weaklyLinked.length, urls: weaklyLinked.map(r => r.url).slice(0, 10) });
+
+  // Thin content (< 300 words) on important pages
+  const thinContent = crawlRows.filter(r =>
+    r.wordCount !== null && r.wordCount < 300 && (isTier1(r.pageCategory) || isTier2(r.pageCategory))
+  );
+  if (thinContent.length > 0) issues.push({ severity: "warning", category: "Content Quality", issue: "Thin content (< 300 words) on priority pages", count: thinContent.length, urls: thinContent.map(r => r.url).slice(0, 10) });
+
+  // High word count pages (> 5000 words) — may indicate content sprawl
+  const bulkyContent = crawlRows.filter(r => r.wordCount !== null && r.wordCount > 5000);
+  if (bulkyContent.length > 0) issues.push({ severity: "opportunity", category: "Content Quality", issue: "Excessively long pages (> 5,000 words) — consider splitting", count: bulkyContent.length, urls: bulkyContent.map(r => r.url).slice(0, 10) });
+
+  // Canonicalization issues: pages with canonical that points elsewhere
+  const canonicalIssues = crawlRows.filter(r =>
+    r.canonical && r.canonical !== r.url && !r.url.endsWith(r.canonical)
+  );
+  if (canonicalIssues.length > 0) issues.push({ severity: "warning", category: "Crawl & Index", issue: "Pages with external canonical (may be canonicalized away)", count: canonicalIssues.length, urls: canonicalIssues.map(r => r.url).slice(0, 10) });
+
+  // Missing page title
+  const missingTitle = crawlRows.filter(r => !r.pageTitle || r.pageTitle.trim() === "");
+  if (missingTitle.length > 0) issues.push({ severity: "warning", category: "Content Quality", issue: "Missing page title tags", count: missingTitle.length, urls: missingTitle.map(r => r.url).slice(0, 10) });
+
+  // Check SF crawl fields for duplicate title tags
+  const titleCounts: Record<string, string[]> = {};
+  for (const row of crawlRows) {
+    if (row.pageTitle) {
+      const t = row.pageTitle.trim();
+      if (!titleCounts[t]) titleCounts[t] = [];
+      titleCounts[t].push(row.url);
+    }
+  }
+  const dupTitles = Object.entries(titleCounts).filter(([, urls]) => urls.length > 1);
+  if (dupTitles.length > 0) {
+    const dupUrls = dupTitles.flatMap(([, urls]) => urls).slice(0, 10);
+    issues.push({ severity: "warning", category: "Content Quality", issue: `Duplicate page titles (${dupTitles.length} groups)`, count: dupTitles.length, urls: dupUrls });
+  }
+
+  return issues.sort((a, b) => {
+    const sev = { error: 0, warning: 1, opportunity: 2 };
+    return (sev[a.severity] - sev[b.severity]) || (b.count - a.count);
+  });
 }
 
 // ─── Summary table generators ─────────────────────────────────────────────────
@@ -409,15 +730,15 @@ export async function enrichCrawlRowsWithPerformance(
         ...(row.performanceFields as any ?? {}),
         gscClicks: gsc?.clicks ?? 0,
         gscImpressions: gsc?.impressions ?? 0,
-        gscCtr: gsc?.ctr ?? 0,
-        gscPosition: gsc?.position ?? 0,
+        gscCtr: gsc ? Math.round((gsc.ctr) * 10000) / 100 : 0,
+        gscPosition: gsc ? Math.round((gsc.position) * 10) / 10 : 0,
         ga4Sessions: sessions,
       },
     };
   });
 }
 
-// ─── SEMrush metrics for client ───────────────────────────────────────────────
+// ─── SEMrush metrics for client (legacy) ─────────────────────────────────────
 
 export async function fetchClientSemrushMetrics(clientId: number): Promise<{ organicKeywords: string; organicTraffic: string } | null> {
   const client = await storage.getClient(clientId);

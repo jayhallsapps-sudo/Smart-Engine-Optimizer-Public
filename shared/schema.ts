@@ -905,3 +905,38 @@ export const insertDiscoverabilityWorkspaceSchema = createInsertSchema(discovera
 });
 export type DiscoverabilityWorkspace = typeof discoverabilityWorkspaces.$inferSelect;
 export type InsertDiscoverabilityWorkspace = z.infer<typeof insertDiscoverabilityWorkspaceSchema>;
+
+// ─── AMA Conversations ────────────────────────────────────────────────────────
+
+export const amaConversations = pgTable("ama_conversations", {
+  id: serial("id").primaryKey(),
+  clientId: integer("client_id"),
+  clientName: text("client_name"),
+  title: text("title").notNull().default("New Conversation"),
+  integrations: text("integrations").array().default(sql`'{}'::text[]`),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => [
+  index("ama_conversations_created_idx").on(t.createdAt),
+]);
+
+export const amaMessages = pgTable("ama_messages", {
+  id: serial("id").primaryKey(),
+  conversationId: integer("conversation_id").notNull().references(() => amaConversations.id, { onDelete: "cascade" }),
+  role: text("role").notNull(),
+  content: text("content").notNull(),
+  toolCalls: jsonb("tool_calls"),
+  provider: text("provider"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertAmaConversationSchema = createInsertSchema(amaConversations).omit({
+  id: true, createdAt: true, updatedAt: true,
+});
+export const insertAmaMessageSchema = createInsertSchema(amaMessages).omit({
+  id: true, createdAt: true,
+});
+export type AmaConversation = typeof amaConversations.$inferSelect;
+export type AmaMessage = typeof amaMessages.$inferSelect;
+export type InsertAmaConversation = z.infer<typeof insertAmaConversationSchema>;
+export type InsertAmaMessage = z.infer<typeof insertAmaMessageSchema>;

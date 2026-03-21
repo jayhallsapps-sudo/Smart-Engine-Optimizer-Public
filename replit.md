@@ -34,8 +34,9 @@ The architecture is modular, separating concerns into distinct components and pa
 -   **Discoverability Tool (Keyword Research Engine)**: A core module for business-goal-aligned keyword research, featuring client intake, cluster management, opportunity scoring, a full keyword table with status management, AI generation (Claude) with detailed explainability, page-type recommendations, internal linking suggestions, and comprehensive XLSX/PDF export capabilities.
 -   **Phase 2 Architecture Foundation**: Introduces a `Report Registry` and `Phase 2 Infrastructure` for extending generator capabilities, defining `slideshow` and `document` report families.
 -   **Mid-Strategy Deck System (New)**: A revamped two-part system (`/eval-sheets` and `/mid-strategy-deck`) for evaluation sheets with competitive benchmarking and a linked 14-slide deck generator supporting slide-by-slide editing and persistent overrides.
--   **AI Provider Chain**: All AI features utilize a fallback chain: Anthropic (Claude Sonnet) → Groq (Llama 3.3 70B) → Gemini (gemini-1.5-flash) → OpenAI (GPT-4o).
--   **/ACA/ (AI Chat Assistant)**: A natural language chat interface (`/aca`) with voice input support, leveraging the AI provider chain for responses.
+-   **AI Provider Chain**: AMA uses Groq (Llama 3.3 70B) → Gemini (gemini-2.0-flash) → OpenAI (GPT-4o) → Perplexity (sonar). Claude is not used. Required env vars: `GROQ_API_KEY`, `GEMINI_API_KEY`, `OPENAI_API_KEY`, `PERPLEXITY_API_KEY` (at least one).
+-   **/AMA (Ask Me Anything)**: Fully rebuilt chat interface (`/aca`) with: real SSE streaming via `POST /api/ama/stream`, persistent conversation history stored in `ama_conversations` + `ama_messages` tables, left sidebar navigation, parallel tool execution (`Promise.all`), expandable tool call result display, source filter panel, health check auto-refresh on client switch, NSM Goals now lookup by `client_id`, Airtable data window expanded to 365 days.
+-   **Heartland Healing Center removed**: Client ID 12 has been removed from the system entirely (DB, seed, and credit map).
 
 ## External Dependencies
 SmartEO integrates with the following services:

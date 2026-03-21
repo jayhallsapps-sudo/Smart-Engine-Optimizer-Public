@@ -1,41 +1,83 @@
 /**
- * ACA — Ask Claude Anything
+ * AMA — Ask Me Anything
  * ─────────────────────────────────────────────────────────────────────────────
- * Server-side Claude integration using the Anthropic SDK with tool use.
- * Claude can call into any SmartEO data source to answer user questions.
+ * Multi-provider AI assistant with tool use, streaming, and conversation logging.
+ * Providers (in fallback order): Groq → Gemini → OpenAI → Perplexity
+ * Claude is intentionally not used.
  */
 
-import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import * as cheerio from "cheerio";
 import { setAiActive } from "./aiProvider";
 import { storage } from "./storage";
-import { queryGsc, handlesGscCommand } from "./gscClient";
-import { queryGa4, handlesGa4Command } from "./ga4Client";
-import { queryCallRail, handlesCallRailCommand } from "./callrailClient";
-import { queryCtm, handlesCtmCommand } from "./ctmClient";
-import { querySemrush, handlesSemrushCommand } from "./semrushClient";
-import { queryAhrefs, handlesAhrefsCommand } from "./ahrefsClient";
+import { queryGsc } from "./gscClient";
+import { queryGa4 } from "./ga4Client";
+import { queryCallRail } from "./callrailClient";
+import { queryCtm } from "./ctmClient";
+import { querySemrush } from "./semrushClient";
+import { queryAhrefs } from "./ahrefsClient";
 import { queryGbp } from "./gbpClient";
-import { querySfReport, handlesSfCommand } from "./sfClient";
+import { querySfReport } from "./sfClient";
 import { fetchAirtableWorkLog } from "./airtable";
-import { fetchAsanaOpenTasks, fetchAsanaWorkLog } from "./asanaClient";
+import { fetchAsanaOpenTasks } from "./asanaClient";
 import { fetchNsmGoals, fetchNsmGoalsForSpecificQuarter } from "./sheetsClient";
 import { fetchStrategyBank } from "./notionClient";
-import { fetchQssbData } from "./qssbClient";
-import type { Client, Command, CommandResult } from "@shared/schema";
+import type { Client, Command } from "@shared/schema";
 
-// ─── Anthropic client ────────────────────────────────────────────────────────
+// ─── Provider client factory ──────────────────────────────────────────────────
 
-function getAnthropicClient(): Anthropic {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    throw new Error("ANTHROPIC_API_KEY environment variable is not set. Add it in Replit Secrets.");
-  }
-  return new Anthropic({ apiKey });
+type Provider = "groq" | "gemini" | "openai" | "perplexity";
+
+interface ProviderConfig {
+  client: OpenAI;
+  model: string;
 }
 
-// ─── Integration → tool mapping ──────────────────────────────────────────────
+function getProviderConfig(provider: Provider): ProviderConfig {
+  switch (provider) {
+    case "groq": {
+      const apiKey = process.env.GROQ_API_KEY;
+      if (!apiKey) throw new Error("GROQ_API_KEY not configured");
+      return {
+        client: new OpenAI({ apiKey, baseURL: "https://api.groq.com/openai/v1" }),
+        model: process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
+      };
+    }
+    case "gemini": {
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) throw new Error("GEMINI_API_KEY not configured");
+      return {
+        client: new OpenAI({ apiKey, baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/" }),
+        model: process.env.GEMINI_MODEL || "gemini-2.0-flash",
+      };
+    }
+    case "openai": {
+      const apiKey = process.env.OPENAI_API_KEY;
+      if (!apiKey) throw new Error("OPENAI_API_KEY not configured");
+      return {
+        client: new OpenAI({ apiKey }),
+        model: process.env.OPENAI_MODEL || "gpt-4o",
+      };
+    }
+    case "perplexity": {
+      const apiKey = process.env.PERPLEXITY_API_KEY;
+      if (!apiKey) throw new Error("PERPLEXITY_API_KEY not configured");
+      return {
+        client: new OpenAI({ apiKey, baseURL: "https://api.perplexity.ai" }),
+        model: process.env.PERPLEXITY_MODEL || "sonar",
+      };
+    }
+  }
+}
+
+function getProviderChain(): Provider[] {
+  const order: Provider[] = ["groq", "gemini", "openai", "perplexity"];
+  return order.filter((p) => {
+    try { getProviderConfig(p); return true; } catch { return false; }
+  });
+}
+
+// ─── Integration → tool mapping ───────────────────────────────────────────────
 
 const INTEGRATION_TO_TOOLS: Record<string, string[]> = {
   gsc: ["query_google_search_console"],
@@ -60,20 +102,26 @@ const ALWAYS_AVAILABLE_TOOLS = [
   "get_query_history",
 ];
 
-function getFilteredTools(integrations?: string[]): Anthropic.Tool[] {
-  if (!integrations || integrations.length === 0) return ACA_TOOLS;
+function getFilteredTools(integrations?: string[]): OpenAI.Chat.ChatCompletionTool[] {
+  const allTools = toOpenAITools(ACA_TOOLS_ANTHROPIC_FORMAT);
+  if (!integrations || integrations.length === 0) return allTools;
   const allowed = new Set(ALWAYS_AVAILABLE_TOOLS);
   for (const key of integrations) {
     const tools = INTEGRATION_TO_TOOLS[key];
     if (tools) tools.forEach((t) => allowed.add(t));
   }
-  return ACA_TOOLS.filter((t) => allowed.has(t.name));
+  return allTools.filter((t) => allowed.has((t as any).function?.name));
 }
 
-// ─── OpenAI-compatible tool definitions ─────────────────────────────────────
-// Converts ACA_TOOLS (Anthropic format) to OpenAI function-calling format.
+// ─── Tool definitions (OpenAI format) ────────────────────────────────────────
 
-function toOpenAITools(tools: Anthropic.Tool[]): OpenAI.Chat.ChatCompletionTool[] {
+interface AnthroCTool {
+  name: string;
+  description?: string;
+  input_schema: Record<string, unknown>;
+}
+
+function toOpenAITools(tools: AnthroCTool[]): OpenAI.Chat.ChatCompletionTool[] {
   return tools.map((t) => ({
     type: "function" as const,
     function: {
@@ -84,106 +132,18 @@ function toOpenAITools(tools: Anthropic.Tool[]): OpenAI.Chat.ChatCompletionTool[
   }));
 }
 
-// ─── OpenAI-compatible agentic loop (Groq or OpenAI) ────────────────────────
-
-async function runWithOpenAICompatible(
-  provider: "groq" | "openai",
-  messages: AcaMessage[],
-  clientContext?: ClientContext,
-  integrations?: string[],
-  onToolCall?: (toolName: string, toolInput: Record<string, any>) => void
-): Promise<string> {
-  let oaiClient: OpenAI;
-  let model: string;
-
-  if (provider === "groq") {
-    const apiKey = process.env.GROQ_API_KEY;
-    if (!apiKey) throw new Error("GROQ_API_KEY not configured");
-    oaiClient = new OpenAI({ apiKey, baseURL: "https://api.groq.com/openai/v1" });
-    model = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
-  } else {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) throw new Error("OPENAI_API_KEY not configured");
-    oaiClient = new OpenAI({ apiKey });
-    model = process.env.OPENAI_MODEL || "gpt-4o";
-  }
-
-  const systemPrompt = buildSystemPrompt(clientContext, integrations);
-  const filteredTools = getFilteredTools(integrations);
-  const oaiTools = toOpenAITools(filteredTools);
-
-  type OAIMessage = OpenAI.Chat.ChatCompletionMessageParam;
-  const apiMessages: OAIMessage[] = [
-    { role: "system", content: systemPrompt },
-    ...messages.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
-  ];
-
-  for (let i = 0; i < 15; i++) {
-    const completion = await oaiClient.chat.completions.create({
-      model,
-      messages: apiMessages,
-      tools: oaiTools,
-      tool_choice: "auto",
-      max_tokens: 4096,
-    });
-
-    const choice = completion.choices[0];
-    if (!choice) throw new Error("No response from provider");
-
-    const msg = choice.message;
-    apiMessages.push(msg as OAIMessage);
-
-    // No tool calls — we have a final answer
-    if (choice.finish_reason !== "tool_calls" || !msg.tool_calls || msg.tool_calls.length === 0) {
-      return msg.content || "No response generated.";
-    }
-
-    // Execute each requested tool call
-    for (const toolCall of msg.tool_calls) {
-      const toolName = toolCall.function.name;
-      let toolInput: Record<string, any> = {};
-      try {
-        toolInput = JSON.parse(toolCall.function.arguments || "{}");
-      } catch {
-        toolInput = {};
-      }
-
-      if (onToolCall) onToolCall(toolName, toolInput);
-      console.log(`[ACA/${provider}] Calling tool: ${toolName}`, JSON.stringify(toolInput).slice(0, 200));
-
-      const result = await executeTool(toolName, toolInput);
-
-      apiMessages.push({
-        role: "tool",
-        tool_call_id: toolCall.id,
-        content: result,
-      } as OAIMessage);
-    }
-  }
-
-  return "I ran into an issue processing your request — too many data lookups were needed. Try asking a more specific question.";
-}
-
-// ─── Tool definitions ────────────────────────────────────────────────────────
-
-const ACA_TOOLS: Anthropic.Tool[] = [
+const ACA_TOOLS_ANTHROPIC_FORMAT: AnthroCTool[] = [
   {
     name: "list_clients",
     description: "List all clients configured in SmartEO with their names, IDs, and connected data sources.",
-    input_schema: {
-      type: "object" as const,
-      properties: {},
-      required: [],
-    },
+    input_schema: { type: "object", properties: {}, required: [] },
   },
   {
     name: "get_client_details",
     description: "Get full details for a specific client including all connected data source IDs, brand terms, lead events, money pages, and goals.",
     input_schema: {
-      type: "object" as const,
-      properties: {
-        client_id: { type: "number", description: "The client ID" },
-      },
+      type: "object",
+      properties: { client_id: { type: "number", description: "The client ID" } },
       required: ["client_id"],
     },
   },
@@ -191,7 +151,7 @@ const ACA_TOOLS: Anthropic.Tool[] = [
     name: "query_google_search_console",
     description: "Query Google Search Console data for a client. Available commands: gsc_qoq_queries (query performance QoQ), gsc_qoq_pages (page performance QoQ), gsc_top_queries (top queries with deltas), gsc_query_to_page_map (which queries drive which pages), gsc_high_impressions_low_ctr (CTR opportunities), gsc_high_traffic_low_cvr (high traffic low conversion pages), gsc_indexation_stability (indexed vs excluded pages).",
     input_schema: {
-      type: "object" as const,
+      type: "object",
       properties: {
         client_id: { type: "number", description: "The client ID" },
         command: {
@@ -201,7 +161,7 @@ const ACA_TOOLS: Anthropic.Tool[] = [
         },
         date_range: {
           type: "string",
-          description: "Date range. Presets: last_14_vs_prev_14, last_30_vs_prev_30, last_90_vs_prev_90 (default), last_365_vs_prev_365, qtd. Custom: custom:YYYY-MM-DD:YYYY-MM-DD (e.g. custom:2026-01-01:2026-03-15). Use custom when user specifies exact dates.",
+          description: "Date range. Presets: last_14_vs_prev_14, last_30_vs_prev_30, last_90_vs_prev_90 (default), last_365_vs_prev_365, qtd. Custom: custom:YYYY-MM-DD:YYYY-MM-DD.",
         },
       },
       required: ["client_id", "command"],
@@ -211,7 +171,7 @@ const ACA_TOOLS: Anthropic.Tool[] = [
     name: "query_google_analytics",
     description: "Query Google Analytics 4 data for a client. Available commands: ga4_qoq_organic_funnel (organic sessions/users/conversions QoQ), ga4_qoq_organic_landing_pages (landing page performance QoQ), ga4_combined_funnel (sessions + forms + calls + CVR snapshot), ga4_qtd_totals (quarter-to-date vs goal), ga4_landing_pages_by_sessions (top pages by traffic), ga4_landing_pages_by_conversions (top pages by leads), ga4_session_movers (pages gaining/losing sessions), ga4_conversion_movers (pages gaining/losing conversions), ga4_yoy_comparison (year-over-year monthly).",
     input_schema: {
-      type: "object" as const,
+      type: "object",
       properties: {
         client_id: { type: "number", description: "The client ID" },
         command: {
@@ -221,7 +181,7 @@ const ACA_TOOLS: Anthropic.Tool[] = [
         },
         date_range: {
           type: "string",
-          description: "Date range. Presets: last_14_vs_prev_14, last_30_vs_prev_30, last_90_vs_prev_90 (default), last_365_vs_prev_365, qtd. Custom: custom:YYYY-MM-DD:YYYY-MM-DD (e.g. custom:2026-01-01:2026-03-15). Use custom when user specifies exact dates.",
+          description: "Date range. Presets: last_14_vs_prev_14, last_30_vs_prev_30, last_90_vs_prev_90 (default), last_365_vs_prev_365, qtd. Custom: custom:YYYY-MM-DD:YYYY-MM-DD.",
         },
       },
       required: ["client_id", "command"],
@@ -231,18 +191,14 @@ const ACA_TOOLS: Anthropic.Tool[] = [
     name: "query_callrail",
     description: "Query CallRail call tracking data. Available commands: callrail_qoq_organic_calls (organic call volume QoQ), callrail_qoq_top_landing_pages (top landing pages by calls), callrail_summary (answered rate, qualified calls, sources).",
     input_schema: {
-      type: "object" as const,
+      type: "object",
       properties: {
         client_id: { type: "number", description: "The client ID" },
         command: {
           type: "string",
-          description: "The CallRail command to run",
           enum: ["callrail_qoq_organic_calls", "callrail_qoq_top_landing_pages", "callrail_summary"],
         },
-        date_range: {
-          type: "string",
-          description: "Date range. Presets: last_14_vs_prev_14, last_30_vs_prev_30, last_90_vs_prev_90 (default, use for 'this quarter'), last_365_vs_prev_365. Custom: custom:YYYY-MM-DD:YYYY-MM-DD (e.g. custom:2026-01-01:2026-03-15). Use custom when user asks for specific start/end dates.",
-        },
+        date_range: { type: "string", description: "Date range preset or custom:YYYY-MM-DD:YYYY-MM-DD" },
       },
       required: ["client_id", "command"],
     },
@@ -251,98 +207,70 @@ const ACA_TOOLS: Anthropic.Tool[] = [
     name: "query_ctm",
     description: "Query CallTrackingMetrics data. Available commands: ctm_qoq_organic_calls (organic call volume QoQ), ctm_qoq_top_landing_pages (top landing pages by calls).",
     input_schema: {
-      type: "object" as const,
+      type: "object",
       properties: {
         client_id: { type: "number", description: "The client ID" },
-        command: {
-          type: "string",
-          description: "The CTM command to run",
-          enum: ["ctm_qoq_organic_calls", "ctm_qoq_top_landing_pages"],
-        },
-        date_range: {
-          type: "string",
-          description: "Date range. Presets: last_14_vs_prev_14, last_30_vs_prev_30, last_90_vs_prev_90 (default), last_365_vs_prev_365. Custom: custom:YYYY-MM-DD:YYYY-MM-DD. Use custom when user specifies exact dates.",
-        },
+        command: { type: "string", enum: ["ctm_qoq_organic_calls", "ctm_qoq_top_landing_pages"] },
+        date_range: { type: "string" },
       },
       required: ["client_id", "command"],
     },
   },
   {
     name: "query_semrush",
-    description: "Query SEMrush competitive intelligence data. Available commands: semrush_organic_overview (organic traffic estimates), semrush_keyword_rankings (keyword positions), semrush_keyword_distribution (ranking tiers: top 3/10/20/100), semrush_competitor_visibility (share of voice vs competitors).",
+    description: "Query SEMrush competitive intelligence data. Available commands: semrush_organic_overview, semrush_keyword_rankings, semrush_keyword_distribution, semrush_competitor_visibility.",
     input_schema: {
-      type: "object" as const,
+      type: "object",
       properties: {
         client_id: { type: "number", description: "The client ID" },
-        command: {
-          type: "string",
-          description: "The SEMrush command to run",
-          enum: ["semrush_organic_overview", "semrush_keyword_rankings", "semrush_keyword_distribution", "semrush_competitor_visibility"],
-        },
-        date_range: {
-          type: "string",
-          description: "Date range. Presets: last_30_vs_prev_30, last_90_vs_prev_90 (default), last_365_vs_prev_365. Custom: custom:YYYY-MM-DD:YYYY-MM-DD. Use custom when user specifies exact dates.",
-        },
+        command: { type: "string", enum: ["semrush_organic_overview", "semrush_keyword_rankings", "semrush_keyword_distribution", "semrush_competitor_visibility"] },
+        date_range: { type: "string" },
       },
       required: ["client_id", "command"],
     },
   },
   {
     name: "query_ahrefs",
-    description: "Query Ahrefs backlink and keyword data. Available commands: ahrefs_backlink_overview (referring domains, domain rating), ahrefs_keyword_rankings (keyword positions), ahrefs_competitor_visibility (competitor comparison).",
+    description: "Query Ahrefs backlink and keyword data. Available commands: ahrefs_backlink_overview, ahrefs_keyword_rankings, ahrefs_competitor_visibility.",
     input_schema: {
-      type: "object" as const,
+      type: "object",
       properties: {
         client_id: { type: "number", description: "The client ID" },
-        command: {
-          type: "string",
-          description: "The Ahrefs command to run",
-          enum: ["ahrefs_backlink_overview", "ahrefs_keyword_rankings", "ahrefs_competitor_visibility"],
-        },
-        date_range: {
-          type: "string",
-          description: "Date range. Presets: last_30_vs_prev_30, last_90_vs_prev_90 (default), last_365_vs_prev_365. Custom: custom:YYYY-MM-DD:YYYY-MM-DD. Use custom when user specifies exact dates.",
-        },
+        command: { type: "string", enum: ["ahrefs_backlink_overview", "ahrefs_keyword_rankings", "ahrefs_competitor_visibility"] },
+        date_range: { type: "string" },
       },
       required: ["client_id", "command"],
     },
   },
   {
     name: "query_gbp",
-    description: "Query Google Business Profile data for a client — reviews, star ratings, local performance (calls, directions, website clicks).",
+    description: "Query Google Business Profile data — reviews, star ratings, local performance (calls, directions, website clicks).",
     input_schema: {
-      type: "object" as const,
+      type: "object",
       properties: {
         client_id: { type: "number", description: "The client ID" },
-        date_range: {
-          type: "string",
-          description: "Date range. Presets: last_30_vs_prev_30, last_90_vs_prev_90 (default), last_365_vs_prev_365. Custom: custom:YYYY-MM-DD:YYYY-MM-DD. Use custom when user specifies exact dates.",
-        },
+        date_range: { type: "string" },
       },
       required: ["client_id"],
     },
   },
   {
     name: "query_screaming_frog",
-    description: "Query uploaded Screaming Frog crawl data. Available commands: technical_health_summary (overall site health), sf_issues_summary (issues by priority), core_web_vitals (CWV trend), new_pages_tracker (new/updated pages).",
+    description: "Query uploaded Screaming Frog crawl data. Available commands: technical_health_summary, sf_issues_summary, core_web_vitals, new_pages_tracker.",
     input_schema: {
-      type: "object" as const,
+      type: "object",
       properties: {
         client_id: { type: "number", description: "The client ID" },
-        command: {
-          type: "string",
-          description: "The SF command to run",
-          enum: ["technical_health_summary", "sf_issues_summary", "core_web_vitals", "new_pages_tracker"],
-        },
+        command: { type: "string", enum: ["technical_health_summary", "sf_issues_summary", "core_web_vitals", "new_pages_tracker"] },
       },
       required: ["client_id", "command"],
     },
   },
   {
     name: "get_airtable_work_log",
-    description: "Get the Airtable work log for a client — shows work completed, deliverables shipped, tasks done, organized by category and credit type.",
+    description: "Get the Airtable work log for a client — shows work completed, deliverables shipped, tasks done, organized by category and credit type. Returns all available records.",
     input_schema: {
-      type: "object" as const,
+      type: "object",
       properties: {
         client_id: { type: "number", description: "The client ID" },
       },
@@ -353,10 +281,8 @@ const ACA_TOOLS: Anthropic.Tool[] = [
     name: "get_asana_tasks",
     description: "Get open Asana tasks for a client — shows current to-do items, their status, and assignees.",
     input_schema: {
-      type: "object" as const,
-      properties: {
-        client_id: { type: "number", description: "The client ID" },
-      },
+      type: "object",
+      properties: { client_id: { type: "number", description: "The client ID" } },
       required: ["client_id"],
     },
   },
@@ -364,29 +290,25 @@ const ACA_TOOLS: Anthropic.Tool[] = [
     name: "get_nsm_goals",
     description: "Get the NSM (North Star Metric) goals from Google Sheets for a client — shows sessions goal/actual, MVP type and goal/actual, on-track status, and credits.",
     input_schema: {
-      type: "object" as const,
+      type: "object",
       properties: {
-        client_name: { type: "string", description: "The client name (must match the NSM tracker sheet)" },
+        client_id: { type: "number", description: "The client ID" },
         quarter: { type: "number", description: "Quarter number (1-4). If omitted, uses current quarter." },
         year: { type: "number", description: "Year. If omitted, uses current year." },
       },
-      required: ["client_name"],
+      required: ["client_id"],
     },
   },
   {
     name: "get_notion_strategy_bank",
     description: "Get the Notion Strategy Bank — contains strategy recommendations, service offerings, and playbook entries organized by category.",
-    input_schema: {
-      type: "object" as const,
-      properties: {},
-      required: [],
-    },
+    input_schema: { type: "object", properties: {}, required: [] },
   },
   {
     name: "get_saved_reports",
     description: "Get previously saved reports for a client — shows report history with dates, types, and names.",
     input_schema: {
-      type: "object" as const,
+      type: "object",
       properties: {
         client_id: { type: "number", description: "The client ID" },
         report_type: {
@@ -400,9 +322,9 @@ const ACA_TOOLS: Anthropic.Tool[] = [
   },
   {
     name: "get_query_history",
-    description: "Get past ACA/query history — shows what questions have been asked and their results.",
+    description: "Get past AMA query history — shows what questions have been asked and their results.",
     input_schema: {
-      type: "object" as const,
+      type: "object",
       properties: {
         client_id: { type: "number", description: "Optional: filter by client ID" },
         limit: { type: "number", description: "Max results to return. Default: 20" },
@@ -412,15 +334,14 @@ const ACA_TOOLS: Anthropic.Tool[] = [
   },
   {
     name: "query_website",
-    description: "Fetch and analyze a client's live website page HTML for on-page SEO signals: meta tags, headings, content structure, internal/external links. Use ONLY for on-page content analysis. Do NOT use for traffic, rankings, conversions, clicks, impressions, CTR, or page performance — those require query_google_search_console or query_google_analytics instead.",
+    description: "Fetch and analyze a client's live website page HTML for on-page SEO signals: meta tags, headings, content structure, internal/external links. Use ONLY for on-page content analysis. Do NOT use for traffic, rankings, conversions, clicks, impressions, CTR, or page performance.",
     input_schema: {
-      type: "object" as const,
+      type: "object",
       properties: {
         client_id: { type: "number", description: "The client ID" },
         url: { type: "string", description: "Specific URL to analyze. If omitted, uses the client's primary site URL." },
         analysis_type: {
           type: "string",
-          description: "What kind of analysis to perform",
           enum: ["seo_audit", "meta_tags", "headings", "content", "links", "full_page"],
         },
       },
@@ -429,30 +350,27 @@ const ACA_TOOLS: Anthropic.Tool[] = [
   },
 ];
 
-// ─── Tool execution ──────────────────────────────────────────────────────────
+// ─── Tool execution ───────────────────────────────────────────────────────────
 
-async function executeTool(
-  name: string,
-  input: Record<string, any>
-): Promise<string> {
+export interface ToolCallRecord {
+  name: string;
+  input: Record<string, any>;
+  result: string;
+}
+
+async function executeTool(name: string, input: Record<string, any>): Promise<string> {
   try {
     switch (name) {
       case "list_clients": {
         const clients = await storage.getClients();
         return JSON.stringify(
           clients.map((c) => ({
-            id: c.id,
-            name: c.name,
-            gsc: !!c.gscSiteUrl,
-            ga4: !!c.ga4PropertyId,
-            callrail: !!c.callrailCompanyId,
-            ctm: !!c.ctmAccountId,
-            ahrefs: !!c.ahrefsProjectUrl,
-            semrush: !!c.semrushProjectId,
-            gbp: !!c.gbpLocationName,
-            airtable: !!c.airtableBaseId,
-            asana: !!c.asanaProjectId,
-            primaryGoal: c.primaryGoal || null,
+            id: c.id, name: c.name,
+            gsc: !!c.gscSiteUrl, ga4: !!c.ga4PropertyId,
+            callrail: !!c.callrailCompanyId, ctm: !!c.ctmAccountId,
+            ahrefs: !!c.ahrefsProjectUrl, semrush: !!c.semrushProjectId,
+            gbp: !!c.gbpLocationName, airtable: !!c.airtableBaseId,
+            asana: !!c.asanaProjectId, primaryGoal: c.primaryGoal || null,
           }))
         );
       }
@@ -461,24 +379,15 @@ async function executeTool(
         const client = await storage.getClient(input.client_id);
         if (!client) return JSON.stringify({ error: "Client not found" });
         return JSON.stringify({
-          id: client.id,
-          name: client.name,
-          gscSiteUrl: client.gscSiteUrl,
-          ga4PropertyId: client.ga4PropertyId,
-          callrailCompanyId: client.callrailCompanyId,
-          callrailAccountId: client.callrailAccountId,
-          ctmAccountId: client.ctmAccountId,
-          ahrefsProjectUrl: client.ahrefsProjectUrl,
-          semrushProjectId: client.semrushProjectId,
-          gbpLocationName: client.gbpLocationName,
-          gbpProfileUrl: client.gbpProfileUrl,
-          airtableBaseId: client.airtableBaseId,
-          airtableTableName: client.airtableTableName,
-          asanaProjectId: client.asanaProjectId,
-          brandTerms: client.brandTerms,
-          leadEvents: client.leadEvents,
-          moneyPages: client.moneyPages,
-          primaryGoal: client.primaryGoal,
+          id: client.id, name: client.name,
+          gscSiteUrl: client.gscSiteUrl, ga4PropertyId: client.ga4PropertyId,
+          callrailCompanyId: client.callrailCompanyId, callrailAccountId: client.callrailAccountId,
+          ctmAccountId: client.ctmAccountId, ahrefsProjectUrl: client.ahrefsProjectUrl,
+          semrushProjectId: client.semrushProjectId, gbpLocationName: client.gbpLocationName,
+          gbpProfileUrl: client.gbpProfileUrl, airtableBaseId: client.airtableBaseId,
+          airtableTableName: client.airtableTableName, asanaProjectId: client.asanaProjectId,
+          brandTerms: client.brandTerms, leadEvents: client.leadEvents,
+          moneyPages: client.moneyPages, primaryGoal: client.primaryGoal,
           aboutPageUrl: client.aboutPageUrl,
         });
       }
@@ -487,12 +396,8 @@ async function executeTool(
         const client = await storage.getClient(input.client_id);
         if (!client) return JSON.stringify({ error: "Client not found" });
         if (!client.gscSiteUrl) return JSON.stringify({ error: `GSC is not configured for ${client.name} — no site URL is set in client settings.` });
-        const result = await queryGsc(
-          input.command as Command,
-          client,
-          input.date_range || "last_90_vs_prev_90"
-        );
-        if (!result) return JSON.stringify({ error: `GSC returned no data for ${client.name} (site: ${client.gscSiteUrl}). The stored Google credentials may not have access to this property, or no data exists for the requested date range.` });
+        const result = await queryGsc(input.command as Command, client, input.date_range || "last_90_vs_prev_90");
+        if (!result) return JSON.stringify({ error: `GSC returned no data for ${client.name}. The stored Google credentials may not have access to this property, or no data exists for the requested date range.` });
         return JSON.stringify(result);
       }
 
@@ -501,18 +406,14 @@ async function executeTool(
         if (!client) return JSON.stringify({ error: "Client not found" });
         if (!client.ga4PropertyId) return JSON.stringify({ error: `GA4 is not configured for ${client.name} — no property ID is set in client settings.` });
         try {
-          const result = await queryGa4(
-            input.command as Command,
-            client,
-            input.date_range || "last_90_vs_prev_90"
-          );
+          const result = await queryGa4(input.command as Command, client, input.date_range || "last_90_vs_prev_90");
           if (!result) return JSON.stringify({ error: `GA4 returned no data for ${client.name} (property: ${client.ga4PropertyId}).` });
           return JSON.stringify(result);
         } catch (ga4Err: any) {
           const msg = ga4Err.message || "";
           const lmsg = msg.toLowerCase();
           if (lmsg.includes("permission") || lmsg.includes("forbidden") || lmsg.includes("403") || lmsg.includes("insufficient") || lmsg.includes("not authorized")) {
-            return JSON.stringify({ error: `GA4 property ${client.ga4PropertyId} is not accessible with the stored credentials. The connected Google account does not have permission to view this property, or the property ID may be incorrect. Check client settings and verify the Google account in Setup has access to this GA4 property.` });
+            return JSON.stringify({ error: `GA4 property ${client.ga4PropertyId} is not accessible with the stored credentials. Check client settings and verify the Google account has access to this GA4 property.` });
           }
           if (lmsg.includes("no credentials") || lmsg.includes("no valid credentials")) {
             return JSON.stringify({ error: `GA4 credentials are not configured or could not be refreshed. Go to Setup to reconnect Google Analytics.` });
@@ -524,24 +425,16 @@ async function executeTool(
       case "query_callrail": {
         const client = await storage.getClient(input.client_id);
         if (!client) return JSON.stringify({ error: "Client not found" });
-        if (!client.callrailCompanyId) return JSON.stringify({ error: `CallRail is not configured for ${client.name} — this client has no CallRail company ID. If the client uses call tracking, try CTM as an alternative, or add the company ID in client settings.` });
-        const result = await queryCallRail(
-          input.command as Command,
-          client,
-          input.date_range || "last_90_vs_prev_90"
-        );
-        if (!result) return JSON.stringify({ error: `CallRail returned no data for ${client.name}. The CallRail API key may not be configured in Setup, or company ID ${client.callrailCompanyId} may not be accessible with the stored key.` });
+        if (!client.callrailCompanyId) return JSON.stringify({ error: `CallRail is not configured for ${client.name} — no company ID set. Try CTM instead, or add the company ID in client settings.` });
+        const result = await queryCallRail(input.command as Command, client, input.date_range || "last_90_vs_prev_90");
+        if (!result) return JSON.stringify({ error: `CallRail returned no data for ${client.name}. The API key may not be configured or company ID ${client.callrailCompanyId} may not be accessible.` });
         return JSON.stringify(result);
       }
 
       case "query_ctm": {
         const client = await storage.getClient(input.client_id);
         if (!client) return JSON.stringify({ error: "Client not found" });
-        const result = await queryCtm(
-          input.command as Command,
-          client,
-          input.date_range || "last_90_vs_prev_90"
-        );
+        const result = await queryCtm(input.command as Command, client, input.date_range || "last_90_vs_prev_90");
         if (!result) return JSON.stringify({ error: "CTM not configured or no data available for this client" });
         return JSON.stringify(result);
       }
@@ -549,11 +442,7 @@ async function executeTool(
       case "query_semrush": {
         const client = await storage.getClient(input.client_id);
         if (!client) return JSON.stringify({ error: "Client not found" });
-        const result = await querySemrush(
-          input.command as Command,
-          client,
-          input.date_range || "last_90_vs_prev_90"
-        );
+        const result = await querySemrush(input.command as Command, client, input.date_range || "last_90_vs_prev_90");
         if (!result) return JSON.stringify({ error: "SEMrush not configured or no data available for this client" });
         return JSON.stringify(result);
       }
@@ -561,11 +450,7 @@ async function executeTool(
       case "query_ahrefs": {
         const client = await storage.getClient(input.client_id);
         if (!client) return JSON.stringify({ error: "Client not found" });
-        const result = await queryAhrefs(
-          input.command as Command,
-          client,
-          input.date_range || "last_90_vs_prev_90"
-        );
+        const result = await queryAhrefs(input.command as Command, client, input.date_range || "last_90_vs_prev_90");
         if (!result) return JSON.stringify({ error: "Ahrefs not configured or no data available for this client" });
         return JSON.stringify(result);
       }
@@ -573,11 +458,7 @@ async function executeTool(
       case "query_gbp": {
         const client = await storage.getClient(input.client_id);
         if (!client) return JSON.stringify({ error: "Client not found" });
-        const result = await queryGbp(
-          "gbp_local_summary" as Command,
-          client,
-          input.date_range || "last_90_vs_prev_90"
-        );
+        const result = await queryGbp("gbp_local_summary" as Command, client, input.date_range || "last_90_vs_prev_90");
         if (!result) return JSON.stringify({ error: "GBP not configured or no data available for this client" });
         return JSON.stringify(result);
       }
@@ -585,11 +466,7 @@ async function executeTool(
       case "query_screaming_frog": {
         const client = await storage.getClient(input.client_id);
         if (!client) return JSON.stringify({ error: "Client not found" });
-        const result = await querySfReport(
-          input.command as Command,
-          client,
-          "last_90_vs_prev_90"
-        );
+        const result = await querySfReport(input.command as Command, client, "last_90_vs_prev_90");
         if (!result) return JSON.stringify({ error: "No Screaming Frog data uploaded for this client" });
         return JSON.stringify(result);
       }
@@ -600,7 +477,7 @@ async function executeTool(
         if (!client.airtableBaseId) return JSON.stringify({ error: `Airtable is not configured for ${client.name} — no Base ID is set in client settings.` });
         const now = new Date();
         const endDate = now.toISOString().slice(0, 10);
-        const startDate = new Date(now.getTime() - 90 * 86400000).toISOString().slice(0, 10);
+        const startDate = new Date(now.getTime() - 365 * 86400000).toISOString().slice(0, 10);
         const result = await fetchAirtableWorkLog(client.id, startDate, endDate);
         if (!result.success) return JSON.stringify({ error: result.error });
         return JSON.stringify(result.data);
@@ -615,15 +492,13 @@ async function executeTool(
       }
 
       case "get_nsm_goals": {
+        const client = await storage.getClient(input.client_id);
+        if (!client) return JSON.stringify({ error: "Client not found" });
         if (input.quarter && input.year) {
-          const data = await fetchNsmGoalsForSpecificQuarter(
-            input.client_name,
-            input.quarter,
-            input.year
-          );
+          const data = await fetchNsmGoalsForSpecificQuarter(client.name, input.quarter, input.year);
           return JSON.stringify(data);
         }
-        const data = await fetchNsmGoals(input.client_name);
+        const data = await fetchNsmGoals(client.name);
         return JSON.stringify(data);
       }
 
@@ -640,15 +515,10 @@ async function executeTool(
         } else {
           reports = await listSavedReportsByClient(input.client_id);
         }
-        // Return metadata only, not full report JSON
         return JSON.stringify(
           reports.map((r: any) => ({
-            id: r.id,
-            reportType: r.reportType,
-            reportName: r.reportName,
-            reportPeriodLabel: r.reportPeriodLabel,
-            generatedOn: r.generatedOn,
-            createdAt: r.createdAt,
+            id: r.id, reportType: r.reportType, reportName: r.reportName,
+            reportPeriodLabel: r.reportPeriodLabel, generatedOn: r.generatedOn, createdAt: r.createdAt,
           }))
         );
       }
@@ -661,60 +531,40 @@ async function executeTool(
       case "query_website": {
         const client = await storage.getClient(input.client_id);
         if (!client) return JSON.stringify({ error: "Client not found" });
-
         const targetUrl = input.url || client.gscSiteUrl || client.aboutPageUrl;
         if (!targetUrl) return JSON.stringify({ error: "No website URL configured for this client." });
-
         const results: any = { url: targetUrl, analysisType: input.analysis_type || "seo_audit" };
-
         try {
           const controller = new AbortController();
           const timeout = setTimeout(() => controller.abort(), 10000);
-          const resp = await fetch(targetUrl, {
-            headers: { "User-Agent": "SmartEO-Bot/1.0" },
-            signal: controller.signal,
-          });
+          const resp = await fetch(targetUrl, { headers: { "User-Agent": "SmartEO-Bot/1.0" }, signal: controller.signal });
           clearTimeout(timeout);
           const html = await resp.text();
           const $ = cheerio.load(html);
-
           results.live = {
             statusCode: resp.status,
             title: $("title").text().trim(),
             metaDescription: $('meta[name="description"]').attr("content") || null,
             metaRobots: $('meta[name="robots"]').attr("content") || null,
             canonical: $('link[rel="canonical"]').attr("href") || null,
-            ogTitle: $('meta[property="og:title"]').attr("content") || null,
-            ogDescription: $('meta[property="og:description"]').attr("content") || null,
-            ogImage: $('meta[property="og:image"]').attr("content") || null,
             h1: $("h1").map((_, el) => $(el).text().trim()).get(),
             h2: $("h2").map((_, el) => $(el).text().trim()).get(),
             h3Count: $("h3").length,
-            h4Count: $("h4").length,
             imgWithoutAlt: $("img:not([alt]), img[alt='']").length,
             totalImages: $("img").length,
             internalLinks: $(`a[href^='/'], a[href^='${targetUrl}']`).length,
-            externalLinks: $("a[href^='http']").not(`a[href^='${targetUrl}']`).length,
             wordCount: $("body").text().replace(/\s+/g, " ").trim().split(" ").length,
             hasStructuredData: $('script[type="application/ld+json"]').length > 0,
-            schemaTypes: $('script[type="application/ld+json"]')
-              .map((_, el) => {
-                try { const parsed = JSON.parse($(el).html() || "{}"); return parsed["@type"] || null; } catch { return null; }
-              })
-              .get()
-              .filter(Boolean),
           };
         } catch (err: any) {
           results.live = { error: `Failed to fetch website: ${err.message}` };
         }
-
         try {
           const sfResult = await querySfReport("technical_health_summary" as Command, client, "last_90_vs_prev_90");
           results.screamingFrog = sfResult || { note: "No Screaming Frog data uploaded for this client" };
         } catch {
           results.screamingFrog = { note: "No Screaming Frog data available" };
         }
-
         return JSON.stringify(results);
       }
 
@@ -722,14 +572,14 @@ async function executeTool(
         return JSON.stringify({ error: `Unknown tool: ${name}` });
     }
   } catch (err: any) {
-    console.error(`[ACA] Tool ${name} failed:`, err.message);
+    console.error(`[AMA] Tool ${name} failed:`, err.message);
     return JSON.stringify({ error: `Tool ${name} failed: ${err.message}` });
   }
 }
 
-// ─── System prompt ───────────────────────────────────────────────────────────
+// ─── System prompt ────────────────────────────────────────────────────────────
 
-const ACA_SYSTEM_PROMPT_BASE = `You are the SmartEO AMA Assistant — an expert SEO analyst embedded inside the Smart Engine Optimizer platform built by Webserv (Sync Digital Solutions). AMA stands for Ask Me Anything.
+const AMA_SYSTEM_PROMPT_BASE = `You are the SmartEO AMA Assistant — an expert SEO analyst embedded inside the Smart Engine Optimizer platform built by Webserv (Sync Digital Solutions). AMA stands for Ask Me Anything.
 
 You are a retrieval-grounded research agent. You do NOT guess, fabricate, or invent any data. Every factual claim in your response must come directly from a tool result.
 
@@ -742,15 +592,15 @@ AVAILABLE DATA SOURCES (via tools):
 - Ahrefs: backlinks, referring domains, domain rating, keyword rankings
 - Google Business Profile (GBP): reviews, local insights, calls, directions
 - Screaming Frog: technical SEO crawl data, issues, CWV
-- Airtable: work logs, deliverables, task tracking
+- Airtable: work logs, deliverables, task tracking (last 365 days)
 - Asana: open tasks, project status
 - Google Sheets (NSM Tracker): North Star Metric goals, sessions/MVP targets, on-track status
 - Notion (Strategy Bank): strategy recommendations, playbooks, service offerings
 
-TOOL ROUTING — follow this exactly. The wrong tool returns useless data:
-- Page traffic, clicks, impressions, CTR, search position, keyword rankings → query_google_search_console
-- Organic sessions, conversions, conversion rate, landing page performance, leads from organic → query_google_analytics
-- Phone calls, call volume, call-driving pages → query_callrail or query_ctm (whichever is configured)
+TOOL ROUTING — follow this exactly:
+- Page traffic, clicks, impressions, CTR, search position → query_google_search_console
+- Organic sessions, conversions, landing page performance, leads → query_google_analytics
+- Phone calls, call volume, call-driving pages → query_callrail or query_ctm
 - Keyword footprint, competitor rankings, share of voice → query_semrush or query_ahrefs
 - Local search visibility, GBP reviews/calls/directions → query_gbp
 - Technical issues, crawl errors, Core Web Vitals → query_screaming_frog
@@ -759,50 +609,42 @@ TOOL ROUTING — follow this exactly. The wrong tool returns useless data:
 - Goals, targets, on-track status → get_nsm_goals
 - Strategy notes, playbook recommendations → get_notion_strategy_bank
 - Page HTML content, meta tags, heading structure, on-page copy → query_website
-- NEVER use query_website to answer performance, traffic, ranking, or conversion questions. It only reads HTML — it cannot tell you how pages perform in search or what converts.
-
-Questions about "weak pages," "underperforming pages," or "low conversion pages":
-→ Call query_google_search_console with gsc_qoq_pages to see which pages have poor CTR, low clicks, or bad positions
-→ Then call query_google_analytics with ga4_landing_pages_by_conversions and ga4_landing_pages_by_sessions for conversion data
-→ Do NOT call query_website for this — it has no traffic or conversion data
+- NEVER use query_website to answer performance, traffic, ranking, or conversion questions.
 
 MANDATORY GROUNDING RULES — never violate these:
 1. ALWAYS call the appropriate tool(s) before answering any data question. Never guess or make up numbers.
-2. If a tool returns an error, returns empty data, or says a source is not configured — report that fact explicitly. Do NOT substitute fabricated data or generic advice.
-3. If the retrieved data does not contain enough evidence to answer the question, say so clearly and specifically: which source you checked, what it returned, and what remains unconfirmed.
-4. Never fill gaps with generic SEO knowledge or "best practice" filler. If you don't have the data, say you don't have it.
+2. If a tool returns an error, returns empty data, or says a source is not configured — report that fact explicitly.
+3. If the retrieved data does not contain enough evidence to answer the question, say so clearly.
+4. Never fill gaps with generic SEO knowledge or "best practice" filler.
 5. Never invent metrics, rankings, dates, URLs, client details, or performance claims.
 6. If two sources conflict, mention the conflict instead of silently choosing one.
 7. Clearly label any data as coming from a specific source (e.g. "From GSC:", "From GA4 (last 90 days):").
 8. If a source is disconnected, stale, or returns an error — say so and label the answer accordingly.
-9. CRITICAL — Configuration errors are NOT zero-values: If a tool returns a configuration error ("not configured", "missing ID", "no credentials", "not accessible"), do NOT say the metric is zero or absent. Say you could NOT MEASURE it because the source was unavailable. "Cannot measure" is factually accurate. "Zero calls" or "no sessions" is fabrication.
+9. CRITICAL — Configuration errors are NOT zero-values: If a tool returns a configuration error, do NOT say the metric is zero or absent. Say you could NOT MEASURE it because the source was unavailable.
 
-REQUIRED RESPONSE STRUCTURE — always structure answers like this when answering data questions:
+REQUIRED RESPONSE STRUCTURE when answering data questions:
 ### Answer
 [Direct answer based only on retrieved data]
 
 ### Sources Used
-[List which tools were called and what data was retrieved — e.g. "GSC: gsc_top_queries (last 90 days) — 847 rows returned"]
+[List which tools were called and what data was retrieved]
 
 ### What I Could Confirm
 [Specific facts confirmed by the data]
 
 ### What I Could Not Confirm
-[Anything the user asked about that the data did not cover, or any source that returned no data]
+[Anything the user asked about that the data did not cover]
 
-For short factual lookups, you may condense this structure, but always cite which source the fact came from.
+For short factual lookups, condense this structure, but always cite which source the fact came from.
 
 ADDITIONAL RULES:
 - Present data clearly — use actual numbers, deltas, and percentages from the tool results.
 - When comparing periods, explain whether metrics are up or down and by how much.
 - If a data source isn't configured for a client, say so clearly rather than failing silently.
-- You can and should call multiple tools in sequence to build a comprehensive answer.
-- When asked about "calls" or "admits" or "conversions", check both CallRail and CTM — use whichever is configured.
-- For quarter performance, use the ga4_qtd_totals or ga4_qoq_organic_funnel commands.
-- For historical context, pull data across multiple date ranges to show trends.
-- Be direct, specific, and actionable. You're talking to SEO professionals at an agency.
-- DATE RANGES: Use preset values (last_90_vs_prev_90, etc.) for general queries. When the user specifies exact dates (e.g. "from January 1 to today"), use the custom format: custom:YYYY-MM-DD:YYYY-MM-DD (e.g. custom:2026-01-01:2026-03-15). NEVER invent non-standard date range strings.
-- Do NOT output placeholder text like "assuming the query is successful" or "let me fetch that" — just call the tool and report actual results.`;
+- You can and should call multiple tools to build a comprehensive answer.
+- For quarter performance, use ga4_qtd_totals or ga4_qoq_organic_funnel.
+- DATE RANGES: Use preset values for general queries. When the user specifies exact dates, use custom:YYYY-MM-DD:YYYY-MM-DD. NEVER invent non-standard date range strings.
+- Do NOT output placeholder text like "let me fetch that" — just call the tool and report actual results.`;
 
 export interface ClientContext {
   id: number;
@@ -811,25 +653,23 @@ export interface ClientContext {
 
 function buildSystemPrompt(clientContext?: ClientContext, integrations?: string[]): string {
   const today = new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
-
-  let prompt = ACA_SYSTEM_PROMPT_BASE;
+  let prompt = AMA_SYSTEM_PROMPT_BASE;
 
   if (clientContext) {
     prompt += `
 
 ACTIVE CLIENT CONTEXT:
 The user has selected "${clientContext.name}" (ID: ${clientContext.id}) as the active client.
-- ALL queries should be scoped to this client unless the user explicitly asks about a different client or all clients.
+- ALL queries should be scoped to this client unless the user explicitly asks about a different client.
 - When using any tool that requires a client_id, use ${clientContext.id}.
-- When using get_nsm_goals, use client_name "${clientContext.name}".
+- When using get_nsm_goals, use client_id ${clientContext.id}.
 - Do NOT ask the user which client they mean — they have already selected ${clientContext.name}.
-- Do NOT call list_clients unless the user asks to switch clients or asks about all clients.
-- Start by getting this client's details if you need to know what data sources are connected.`;
+- Do NOT call list_clients unless the user asks to switch clients or asks about all clients.`;
   } else {
     prompt += `
 
 NO CLIENT SELECTED:
-The user has not selected a specific client. If their question is about a specific client, call list_clients first to see what's available, then ask which client they mean. If they ask about all clients, query each one.`;
+The user has not selected a specific client. If their question is about a specific client, call list_clients first to see what's available, then ask which client they mean.`;
   }
 
   if (integrations && integrations.length > 0) {
@@ -839,209 +679,261 @@ SELECTED SOURCES (strict constraint):
 The user has narrowed the query to these sources ONLY: ${integrations.join(", ")}.
 - You MUST limit all data retrieval to these selected sources.
 - Do NOT call tools for sources the user did not select, even if they would be helpful.
-- If the answer cannot be fully answered from only these sources, state which part is missing and which source would have it.
-- At the end of your response, list which of the selected sources you actually queried.`;
+- If the answer cannot be fully answered from only these sources, state which part is missing and which source would have it.`;
   } else {
     prompt += `
 
 NO SOURCE FILTER:
-The user has not selected specific sources. All available tools are accessible.
-- Query whichever sources are most relevant to the question.
-- In your response, clearly state which sources you queried and what each returned.
-- Do not use sources that are not configured for the selected client.`;
+All available tools are accessible. Query whichever sources are most relevant to the question.`;
   }
 
   prompt += `
 
 Today's date is ${today}.`;
-
   return prompt;
 }
 
-// ─── Chat interface ──────────────────────────────────────────────────────────
+// ─── AMA message types ────────────────────────────────────────────────────────
 
-export interface AcaMessage {
+export interface AmaMessage {
   role: "user" | "assistant";
   content: string;
 }
 
-/**
- * Run a full ACA conversation turn with multi-provider fallback.
- * Tries Claude → Groq → OpenAI in order. Any failure on one provider
- * is logged and the next one is attempted.
- */
-export async function runAcaChat(
-  messages: AcaMessage[],
-  clientContext?: ClientContext,
-  integrations?: string[],
-  onToolCall?: (toolName: string, toolInput: Record<string, any>) => void
-): Promise<{ response: string; provider: string }> {
-  if (process.env.ANTHROPIC_API_KEY) {
-    try {
-      console.log("[ACA] Trying provider: claude");
-      setAiActive("claude", true);
-      try {
-        const response = await runWithClaude(messages, clientContext, integrations, onToolCall);
-        return { response, provider: "claude" };
-      } finally {
-        setAiActive("claude", false);
-      }
-    } catch (err: any) {
-      console.error("[ACA] Claude failed:", err?.status, err?.message?.slice(0, 200));
-    }
-  }
-  if (process.env.GROQ_API_KEY) {
-    try {
-      console.log("[ACA] Trying provider: groq");
-      setAiActive("groq", true);
-      try {
-        const response = await runWithOpenAICompatible("groq", messages, clientContext, integrations, onToolCall);
-        return { response, provider: "groq" };
-      } finally {
-        setAiActive("groq", false);
-      }
-    } catch (err: any) {
-      console.error("[ACA] Groq failed:", err?.status, err?.message?.slice(0, 200));
-    }
-  }
-  if (process.env.OPENAI_API_KEY) {
-    try {
-      console.log("[ACA] Trying provider: openai");
-      setAiActive("openai", true);
-      try {
-        const response = await runWithOpenAICompatible("openai", messages, clientContext, integrations, onToolCall);
-        return { response, provider: "openai" };
-      } finally {
-        setAiActive("openai", false);
-      }
-    } catch (err: any) {
-      console.error("[ACA] OpenAI failed:", err?.status, err?.message?.slice(0, 200));
-    }
-  }
-  throw new Error(
-    "All AI providers failed or are unconfigured. Add at least one API key in Secrets: ANTHROPIC_API_KEY, GROQ_API_KEY, or OPENAI_API_KEY."
-  );
-}
+export type StreamEvent =
+  | { type: "tool_call"; name: string; input: Record<string, any> }
+  | { type: "tool_result"; name: string; result: string }
+  | { type: "token"; text: string }
+  | { type: "done"; provider: string; toolCalls: ToolCallRecord[] }
+  | { type: "error"; message: string };
 
-async function runWithClaude(
-  messages: AcaMessage[],
+// ─── Core provider loop (non-streaming, parallel tools) ───────────────────────
+
+async function runWithProvider(
+  provider: Provider,
+  messages: AmaMessage[],
   clientContext?: ClientContext,
   integrations?: string[],
-  onToolCall?: (toolName: string, toolInput: Record<string, any>) => void
+  onToolCall?: (record: ToolCallRecord) => void
 ): Promise<string> {
-  const anthropic = getAnthropicClient();
+  const { client: oaiClient, model } = getProviderConfig(provider);
   const systemPrompt = buildSystemPrompt(clientContext, integrations);
-  const tools = getFilteredTools(integrations);
+  const filteredTools = getFilteredTools(integrations);
 
-  const apiMessages: Anthropic.MessageParam[] = messages.map((m) => ({
-    role: m.role,
-    content: m.content,
-  }));
+  type OAIMessage = OpenAI.Chat.ChatCompletionMessageParam;
+  const apiMessages: OAIMessage[] = [
+    { role: "system", content: systemPrompt },
+    ...messages.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+  ];
 
   for (let i = 0; i < 15; i++) {
-    const response = await anthropic.messages.create({
-      model: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514",
-      max_tokens: 4096,
-      system: systemPrompt,
-      tools,
+    const completion = await oaiClient.chat.completions.create({
+      model,
       messages: apiMessages,
+      tools: filteredTools.length > 0 ? filteredTools : undefined,
+      tool_choice: filteredTools.length > 0 ? "auto" : undefined,
+      max_tokens: 4096,
     });
 
-    if (response.stop_reason === "end_turn") {
-      const textBlocks = response.content.filter(
-        (b): b is Anthropic.TextBlock => b.type === "text"
-      );
-      return textBlocks.map((b) => b.text).join("\n\n");
+    const choice = completion.choices[0];
+    if (!choice) throw new Error("No response from provider");
+
+    const msg = choice.message;
+    apiMessages.push(msg as OAIMessage);
+
+    if (choice.finish_reason !== "tool_calls" || !msg.tool_calls || msg.tool_calls.length === 0) {
+      return msg.content || "No response generated.";
     }
 
-    if (response.stop_reason === "tool_use") {
-      apiMessages.push({ role: "assistant", content: response.content });
+    // Execute all tool calls in parallel
+    const toolResults = await Promise.all(
+      msg.tool_calls.map(async (toolCall) => {
+        const tc = toolCall as any;
+        const toolName: string = tc.function.name;
+        let toolInput: Record<string, any> = {};
+        try { toolInput = JSON.parse(tc.function.arguments || "{}"); } catch { toolInput = {}; }
+        console.log(`[AMA/${provider}] Tool: ${toolName}`, JSON.stringify(toolInput).slice(0, 200));
+        const result = await executeTool(toolName, toolInput);
+        const record: ToolCallRecord = { name: toolName, input: toolInput, result };
+        if (onToolCall) onToolCall(record);
+        return { id: toolCall.id, name: toolName, result };
+      })
+    );
 
-      const toolResults: Anthropic.ToolResultBlockParam[] = [];
-      for (const block of response.content) {
-        if (block.type === "tool_use") {
-          if (onToolCall) onToolCall(block.name, block.input as Record<string, any>);
-          console.log(`[ACA] Calling tool: ${block.name}`, JSON.stringify(block.input).slice(0, 200));
-          const result = await executeTool(block.name, block.input as Record<string, any>);
-          toolResults.push({
-            type: "tool_result",
-            tool_use_id: block.id,
-            content: result,
-          });
-        }
-      }
-
-      apiMessages.push({ role: "user", content: toolResults });
+    for (const { id, result } of toolResults) {
+      apiMessages.push({ role: "tool", tool_call_id: id, content: result } as OAIMessage);
     }
   }
 
   return "I ran into an issue processing your request — too many data lookups were needed. Try asking a more specific question.";
 }
 
-/**
- * Stream an ACA conversation turn.
- * Returns an async generator that yields partial text as Claude streams its response.
- * Handles the tool-use loop internally.
- */
-export async function* streamAcaChat(
-  messages: AcaMessage[],
-  clientContext?: ClientContext,
-  onToolCall?: (toolName: string, toolInput: Record<string, any>) => void
-): AsyncGenerator<string, void, unknown> {
-  const anthropic = getAnthropicClient();
-  const systemPrompt = buildSystemPrompt(clientContext);
+// ─── Streaming provider loop ──────────────────────────────────────────────────
 
-  const apiMessages: Anthropic.MessageParam[] = messages.map((m) => ({
-    role: m.role,
-    content: m.content,
-  }));
+async function* streamWithProvider(
+  provider: Provider,
+  messages: AmaMessage[],
+  clientContext?: ClientContext,
+  integrations?: string[]
+): AsyncGenerator<StreamEvent> {
+  const { client: oaiClient, model } = getProviderConfig(provider);
+  const systemPrompt = buildSystemPrompt(clientContext, integrations);
+  const filteredTools = getFilteredTools(integrations);
+
+  type OAIMessage = OpenAI.Chat.ChatCompletionMessageParam;
+  const apiMessages: OAIMessage[] = [
+    { role: "system", content: systemPrompt },
+    ...messages.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+  ];
+
+  const allToolCalls: ToolCallRecord[] = [];
 
   for (let i = 0; i < 15; i++) {
-    // First, make a non-streaming call to check if tool use is needed
-    const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 4096,
-      system: systemPrompt,
-      tools: ACA_TOOLS,
+    // Non-streaming call for tool-use turns
+    const completion = await oaiClient.chat.completions.create({
+      model,
       messages: apiMessages,
+      tools: filteredTools.length > 0 ? filteredTools : undefined,
+      tool_choice: filteredTools.length > 0 ? "auto" : undefined,
+      max_tokens: 4096,
     });
 
-    if (response.stop_reason === "tool_use") {
-      // Handle tool calls silently
-      apiMessages.push({ role: "assistant", content: response.content });
+    const choice = completion.choices[0];
+    if (!choice) throw new Error("No response from provider");
+    const msg = choice.message;
+    apiMessages.push(msg as OAIMessage);
 
-      const toolResults: Anthropic.ToolResultBlockParam[] = [];
-      for (const block of response.content) {
-        if (block.type === "tool_use") {
-          if (onToolCall) onToolCall(block.name, block.input as Record<string, any>);
-          console.log(`[ACA] Calling tool: ${block.name}`, JSON.stringify(block.input).slice(0, 200));
+    if (choice.finish_reason !== "tool_calls" || !msg.tool_calls || msg.tool_calls.length === 0) {
+      // This is the final response — stream it token by token
+      const finalContent = msg.content || "";
 
-          // Yield a status message so the UI can show what's happening
-          yield `\n<!-- tool:${block.name} -->\n`;
-
-          const result = await executeTool(block.name, block.input as Record<string, any>);
-          toolResults.push({
-            type: "tool_result",
-            tool_use_id: block.id,
-            content: result,
-          });
+      // Try to stream the final response
+      try {
+        const stream = await oaiClient.chat.completions.create({
+          model,
+          messages: apiMessages.slice(0, -1), // Remove the last assistant message so we re-generate as stream
+          tools: undefined,
+          max_tokens: 4096,
+          stream: true,
+        });
+        for await (const chunk of stream) {
+          const text = chunk.choices[0]?.delta?.content;
+          if (text) yield { type: "token", text };
+          if (chunk.choices[0]?.finish_reason === "stop") break;
         }
+      } catch {
+        // Streaming failed — yield the already-fetched content in one shot
+        yield { type: "token", text: finalContent };
       }
 
-      apiMessages.push({ role: "user", content: toolResults });
-      continue;
+      yield { type: "done", provider, toolCalls: allToolCalls };
+      return;
     }
 
-    // Final response — stream the text
-    if (response.stop_reason === "end_turn") {
-      for (const block of response.content) {
-        if (block.type === "text") {
-          yield block.text;
-        }
-      }
-      return;
+    // Yield tool_call events first (before parallel execution)
+    const toolCallsThisRound: Array<{ id: string; name: string; input: Record<string, any> }> = [];
+    for (const toolCall of msg.tool_calls) {
+      const tc = toolCall as any;
+      let toolInput: Record<string, any> = {};
+      try { toolInput = JSON.parse(tc.function.arguments || "{}"); } catch { toolInput = {}; }
+      toolCallsThisRound.push({ id: toolCall.id, name: tc.function.name, input: toolInput });
+      yield { type: "tool_call", name: tc.function.name, input: toolInput };
+    }
+
+    // Execute all tools in parallel
+    const toolResults = await Promise.all(
+      toolCallsThisRound.map(async ({ id, name, input }) => {
+        const result = await executeTool(name, input);
+        return { id, name, input, result };
+      })
+    );
+
+    // Yield tool results and build message history
+    for (const { id, name, input, result } of toolResults) {
+      const record: ToolCallRecord = { name, input, result };
+      allToolCalls.push(record);
+      yield { type: "tool_result", name, result: result.slice(0, 800) };
+      apiMessages.push({ role: "tool", tool_call_id: id, content: result } as OAIMessage);
     }
   }
 
-  yield "I ran into an issue — too many lookups needed. Try a more specific question.";
+  yield { type: "error", message: "Too many data lookups — try asking a more specific question." };
 }
+
+// ─── Public API ───────────────────────────────────────────────────────────────
+
+export async function runAmaChat(
+  messages: AmaMessage[],
+  clientContext?: ClientContext,
+  integrations?: string[],
+  onToolCall?: (record: ToolCallRecord) => void
+): Promise<{ response: string; provider: string; toolCalls: ToolCallRecord[] }> {
+  const chain = getProviderChain();
+  if (chain.length === 0) {
+    throw new Error("No AI providers configured. Add at least one API key in Secrets: GROQ_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY, or PERPLEXITY_API_KEY.");
+  }
+
+  const toolCalls: ToolCallRecord[] = [];
+
+  for (const provider of chain) {
+    try {
+      console.log(`[AMA] Trying provider: ${provider}`);
+      setAiActive(provider as any, true);
+      try {
+        const response = await runWithProvider(
+          provider, messages, clientContext, integrations,
+          (record) => { toolCalls.push(record); if (onToolCall) onToolCall(record); }
+        );
+        return { response, provider, toolCalls };
+      } finally {
+        setAiActive(provider as any, false);
+      }
+    } catch (err: any) {
+      console.error(`[AMA] ${provider} failed:`, err?.status, err?.message?.slice(0, 200));
+    }
+  }
+
+  throw new Error("All AI providers failed. Check provider API keys in Secrets.");
+}
+
+export async function* streamAmaChat(
+  messages: AmaMessage[],
+  clientContext?: ClientContext,
+  integrations?: string[]
+): AsyncGenerator<StreamEvent> {
+  const chain = getProviderChain();
+  if (chain.length === 0) {
+    yield { type: "error", message: "No AI providers configured. Add at least one API key in Secrets." };
+    return;
+  }
+
+  for (const provider of chain) {
+    try {
+      console.log(`[AMA] Streaming with provider: ${provider}`);
+      setAiActive(provider as any, true);
+      try {
+        yield* streamWithProvider(provider, messages, clientContext, integrations);
+        return;
+      } finally {
+        setAiActive(provider as any, false);
+      }
+    } catch (err: any) {
+      console.error(`[AMA] ${provider} streaming failed:`, err?.status, err?.message?.slice(0, 200));
+    }
+  }
+
+  yield { type: "error", message: "All AI providers failed. Check API keys in Secrets." };
+}
+
+// ─── Legacy alias (for any existing imports) ─────────────────────────────────
+export const runAcaChat = async (
+  messages: AmaMessage[],
+  clientContext?: ClientContext,
+  integrations?: string[],
+  onToolCall?: (name: string, input: Record<string, any>) => void
+) => {
+  const result = await runAmaChat(messages, clientContext, integrations,
+    onToolCall ? (r) => onToolCall(r.name, r.input) : undefined
+  );
+  return result;
+};

@@ -61,6 +61,10 @@ import {
   type InsertMidStrategyDeck,
   type DiscoverabilityWorkspace,
   type InsertDiscoverabilityWorkspace,
+  amaConversations,
+  amaMessages,
+  type AmaConversation,
+  type AmaMessage,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -178,6 +182,15 @@ export interface IStorage {
   createDiscoverabilityWorkspace(data: InsertDiscoverabilityWorkspace): Promise<DiscoverabilityWorkspace>;
   updateDiscoverabilityWorkspace(id: number, data: Partial<InsertDiscoverabilityWorkspace>): Promise<DiscoverabilityWorkspace | undefined>;
   deleteDiscoverabilityWorkspace(id: number): Promise<boolean>;
+
+  // AMA Conversations
+  listAmaConversations(clientId?: number | null): Promise<AmaConversation[]>;
+  getAmaConversation(id: number): Promise<AmaConversation | undefined>;
+  createAmaConversation(data: { clientId?: number | null; clientName?: string | null; title: string; integrations?: string[] }): Promise<AmaConversation>;
+  updateAmaConversation(id: number, data: { title?: string }): Promise<AmaConversation | undefined>;
+  deleteAmaConversation(id: number): Promise<boolean>;
+  getAmaMessages(conversationId: number): Promise<AmaMessage[]>;
+  addAmaMessage(data: { conversationId: number; role: string; content: string; toolCalls?: any; provider?: string }): Promise<AmaMessage>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -779,6 +792,60 @@ export class DatabaseStorage implements IStorage {
   async deleteDiscoverabilityWorkspace(id: number): Promise<boolean> {
     const res = await db.delete(discoverabilityWorkspaces).where(eq(discoverabilityWorkspaces.id, id));
     return (res.rowCount ?? 0) > 0;
+  }
+
+  async listAmaConversations(clientId?: number | null): Promise<AmaConversation[]> {
+    if (clientId != null) {
+      return db.select().from(amaConversations)
+        .where(eq(amaConversations.clientId, clientId))
+        .orderBy(desc(amaConversations.updatedAt));
+    }
+    return db.select().from(amaConversations).orderBy(desc(amaConversations.updatedAt));
+  }
+
+  async getAmaConversation(id: number): Promise<AmaConversation | undefined> {
+    const [row] = await db.select().from(amaConversations).where(eq(amaConversations.id, id));
+    return row;
+  }
+
+  async createAmaConversation(data: { clientId?: number | null; clientName?: string | null; title: string; integrations?: string[] }): Promise<AmaConversation> {
+    const [row] = await db.insert(amaConversations).values({
+      clientId: data.clientId ?? null,
+      clientName: data.clientName ?? null,
+      title: data.title,
+      integrations: data.integrations ?? [],
+    }).returning();
+    return row;
+  }
+
+  async updateAmaConversation(id: number, data: { title?: string }): Promise<AmaConversation | undefined> {
+    const [row] = await db.update(amaConversations)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(amaConversations.id, id))
+      .returning();
+    return row;
+  }
+
+  async deleteAmaConversation(id: number): Promise<boolean> {
+    const res = await db.delete(amaConversations).where(eq(amaConversations.id, id));
+    return (res.rowCount ?? 0) > 0;
+  }
+
+  async getAmaMessages(conversationId: number): Promise<AmaMessage[]> {
+    return db.select().from(amaMessages)
+      .where(eq(amaMessages.conversationId, conversationId))
+      .orderBy(amaMessages.createdAt);
+  }
+
+  async addAmaMessage(data: { conversationId: number; role: string; content: string; toolCalls?: any; provider?: string }): Promise<AmaMessage> {
+    const [row] = await db.insert(amaMessages).values({
+      conversationId: data.conversationId,
+      role: data.role,
+      content: data.content,
+      toolCalls: data.toolCalls ?? null,
+      provider: data.provider ?? null,
+    }).returning();
+    return row;
   }
 }
 

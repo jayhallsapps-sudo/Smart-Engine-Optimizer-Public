@@ -1,1071 +1,803 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { IntegrationsPanel } from "@/components/IntegrationsPanel";
 import {
-  Send,
-  Loader2,
-  Bot,
-  User,
-  Sparkles,
-  RotateCcw,
-  Database,
-  Search,
-  BarChart3,
-  Phone,
-  Globe,
-  FileText,
-  Layers,
-  ChevronDown,
-  Users,
-  Mic,
-  MicOff,
-  Check,
-  X,
-  Filter,
+  Send, Loader2, Trash2, ChevronDown, ChevronRight, Settings, Plus,
+  MessageSquare, Wrench, AlertCircle, CheckCircle2, Zap, PanelLeft,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
+import type { Client } from "@shared/schema";
 
-// ─── SpeechRecognition browser API types ─────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-interface SpeechRecognitionResult {
-  readonly isFinal: boolean;
-  readonly length: number;
-  item(index: number): SpeechRecognitionAlternative;
-  [index: number]: SpeechRecognitionAlternative;
+interface ToolCallRecord {
+  name: string;
+  input?: Record<string, any>;
+  result?: string;
 }
-
-interface SpeechRecognitionAlternative {
-  readonly transcript: string;
-  readonly confidence: number;
-}
-
-interface SpeechRecognitionResultList {
-  readonly length: number;
-  item(index: number): SpeechRecognitionResult;
-  [index: number]: SpeechRecognitionResult;
-}
-
-interface SpeechRecognitionEvent extends Event {
-  readonly results: SpeechRecognitionResultList;
-}
-
-type SpeechRecognitionErrorCode =
-  | "aborted"
-  | "audio-capture"
-  | "bad-grammar"
-  | "language-not-supported"
-  | "network"
-  | "no-speech"
-  | "not-allowed"
-  | "service-not-allowed";
-
-interface SpeechRecognitionErrorEvent extends Event {
-  readonly error: SpeechRecognitionErrorCode;
-  readonly message: string;
-}
-
-interface SpeechRecognitionInstance extends EventTarget {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  onresult: ((event: SpeechRecognitionEvent) => void) | null;
-  onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
-  onend: (() => void) | null;
-  start(): void;
-  stop(): void;
-  abort(): void;
-}
-
-interface SpeechRecognitionConstructor {
-  new(): SpeechRecognitionInstance;
-}
-
-declare global {
-  interface Window {
-    SpeechRecognition?: SpeechRecognitionConstructor;
-    webkitSpeechRecognition?: SpeechRecognitionConstructor;
-  }
-}
-
-// ─── Types ───────────────────────────────────────────────────────────────────
 
 interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
-  toolCalls?: string[];
-  timestamp: Date;
+  toolCalls?: ToolCallRecord[];
+  provider?: string;
+  streaming?: boolean;
+  streamingTools?: ToolCallRecord[];
 }
 
-// ─── Tool call display ───────────────────────────────────────────────────────
-
-const TOOL_ICONS: Record<string, React.ElementType> = {
-  list_clients: Layers,
-  get_client_details: FileText,
-  query_google_search_console: Search,
-  query_google_analytics: BarChart3,
-  query_callrail: Phone,
-  query_ctm: Phone,
-  query_semrush: Globe,
-  query_ahrefs: Globe,
-  query_gbp: Globe,
-  query_screaming_frog: Database,
-  get_airtable_work_log: Database,
-  get_asana_tasks: Database,
-  get_nsm_goals: BarChart3,
-  get_notion_strategy_bank: FileText,
-  get_saved_reports: FileText,
-  get_query_history: FileText,
-  query_website: Globe,
-};
-
-const TOOL_LABELS: Record<string, string> = {
-  list_clients: "Listing clients",
-  get_client_details: "Getting client details",
-  query_google_search_console: "Querying Google Search Console",
-  query_google_analytics: "Querying Google Analytics",
-  query_callrail: "Querying CallRail",
-  query_ctm: "Querying CallTrackingMetrics",
-  query_semrush: "Querying SEMrush",
-  query_ahrefs: "Querying Ahrefs",
-  query_gbp: "Querying Google Business Profile",
-  query_screaming_frog: "Querying Screaming Frog data",
-  get_airtable_work_log: "Fetching Airtable work log",
-  get_asana_tasks: "Fetching Asana tasks",
-  get_nsm_goals: "Fetching NSM goals from Google Sheets",
-  get_notion_strategy_bank: "Fetching Notion Strategy Bank",
-  get_saved_reports: "Loading saved reports",
-  get_query_history: "Loading query history",
-  query_website: "Analyzing website",
-};
-
-function ToolCallBadge({ toolName }: { toolName: string }) {
-  const Icon = TOOL_ICONS[toolName] || Database;
-  const label = TOOL_LABELS[toolName] || toolName;
-  return (
-    <span className="inline-flex items-center gap-1.5 text-[10px] font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-full px-2.5 py-0.5">
-      <Icon className="w-3 h-3" />
-      {label}
-    </span>
-  );
-}
-
-// ─── Markdown-light renderer ─────────────────────────────────────────────────
-// Handles bold, bullet points, numbered lists, and line breaks
-
-function renderContent(text: string) {
-  const lines = text.split("\n");
-  const elements: React.ReactNode[] = [];
-  let inList = false;
-  let listItems: React.ReactNode[] = [];
-
-  function flushList() {
-    if (listItems.length > 0) {
-      elements.push(
-        <ul key={`list-${elements.length}`} className="list-disc list-inside space-y-1 my-2">
-          {listItems}
-        </ul>
-      );
-      listItems = [];
-      inList = false;
-    }
-  }
-
-  function formatLine(line: string): React.ReactNode {
-    // Bold: **text**
-    const parts = line.split(/(\*\*[^*]+\*\*)/g);
-    return parts.map((part, i) => {
-      if (part.startsWith("**") && part.endsWith("**")) {
-        return <strong key={i}>{part.slice(2, -2)}</strong>;
-      }
-      return part;
-    });
-  }
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const trimmed = line.trim();
-
-    // Bullet point
-    if (/^[-•*]\s/.test(trimmed)) {
-      inList = true;
-      listItems.push(
-        <li key={`li-${i}`} className="text-sm leading-relaxed">
-          {formatLine(trimmed.replace(/^[-•*]\s/, ""))}
-        </li>
-      );
-      continue;
-    }
-
-    // Numbered list
-    if (/^\d+[.)]\s/.test(trimmed)) {
-      inList = true;
-      listItems.push(
-        <li key={`li-${i}`} className="text-sm leading-relaxed">
-          {formatLine(trimmed.replace(/^\d+[.)]\s/, ""))}
-        </li>
-      );
-      continue;
-    }
-
-    flushList();
-
-    // Empty line = paragraph break
-    if (!trimmed) {
-      elements.push(<div key={`br-${i}`} className="h-2" />);
-      continue;
-    }
-
-    // Heading (###)
-    if (trimmed.startsWith("### ")) {
-      elements.push(
-        <h4 key={`h-${i}`} className="text-sm font-semibold text-foreground mt-3 mb-1">
-          {formatLine(trimmed.slice(4))}
-        </h4>
-      );
-      continue;
-    }
-    if (trimmed.startsWith("## ")) {
-      elements.push(
-        <h3 key={`h-${i}`} className="text-base font-semibold text-foreground mt-3 mb-1">
-          {formatLine(trimmed.slice(3))}
-        </h3>
-      );
-      continue;
-    }
-
-    // Regular paragraph
-    elements.push(
-      <p key={`p-${i}`} className="text-sm leading-relaxed">
-        {formatLine(trimmed)}
-      </p>
-    );
-  }
-
-  flushList();
-  return <div className="space-y-0.5">{elements}</div>;
-}
-
-// ─── Suggested prompts ───────────────────────────────────────────────────────
-
-const SUGGESTED_PROMPTS = [
-  "How many organic sessions did we get this quarter across all clients?",
-  "Show me the top 10 queries for [client] in the last 90 days.",
-  "Which client has the best conversion rate right now?",
-  "How many calls did we get this quarter and how does it compare to last quarter?",
-  "What's our progress toward the NSM goals this quarter?",
-  "Are there any technical SEO issues I should know about?",
-];
-
-// ─── Client type ─────────────────────────────────────────────────────────────
-
-interface AcaClient {
+interface AmaConversation {
   id: number;
-  name: string;
-  gscSiteUrl?: string | null;
-  ga4PropertyId?: string | null;
-  callrailCompanyId?: string | null;
-  ctmAccountId?: string | null;
-  semrushProjectId?: string | null;
-  ahrefsProjectUrl?: string | null;
-  gbpLocationName?: string | null;
-  airtableBaseId?: string | null;
-  asanaProjectId?: string | null;
-}
-
-// ─── Execution health types ──────────────────────────────────────────────────
-
-interface SourceHealth {
-  status: "ok" | "client_missing_id" | "credential_missing" | "not_applicable";
-  detail: string;
+  clientId: number | null;
+  clientName: string | null;
+  title: string;
+  integrations: string[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface ExecutionHealth {
   clientId: number;
-  clientName: string;
-  sources: Record<string, SourceHealth>;
+  sources: Record<string, { configured: boolean; credentialPresent: boolean; reason?: string }>;
 }
 
-// ─── Integration config ──────────────────────────────────────────────────────
+// ─── Integration options ──────────────────────────────────────────────────────
 
-const INTEGRATION_CONFIG: Array<{
-  key: string;
-  label: string;
-  check: (c: AcaClient) => boolean;
-}> = [
-  { key: "gsc", label: "Google Search Console", check: (c) => !!c.gscSiteUrl },
-  { key: "ga4", label: "Google Analytics", check: (c) => !!c.ga4PropertyId },
-  { key: "callrail", label: "CallRail", check: (c) => !!c.callrailCompanyId },
-  { key: "ctm", label: "CallTrackingMetrics", check: (c) => !!c.ctmAccountId },
-  { key: "semrush", label: "SEMrush", check: (c) => !!c.semrushProjectId },
-  { key: "ahrefs", label: "Ahrefs", check: (c) => !!c.ahrefsProjectUrl },
-  { key: "gbp", label: "Google Business Profile", check: (c) => !!c.gbpLocationName },
-  { key: "screaming_frog", label: "Screaming Frog", check: () => true },
-  { key: "airtable", label: "Airtable", check: (c) => !!c.airtableBaseId },
-  { key: "asana", label: "Asana", check: (c) => !!c.asanaProjectId },
-  { key: "nsm_goals", label: "NSM Goals", check: () => true },
-  { key: "strategy_bank", label: "Strategy Bank", check: () => true },
-  { key: "website", label: "Website", check: () => true },
+const ALL_INTEGRATIONS = [
+  { key: "gsc", label: "Google Search Console" },
+  { key: "ga4", label: "Google Analytics 4" },
+  { key: "callrail", label: "CallRail" },
+  { key: "ctm", label: "CallTrackingMetrics" },
+  { key: "semrush", label: "SEMrush" },
+  { key: "ahrefs", label: "Ahrefs" },
+  { key: "gbp", label: "Google Business Profile" },
+  { key: "screaming_frog", label: "Screaming Frog" },
+  { key: "airtable", label: "Airtable" },
+  { key: "asana", label: "Asana" },
+  { key: "nsm_goals", label: "NSM Goals" },
+  { key: "strategy_bank", label: "Strategy Bank" },
+  { key: "website", label: "Website Analysis" },
 ];
 
-// ─── Main component ──────────────────────────────────────────────────────────
+const TOOL_LABELS: Record<string, string> = {
+  query_google_search_console: "Google Search Console",
+  query_google_analytics: "Google Analytics 4",
+  query_callrail: "CallRail",
+  query_ctm: "CallTrackingMetrics",
+  query_semrush: "SEMrush",
+  query_ahrefs: "Ahrefs",
+  query_gbp: "Google Business Profile",
+  query_screaming_frog: "Screaming Frog",
+  get_airtable_work_log: "Airtable",
+  get_asana_tasks: "Asana",
+  get_nsm_goals: "NSM Goals",
+  get_notion_strategy_bank: "Strategy Bank",
+  get_saved_reports: "Saved Reports",
+  get_query_history: "Query History",
+  list_clients: "Clients List",
+  get_client_details: "Client Details",
+  query_website: "Website",
+};
+
+// ─── Simple markdown renderer ─────────────────────────────────────────────────
+
+function renderMarkdown(text: string): string {
+  return text
+    .replace(/\*\*\*(.+?)\*\*\*/g, "<strong><em>$1</em></strong>")
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*(.+?)\*/g, "<em>$1</em>")
+    .replace(/^### (.+)$/gm, "<h3 class='text-sm font-semibold mt-3 mb-1'>$1</h3>")
+    .replace(/^## (.+)$/gm, "<h2 class='text-base font-semibold mt-3 mb-1'>$1</h2>")
+    .replace(/^# (.+)$/gm, "<h1 class='text-lg font-bold mt-3 mb-1'>$1</h1>")
+    .replace(/^- (.+)$/gm, "<li class='ml-4 list-disc text-sm'>$1</li>")
+    .replace(/^(\d+)\. (.+)$/gm, "<li class='ml-4 list-decimal text-sm'>$2</li>")
+    .replace(/`(.+?)`/g, "<code class='bg-muted px-1 py-0.5 rounded text-xs font-mono'>$1</code>")
+    .replace(/\n\n/g, "<br/><br/>")
+    .replace(/\n/g, "<br/>");
+}
+
+// ─── ToolCallBadge ────────────────────────────────────────────────────────────
+
+function ToolCallBadge({ tool, isActive }: { tool: ToolCallRecord; isActive?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const label = TOOL_LABELS[tool.name] || tool.name;
+  const hasResult = !!tool.result;
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <CollapsibleTrigger asChild>
+        <button
+          data-testid={`tool-badge-${tool.name}`}
+          className={cn(
+            "flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium transition-colors border",
+            "hover:bg-muted/80 cursor-pointer",
+            isActive
+              ? "bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300"
+              : hasResult
+              ? "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300"
+              : "bg-muted border-border text-muted-foreground"
+          )}
+        >
+          {isActive ? (
+            <Loader2 className="h-3 w-3 animate-spin" />
+          ) : hasResult ? (
+            <CheckCircle2 className="h-3 w-3" />
+          ) : (
+            <Wrench className="h-3 w-3" />
+          )}
+          <span>{label}</span>
+          {(hasResult || tool.input) && (
+            open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />
+          )}
+        </button>
+      </CollapsibleTrigger>
+      {(hasResult || tool.input) && (
+        <CollapsibleContent>
+          <div className="mt-1 ml-1 rounded-md border border-border bg-muted/50 p-2 text-xs font-mono text-muted-foreground max-h-48 overflow-y-auto">
+            {tool.input && Object.keys(tool.input).length > 0 && (
+              <div className="mb-1">
+                <span className="text-foreground/60 font-sans not-italic">Input:</span>{" "}
+                {JSON.stringify(tool.input)}
+              </div>
+            )}
+            {tool.result && (
+              <div>
+                <span className="text-foreground/60 font-sans not-italic">Result preview:</span>
+                <pre className="whitespace-pre-wrap break-all mt-0.5">
+                  {tool.result.slice(0, 1000)}{tool.result.length > 1000 ? "\n…(truncated)" : ""}
+                </pre>
+              </div>
+            )}
+          </div>
+        </CollapsibleContent>
+      )}
+    </Collapsible>
+  );
+}
+
+// ─── MessageBubble ────────────────────────────────────────────────────────────
+
+function MessageBubble({ message }: { message: ChatMessage }) {
+  const isUser = message.role === "user";
+  const tools: ToolCallRecord[] =
+    message.toolCalls && message.toolCalls.length > 0
+      ? message.toolCalls
+      : message.streamingTools || [];
+
+  return (
+    <div
+      data-testid={`message-${message.id}`}
+      className={cn("flex flex-col gap-2", isUser ? "items-end" : "items-start")}
+    >
+      {!isUser && tools.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 max-w-[90%]">
+          {tools.map((tool, i) => (
+            <ToolCallBadge
+              key={`${tool.name}-${i}`}
+              tool={tool}
+              isActive={message.streaming && i === tools.length - 1 && !tool.result}
+            />
+          ))}
+        </div>
+      )}
+
+      <div
+        className={cn(
+          "rounded-xl px-4 py-3 max-w-[90%] text-sm leading-relaxed",
+          isUser
+            ? "bg-primary text-primary-foreground rounded-tr-sm"
+            : "bg-card border border-border text-foreground rounded-tl-sm"
+        )}
+      >
+        {isUser ? (
+          <span className="whitespace-pre-wrap">{message.content}</span>
+        ) : message.streaming && !message.content ? (
+          <span className="flex items-center gap-1.5 text-muted-foreground">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            <span className="text-xs">Processing…</span>
+          </span>
+        ) : (
+          <div
+            dangerouslySetInnerHTML={{ __html: renderMarkdown(message.content) }}
+          />
+        )}
+      </div>
+
+      {!isUser && message.provider && (
+        <span className="text-[10px] text-muted-foreground/60 ml-1">via {message.provider}</span>
+      )}
+    </div>
+  );
+}
+
+// ─── Health indicator ─────────────────────────────────────────────────────────
+
+function HealthDot({ status }: { status: "ok" | "warn" | "error" }) {
+  return (
+    <span
+      className={cn(
+        "inline-block w-2 h-2 rounded-full shrink-0",
+        status === "ok" && "bg-emerald-500",
+        status === "warn" && "bg-yellow-500",
+        status === "error" && "bg-red-500"
+      )}
+    />
+  );
+}
+
+// ─── Conversation sidebar ─────────────────────────────────────────────────────
+
+function ConversationSidebar({
+  conversations,
+  activeId,
+  onSelect,
+  onNew,
+  onDelete,
+  isLoading,
+}: {
+  conversations: AmaConversation[];
+  activeId: number | null;
+  onSelect: (id: number) => void;
+  onNew: () => void;
+  onDelete: (id: number) => void;
+  isLoading: boolean;
+}) {
+  return (
+    <div className="flex flex-col h-full">
+      <div className="p-3 border-b border-border">
+        <Button
+          data-testid="button-new-conversation"
+          onClick={onNew}
+          variant="outline"
+          size="sm"
+          className="w-full gap-2 text-xs"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          New Conversation
+        </Button>
+      </div>
+
+      <ScrollArea className="flex-1">
+        <div className="p-2 space-y-0.5">
+          {isLoading && (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            </div>
+          )}
+          {!isLoading && conversations.length === 0 && (
+            <p className="text-xs text-muted-foreground text-center py-6 px-2">
+              No conversations yet.
+            </p>
+          )}
+          {conversations.map((convo) => (
+            <div
+              key={convo.id}
+              data-testid={`conversation-${convo.id}`}
+              className={cn(
+                "group flex items-start gap-2 rounded-md px-2 py-2 cursor-pointer transition-colors",
+                activeId === convo.id
+                  ? "bg-primary/10 text-primary"
+                  : "hover:bg-muted text-foreground"
+              )}
+              onClick={() => onSelect(convo.id)}
+            >
+              <MessageSquare className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium truncate leading-snug">{convo.title}</p>
+                {convo.clientName && (
+                  <p className="text-[10px] text-muted-foreground truncate mt-0.5">{convo.clientName}</p>
+                )}
+              </div>
+              <button
+                data-testid={`button-delete-convo-${convo.id}`}
+                onClick={(e) => { e.stopPropagation(); onDelete(convo.id); }}
+                className="opacity-0 group-hover:opacity-100 p-0.5 text-muted-foreground hover:text-destructive transition-opacity shrink-0"
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      </ScrollArea>
+    </div>
+  );
+}
+
+// ─── Main AMA page ────────────────────────────────────────────────────────────
 
 export default function AcaPage() {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedClientId, setSelectedClientId] = useState<number | null>(null);
-  const [clientDropdownOpen, setClientDropdownOpen] = useState(false);
-  const [selectedIntegrations, setSelectedIntegrations] = useState<string[]>([]);
-  const [integrationDropdownOpen, setIntegrationDropdownOpen] = useState(false);
-  const [isListening, setIsListening] = useState(false);
-  const [voiceError, setVoiceError] = useState<string | null>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const integrationDropdownRef = useRef<HTMLDivElement>(null);
-  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
-  // Fetch clients
-  const { data: clients = [] } = useQuery<AcaClient[]>({
-    queryKey: ["/api/clients"],
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [selectedClientId, setSelectedClientId] = useState<number | null>(null);
+  const [integrations, setIntegrations] = useState<string[]>([]);
+  const [showIntegrations, setShowIntegrations] = useState(false);
+  const [input, setInput] = useState("");
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
+  const [authToken, setAuthToken] = useState<string>("");
+
+  // Bootstrap token
+  useEffect(() => {
+    fetch("/api/auth/bootstrap")
+      .then((r) => r.json())
+      .then((d) => setAuthToken(d.token || ""));
+  }, []);
+
+  // Data queries
+  const { data: clients = [] } = useQuery<Client[]>({ queryKey: ["/api/clients"] });
+
+  const { data: conversations = [], isLoading: convoLoading } = useQuery<AmaConversation[]>({
+    queryKey: ["/api/ama/conversations"],
+    staleTime: 0,
   });
 
-  const selectedClient = clients.find((c) => c.id === selectedClientId) || null;
-  const availableIntegrations = selectedClient
-    ? INTEGRATION_CONFIG.filter((cfg) => cfg.check(selectedClient))
-    : [];
-
-  // Fetch per-source execution health when a client is selected
   const { data: executionHealth } = useQuery<ExecutionHealth>({
     queryKey: ["/api/aca/execution-health", selectedClientId],
     enabled: !!selectedClientId,
+    staleTime: 0,
   });
 
-  // Reset integrations when client changes
+  // Auto-scroll
   useEffect(() => {
-    setSelectedIntegrations([]);
-  }, [selectedClientId]);
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
-  // Close dropdowns on outside click
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setClientDropdownOpen(false);
-      }
-      if (integrationDropdownRef.current && !integrationDropdownRef.current.contains(e.target as Node)) {
-        setIntegrationDropdownOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const SpeechRecognitionClass = typeof window !== "undefined" ? (window.SpeechRecognition || window.webkitSpeechRecognition) : undefined;
-  const speechSupported = !!SpeechRecognitionClass;
-
-  const preVoiceInputRef = useRef("");
-  const inputValueRef = useRef("");
-  const manualStopRef = useRef(false);
-  const maxTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const startSessionRef = useRef<(() => void) | null>(null);
-
-  useEffect(() => { inputValueRef.current = input; }, [input]);
-
-  const stopRecognition = useCallback(() => {
-    manualStopRef.current = true;
-    if (maxTimeoutRef.current) {
-      clearTimeout(maxTimeoutRef.current);
-      maxTimeoutRef.current = null;
-    }
-    setIsListening(false);
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-    }
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      manualStopRef.current = true;
-      if (maxTimeoutRef.current) clearTimeout(maxTimeoutRef.current);
-      if (recognitionRef.current) {
-        recognitionRef.current.onresult = null;
-        recognitionRef.current.onerror = null;
-        recognitionRef.current.onend = null;
-        recognitionRef.current.abort();
-        recognitionRef.current = null;
-      }
-    };
-  }, []);
-
-  const buildAndStartSession = useCallback(() => {
-    if (!SpeechRecognitionClass || manualStopRef.current) return;
-
-    const recognition = new SpeechRecognitionClass();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
-      let interim = "";
-      let finalText = "";
-      for (let i = 0; i < event.results.length; i++) {
-        const r = event.results[i];
-        const t = r[0].transcript;
-        if (r.isFinal) finalText += t;
-        else interim += t;
-      }
-      const combined = finalText + interim;
-      const base = preVoiceInputRef.current;
-      const newVal = base ? base + " " + combined.trim() : combined.trim();
-      setInput(newVal);
-      inputValueRef.current = newVal;
-    };
-
-    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      recognitionRef.current = null;
-      const code = event.error;
-
-      // Permanent failures — stop and show feedback
-      if (code === "not-allowed" || code === "service-not-allowed") {
-        manualStopRef.current = true;
-        setIsListening(false);
-        setVoiceError("Microphone access was denied. Please allow microphone permissions in your browser and try again.");
-        return;
-      }
-      if (code === "audio-capture") {
-        manualStopRef.current = true;
-        setIsListening(false);
-        setVoiceError("No microphone was found. Please connect a microphone and try again.");
-        return;
-      }
-      if (code === "language-not-supported") {
-        manualStopRef.current = true;
-        setIsListening(false);
-        setVoiceError("Your browser does not support speech recognition in this language.");
-        return;
-      }
-
-      // Recoverable failures — retry unless manually stopped
-      if (code === "no-speech") {
-        // Restart silently; user hasn't spoken yet
-        if (!manualStopRef.current) {
-          setTimeout(() => startSessionRef.current?.(), 300);
-        } else {
-          setIsListening(false);
-        }
-        return;
-      }
-
-      // network, aborted, bad-grammar, unknown — retry if not manually stopped
-      if (!manualStopRef.current) {
-        setTimeout(() => startSessionRef.current?.(), 300);
-      } else {
-        setIsListening(false);
-      }
-    };
-
-    recognition.onend = () => {
-      recognitionRef.current = null;
-      if (!manualStopRef.current) {
-        preVoiceInputRef.current = inputValueRef.current;
-        setTimeout(() => startSessionRef.current?.(), 150);
-      } else {
-        setIsListening(false);
-        setTimeout(() => {
-          if (inputRef.current) {
-            inputRef.current.focus();
-            inputRef.current.style.height = "auto";
-            inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 200) + "px";
-          }
-        }, 0);
-      }
-    };
-
-    recognitionRef.current = recognition;
+  // Load a past conversation
+  const loadConversation = useCallback(async (id: number) => {
+    setActiveConversationId(id);
     try {
-      recognition.start();
+      const resp = await fetch(`/api/ama/conversations/${id}`, {
+        headers: { "x-internal-token": authToken },
+      });
+      const data = await resp.json();
+      if (data.messages) {
+        setMessages(
+          data.messages.map((m: any) => ({
+            id: `db-${m.id}`,
+            role: m.role as "user" | "assistant",
+            content: m.content,
+            toolCalls: m.toolCalls || [],
+            provider: m.provider || undefined,
+          }))
+        );
+      }
+      if (data.clientId) setSelectedClientId(data.clientId);
+      if (data.integrations?.length) setIntegrations(data.integrations);
     } catch {
-      recognitionRef.current = null;
-      if (!manualStopRef.current) {
-        setTimeout(() => startSessionRef.current?.(), 500);
-      } else {
-        setIsListening(false);
+      toast({ title: "Failed to load conversation", variant: "destructive" });
+    }
+  }, [authToken, toast]);
+
+  // Delete a conversation
+  const deleteConversation = useCallback(async (id: number) => {
+    try {
+      await apiRequest("DELETE", `/api/ama/conversations/${id}`);
+      queryClient.invalidateQueries({ queryKey: ["/api/ama/conversations"] });
+      if (activeConversationId === id) {
+        setActiveConversationId(null);
+        setMessages([]);
       }
+    } catch {
+      toast({ title: "Failed to delete conversation", variant: "destructive" });
     }
-  }, [SpeechRecognitionClass]);
+  }, [activeConversationId, queryClient, toast]);
 
-  useEffect(() => {
-    startSessionRef.current = buildAndStartSession;
-  }, [buildAndStartSession]);
-
-  const toggleVoiceInput = useCallback(() => {
-    if (isListening) {
-      stopRecognition();
-      return;
-    }
-
-    if (!SpeechRecognitionClass) return;
-
-    setVoiceError(null);
-    manualStopRef.current = false;
-    preVoiceInputRef.current = input;
-    inputValueRef.current = input;
-    setIsListening(true);
-
-    maxTimeoutRef.current = setTimeout(() => {
-      stopRecognition();
-    }, 10 * 60 * 1000);
-
-    buildAndStartSession();
-  }, [isListening, input, SpeechRecognitionClass, stopRecognition, buildAndStartSession]);
-
-  // Auto-scroll to bottom on new messages
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages, loading]);
-
-  // Auto-resize textarea
-  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInput(e.target.value);
-    e.target.style.height = "auto";
-    e.target.style.height = Math.min(e.target.scrollHeight, 200) + "px";
+  // Start fresh
+  const startNewConversation = useCallback(() => {
+    if (abortRef.current) { abortRef.current.abort(); abortRef.current = null; }
+    setActiveConversationId(null);
+    setMessages([]);
+    setInput("");
+    setIsStreaming(false);
+    textareaRef.current?.focus();
   }, []);
 
-  async function sendMessage(text?: string) {
-    const messageText = text || input.trim();
-    if (!messageText || loading) return;
+  // Toggle integration filter
+  const toggleIntegration = (key: string) => {
+    setIntegrations((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
+  };
 
-    stopRecognition();
+  // Send message via SSE stream
+  const sendMessage = useCallback(async () => {
+    const userInput = input.trim();
+    if (!userInput || isStreaming) return;
+
     setInput("");
-    setError(null);
-    if (inputRef.current) inputRef.current.style.height = "auto";
+    setIsStreaming(true);
 
-    const userMessage: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: "user",
-      content: messageText,
-      timestamp: new Date(),
+    const userMsgId = `user-${Date.now()}`;
+    const asstMsgId = `asst-${Date.now()}`;
+
+    const userMsg: ChatMessage = { id: userMsgId, role: "user", content: userInput };
+    const asstMsg: ChatMessage = {
+      id: asstMsgId, role: "assistant", content: "",
+      streaming: true, streamingTools: [], toolCalls: [],
     };
 
-    const updatedMessages = [...messages, userMessage];
-    setMessages(updatedMessages);
-    setLoading(true);
+    setMessages((prev) => [...prev, userMsg, asstMsg]);
+
+    const historyMessages = [
+      ...messages.map((m) => ({ role: m.role, content: m.content })),
+      { role: "user" as const, content: userInput },
+    ];
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    const updateAsst = (fn: (m: ChatMessage) => ChatMessage) => {
+      setMessages((prev) => prev.map((m) => (m.id === asstMsgId ? fn(m) : m)));
+    };
 
     try {
-      const apiMessages = updatedMessages.map((m) => ({
-        role: m.role,
-        content: m.content,
-      }));
-
-      const res = await apiRequest("POST", "/api/aca/chat", {
-        messages: apiMessages,
-        clientId: selectedClientId,
-        integrations: selectedIntegrations,
+      const resp = await fetch("/api/ama/stream", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-internal-token": authToken,
+        },
+        body: JSON.stringify({
+          messages: historyMessages,
+          clientId: selectedClientId,
+          integrations,
+          conversationId: activeConversationId,
+        }),
+        signal: controller.signal,
       });
 
-      const contentType = res.headers.get("content-type") || "";
-      if (!contentType.includes("application/json")) {
-        throw new Error("Received an unexpected response from the server. Please try again.");
-      }
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
 
-      const data = await res.json();
+      const reader = resp.body!.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
 
-      const assistantMessage: ChatMessage = {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        content: data.response,
-        toolCalls: data.toolCalls,
-        timestamp: new Date(),
-      };
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() || "";
 
-      setMessages((prev) => [...prev, assistantMessage]);
-    } catch (err: any) {
-      const errorText = err.message || "Something went wrong";
-      let displayError = errorText;
-      try {
-        const match = errorText.match(/^(\d+):\s*(.+)/);
-        if (match) {
-          const statusCode = match[1];
-          const body = match[2];
-          if (body.trimStart().startsWith("<") || body.trimStart().startsWith("<!")) {
-            displayError = `Server error (${statusCode}). Please try again.`;
-          } else {
-            try {
-              const parsed = JSON.parse(body);
-              displayError = parsed.message || errorText;
-            } catch {
-              displayError = `Server error (${statusCode}). Please try again.`;
-            }
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const raw = line.slice(6).trim();
+          if (raw === "[DONE]") break;
+
+          let ev: any;
+          try { ev = JSON.parse(raw); } catch { continue; }
+
+          switch (ev.type) {
+            case "tool_call":
+              updateAsst((m) => ({
+                ...m,
+                streamingTools: [...(m.streamingTools || []), { name: ev.name, input: ev.input }],
+              }));
+              break;
+
+            case "tool_result":
+              updateAsst((m) => {
+                const tools = [...(m.streamingTools || [])];
+                const ri = [...tools].reverse().findIndex((t) => t.name === ev.name);
+                if (ri >= 0) tools[tools.length - 1 - ri] = { ...tools[tools.length - 1 - ri], result: ev.result };
+                return { ...m, streamingTools: tools };
+              });
+              break;
+
+            case "token":
+              updateAsst((m) => ({ ...m, content: m.content + ev.text }));
+              break;
+
+            case "done":
+              updateAsst((m) => ({
+                ...m,
+                streaming: false,
+                provider: ev.provider,
+                toolCalls: m.streamingTools || [],
+                streamingTools: [],
+              }));
+              break;
+
+            case "conversation_id":
+              setActiveConversationId(ev.id);
+              queryClient.invalidateQueries({ queryKey: ["/api/ama/conversations"] });
+              break;
+
+            case "error":
+              updateAsst((m) => ({
+                ...m,
+                streaming: false,
+                content: m.content || `Error: ${ev.message}`,
+              }));
+              toast({ title: "AI error", description: ev.message, variant: "destructive" });
+              break;
           }
         }
-      } catch {}
-      setError(displayError);
+      }
+    } catch (err: any) {
+      if (err.name !== "AbortError") {
+        updateAsst((m) => ({
+          ...m,
+          streaming: false,
+          content: m.content || "Something went wrong. Please try again.",
+        }));
+        toast({ title: "Connection error", description: err.message, variant: "destructive" });
+      }
     } finally {
-      setLoading(false);
+      abortRef.current = null;
+      setIsStreaming(false);
     }
-  }
+  }, [input, isStreaming, messages, selectedClientId, integrations, activeConversationId, authToken, queryClient, toast]);
 
-  function handleKeyDown(e: React.KeyboardEvent) {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       sendMessage();
     }
-  }
+  };
 
-  function handleClearChat() {
-    setMessages([]);
-    setError(null);
-  }
-
-  const isEmpty = messages.length === 0;
+  // Health summary
+  const healthSummary = selectedClientId && executionHealth
+    ? (() => {
+        const src = executionHealth.sources || {};
+        const ok = Object.values(src).filter((s) => s.configured && s.credentialPresent).length;
+        const total = Object.keys(src).length;
+        return { ok, total, src };
+      })()
+    : null;
 
   return (
-    <div className="flex flex-col h-full bg-background" data-testid="page-aca">
-      {/* Header */}
-      <div className="shrink-0 border-b px-6 py-4">
-        <div className="flex items-center justify-between max-w-[900px] mx-auto w-full">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-gradient-to-br from-[#D97706] to-[#B45309] shrink-0">
-              <Sparkles className="w-4.5 h-4.5 text-white" />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold tracking-tight" style={{ color: "#D97706" }}>/AMA/</h1>
-              <p className="text-[11px] text-muted-foreground">
-                ask the onboard AIs anything about clients, integrations, data, and get live data pulls.
-              </p>
-            </div>
-          </div>
-          {messages.length > 0 && (
+    <div className="flex h-screen overflow-hidden bg-background">
+      {/* Sidebar */}
+      {sidebarOpen && (
+        <div
+          data-testid="sidebar-conversations"
+          className="w-56 shrink-0 border-r border-border flex flex-col bg-muted/20"
+        >
+          <div className="flex items-center justify-between px-3 py-2 border-b border-border">
+            <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
+              Conversations
+            </span>
             <button
-              onClick={handleClearChat}
-              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded-md hover:bg-muted"
-              data-testid="button-clear-chat"
+              data-testid="button-close-sidebar"
+              onClick={() => setSidebarOpen(false)}
+              className="text-muted-foreground hover:text-foreground"
             >
-              <RotateCcw className="w-3.5 h-3.5" />
-              New chat
+              <PanelLeft className="h-3.5 w-3.5" />
             </button>
-          )}
-        </div>
-      </div>
-
-      {/* Integrations panel */}
-      <div className="shrink-0 border-b">
-        <div className="max-w-[900px] mx-auto w-full px-6 py-3">
-          <IntegrationsPanel
-            hideLabel={true}
-            integrations={[
-              {
-                id: "gsc",
-                how: "Queries search performance data including top queries, page performance, CTR opportunities, impressions without clicks, and indexation status for the selected client.",
-                why: "GSC is the only authoritative source for actual Google search visibility. Without it, ACA answers about keyword rankings or traffic drops are guesses.",
-              },
-              {
-                id: "ga4",
-                how: "Pulls organic session funnels, landing page performance, conversion movers, QTD totals, and year-over-year comparisons from the client's GA4 property.",
-                why: "GA4 connects search visibility to actual user behavior and conversions — the data needed to answer whether SEO is driving business outcomes.",
-              },
-              {
-                id: "callrail",
-                how: "Reads organic call volume, top call-driving landing pages, and call source breakdowns from CallRail for clients using that platform for call tracking.",
-                why: "Calls are often the primary conversion for treatment centers. CallRail data is required to show whether search traffic is converting to actual leads.",
-              },
-              {
-                id: "ctm",
-                how: "Reads the same call-tracking signals as CallRail (volume, sources, landing pages) for clients using CallTrackingMetrics instead.",
-                why: "CTM is used by a subset of clients. ACA checks for it automatically when CallRail is not configured so no call data is left on the table.",
-              },
-              {
-                id: "semrush",
-                how: "Pulls keyword distribution, domain-level organic rankings, and competitor visibility metrics from SEMrush for the selected client.",
-                why: "SEMrush provides third-party keyword footprint data that GSC alone can't supply, including competitive share of voice and keyword difficulty context.",
-              },
-              {
-                id: "ahrefs",
-                how: "Queries keyword rankings, backlink profile (DR, referring domains), and competitor overlap from Ahrefs Site Explorer for the selected client.",
-                why: "Ahrefs is the authoritative source for backlink authority signals. ACA uses it to answer questions about domain strength and link-building ROI.",
-              },
-              {
-                id: "gbp",
-                how: "Reads Google Business Profile metrics including local search impressions, direction requests, calls, and photo views for the client's location(s).",
-                why: "Local SEO performance is invisible without GBP data. Treatment centers with physical locations need this to track local visibility separately from organic.",
-              },
-              {
-                id: "airtable",
-                how: "Reads the client's published and in-production content work log from Airtable to ground execution questions in real deliverable records.",
-                why: "Airtable is where content production is tracked. Without it, ACA can't answer what content actually shipped or what's still in the queue.",
-              },
-              {
-                id: "asana",
-                how: "Reads open and completed tasks from the client's linked Asana project, grouped by category (Technical SEO, Content, Local, etc.).",
-                why: "Asana is the source of truth for ongoing deliverables. It lets ACA answer what work is in flight — not just what's been published.",
-              },
-              {
-                id: "google-sheets",
-                how: "Reads the client's North Star Metric goals (NSM targets by quarter) from the shared Google Sheet used for goal-setting.",
-                why: "NSM goals are the benchmark for every performance conversation. ACA needs them to contextualize whether metrics are on track or off.",
-              },
-              {
-                id: "notion",
-                how: "Searches the Webserv Strategy Bank for relevant SOPs, playbooks, behavioral health glossary entries, and client strategy notes.",
-                why: "Notion houses institutional knowledge that doesn't exist in structured data. It lets ACA cite approved Webserv methodology rather than generic AI reasoning.",
-              },
-              {
-                id: "screaming-frog",
-                how: "Reads uploaded Screaming Frog crawl reports to surface technical issues including broken links, redirect chains, missing tags, and crawl errors.",
-                why: "Screaming Frog is the most complete source of on-site technical data. ACA uses it to answer technical audit questions with specifics, not generalities.",
-              },
-            ]}
+          </div>
+          <ConversationSidebar
+            conversations={conversations}
+            activeId={activeConversationId}
+            onSelect={loadConversation}
+            onNew={startNewConversation}
+            onDelete={deleteConversation}
+            isLoading={convoLoading}
           />
         </div>
-      </div>
+      )}
 
-      {/* Chat area */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-6 py-4">
-        <div className="max-w-[900px] mx-auto w-full space-y-4">
-          {/* Empty state */}
-          {isEmpty && (
-            <div className="flex flex-col items-center justify-center py-16">
-              <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-[#D97706]/10 to-[#B45309]/10 border border-[#D97706]/20 mb-6">
-                <Sparkles className="w-8 h-8 text-[#D97706]" />
-              </div>
-              <h2 className="text-lg font-semibold text-foreground mb-2">What do you want to know?</h2>
-              <p className="text-sm text-muted-foreground mb-8 text-center max-w-md">
-                I have access to all your connected integrations — GSC, GA4, CallRail, CTM, SEMrush, Ahrefs, Airtable, Asana, Notion, and Google Sheets. Ask me anything.
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full max-w-2xl">
-                {SUGGESTED_PROMPTS.map((prompt, i) => (
-                  <button
-                    key={i}
-                    onClick={() => sendMessage(prompt)}
-                    className="text-left text-xs text-muted-foreground hover:text-foreground bg-muted/50 hover:bg-muted border border-border rounded-lg px-3 py-2.5 transition-colors leading-relaxed"
-                    data-testid={`suggested-${i}`}
-                  >
-                    {prompt}
-                  </button>
-                ))}
-              </div>
+      {/* Main area */}
+      <div className="flex flex-col flex-1 min-w-0">
+        {/* Header */}
+        <div className="flex items-center gap-2 px-4 py-2 border-b border-border bg-background shrink-0 h-12">
+          {!sidebarOpen && (
+            <button
+              data-testid="button-open-sidebar"
+              onClick={() => setSidebarOpen(true)}
+              className="text-muted-foreground hover:text-foreground mr-1"
+            >
+              <PanelLeft className="h-4 w-4" />
+            </button>
+          )}
+
+          <Zap className="h-4 w-4 text-primary shrink-0" />
+          <span className="font-semibold text-sm text-foreground hidden sm:block">AMA — Ask Me Anything</span>
+
+          <div className="flex-1" />
+
+          {/* Client selector */}
+          <Select
+            value={selectedClientId ? String(selectedClientId) : "__none__"}
+            onValueChange={(v) => {
+              const id = v === "__none__" ? null : parseInt(v, 10);
+              setSelectedClientId(id);
+              queryClient.invalidateQueries({ queryKey: ["/api/aca/execution-health"] });
+            }}
+          >
+            <SelectTrigger data-testid="select-client" className="h-8 text-xs w-44">
+              <SelectValue placeholder="No client" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">No client</SelectItem>
+              {clients.map((c) => (
+                <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Health summary */}
+          {healthSummary && (
+            <div
+              data-testid="health-indicator"
+              className="flex items-center gap-1 text-xs text-muted-foreground"
+              title={`${healthSummary.ok}/${healthSummary.total} sources OK`}
+            >
+              <HealthDot
+                status={
+                  healthSummary.ok >= healthSummary.total * 0.7 ? "ok"
+                  : healthSummary.ok > 0 ? "warn"
+                  : "error"
+                }
+              />
+              <span className="text-xs">{healthSummary.ok}/{healthSummary.total}</span>
             </div>
           )}
 
-          {/* Messages */}
-          {messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-            >
-              {msg.role === "assistant" && (
-                <div className="flex items-start pt-1 shrink-0">
-                  <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-gradient-to-br from-[#D97706] to-[#B45309]">
-                    <Bot className="w-3.5 h-3.5 text-white" />
-                  </div>
-                </div>
-              )}
+          {/* Source filter */}
+          <button
+            data-testid="button-source-filter"
+            onClick={() => setShowIntegrations((v) => !v)}
+            className={cn(
+              "flex items-center gap-1 text-xs rounded-md px-2 py-1 border transition-colors",
+              integrations.length > 0
+                ? "bg-primary/10 border-primary/30 text-primary"
+                : "border-border text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <Settings className="h-3 w-3" />
+            <span className="hidden sm:inline">
+              {integrations.length > 0 ? `${integrations.length} sources` : "All sources"}
+            </span>
+          </button>
 
-              <div
-                className={`max-w-[75%] ${
-                  msg.role === "user"
-                    ? "bg-primary text-primary-foreground rounded-2xl rounded-br-md px-4 py-2.5"
-                    : "bg-card border border-border rounded-2xl rounded-bl-md px-4 py-3"
-                }`}
+          {/* New chat */}
+          <button
+            data-testid="button-new-chat"
+            onClick={startNewConversation}
+            className="text-muted-foreground hover:text-foreground"
+            title="New conversation"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Integration filter panel */}
+        {showIntegrations && (
+          <div
+            data-testid="panel-integrations"
+            className="px-4 py-2 border-b border-border bg-muted/30 flex flex-wrap gap-1.5"
+          >
+            {ALL_INTEGRATIONS.map((integ) => {
+              const hs = healthSummary?.src[integ.key];
+              const selected = integrations.includes(integ.key);
+              return (
+                <button
+                  key={integ.key}
+                  data-testid={`toggle-${integ.key}`}
+                  onClick={() => toggleIntegration(integ.key)}
+                  className={cn(
+                    "flex items-center gap-1 px-2.5 py-1 rounded-full text-xs border transition-colors",
+                    selected
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-background border-border text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {hs && (
+                    <HealthDot
+                      status={
+                        hs.configured && hs.credentialPresent ? "ok"
+                        : hs.credentialPresent ? "warn"
+                        : "error"
+                      }
+                    />
+                  )}
+                  {integ.label}
+                </button>
+              );
+            })}
+            {integrations.length > 0 && (
+              <button
+                data-testid="button-clear-filter"
+                onClick={() => setIntegrations([])}
+                className="px-2.5 py-1 rounded-full text-xs border border-destructive/40 text-destructive hover:bg-destructive/10"
               >
-                {/* Tool call badges */}
-                {msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mb-2.5">
-                    {[...new Set(msg.toolCalls)].map((tool, i) => (
-                      <ToolCallBadge key={i} toolName={tool} />
+                Clear filter
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Messages */}
+        <ScrollArea className="flex-1">
+          <div className="px-4 py-4">
+            {messages.length === 0 ? (
+              <div className="flex flex-col items-center justify-center min-h-[60vh] text-center gap-3">
+                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                  <Zap className="h-6 w-6 text-primary" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-foreground mb-1">Ask Me Anything</h3>
+                  <p className="text-sm text-muted-foreground max-w-xs">
+                    Ask about SEO performance, rankings, conversions, goals, work completed, or any data in the platform.
+                  </p>
+                </div>
+                {selectedClientId && (
+                  <div className="flex flex-wrap gap-1.5 justify-center mt-1 max-w-md">
+                    {[
+                      "What's organic traffic looking like this quarter?",
+                      "Show top converting pages",
+                      "How are we tracking against NSM goals?",
+                      "What work was done last month?",
+                    ].map((s) => (
+                      <button
+                        key={s}
+                        data-testid={`suggestion-${s.slice(0, 15)}`}
+                        onClick={() => { setInput(s); textareaRef.current?.focus(); }}
+                        className="text-xs px-3 py-1 rounded-full border border-border hover:bg-muted transition-colors text-muted-foreground"
+                      >
+                        {s}
+                      </button>
                     ))}
                   </div>
                 )}
-
-                {msg.role === "user" ? (
-                  <p className="text-sm leading-relaxed">{msg.content}</p>
-                ) : (
-                  renderContent(msg.content)
-                )}
-              </div>
-
-              {msg.role === "user" && (
-                <div className="flex items-start pt-1 shrink-0">
-                  <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-muted">
-                    <User className="w-3.5 h-3.5 text-muted-foreground" />
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
-
-          {/* Loading state */}
-          {loading && (
-            <div className="flex gap-3 justify-start">
-              <div className="flex items-start pt-1 shrink-0">
-                <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-gradient-to-br from-[#D97706] to-[#B45309]">
-                  <Bot className="w-3.5 h-3.5 text-white" />
-                </div>
-              </div>
-              <div className="bg-card border border-border rounded-2xl rounded-bl-md px-4 py-3">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Analyzing your data...
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Error */}
-          {error && (
-            <div className="flex gap-3 justify-start">
-              <div className="flex items-start pt-1 shrink-0">
-                <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-red-100 dark:bg-red-950">
-                  <Bot className="w-3.5 h-3.5 text-red-600 dark:text-red-400" />
-                </div>
-              </div>
-              <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-2xl rounded-bl-md px-4 py-3">
-                <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Input area */}
-      <div className="shrink-0 border-t px-6 py-4 bg-background">
-        <div className="max-w-[900px] mx-auto w-full">
-          {/* Client selector row */}
-          <div className="flex items-center gap-2 mb-2">
-            <div className="relative" ref={dropdownRef}>
-              <button
-                onClick={() => setClientDropdownOpen((o) => !o)}
-                className={[
-                  "flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors",
-                  selectedClient
-                    ? "bg-[#D97706]/10 border-[#D97706]/30 text-[#D97706] dark:text-amber-400 hover:bg-[#D97706]/15"
-                    : "bg-muted/50 border-border text-muted-foreground hover:bg-muted hover:text-foreground",
-                ].join(" ")}
-                data-testid="button-client-selector"
-              >
-                <Users className="w-3.5 h-3.5" />
-                {selectedClient ? selectedClient.name : "All Clients"}
-                <ChevronDown className="w-3 h-3 ml-0.5" />
-              </button>
-
-              {clientDropdownOpen && (
-                <div className="absolute bottom-full mb-1 left-0 z-50 min-w-[200px] max-h-[240px] overflow-y-auto bg-popover border border-border rounded-lg shadow-lg py-1">
-                  <button
-                    onClick={() => {
-                      setSelectedClientId(null);
-                      setClientDropdownOpen(false);
-                    }}
-                    className={[
-                      "w-full text-left px-3 py-2 text-xs transition-colors",
-                      selectedClientId === null
-                        ? "bg-accent text-accent-foreground font-medium"
-                        : "text-foreground hover:bg-muted",
-                    ].join(" ")}
-                  >
-                    All Clients
-                  </button>
-                  {clients.map((c) => (
-                    <button
-                      key={c.id}
-                      onClick={() => {
-                        setSelectedClientId(c.id);
-                        setClientDropdownOpen(false);
-                      }}
-                      className={[
-                        "w-full text-left px-3 py-2 text-xs transition-colors",
-                        selectedClientId === c.id
-                          ? "bg-accent text-accent-foreground font-medium"
-                          : "text-foreground hover:bg-muted",
-                      ].join(" ")}
-                    >
-                      {c.name}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Integration selector */}
-            <div className="relative" ref={integrationDropdownRef}>
-              <button
-                onClick={() => {
-                  if (!selectedClient) return;
-                  setIntegrationDropdownOpen((o) => !o);
-                }}
-                disabled={!selectedClient}
-                className={[
-                  "flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors",
-                  selectedIntegrations.length > 0
-                    ? "bg-blue-50 border-blue-300 text-blue-700 dark:bg-blue-950/30 dark:border-blue-700 dark:text-blue-400"
-                    : "bg-muted/50 border-border text-muted-foreground",
-                  !selectedClient ? "opacity-40 cursor-not-allowed" : "hover:bg-muted hover:text-foreground",
-                ].join(" ")}
-                data-testid="button-integration-selector"
-                title={!selectedClient ? "Select a client first" : undefined}
-              >
-                <Filter className="w-3.5 h-3.5" />
-                {selectedIntegrations.length > 0 ? `Sources (${selectedIntegrations.length})` : "Sources"}
-                <ChevronDown className="w-3 h-3 ml-0.5" />
-              </button>
-
-              {integrationDropdownOpen && selectedClient && (
-                <div className="absolute bottom-full mb-1 left-0 z-50 w-[220px] bg-popover border border-border rounded-lg shadow-lg py-1">
-                  {/* Select All / Deselect All */}
-                  <div className="flex items-center justify-end px-3 py-1.5 border-b border-border">
-                    <button
-                      onClick={() => {
-                        if (selectedIntegrations.length === availableIntegrations.length) {
-                          setSelectedIntegrations([]);
-                        } else {
-                          setSelectedIntegrations(availableIntegrations.map((a) => a.key));
-                        }
-                      }}
-                      className="text-[10px] text-blue-600 dark:text-blue-400 hover:underline"
-                    >
-                      {selectedIntegrations.length === availableIntegrations.length ? "Deselect all" : "Select all"}
-                    </button>
-                  </div>
-                  {availableIntegrations.length === 0 ? (
-                    <p className="text-xs text-muted-foreground px-3 py-2">No integrations configured</p>
-                  ) : (
-                    availableIntegrations.map((cfg) => {
-                      const checked = selectedIntegrations.includes(cfg.key);
-                      const srcHealth = executionHealth?.sources[cfg.key];
-                      const srcStatus = srcHealth?.status ?? "ok";
-                      return (
-                        <button
-                          key={cfg.key}
-                          onClick={() => {
-                            setSelectedIntegrations((prev) =>
-                              checked ? prev.filter((k) => k !== cfg.key) : [...prev, cfg.key]
-                            );
-                          }}
-                          className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-foreground hover:bg-muted transition-colors"
-                          title={srcHealth?.detail}
-                        >
-                          <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${checked ? "bg-blue-600 border-blue-600" : "border-border bg-background"}`}>
-                            {checked && <Check className="w-2.5 h-2.5 text-white" />}
-                          </div>
-                          <span className="flex-1 text-left">{cfg.label}</span>
-                          {srcStatus === "credential_missing" && (
-                            <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" title={srcHealth?.detail} />
-                          )}
-                          {srcStatus === "client_missing_id" && (
-                            <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 shrink-0" title={srcHealth?.detail} />
-                          )}
-                        </button>
-                      );
-                    })
-                  )}
-                </div>
-              )}
-            </div>
-
-            {selectedIntegrations.length > 0 && (
-              <button
-                onClick={() => setSelectedIntegrations([])}
-                className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-                title="Clear source filters"
-              >
-                <X className="w-3 h-3" />
-                Clear
-              </button>
-            )}
-          </div>
-
-          {/* Execution health warnings for selected sources */}
-          {executionHealth && selectedIntegrations.length > 0 && (() => {
-            const issues = selectedIntegrations
-              .map((key) => ({ key, health: executionHealth.sources[key] }))
-              .filter(({ health }) => health && health.status !== "ok");
-            if (issues.length === 0) return null;
-            return (
-              <div className="mb-2 rounded-lg border border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-950/30 px-3 py-2 space-y-1">
-                {issues.map(({ key, health }) => (
-                  <p key={key} className="text-[11px] text-yellow-800 dark:text-yellow-300">
-                    <span className="font-medium capitalize">{key.replace(/_/g, " ")}: </span>
-                    {health.status === "credential_missing" ? "⚠ No credentials stored — " : "⚠ Client not configured — "}
-                    {health.detail}
-                  </p>
-                ))}
-              </div>
-            );
-          })()}
-
-          {/* Input row */}
-          <div className={`flex items-end gap-2 bg-card border rounded-xl px-3 py-2 transition-all ${
-            isListening
-              ? "border-red-400 dark:border-red-600 ring-2 ring-red-400/20"
-              : "border-border focus-within:ring-2 focus-within:ring-ring/20 focus-within:border-ring"
-          }`}>
-            {isListening ? (
-              <div className="flex-1 flex items-center gap-3 min-h-[30px] py-1 overflow-hidden">
-                {/* Animated waveform bars */}
-                <div className="flex items-end gap-[3px] h-5 shrink-0 text-red-500">
-                  {[0, 0.12, 0.24, 0.36, 0.48, 0.36, 0.24].map((delay, i) => (
-                    <span key={i} className="aca-bar" style={{ animationDelay: `${delay}s` }} />
-                  ))}
-                </div>
-                {/* Interim transcript or "Listening..." */}
-                <span className="text-sm text-muted-foreground/70 truncate">
-                  {input || "Listening\u2026"}
-                </span>
               </div>
             ) : (
-              <textarea
-                ref={inputRef}
-                value={input}
-                onChange={handleInputChange}
-                onKeyDown={handleKeyDown}
-                placeholder={
-                  selectedClient
-                    ? `Ask anything about ${selectedClient.name}...`
-                    : "Ask anything about your clients, data, or integrations..."
-                }
-                rows={1}
-                disabled={loading}
-                className="flex-1 text-sm bg-transparent border-none outline-none resize-none placeholder:text-muted-foreground/60 min-h-[24px] max-h-[200px] py-1"
-                data-testid="input-aca-message"
-              />
+              <div className="space-y-5">
+                {messages.map((m) => <MessageBubble key={m.id} message={m} />)}
+                <div ref={messagesEndRef} />
+              </div>
             )}
-            {speechSupported && (
-              <button
-                onClick={toggleVoiceInput}
-                disabled={loading}
-                className={`flex items-center justify-center w-8 h-8 rounded-lg transition-colors shrink-0 ${
-                  isListening
-                    ? "bg-red-500 hover:bg-red-600 text-white"
-                    : "bg-muted hover:bg-muted/80 text-muted-foreground"
-                } disabled:opacity-40 disabled:cursor-not-allowed`}
-                data-testid="button-aca-voice"
-                title={isListening ? "Stop listening" : "Voice input"}
-              >
-                {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-              </button>
-            )}
-            <button
-              onClick={() => sendMessage()}
-              disabled={(!input.trim() && !isListening) || loading}
-              className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-              data-testid="button-aca-send"
-            >
-              {loading ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Send className="w-4 h-4" />
-              )}
-            </button>
           </div>
-          {voiceError && (
-            <p className="text-[11px] text-red-600 dark:text-red-400 mt-1.5 text-center">
-              {voiceError}
-            </p>
+        </ScrollArea>
+
+        {/* Input bar */}
+        <div className="px-4 pb-4 pt-2 shrink-0 border-t border-border bg-background">
+          {!selectedClientId && (
+            <div className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 mb-2">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+              <span>Select a client above to enable client-specific data queries.</span>
+            </div>
           )}
-          <p className="text-[10px] text-muted-foreground mt-2 text-center">
-            /AMA/ reads live data from your connected integrations. Responses may take a moment when pulling from multiple sources.
+          <div className="flex gap-2 items-end">
+            <Textarea
+              ref={textareaRef}
+              data-testid="input-chat"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={
+                selectedClientId
+                  ? "Ask about performance, rankings, goals, work done… (Enter to send)"
+                  : "Ask a question or select a client first…"
+              }
+              className="flex-1 min-h-[64px] max-h-40 resize-none text-sm"
+              disabled={isStreaming}
+            />
+            <Button
+              data-testid="button-send"
+              onClick={sendMessage}
+              disabled={!input.trim() || isStreaming}
+              size="sm"
+              className="h-10 px-4 shrink-0"
+            >
+              {isStreaming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            </Button>
+          </div>
+          <p className="text-[10px] text-muted-foreground/50 mt-1.5">
+            Shift+Enter for new line · All responses grounded in retrieved data
           </p>
         </div>
       </div>

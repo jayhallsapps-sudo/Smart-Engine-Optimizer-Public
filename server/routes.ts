@@ -870,7 +870,147 @@ export async function registerRoutes(
     }
   });
 
-  // ─── ACA: Ask Claude Anything ───────────────────────────────────────────────
+  // ─── AMA: Ask Me Anything — Conversation CRUD ───────────────────────────────
+
+  app.get("/api/ama/conversations", async (req: Request, res: Response) => {
+    const clientId = req.query.clientId ? parseInt(req.query.clientId as string, 10) : null;
+    const conversations = await storage.listAmaConversations(clientId);
+    res.json(conversations);
+  });
+
+  app.post("/api/ama/conversations", async (req: Request, res: Response) => {
+    const { clientId, clientName, title, integrations } = req.body;
+    const convo = await storage.createAmaConversation({ clientId, clientName, title: title || "New Conversation", integrations });
+    res.json(convo);
+  });
+
+  app.get("/api/ama/conversations/:id", async (req: Request, res: Response) => {
+    const id = parseInt(req.params.id, 10);
+    const convo = await storage.getAmaConversation(id);
+    if (!convo) return res.status(404).json({ message: "Conversation not found" });
+    const messages = await storage.getAmaMessages(id);
+    res.json({ ...convo, messages });
+  });
+
+  app.patch("/api/ama/conversations/:id", async (req: Request, res: Response) => {
+    const id = parseInt(req.params.id, 10);
+    const { title } = req.body;
+    const updated = await storage.updateAmaConversation(id, { title });
+    if (!updated) return res.status(404).json({ message: "Conversation not found" });
+    res.json(updated);
+  });
+
+  app.delete("/api/ama/conversations/:id", async (req: Request, res: Response) => {
+    const id = parseInt(req.params.id, 10);
+    const ok = await storage.deleteAmaConversation(id);
+    res.json({ success: ok });
+  });
+
+  // ─── AMA: Streaming chat endpoint (SSE) ─────────────────────────────────────
+
+  app.post("/api/ama/stream", heavyLimiter, async (req: Request, res: Response) => {
+    const { messages, clientId, integrations, conversationId } = req.body as {
+      messages?: { role: string; content: string }[];
+      clientId?: number | null;
+      integrations?: string[];
+      conversationId?: number | null;
+    };
+
+    if (!messages || !Array.isArray(messages) || messages.length === 0) {
+      return res.status(400).json({ message: "messages array is required" });
+    }
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders();
+
+    const sendEvent = (data: object) => {
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+
+    try {
+      const { streamAmaChat } = await import("./claudeService");
+
+      const amaMessages = messages.map((m) => ({
+        role: m.role as "user" | "assistant",
+        content: m.content,
+      }));
+
+      let clientContext: { id: number; name: string } | undefined;
+      let clientNameForLog: string | null = null;
+      if (clientId) {
+        const client = await storage.getClient(clientId);
+        if (client) {
+          clientContext = { id: client.id, name: client.name };
+          clientNameForLog = client.name;
+        }
+      }
+
+      let activeConversationId = conversationId ?? null;
+      let fullResponse = "";
+      const allToolCalls: any[] = [];
+
+      for await (const event of streamAmaChat(amaMessages, clientContext, integrations || [])) {
+        sendEvent(event);
+
+        if (event.type === "tool_call") {
+          allToolCalls.push({ name: event.name, input: event.input });
+        }
+        if (event.type === "tool_result") {
+          const last = allToolCalls[allToolCalls.length - 1];
+          if (last && last.name === event.name) last.result = event.result;
+        }
+        if (event.type === "token") {
+          fullResponse += event.text;
+        }
+        if (event.type === "done") {
+          const userMessage = amaMessages[amaMessages.length - 1]?.content || "";
+
+          if (!activeConversationId) {
+            const title = userMessage.slice(0, 60) + (userMessage.length > 60 ? "…" : "");
+            const convo = await storage.createAmaConversation({
+              clientId: clientId ?? null,
+              clientName: clientNameForLog,
+              title,
+              integrations: integrations || [],
+            });
+            activeConversationId = convo.id;
+
+            for (const m of amaMessages) {
+              await storage.addAmaMessage({ conversationId: activeConversationId, role: m.role, content: m.content });
+            }
+          } else {
+            const lastUserMsg = amaMessages[amaMessages.length - 1];
+            if (lastUserMsg) {
+              await storage.addAmaMessage({ conversationId: activeConversationId, role: lastUserMsg.role, content: lastUserMsg.content });
+            }
+          }
+
+          await storage.addAmaMessage({
+            conversationId: activeConversationId,
+            role: "assistant",
+            content: fullResponse,
+            toolCalls: allToolCalls.length > 0 ? allToolCalls : null,
+            provider: event.provider,
+          });
+
+          await storage.updateAmaConversation(activeConversationId, {});
+
+          sendEvent({ type: "conversation_id", id: activeConversationId });
+        }
+      }
+    } catch (err: any) {
+      console.error("[AMA] Stream error:", err);
+      sendEvent({ type: "error", message: "Something went wrong. Please try again." });
+    }
+
+    res.write("data: [DONE]\n\n");
+    res.end();
+  });
+
+  // ─── ACA: Legacy non-streaming chat (kept for compatibility) ─────────────────
 
   app.post("/api/aca/chat", heavyLimiter, async (req: Request, res: Response) => {
     const { messages, clientId, integrations } = req.body as {
@@ -883,43 +1023,29 @@ export async function registerRoutes(
     }
 
     try {
-      const { runAcaChat } = await import("./claudeService");
+      const { runAmaChat } = await import("./claudeService");
 
-      const acaMessages = messages.map((m) => ({
+      const amaMessages = messages.map((m) => ({
         role: m.role as "user" | "assistant",
         content: m.content,
       }));
 
-      // Resolve client context if a client is selected
       let clientContext: { id: number; name: string } | undefined;
       if (clientId) {
         const client = await storage.getClient(clientId);
-        if (client) {
-          clientContext = { id: client.id, name: client.name };
-        }
+        if (client) clientContext = { id: client.id, name: client.name };
       }
 
-      const toolCalls: string[] = [];
-      const { response, provider } = await runAcaChat(
-        acaMessages,
-        clientContext,
-        integrations || [],
-        (toolName) => { toolCalls.push(toolName); }
-      );
-
+      const { response, provider, toolCalls } = await runAmaChat(amaMessages, clientContext, integrations || []);
       res.json({ response, provider, toolCalls });
     } catch (err: any) {
-      console.error("[ACA] Chat error:", err);
-      if (err.message?.includes("unconfigured") || err.message?.includes("API key")) {
-        return res.status(503).json({
-          message: "The AI service is not configured. Please contact your administrator.",
-        });
-      }
+      console.error("[AMA] Chat error:", err);
       const errMsg = (err.message || "").toLowerCase();
-      if (err.status === 429 || errMsg.includes("rate limit") || (errMsg.includes("token") && errMsg.includes("limit"))) {
-        return res.status(503).json({
-          message: "The AI service is temporarily at capacity. Please wait a moment and try again.",
-        });
+      if (errMsg.includes("api key") || errMsg.includes("configured")) {
+        return res.status(503).json({ message: "The AI service is not configured. Please contact your administrator." });
+      }
+      if (err.status === 429 || errMsg.includes("rate limit")) {
+        return res.status(503).json({ message: "The AI service is temporarily at capacity. Please wait a moment and try again." });
       }
       res.status(500).json({ message: "Something went wrong processing your request. Please try again." });
     }

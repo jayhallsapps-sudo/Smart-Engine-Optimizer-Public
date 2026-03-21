@@ -92,7 +92,7 @@ function ReportRow({ rt }: { rt: ReportTypeDefinition }) {
 }
 
 export default function PrepareReportPage() {
-  const slideshowReports = ALL_REPORT_TYPES.filter(r => r.family === "slideshow");
+  const slideshowReports = ALL_REPORT_TYPES.filter(r => r.family === "slideshow" && r.id !== "mid_strategy");
   const documentReports = ALL_REPORT_TYPES.filter(r => r.family === "document");
 
   return (
@@ -204,7 +204,7 @@ export default function PrepareReportPage() {
           <Zap className="w-3.5 h-3.5 text-muted-foreground mt-0.5 shrink-0" />
           <div>
             <span className="text-[11px] text-muted-foreground font-medium">Quick launch — skip the guided workflow: </span>
-            {ALL_REPORT_TYPES.filter(rt => rt.implemented && rt.route).map((rt, i, arr) => (
+            {ALL_REPORT_TYPES.filter(rt => rt.implemented && rt.route && rt.id !== "mid_strategy").map((rt, i, arr) => (
               <span key={rt.id}>
                 <a
                   href={rt.route!}

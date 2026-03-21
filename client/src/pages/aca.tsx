@@ -49,12 +49,27 @@ interface SpeechRecognitionEvent extends Event {
   readonly results: SpeechRecognitionResultList;
 }
 
+type SpeechRecognitionErrorCode =
+  | "aborted"
+  | "audio-capture"
+  | "bad-grammar"
+  | "language-not-supported"
+  | "network"
+  | "no-speech"
+  | "not-allowed"
+  | "service-not-allowed";
+
+interface SpeechRecognitionErrorEvent extends Event {
+  readonly error: SpeechRecognitionErrorCode;
+  readonly message: string;
+}
+
 interface SpeechRecognitionInstance extends EventTarget {
   continuous: boolean;
   interimResults: boolean;
   lang: string;
   onresult: ((event: SpeechRecognitionEvent) => void) | null;
-  onerror: ((event: Event) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
   onend: (() => void) | null;
   start(): void;
   stop(): void;
@@ -292,6 +307,7 @@ export default function AcaPage() {
   const [selectedIntegrations, setSelectedIntegrations] = useState<string[]>([]);
   const [integrationDropdownOpen, setIntegrationDropdownOpen] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -387,8 +403,42 @@ export default function AcaPage() {
       inputValueRef.current = newVal;
     };
 
-    recognition.onerror = () => {
+    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
       recognitionRef.current = null;
+      const code = event.error;
+
+      // Permanent failures — stop and show feedback
+      if (code === "not-allowed" || code === "service-not-allowed") {
+        manualStopRef.current = true;
+        setIsListening(false);
+        setVoiceError("Microphone access was denied. Please allow microphone permissions in your browser and try again.");
+        return;
+      }
+      if (code === "audio-capture") {
+        manualStopRef.current = true;
+        setIsListening(false);
+        setVoiceError("No microphone was found. Please connect a microphone and try again.");
+        return;
+      }
+      if (code === "language-not-supported") {
+        manualStopRef.current = true;
+        setIsListening(false);
+        setVoiceError("Your browser does not support speech recognition in this language.");
+        return;
+      }
+
+      // Recoverable failures — retry unless manually stopped
+      if (code === "no-speech") {
+        // Restart silently; user hasn't spoken yet
+        if (!manualStopRef.current) {
+          setTimeout(() => startSessionRef.current?.(), 300);
+        } else {
+          setIsListening(false);
+        }
+        return;
+      }
+
+      // network, aborted, bad-grammar, unknown — retry if not manually stopped
       if (!manualStopRef.current) {
         setTimeout(() => startSessionRef.current?.(), 300);
       } else {
@@ -438,6 +488,7 @@ export default function AcaPage() {
 
     if (!SpeechRecognitionClass) return;
 
+    setVoiceError(null);
     manualStopRef.current = false;
     preVoiceInputRef.current = input;
     inputValueRef.current = input;
@@ -562,9 +613,9 @@ export default function AcaPage() {
               <Sparkles className="w-4.5 h-4.5 text-white" />
             </div>
             <div>
-              <h1 className="text-lg font-bold tracking-tight" style={{ color: "#D97706" }}>/ACA/</h1>
+              <h1 className="text-lg font-bold tracking-tight" style={{ color: "#D97706" }}>/AMA/</h1>
               <p className="text-[11px] text-muted-foreground">
-                Query any data source, analyze client performance, explore integrations.
+                ask the onboard AIs anything about clients, integrations, data, and get live data pulls.
               </p>
             </div>
           </div>
@@ -585,6 +636,7 @@ export default function AcaPage() {
       <div className="shrink-0 border-b">
         <div className="max-w-[900px] mx-auto w-full px-6 py-3">
           <IntegrationsPanel
+            hideLabel={true}
             integrations={[
               {
                 id: "gsc",
@@ -843,8 +895,7 @@ export default function AcaPage() {
               {integrationDropdownOpen && selectedClient && (
                 <div className="absolute bottom-full mb-1 left-0 z-50 w-[220px] bg-popover border border-border rounded-lg shadow-lg py-1">
                   {/* Select All / Deselect All */}
-                  <div className="flex items-center justify-between px-3 py-1.5 border-b border-border">
-                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Data Sources</span>
+                  <div className="flex items-center justify-end px-3 py-1.5 border-b border-border">
                     <button
                       onClick={() => {
                         if (selectedIntegrations.length === availableIntegrations.length) {
@@ -961,8 +1012,13 @@ export default function AcaPage() {
               )}
             </button>
           </div>
+          {voiceError && (
+            <p className="text-[11px] text-red-600 dark:text-red-400 mt-1.5 text-center">
+              {voiceError}
+            </p>
+          )}
           <p className="text-[10px] text-muted-foreground mt-2 text-center">
-            /ACA/ reads live data from your connected integrations. Responses may take a moment when pulling from multiple sources.
+            /AMA/ reads live data from your connected integrations. Responses may take a moment when pulling from multiple sources.
           </p>
         </div>
       </div>

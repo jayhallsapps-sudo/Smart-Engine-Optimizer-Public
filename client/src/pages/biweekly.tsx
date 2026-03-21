@@ -116,7 +116,7 @@ function AcaChatPanel({ clientId, clientName, report, edits }: {
     <div className="flex flex-col h-full">
       <div className="px-3 py-2 border-b flex items-center gap-2 shrink-0">
         <Bot className="w-4 h-4 text-[#D97706]" />
-        <span className="text-xs font-semibold">/ACA/ Chat</span>
+        <span className="text-xs font-semibold">/AMA/ Chat</span>
         <span className="text-[10px] text-muted-foreground ml-auto">Ask about this report</span>
       </div>
 
@@ -692,7 +692,7 @@ export default function BiweeklyPage() {
         <Tabs value={rightTab} onValueChange={v => setRightTab(v as any)} className="flex flex-col h-full min-h-0">
           <TabsList className="w-full rounded-none border-b bg-card shrink-0 h-9">
             <TabsTrigger value="aca" className="flex-1 text-xs gap-1" data-testid="tab-aca">
-              <Bot className="w-3 h-3" /> /ACA/
+              <Bot className="w-3 h-3" /> /AMA/
             </TabsTrigger>
             <TabsTrigger value="notes" className="flex-1 text-xs gap-1" data-testid="tab-notes">
               <NotebookPen className="w-3 h-3" /> AM Notes

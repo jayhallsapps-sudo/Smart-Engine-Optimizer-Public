@@ -217,9 +217,10 @@ function IntegrationTag({ id }: { id: IntegrationId }) {
 interface Props {
   integrations: IntegrationUsage[];
   className?: string;
+  hideLabel?: boolean;
 }
 
-export function IntegrationsPanel({ integrations, className = "" }: Props) {
+export function IntegrationsPanel({ integrations, className = "", hideLabel = false }: Props) {
   const [open, setOpen] = useState(false);
 
   if (integrations.length === 0) return null;
@@ -234,9 +235,11 @@ export function IntegrationsPanel({ integrations, className = "" }: Props) {
         aria-expanded={open}
       >
         <Puzzle className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-        <span className="text-xs font-medium text-muted-foreground group-hover:text-foreground transition-colors flex-1">
-          Data sources
-        </span>
+        {!hideLabel && (
+          <span className="text-xs font-medium text-muted-foreground group-hover:text-foreground transition-colors flex-1">
+            Data sources
+          </span>
+        )}
         {/* inline tags when collapsed */}
         {!open && (
           <span className="flex items-center gap-1.5 flex-wrap mr-2">

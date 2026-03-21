@@ -31,8 +31,8 @@ const MODULES: ModuleCard[] = [
   {
     id: "aca",
     icon: Sparkles,
-    label: "/ACA/",
-    description: "Ask Claude Anything about clients, integrations, data, and get live data pulls.",
+    label: "/AMA/",
+    description: "ask the onboard AIs anything about clients, integrations, data, and get live data pulls.",
     href: "/aca",
     status: "live",
     accentColor: "#D97706",

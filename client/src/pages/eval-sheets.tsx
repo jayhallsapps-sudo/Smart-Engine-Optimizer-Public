@@ -771,29 +771,12 @@ function KeywordGapTab({ batch }: { batch: EvalBatch }) {
 
 // ─── Generating Panel ─────────────────────────────────────────────────────────
 
-function GeneratingPanel({ batch, onDone }: { batch: EvalBatch; onDone: (b: EvalBatch) => void }) {
-  const qc = useQueryClient();
+function GeneratingPanel({ batch }: { batch: EvalBatch }) {
   const [step, setStep] = useState(0);
 
   useEffect(() => {
-    const stepTimer = setInterval(() => setStep(s => Math.min(s + 1, 3)), 8000);
-    const pollTimer = setInterval(async () => {
-      try {
-        const headers = await getAuthHeaders();
-        const r = await fetch(`/api/eval-batches/${batch.id}/status`, { headers });
-        const data = await r.json();
-        if (data.enrichmentStatus === "generated" || data.enrichmentStatus === "failed") {
-          clearInterval(pollTimer);
-          clearInterval(stepTimer);
-          const headers2 = await getAuthHeaders();
-          const r2 = await fetch(`/api/eval-batches/${batch.id}`, { headers: headers2 });
-          const updated = await r2.json();
-          qc.invalidateQueries({ queryKey: ["/api/eval-batches"] });
-          onDone(updated);
-        }
-      } catch {}
-    }, 2500);
-    return () => { clearInterval(pollTimer); clearInterval(stepTimer); };
+    const timer = setInterval(() => setStep(s => Math.min(s + 1, 3)), 8000);
+    return () => clearInterval(timer);
   }, [batch.id]);
 
   const steps = [
@@ -833,10 +816,14 @@ function GeneratingPanel({ batch, onDone }: { batch: EvalBatch; onDone: (b: Eval
 
 // ─── Failed Panel ─────────────────────────────────────────────────────────────
 
-function FailedPanel({ batch, onRetry }: { batch: EvalBatch; onRetry: (b: EvalBatch) => void }) {
+function FailedPanel({ batch }: { batch: EvalBatch }) {
+  const qc = useQueryClient();
   const retryMut = useMutation({
     mutationFn: () => apiRequest("PATCH", `/api/eval-batches/${batch.id}`, { enrichmentStatus: "pending" }),
-    onSuccess: async resp => { const updated = await resp.json(); onRetry(updated); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/eval-batches", batch.id] });
+      qc.invalidateQueries({ queryKey: ["/api/eval-batches"] });
+    },
   });
 
   return (
@@ -891,18 +878,37 @@ function GeneratedPanel({ batch }: { batch: EvalBatch }) {
 
 // ─── Batch Detail Router ──────────────────────────────────────────────────────
 
-function BatchDetailPanel({ batch: initialBatch }: { batch: EvalBatch }) {
-  const [batch, setBatch] = useState<EvalBatch>(initialBatch);
-  useEffect(() => { setBatch(initialBatch); }, [initialBatch.id, initialBatch.enrichmentStatus]);
+function BatchDetailPanel({ batchId }: { batchId: number }) {
+  const { data: batch, isLoading } = useQuery<EvalBatch>({
+    queryKey: ["/api/eval-batches", batchId],
+    queryFn: () => authedGet(`/api/eval-batches/${batchId}`),
+    refetchInterval: (query) => query.state.data?.enrichmentStatus === "generating" ? 2500 : false,
+  });
+  const { data: imports = [] } = useQuery<any[]>({
+    queryKey: ["/api/eval-batches", batchId, "imports"],
+    queryFn: () => authedGet(`/api/eval-batches/${batchId}/imports`),
+    enabled: !!batchId,
+  });
+  const hasCrawlData = imports.some((i: any) => (i.rowCount ?? 0) > 0);
 
-  if (batch.enrichmentStatus === "generating") return <GeneratingPanel batch={batch} onDone={setBatch} />;
+  if (isLoading || !batch) return (
+    <div className="flex items-center justify-center h-full gap-2 text-muted-foreground">
+      <Loader2 className="w-4 h-4 animate-spin" /><span className="text-sm">Loading...</span>
+    </div>
+  );
+
+  if (batch.enrichmentStatus === "generating") return <GeneratingPanel batch={batch} />;
   if (batch.enrichmentStatus === "generated") return <GeneratedPanel batch={batch} />;
-  if (batch.enrichmentStatus === "failed") return <FailedPanel batch={batch} onRetry={setBatch} />;
+  if (batch.enrichmentStatus === "failed") return <FailedPanel batch={batch} />;
 
   return (
     <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-3 p-8">
       <Zap className="w-10 h-10 opacity-20" />
-      <p className="text-sm text-center">Upload Screaming Frog data and click<br /><strong>Generate Evaluation</strong> in the sidebar to get started.</p>
+      {hasCrawlData ? (
+        <p className="text-sm text-center">Screaming Frog data is loaded. Click<br /><strong>Generate Evaluation</strong> in the sidebar to run the analysis.</p>
+      ) : (
+        <p className="text-sm text-center">Upload Screaming Frog data and click<br /><strong>Generate Evaluation</strong> in the sidebar to get started.</p>
+      )}
     </div>
   );
 }
@@ -931,12 +937,19 @@ function SidebarSetup({ batch, clientId, onBatchChange }: { batch: EvalBatch; cl
   const crawlRowCount = sfImport?.rowCount ?? 0;
   const hasCrawlData = crawlRowCount > 0;
 
+  // Live batch status — keeps Generate/Regenerate button in sync
+  const { data: liveBatch } = useQuery<EvalBatch>({
+    queryKey: ["/api/eval-batches", batch.id],
+    queryFn: () => authedGet(`/api/eval-batches/${batch.id}`),
+    enabled: !!batch.id && !isNaN(batch.id),
+  });
+  const currentBatch = liveBatch ?? batch;
+
   const generateMut = useMutation({
     mutationFn: () => apiRequest("POST", `/api/eval-batches/${batch.id}/generate`),
-    onSuccess: async resp => {
-      const result = await resp.json();
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/eval-batches", batch.id] });
       qc.invalidateQueries({ queryKey: ["/api/eval-batches"] });
-      if (result.batch) onBatchChange(result.batch);
     },
     onError: (err: any) => {
       toast({ title: "Generation failed", description: err.message, variant: "destructive" });
@@ -945,7 +958,10 @@ function SidebarSetup({ batch, clientId, onBatchChange }: { batch: EvalBatch; cl
 
   const regenMut = useMutation({
     mutationFn: () => apiRequest("PATCH", `/api/eval-batches/${batch.id}`, { enrichmentStatus: "pending" }),
-    onSuccess: async resp => { const updated = await resp.json(); onBatchChange(updated); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/eval-batches", batch.id] });
+      qc.invalidateQueries({ queryKey: ["/api/eval-batches"] });
+    },
   });
 
   async function doUpload(fileList: FileList | File[] | null) {
@@ -973,8 +989,8 @@ function SidebarSetup({ batch, clientId, onBatchChange }: { batch: EvalBatch; cl
     doUpload(e.dataTransfer.files);
   }
 
-  const isGenerated = batch.enrichmentStatus === "generated";
-  const isGenerating = batch.enrichmentStatus === "generating";
+  const isGenerated = currentBatch.enrichmentStatus === "generated";
+  const isGenerating = currentBatch.enrichmentStatus === "generating";
 
   return (
     <div className="border-t mt-2 pt-3 space-y-3 px-3 pb-3">
@@ -1259,7 +1275,7 @@ export default function EvalSheetsPage() {
             <p className="text-xs opacity-70">Each batch represents one evaluation period</p>
           </div>
         ) : (
-          <BatchDetailPanel batch={selectedBatch} />
+          <BatchDetailPanel key={selectedBatch.id} batchId={selectedBatch.id} />
         )}
       </div>
     </div>

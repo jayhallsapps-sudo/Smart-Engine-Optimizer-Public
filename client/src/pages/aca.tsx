@@ -240,6 +240,7 @@ function ConversationSidebar({
   onNew,
   onDelete,
   isLoading,
+  hasClient,
 }: {
   conversations: AmaConversation[];
   activeId: number | null;
@@ -247,6 +248,7 @@ function ConversationSidebar({
   onNew: () => void;
   onDelete: (id: number) => void;
   isLoading: boolean;
+  hasClient: boolean;
 }) {
   return (
     <div className="flex flex-col h-full">
@@ -271,8 +273,10 @@ function ConversationSidebar({
             </div>
           )}
           {!isLoading && conversations.length === 0 && (
-            <p className="text-xs text-muted-foreground text-center py-6 px-2">
-              No conversations yet.
+            <p className="text-xs text-muted-foreground text-center py-6 px-2 leading-relaxed">
+              {hasClient
+                ? "No conversations for this client yet."
+                : "Select a client to see its history."}
             </p>
           )}
           {conversations.map((convo) => (
@@ -338,8 +342,12 @@ export default function AcaPage() {
   // Data queries
   const { data: clients = [] } = useQuery<Client[]>({ queryKey: ["/api/clients"] });
 
+  const conversationQueryKey = selectedClientId != null
+    ? `/api/ama/conversations?clientId=${selectedClientId}`
+    : "/api/ama/conversations";
+
   const { data: conversations = [], isLoading: convoLoading } = useQuery<AmaConversation[]>({
-    queryKey: ["/api/ama/conversations"],
+    queryKey: [conversationQueryKey],
     staleTime: 0,
   });
 
@@ -380,11 +388,19 @@ export default function AcaPage() {
     }
   }, [authToken, toast]);
 
+  // Clear conversation when client switches
+  useEffect(() => {
+    setActiveConversationId(null);
+    setMessages([]);
+  }, [selectedClientId]);
+
   // Delete a conversation
   const deleteConversation = useCallback(async (id: number) => {
     try {
       await apiRequest("DELETE", `/api/ama/conversations/${id}`);
-      queryClient.invalidateQueries({ queryKey: ["/api/ama/conversations"] });
+      queryClient.invalidateQueries({
+        predicate: (q) => typeof q.queryKey[0] === "string" && (q.queryKey[0] as string).startsWith("/api/ama/conversations"),
+      });
       if (activeConversationId === id) {
         setActiveConversationId(null);
         setMessages([]);
@@ -512,7 +528,9 @@ export default function AcaPage() {
 
             case "conversation_id":
               setActiveConversationId(ev.id);
-              queryClient.invalidateQueries({ queryKey: ["/api/ama/conversations"] });
+              queryClient.invalidateQueries({
+                predicate: (q) => typeof q.queryKey[0] === "string" && (q.queryKey[0] as string).startsWith("/api/ama/conversations"),
+              });
               break;
 
             case "error":
@@ -585,6 +603,7 @@ export default function AcaPage() {
             onNew={startNewConversation}
             onDelete={deleteConversation}
             isLoading={convoLoading}
+            hasClient={selectedClientId != null}
           />
         </div>
       )}

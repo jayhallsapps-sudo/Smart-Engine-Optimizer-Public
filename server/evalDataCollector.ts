@@ -246,72 +246,11 @@ async function semrushDomainData(apiKey: string, domain: string): Promise<{
 // ─── SEMrush keyword gap (client vs competitors) ──────────────────────────────
 
 export async function fetchKeywordGap(
-  clientDomain: string,
-  competitorDomains: string[],
+  _clientDomain: string,
+  _competitorDomains: string[],
 ): Promise<Array<{ keyword: string; volume: number; clientPos: string; competitors: Array<{ domain: string; pos: string }> }>> {
-  const apiKey = await getSemrushKey();
-  if (!apiKey || competitorDomains.length === 0) return [];
-
-  try {
-    const clientD = cleanDomainForApi(clientDomain);
-
-    // Fetch client's top 500 ranking keywords
-    const clientQs = new URLSearchParams({
-      type: "domain_organic", domain: clientD, database: "us",
-      display_limit: "500", export_columns: "Ph,Po,Nq",
-      key: apiKey,
-    }).toString();
-    const clientResp = await fetch(`https://api.semrush.com/?${clientQs}`);
-    const clientText = await clientResp.text();
-    const clientKeywords = new Map<string, string>(); // keyword -> position
-    if (clientResp.ok && clientText && !clientText.startsWith("ERROR")) {
-      const lines = clientText.trim().split("\n").slice(1).filter(Boolean);
-      for (const line of lines) {
-        const parts = line.split(";");
-        if (parts[0]) clientKeywords.set(parts[0].trim().toLowerCase(), parts[1]?.trim() ?? DASH);
-      }
-    }
-
-    // Fetch top competitors' keywords, find gaps
-    const gaps: Array<{ keyword: string; volume: number; clientPos: string; competitors: Array<{ domain: string; pos: string }> }> = [];
-    const seen = new Set<string>();
-
-    for (const compUrl of competitorDomains.slice(0, 3)) {
-      const compD = cleanDomainForApi(compUrl);
-      const compQs = new URLSearchParams({
-        type: "domain_organic", domain: compD, database: "us",
-        display_limit: "200", export_columns: "Ph,Po,Nq",
-        display_sort: "nq_desc", key: apiKey,
-      }).toString();
-      const compResp = await fetch(`https://api.semrush.com/?${compQs}`);
-      const compText = await compResp.text();
-      if (!compResp.ok || !compText || compText.startsWith("ERROR")) continue;
-
-      const compLines = compText.trim().split("\n").slice(1).filter(Boolean);
-      for (const line of compLines) {
-        const parts = line.split(";");
-        const kw = parts[0]?.trim().toLowerCase() ?? "";
-        const pos = parts[1]?.trim() ?? DASH;
-        const vol = parseInt(parts[2]?.trim() ?? "0") || 0;
-        if (!kw || seen.has(kw)) continue;
-        const clientPos = clientKeywords.get(kw);
-        // Only include if client doesn't rank top 20 for it
-        const clientRank = parseInt(clientPos ?? "999");
-        const compRank = parseInt(pos);
-        if (compRank <= 10 && (isNaN(clientRank) || clientRank > 20) && vol > 50) {
-          seen.add(kw);
-          gaps.push({
-            keyword: kw,
-            volume: vol,
-            clientPos: clientPos ?? DASH,
-            competitors: [{ domain: compD, pos }],
-          });
-        }
-      }
-    }
-
-    return gaps.sort((a, b) => b.volume - a.volume).slice(0, 100);
-  } catch { return []; }
+  // SEMrush API calls are currently disabled to preserve account credits.
+  return [];
 }
 
 // ─── Ahrefs v3 endpoints (the /overview endpoint does not exist — use individual endpoints) ───
@@ -469,7 +408,10 @@ export async function fetchCompetitorEvalMetrics(domain: string, opts?: { includ
     whoisReg: DASH, firstArchive: DASH, archiveUrl: DASH,
   };
 
-  const [ahrefsToken, semrushKey] = await Promise.all([getAhrefsToken(), getSemrushKey()]);
+  const ahrefsToken = await getAhrefsToken();
+  // SEMrush API calls are currently disabled to preserve account credits.
+  // All SEMrush-sourced fields (organicTraffic, indexedPages, featuredSnippets, informationalKeywords)
+  // will remain "—" and can be filled in manually by the AM.
   const includeWW = opts?.includeWhoisWayback ?? true;
 
   // Run all API calls in parallel — Ahrefs uses separate v3 endpoints (no /overview)
@@ -479,7 +421,7 @@ export async function fetchCompetitorEvalMetrics(domain: string, opts?: { includ
     ahrefsToken ? ahrefsOrganicKeywordsTotal(ahrefsToken, domain) : Promise.resolve(DASH),
     ahrefsToken ? ahrefsTop1to3Count(ahrefsToken, domain) : Promise.resolve(DASH),
     ahrefsToken ? ahrefsTop4to10Count(ahrefsToken, domain) : Promise.resolve(DASH),
-    semrushKey ? semrushDomainData(semrushKey, domain) : Promise.resolve(null),
+    Promise.resolve(null), // SEMrush disabled — credits paused
     includeWW ? fetchWhoisReg(domain) : Promise.resolve(DASH),
     includeWW ? fetchFirstArchive(domain) : Promise.resolve({ date: DASH, url: DASH }),
   ]);
@@ -910,12 +852,7 @@ export async function enrichCrawlRowsWithPerformance(
 
 // ─── SEMrush metrics for client (legacy) ─────────────────────────────────────
 
-export async function fetchClientSemrushMetrics(clientId: number): Promise<{ organicKeywords: string; organicTraffic: string } | null> {
-  const client = await storage.getClient(clientId);
-  if (!client) return null;
-  const semrushKey = await getSemrushKey();
-  if (!semrushKey) return null;
-  const domain = extractDomain(client.gscSiteUrl ?? client.ahrefsProjectUrl) ?? "";
-  if (!domain) return null;
-  return semrushDomainData(semrushKey, domain);
+export async function fetchClientSemrushMetrics(_clientId: number): Promise<null> {
+  // SEMrush API calls are currently disabled to preserve account credits.
+  return null;
 }

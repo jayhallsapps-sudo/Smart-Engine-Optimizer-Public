@@ -1,7 +1,7 @@
 /**
  * Canonical monthly content credit capacities per client.
  * Source of truth per data-handling-rules skill.
- * Values: Anchored Tides=4, Bliss=8, Heartland=5, Sol Women's=5,
+ * Values: Anchored Tides=4, Bliss=8, Sol Women's=5,
  *         Williamsburg=3, Horseshoe Ridge=4, Iris Healing=5
  *
  * Matching is case-insensitive substring on the client name.
@@ -10,7 +10,6 @@
 export const CLIENT_MONTHLY_CREDIT_MAP: Record<string, number> = {
   "anchored tides": 4,
   "bliss recovery": 8,
-  "heartland healing": 5,
   "sol women": 5,
   "williamsburg house": 3,
   "horseshoe ridge": 4,

@@ -4367,6 +4367,66 @@ export async function registerRoutes(
     } catch (err: any) { res.status(500).json({ error: err.message }); }
   });
 
+  // ─── Eval API Diagnostics ────────────────────────────────────────────────────
+  // Quick endpoint to verify Ahrefs + SEMrush tokens without running a full generation
+
+  app.get("/api/eval-diagnostics", async (req, res) => {
+    const { decrypt } = await import("./encryption");
+    const testDomain = (req.query.domain as string) || "ahrefs.com";
+
+    const results: Record<string, { status: "ok" | "error" | "missing"; detail: string }> = {};
+
+    // Test Ahrefs
+    try {
+      const ahrefsCreds = await storage.getApiCredentialsByService("ahrefs");
+      if (!ahrefsCreds.length) {
+        results.ahrefs = { status: "missing", detail: "No Ahrefs API key configured" };
+      } else {
+        const token = decrypt(ahrefsCreds[0].encryptedValue);
+        const today = new Date().toISOString().slice(0, 10);
+        // Test the domain-rating endpoint (confirmed working in Ahrefs v3)
+        const qs = new URLSearchParams({ target: testDomain, date: today }).toString();
+        const resp = await fetch(`https://api.ahrefs.com/v3/site-explorer/domain-rating?${qs}`, {
+          headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+          signal: AbortSignal.timeout(10000),
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          const dr = data.domain_rating ?? data.domain?.domain_rating ?? "?";
+          results.ahrefs = { status: "ok", detail: `domain-rating endpoint OK — DR=${dr}` };
+        } else {
+          const body = await resp.text().catch(() => "");
+          results.ahrefs = { status: "error", detail: `HTTP ${resp.status}: ${body.slice(0, 200)}` };
+        }
+      }
+    } catch (e: any) {
+      results.ahrefs = { status: "error", detail: e.message };
+    }
+
+    // Test SEMrush
+    try {
+      const semCreds = await storage.getApiCredentialsByService("semrush");
+      if (!semCreds.length) {
+        results.semrush = { status: "missing", detail: "No SEMrush API key configured" };
+      } else {
+        const key = decrypt(semCreds[0].encryptedValue);
+        const qs = new URLSearchParams({ type: "domain_ranks", domain: testDomain, database: "us", export_columns: "Or,Ot", key }).toString();
+        const resp = await fetch(`https://api.semrush.com/?${qs}`, { signal: AbortSignal.timeout(10000) });
+        const text = await resp.text();
+        if (resp.ok && text && !text.startsWith("ERROR")) {
+          const lines = text.trim().split("\n");
+          results.semrush = { status: "ok", detail: `Returned ${lines.length} line(s): ${lines[0]?.slice(0, 80)}` };
+        } else {
+          results.semrush = { status: "error", detail: `HTTP ${resp.status}: ${text.slice(0, 200)}` };
+        }
+      }
+    } catch (e: any) {
+      results.semrush = { status: "error", detail: e.message };
+    }
+
+    res.json({ testDomain, results });
+  });
+
   // ─── Eval Batch Generation ──────────────────────────────────────────────────
 
   app.post("/api/eval-batches/:id/generate", async (req, res) => {
@@ -4455,10 +4515,17 @@ export async function registerRoutes(
           firstArchive:          fetched?.firstArchive ?? "—",
         };
         const computed = computeDerivedMetrics(metrics);
+        // sourceTrace: record which API each metric came from
         if (fetched?.dr !== "—") { sourceTrace.dr = "ahrefs"; sourceTrace.referringDomains = "ahrefs"; sourceTrace.backlinks = "ahrefs"; }
-        if (!sourceTrace.organicTraffic && fetched?.organicTraffic !== "—") sourceTrace.organicTraffic = "ahrefs";
-        if (!sourceTrace.organicKeywords && fetched?.organicKeywords !== "—") sourceTrace.organicKeywords = "ahrefs";
         if (fetched?.top10Keywords !== "—") sourceTrace.top10Keywords = "ahrefs";
+        // organicTraffic/Keywords: Ahrefs first, SEMrush fallback — trace must reflect actual source
+        if (!sourceTrace.organicTraffic && organicTraffic !== "—") {
+          // If Ahrefs had it, it would have been used already (see fetchCompetitorEvalMetrics priority)
+          sourceTrace.organicTraffic = fetched?.dr !== "—" ? "ahrefs" : "semrush";
+        }
+        if (!sourceTrace.organicKeywords && organicKeywords !== "—") {
+          sourceTrace.organicKeywords = fetched?.dr !== "—" ? "ahrefs" : "semrush";
+        }
         if (fetched?.indexedPages !== "—") sourceTrace.indexedPages = "semrush";
         if (fetched?.featuredSnippets !== "—") sourceTrace.featuredSnippets = "semrush";
         if (fetched?.informationalKeywords !== "—") sourceTrace.informationalKeywords = "semrush";

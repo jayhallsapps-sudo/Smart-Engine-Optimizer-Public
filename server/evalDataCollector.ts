@@ -128,8 +128,9 @@ async function semrushDomainData(apiKey: string, domain: string): Promise<{
   try {
     const d = cleanDomainForApi(domain);
 
+    // Step 1: domain_ranks — fast summary, but only works for domains SEMrush actively tracks (> ~100 visits/mo)
     const rankQs = new URLSearchParams({ type: "domain_ranks", domain: d, database: "us", export_columns: "Or,Ot,Pc", key: apiKey }).toString();
-    const rankResp = await fetch(`https://api.semrush.com/?${rankQs}`);
+    const rankResp = await fetch(`https://api.semrush.com/?${rankQs}`, { signal: AbortSignal.timeout(12000) });
     const rankText = await rankResp.text();
     let organicKeywords = DASH, organicTraffic = DASH, indexedPages = DASH;
     if (rankResp.ok && rankText && !rankText.startsWith("ERROR")) {
@@ -141,41 +142,97 @@ async function semrushDomainData(apiKey: string, domain: string): Promise<{
         organicKeywords = fmtNum(get("Organic Keywords") ?? get("Or") ?? null);
         organicTraffic = fmtNum(get("Organic Traffic") ?? get("Ot") ?? null);
         indexedPages = fmtNum(get("Pages Crawled") ?? get("Pc") ?? null);
+      } else {
+        console.log(`[SEMrush domain_ranks] No data row for ${d} — domain may be below SEMrush tracking threshold. Will try domain_organic fallback.`);
       }
+    } else {
+      console.log(`[SEMrush domain_ranks] ${rankResp.status} / text: ${rankText.slice(0, 100)} for ${d}`);
     }
 
+    // Step 2: domain_organic — works for any domain regardless of traffic volume.
+    // Fetch top 5000 keywords in one call; count rows for organicKeywords fallback,
+    // and also derive featuredSnippets + informationalKeywords from the same result set.
+    let allKwLines: string[] = [];
     let featuredSnippets = DASH;
-    try {
-      const fsQs = new URLSearchParams({
-        type: "domain_organic", domain: d, database: "us",
-        display_limit: "5000", export_columns: "Ph,Po,Fk",
-        display_filter: "%2B|Fk|Co|1", key: apiKey,
-      }).toString();
-      const fsResp = await fetch(`https://api.semrush.com/?${fsQs}`);
-      const fsText = await fsResp.text();
-      if (fsResp.ok && fsText && !fsText.startsWith("ERROR")) {
-        const count = Math.max(0, fsText.trim().split("\n").filter(Boolean).length - 1);
-        if (count > 0) featuredSnippets = String(count);
-      }
-    } catch { /* silent */ }
-
     let informationalKeywords = DASH;
+
     try {
-      const infoQs = new URLSearchParams({
+      // Request Ph (keyword), Nq (volume), Po (position), Fk (SERP features), In (intent) columns
+      const allKwQs = new URLSearchParams({
         type: "domain_organic", domain: d, database: "us",
-        display_limit: "5000", export_columns: "Ph,Po,In",
-        display_filter: "%2B|In|Eq|Informational", key: apiKey,
+        display_limit: "5000", export_columns: "Ph,Nq,Po,Fk,In",
+        display_sort: "nq_desc",
+        key: apiKey,
       }).toString();
-      const infoResp = await fetch(`https://api.semrush.com/?${infoQs}`);
-      const infoText = await infoResp.text();
-      if (infoResp.ok && infoText && !infoText.startsWith("ERROR")) {
-        const count = Math.max(0, infoText.trim().split("\n").filter(Boolean).length - 1);
-        if (count > 0) informationalKeywords = String(count);
+      const allKwResp = await fetch(`https://api.semrush.com/?${allKwQs}`, { signal: AbortSignal.timeout(30000) });
+      const allKwText = await allKwResp.text();
+      if (allKwResp.ok && allKwText && !allKwText.startsWith("ERROR")) {
+        // Parse once and derive everything
+        const rawLines = allKwText.trim().split("\n").filter(Boolean);
+        if (rawLines.length >= 2) {
+          const hdr = rawLines[0].split(";");
+          allKwLines = rawLines.slice(1); // data rows only
+
+          const fkIdx = hdr.indexOf("Fk");
+          const inIdx = hdr.indexOf("In");
+
+          // organicKeywords fallback: if domain_ranks returned nothing, use the domain_organic count
+          if (organicKeywords === DASH && allKwLines.length > 0) {
+            organicKeywords = String(allKwLines.length);
+          }
+
+          // Featured snippets: SERP feature code "Featured snippet" in SEMrush = Fk value containing "12"
+          if (fkIdx >= 0) {
+            const fsCount = allKwLines.filter(line => {
+              const cols = line.split(";");
+              const fk = cols[fkIdx] ?? "";
+              // SEMrush Fk column: comma-separated codes. 12 = featured snippet
+              return fk.split(",").some(code => code.trim() === "12");
+            }).length;
+            if (fsCount > 0) featuredSnippets = String(fsCount);
+          }
+
+          // Informational keywords: In column = "Informational"
+          if (inIdx >= 0) {
+            const infoCount = allKwLines.filter(line => {
+              const cols = line.split(";");
+              return (cols[inIdx] ?? "").toLowerCase().includes("informational");
+            }).length;
+            if (infoCount > 0) informationalKeywords = String(infoCount);
+          }
+
+          // Estimate organic traffic from domain_organic if domain_ranks failed:
+          // Sum top-100 keyword volumes × CTR proxy (pos 1=0.28, 2=0.15, 3=0.11, 4-10=0.07, 11+=0.02)
+          if (organicTraffic === DASH) {
+            const poIdx = hdr.indexOf("Po");
+            const nqIdx = hdr.indexOf("Nq");
+            if (poIdx >= 0 && nqIdx >= 0) {
+              let estTraffic = 0;
+              for (const line of allKwLines.slice(0, 100)) {
+                const cols = line.split(";");
+                const pos = parseInt(cols[poIdx] ?? "0") || 0;
+                const vol = parseInt(cols[nqIdx] ?? "0") || 0;
+                const ctr = pos === 1 ? 0.28 : pos === 2 ? 0.15 : pos === 3 ? 0.11 : pos <= 10 ? 0.07 : 0.02;
+                estTraffic += vol * ctr;
+              }
+              if (estTraffic > 0) organicTraffic = fmtNum(Math.round(estTraffic));
+            }
+          }
+        } else {
+          console.log(`[SEMrush domain_organic] No data rows for ${d}`);
+        }
+      } else {
+        console.log(`[SEMrush domain_organic] ${allKwResp.status} / text: ${allKwText.slice(0, 100)} for ${d}`);
       }
-    } catch { /* silent */ }
+    } catch (e: any) {
+      console.error(`[SEMrush domain_organic] Error for ${d}:`, e.message);
+    }
 
     return { organicKeywords, organicTraffic, indexedPages, informationalKeywords, featuredSnippets };
-  } catch { return null; }
+  } catch (e: any) {
+    console.error(`[SEMrush semrushDomainData] Outer error for ${domain}:`, e.message);
+    return null;
+  }
 }
 
 // ─── SEMrush keyword gap (client vs competitors) ──────────────────────────────
@@ -249,61 +306,142 @@ export async function fetchKeywordGap(
   } catch { return []; }
 }
 
-// ─── Ahrefs domain overview ───────────────────────────────────────────────────
+// ─── Ahrefs v3 endpoints (the /overview endpoint does not exist — use individual endpoints) ───
 
-async function ahrefsOverview(token: string, domain: string): Promise<{
-  dr: string; referringDomains: string; backlinks: string; organicTraffic: string; organicKeywords: string;
-} | null> {
+async function ahrefsDomainRating(token: string, domain: string): Promise<string> {
   try {
     const d = cleanDomainForApi(domain);
-    const qs = new URLSearchParams({
-      select: "domain_rating,backlinks,refdomains,org_keywords,org_traffic",
-      target: d, mode: "domain",
-    }).toString();
-    const resp = await fetch(`https://api.ahrefs.com/v3/site-explorer/overview?${qs}`, {
+    const today = new Date().toISOString().slice(0, 10);
+    const qs = new URLSearchParams({ target: d, date: today }).toString();
+    const resp = await fetch(`https://api.ahrefs.com/v3/site-explorer/domain-rating?${qs}`, {
       headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      signal: AbortSignal.timeout(12000),
     });
-    if (!resp.ok) { console.error(`[Ahrefs overview] ${resp.status} for ${d}`); return null; }
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => "");
+      console.error(`[Ahrefs domain-rating] HTTP ${resp.status} for "${d}": ${body.slice(0, 200)}`);
+      return DASH;
+    }
     const data = await resp.json();
-    const m = data.domain ?? {};
+    // Ahrefs v3 response: { domain_rating: { domain_rating: 52.3, ahrefs_rank: ... } } (nested)
+    // OR sometimes: { domain_rating: 52 } (flat). Handle both.
+    const raw = data?.domain_rating;
+    const dr = typeof raw === "number" ? raw : (raw?.domain_rating ?? data?.domain?.domain_rating ?? null);
+    console.log(`[Ahrefs domain-rating] OK for "${d}" — dr=${dr}`);
+    return dr != null ? String(Math.round(Number(dr))) : DASH;
+  } catch (e: any) {
+    console.error(`[Ahrefs domain-rating] Exception for "${domain}":`, e.message);
+    return DASH;
+  }
+}
+
+async function ahrefsBacklinksStats(token: string, domain: string): Promise<{ backlinks: string; referringDomains: string }> {
+  const blank = { backlinks: DASH, referringDomains: DASH };
+  try {
+    const d = cleanDomainForApi(domain);
+    const today = new Date().toISOString().slice(0, 10);
+    const qs = new URLSearchParams({ target: d, mode: "domain", date: today }).toString();
+    const resp = await fetch(`https://api.ahrefs.com/v3/site-explorer/backlinks-stats?${qs}`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      signal: AbortSignal.timeout(12000),
+    });
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => "");
+      console.error(`[Ahrefs backlinks-stats] HTTP ${resp.status} for "${d}": ${body.slice(0, 200)}`);
+      return blank;
+    }
+    const data = await resp.json();
+    // Response shape: { metrics: { live: N, all_time: N, live_refdomains: N, all_time_refdomains: N } }
+    const m = data.metrics ?? data;
+    const bl = m?.live ?? m?.backlinks ?? null;
+    const rd = m?.live_refdomains ?? m?.refdomains ?? m?.referring_domains ?? null;
+    console.log(`[Ahrefs backlinks-stats] OK for "${d}" — bl=${bl} rd=${rd}`);
     return {
-      dr: m.domain_rating != null ? String(Math.round(Number(m.domain_rating))) : DASH,
-      referringDomains: m.refdomains != null ? String(m.refdomains) : DASH,
-      backlinks: m.backlinks != null ? String(m.backlinks) : DASH,
-      organicKeywords: m.org_keywords != null ? String(m.org_keywords) : DASH,
-      organicTraffic: m.org_traffic != null ? String(m.org_traffic) : DASH,
+      backlinks: bl != null ? String(bl) : DASH,
+      referringDomains: rd != null ? String(rd) : DASH,
     };
-  } catch (e: any) { console.error("[Ahrefs overview]", e.message); return null; }
+  } catch (e: any) {
+    console.error(`[Ahrefs backlinks-stats] Exception for "${domain}":`, e.message);
+    return blank;
+  }
+}
+
+async function ahrefsOrganicKeywordsTotal(token: string, domain: string): Promise<string> {
+  try {
+    const d = cleanDomainForApi(domain);
+    const today = new Date().toISOString().slice(0, 10);
+    // Ahrefs v3 organic-keywords endpoint returns { keywords: [...] } — no meta.total.
+    // Fetch up to 1000 keywords and count; for small RV park sites this captures all.
+    const qs = new URLSearchParams({ select: "keyword", target: d, mode: "domain", limit: "1000", date: today }).toString();
+    const resp = await fetch(`https://api.ahrefs.com/v3/site-explorer/organic-keywords?${qs}`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => "");
+      console.error(`[Ahrefs organic-keywords total] HTTP ${resp.status} for "${d}": ${body.slice(0, 200)}`);
+      return DASH;
+    }
+    const data = await resp.json();
+    const count = Array.isArray(data.keywords) ? data.keywords.length : null;
+    console.log(`[Ahrefs organic-keywords total] OK for "${d}" — count=${count}`);
+    return count !== null && count > 0 ? String(count) : DASH;
+  } catch (e: any) {
+    console.error(`[Ahrefs organic-keywords total] Exception for "${domain}":`, e.message);
+    return DASH;
+  }
 }
 
 async function ahrefsTop1to3Count(token: string, domain: string): Promise<string> {
   try {
     const d = cleanDomainForApi(domain);
-    const where = JSON.stringify({ and: [{ field: "position", is: ["gte", 1] }, { field: "position", is: ["lte", 3] }] });
-    const qs = new URLSearchParams({ select: "keyword", target: d, mode: "domain", limit: "1", where }).toString();
+    const today = new Date().toISOString().slice(0, 10);
+    // Ahrefs v3: use the boolean column "is_best_position_set_top_3" to filter keywords ranking 1-3
+    const where = JSON.stringify({ field: "is_best_position_set_top_3", is: ["eq", true] });
+    const qs = new URLSearchParams({ select: "keyword", target: d, mode: "domain", limit: "1000", date: today, where }).toString();
     const resp = await fetch(`https://api.ahrefs.com/v3/site-explorer/organic-keywords?${qs}`, {
       headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      signal: AbortSignal.timeout(20000),
     });
-    if (!resp.ok) return DASH;
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => "");
+      console.error(`[Ahrefs top1-3] HTTP ${resp.status} for "${d}": ${body.slice(0, 150)}`);
+      return DASH;
+    }
     const data = await resp.json();
-    const total = data.meta?.total ?? null;
-    return total !== null ? String(total) : DASH;
-  } catch { return DASH; }
+    const count = Array.isArray(data.keywords) ? data.keywords.length : null;
+    console.log(`[Ahrefs top1-3] OK for "${d}" — count=${count}`);
+    return count !== null ? String(count) : DASH;
+  } catch (e: any) {
+    console.error(`[Ahrefs top1-3] Exception for "${domain}":`, e.message);
+    return DASH;
+  }
 }
 
 async function ahrefsTop4to10Count(token: string, domain: string): Promise<string> {
   try {
     const d = cleanDomainForApi(domain);
-    const where = JSON.stringify({ and: [{ field: "position", is: ["gte", 4] }, { field: "position", is: ["lte", 10] }] });
-    const qs = new URLSearchParams({ select: "keyword", target: d, mode: "domain", limit: "1", where }).toString();
+    const today = new Date().toISOString().slice(0, 10);
+    // Ahrefs v3: best_position_set enum — "top_4_10" = keywords with best position in 4-10
+    const where = JSON.stringify({ field: "best_position_set", is: ["eq", "top_4_10"] });
+    const qs = new URLSearchParams({ select: "keyword", target: d, mode: "domain", limit: "1000", date: today, where }).toString();
     const resp = await fetch(`https://api.ahrefs.com/v3/site-explorer/organic-keywords?${qs}`, {
       headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      signal: AbortSignal.timeout(20000),
     });
-    if (!resp.ok) return DASH;
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => "");
+      console.error(`[Ahrefs top4-10] HTTP ${resp.status} for "${d}": ${body.slice(0, 200)}`);
+      return DASH;
+    }
     const data = await resp.json();
-    const total = data.meta?.total ?? null;
-    return total !== null ? String(total) : DASH;
-  } catch { return DASH; }
+    const count = Array.isArray(data.keywords) ? data.keywords.length : null;
+    console.log(`[Ahrefs top4-10] OK for "${d}" — count=${count}`);
+    return count !== null ? String(count) : DASH;
+  } catch (e: any) {
+    console.error(`[Ahrefs top4-10] Exception for "${domain}":`, e.message);
+    return DASH;
+  }
 }
 
 // ─── Combined competitor metric fetch ─────────────────────────────────────────
@@ -324,8 +462,11 @@ export async function fetchCompetitorEvalMetrics(domain: string, opts?: { includ
   const [ahrefsToken, semrushKey] = await Promise.all([getAhrefsToken(), getSemrushKey()]);
   const includeWW = opts?.includeWhoisWayback ?? true;
 
-  const [ahrefsResult, top1to3Result, top4to10Result, semrushResult, whoisResult, archiveResult] = await Promise.allSettled([
-    ahrefsToken ? ahrefsOverview(ahrefsToken, domain) : Promise.resolve(null),
+  // Run all API calls in parallel — Ahrefs uses separate v3 endpoints (no /overview)
+  const [drResult, blResult, ahrefsKwResult, top1to3Result, top4to10Result, semrushResult, whoisResult, archiveResult] = await Promise.allSettled([
+    ahrefsToken ? ahrefsDomainRating(ahrefsToken, domain) : Promise.resolve(DASH),
+    ahrefsToken ? ahrefsBacklinksStats(ahrefsToken, domain) : Promise.resolve({ backlinks: DASH, referringDomains: DASH }),
+    ahrefsToken ? ahrefsOrganicKeywordsTotal(ahrefsToken, domain) : Promise.resolve(DASH),
     ahrefsToken ? ahrefsTop1to3Count(ahrefsToken, domain) : Promise.resolve(DASH),
     ahrefsToken ? ahrefsTop4to10Count(ahrefsToken, domain) : Promise.resolve(DASH),
     semrushKey ? semrushDomainData(semrushKey, domain) : Promise.resolve(null),
@@ -333,14 +474,18 @@ export async function fetchCompetitorEvalMetrics(domain: string, opts?: { includ
     includeWW ? fetchFirstArchive(domain) : Promise.resolve(DASH),
   ]);
 
-  const ahrefs = ahrefsResult.status === "fulfilled" ? ahrefsResult.value : null;
+  const dr = drResult.status === "fulfilled" ? drResult.value : DASH;
+  const bl = blResult.status === "fulfilled" ? blResult.value : { backlinks: DASH, referringDomains: DASH };
+  const ahrefsKw = ahrefsKwResult.status === "fulfilled" ? ahrefsKwResult.value : DASH;
   const top1to3 = top1to3Result.status === "fulfilled" ? top1to3Result.value : DASH;
   const top4to10 = top4to10Result.status === "fulfilled" ? top4to10Result.value : DASH;
   const sem = semrushResult.status === "fulfilled" ? semrushResult.value : null;
   const whois = whoisResult.status === "fulfilled" ? whoisResult.value : DASH;
   const archive = archiveResult.status === "fulfilled" ? archiveResult.value : DASH;
 
-  // Combine top 1-3 + top 4-10 for true top 10 count
+  // top1to3 = keywords in positions 1-3 (is_best_position_set_top_3 boolean)
+  // top4to10 = keywords in positions 4-10 (best_position_set = "top_4_10" enum)
+  // top10Combined = true top-10 keyword count (sum of both)
   const top1to3Num = top1to3 !== DASH ? parseInt(top1to3) : null;
   const top4to10Num = top4to10 !== DASH ? parseInt(top4to10) : null;
   const top10Combined =
@@ -349,16 +494,21 @@ export async function fetchCompetitorEvalMetrics(domain: string, opts?: { includ
     top4to10Num !== null ? String(top4to10Num) :
     DASH;
 
+  // organicKeywords: Ahrefs total count first, SEMrush fallback
+  const organicKeywords = ahrefsKw !== DASH ? ahrefsKw : (sem?.organicKeywords ?? DASH);
+  // organicTraffic: SEMrush only (Ahrefs v3 has no traffic endpoint)
+  const organicTraffic = sem?.organicTraffic ?? DASH;
+
   return {
-    dr: ahrefs?.dr ?? blank.dr,
-    referringDomains: ahrefs?.referringDomains ?? blank.referringDomains,
-    backlinks: ahrefs?.backlinks ?? blank.backlinks,
-    organicTraffic: ahrefs?.organicTraffic !== DASH ? (ahrefs?.organicTraffic ?? blank.organicTraffic) : (sem?.organicTraffic ?? blank.organicTraffic),
-    organicKeywords: ahrefs?.organicKeywords !== DASH ? (ahrefs?.organicKeywords ?? blank.organicKeywords) : (sem?.organicKeywords ?? blank.organicKeywords),
+    dr,
+    referringDomains: bl.referringDomains,
+    backlinks: bl.backlinks,
+    organicTraffic,
+    organicKeywords,
     top10Keywords: top10Combined,
-    indexedPages: sem?.indexedPages ?? blank.indexedPages,
-    featuredSnippets: sem?.featuredSnippets ?? blank.featuredSnippets,
-    informationalKeywords: sem?.informationalKeywords ?? blank.informationalKeywords,
+    indexedPages: sem?.indexedPages ?? DASH,
+    featuredSnippets: sem?.featuredSnippets ?? DASH,
+    informationalKeywords: sem?.informationalKeywords ?? DASH,
     whoisReg: whois,
     firstArchive: archive,
   };

@@ -925,6 +925,98 @@ export async function registerRoutes(
     }
   });
 
+  // ─── ACA: per-client execution health check ─────────────────────────────────
+  // Validates whether each source is properly configured for the given client
+  // (credential exists + client has the required property/account IDs).
+  // Does NOT make external API calls — checks DB state only.
+  app.get("/api/aca/execution-health/:clientId", async (req: Request, res: Response) => {
+    const clientId = parseInt(req.params.clientId, 10);
+    if (isNaN(clientId)) return res.status(400).json({ message: "Invalid clientId" });
+
+    const client = await storage.getClient(clientId);
+    if (!client) return res.status(404).json({ message: "Client not found" });
+
+    const allCreds = await storage.getApiCredentials();
+    const hasCred = (service: string) => allCreds.some((c) => c.service === service);
+
+    type SourceHealth =
+      | { status: "ok"; detail: string }
+      | { status: "client_missing_id"; detail: string }
+      | { status: "credential_missing"; detail: string }
+      | { status: "not_applicable"; detail: string };
+
+    const health: Record<string, SourceHealth> = {};
+
+    // GSC
+    if (client.gscSiteUrl) {
+      health.gsc = hasCred("google_search_console")
+        ? { status: "ok", detail: `Site: ${client.gscSiteUrl}` }
+        : { status: "credential_missing", detail: "No Google Search Console credentials stored — reconnect in Setup." };
+    } else {
+      health.gsc = { status: "client_missing_id", detail: "No GSC site URL configured for this client." };
+    }
+
+    // GA4
+    if (client.ga4PropertyId) {
+      health.ga4 = hasCred("google_analytics_4")
+        ? { status: "ok", detail: `Property: ${client.ga4PropertyId} — credential found, property access unverified until query` }
+        : { status: "credential_missing", detail: "No GA4 credentials stored — reconnect in Setup." };
+    } else {
+      health.ga4 = { status: "client_missing_id", detail: "No GA4 property ID configured for this client." };
+    }
+
+    // CallRail
+    if (client.callrailCompanyId) {
+      health.callrail = hasCred("callrail")
+        ? { status: "ok", detail: `Company ID: ${client.callrailCompanyId}` }
+        : { status: "credential_missing", detail: "No CallRail API key stored — add it in Setup." };
+    } else {
+      health.callrail = { status: "client_missing_id", detail: "No CallRail company ID configured for this client. Client may not use CallRail." };
+    }
+
+    // CTM
+    if (client.ctmAccountId) {
+      health.ctm = hasCred("call_tracking_metrics")
+        ? { status: "ok", detail: `Account ID: ${client.ctmAccountId}` }
+        : { status: "credential_missing", detail: "No CTM credentials stored — add them in Setup." };
+    } else {
+      health.ctm = { status: "client_missing_id", detail: "No CTM account ID configured for this client. Client may not use CTM." };
+    }
+
+    // Airtable
+    if (client.airtableBaseId) {
+      health.airtable = hasCred("airtable")
+        ? { status: "ok", detail: `Base: ${client.airtableBaseId}, Table: ${client.airtableTableName ?? "Content"}` }
+        : { status: "credential_missing", detail: "No Airtable PAT stored — add it in Setup." };
+    } else {
+      health.airtable = { status: "client_missing_id", detail: "No Airtable Base ID configured for this client." };
+    }
+
+    // Asana
+    if (client.asanaProjectId) {
+      health.asana = { status: "ok", detail: `Project ID: ${client.asanaProjectId} (uses Replit connector)` };
+    } else {
+      health.asana = { status: "client_missing_id", detail: "No Asana project ID configured for this client." };
+    }
+
+    // SEMrush (account-level, not per-client property)
+    health.semrush = hasCred("semrush")
+      ? { status: "ok", detail: client.semrushProjectId ? `Project: ${client.semrushProjectId}` : "Account-level credential found" }
+      : { status: "credential_missing", detail: "No SEMrush API key stored — add it in Setup." };
+
+    // Ahrefs
+    health.ahrefs = hasCred("ahrefs")
+      ? { status: "ok", detail: client.ahrefsProjectUrl ? `Project URL: ${client.ahrefsProjectUrl}` : "Account-level credential found" }
+      : { status: "credential_missing", detail: "No Ahrefs API key stored — add it in Setup." };
+
+    // GBP
+    health.gbp = hasCred("google_business_profile")
+      ? { status: "ok", detail: client.gbpLocationName ? `Location: ${client.gbpLocationName}` : "Credential found — location optional" }
+      : { status: "credential_missing", detail: "No GBP credentials stored — reconnect in Setup." };
+
+    res.json({ clientId, clientName: client.name, sources: health });
+  });
+
   app.post("/api/query", async (req, res) => {
     const { query, clientId } = req.body;
     if (!query) return res.status(400).json({ message: "Query is required" });

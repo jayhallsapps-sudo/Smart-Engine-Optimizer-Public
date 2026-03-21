@@ -273,6 +273,19 @@ interface AcaClient {
   asanaProjectId?: string | null;
 }
 
+// ─── Execution health types ──────────────────────────────────────────────────
+
+interface SourceHealth {
+  status: "ok" | "client_missing_id" | "credential_missing" | "not_applicable";
+  detail: string;
+}
+
+interface ExecutionHealth {
+  clientId: number;
+  clientName: string;
+  sources: Record<string, SourceHealth>;
+}
+
 // ─── Integration config ──────────────────────────────────────────────────────
 
 const INTEGRATION_CONFIG: Array<{
@@ -323,6 +336,12 @@ export default function AcaPage() {
   const availableIntegrations = selectedClient
     ? INTEGRATION_CONFIG.filter((cfg) => cfg.check(selectedClient))
     : [];
+
+  // Fetch per-source execution health when a client is selected
+  const { data: executionHealth } = useQuery<ExecutionHealth>({
+    queryKey: ["/api/aca/execution-health", selectedClientId],
+    enabled: !!selectedClientId,
+  });
 
   // Reset integrations when client changes
   useEffect(() => {
@@ -914,6 +933,8 @@ export default function AcaPage() {
                   ) : (
                     availableIntegrations.map((cfg) => {
                       const checked = selectedIntegrations.includes(cfg.key);
+                      const srcHealth = executionHealth?.sources[cfg.key];
+                      const srcStatus = srcHealth?.status ?? "ok";
                       return (
                         <button
                           key={cfg.key}
@@ -923,11 +944,18 @@ export default function AcaPage() {
                             );
                           }}
                           className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-foreground hover:bg-muted transition-colors"
+                          title={srcHealth?.detail}
                         >
                           <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${checked ? "bg-blue-600 border-blue-600" : "border-border bg-background"}`}>
                             {checked && <Check className="w-2.5 h-2.5 text-white" />}
                           </div>
-                          {cfg.label}
+                          <span className="flex-1 text-left">{cfg.label}</span>
+                          {srcStatus === "credential_missing" && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" title={srcHealth?.detail} />
+                          )}
+                          {srcStatus === "client_missing_id" && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 shrink-0" title={srcHealth?.detail} />
+                          )}
                         </button>
                       );
                     })
@@ -947,6 +975,25 @@ export default function AcaPage() {
               </button>
             )}
           </div>
+
+          {/* Execution health warnings for selected sources */}
+          {executionHealth && selectedIntegrations.length > 0 && (() => {
+            const issues = selectedIntegrations
+              .map((key) => ({ key, health: executionHealth.sources[key] }))
+              .filter(({ health }) => health && health.status !== "ok");
+            if (issues.length === 0) return null;
+            return (
+              <div className="mb-2 rounded-lg border border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-950/30 px-3 py-2 space-y-1">
+                {issues.map(({ key, health }) => (
+                  <p key={key} className="text-[11px] text-yellow-800 dark:text-yellow-300">
+                    <span className="font-medium capitalize">{key.replace(/_/g, " ")}: </span>
+                    {health.status === "credential_missing" ? "⚠ No credentials stored — " : "⚠ Client not configured — "}
+                    {health.detail}
+                  </p>
+                ))}
+              </div>
+            );
+          })()}
 
           {/* Input row */}
           <div className={`flex items-end gap-2 bg-card border rounded-xl px-3 py-2 transition-all ${

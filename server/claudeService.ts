@@ -486,36 +486,51 @@ async function executeTool(
       case "query_google_search_console": {
         const client = await storage.getClient(input.client_id);
         if (!client) return JSON.stringify({ error: "Client not found" });
+        if (!client.gscSiteUrl) return JSON.stringify({ error: `GSC is not configured for ${client.name} — no site URL is set in client settings.` });
         const result = await queryGsc(
           input.command as Command,
           client,
           input.date_range || "last_90_vs_prev_90"
         );
-        if (!result) return JSON.stringify({ error: "GSC not configured or no data available for this client" });
+        if (!result) return JSON.stringify({ error: `GSC returned no data for ${client.name} (site: ${client.gscSiteUrl}). The stored Google credentials may not have access to this property, or no data exists for the requested date range.` });
         return JSON.stringify(result);
       }
 
       case "query_google_analytics": {
         const client = await storage.getClient(input.client_id);
         if (!client) return JSON.stringify({ error: "Client not found" });
-        const result = await queryGa4(
-          input.command as Command,
-          client,
-          input.date_range || "last_90_vs_prev_90"
-        );
-        if (!result) return JSON.stringify({ error: "GA4 not configured or no data available for this client" });
-        return JSON.stringify(result);
+        if (!client.ga4PropertyId) return JSON.stringify({ error: `GA4 is not configured for ${client.name} — no property ID is set in client settings.` });
+        try {
+          const result = await queryGa4(
+            input.command as Command,
+            client,
+            input.date_range || "last_90_vs_prev_90"
+          );
+          if (!result) return JSON.stringify({ error: `GA4 returned no data for ${client.name} (property: ${client.ga4PropertyId}).` });
+          return JSON.stringify(result);
+        } catch (ga4Err: any) {
+          const msg = ga4Err.message || "";
+          const lmsg = msg.toLowerCase();
+          if (lmsg.includes("permission") || lmsg.includes("forbidden") || lmsg.includes("403") || lmsg.includes("insufficient") || lmsg.includes("not authorized")) {
+            return JSON.stringify({ error: `GA4 property ${client.ga4PropertyId} is not accessible with the stored credentials. The connected Google account does not have permission to view this property, or the property ID may be incorrect. Check client settings and verify the Google account in Setup has access to this GA4 property.` });
+          }
+          if (lmsg.includes("no credentials") || lmsg.includes("no valid credentials")) {
+            return JSON.stringify({ error: `GA4 credentials are not configured or could not be refreshed. Go to Setup to reconnect Google Analytics.` });
+          }
+          return JSON.stringify({ error: `GA4 query failed for ${client.name}: ${msg}` });
+        }
       }
 
       case "query_callrail": {
         const client = await storage.getClient(input.client_id);
         if (!client) return JSON.stringify({ error: "Client not found" });
+        if (!client.callrailCompanyId) return JSON.stringify({ error: `CallRail is not configured for ${client.name} — this client has no CallRail company ID. If the client uses call tracking, try CTM as an alternative, or add the company ID in client settings.` });
         const result = await queryCallRail(
           input.command as Command,
           client,
           input.date_range || "last_90_vs_prev_90"
         );
-        if (!result) return JSON.stringify({ error: "CallRail not configured or no data available for this client" });
+        if (!result) return JSON.stringify({ error: `CallRail returned no data for ${client.name}. The CallRail API key may not be configured in Setup, or company ID ${client.callrailCompanyId} may not be accessible with the stored key.` });
         return JSON.stringify(result);
       }
 
@@ -582,9 +597,13 @@ async function executeTool(
       case "get_airtable_work_log": {
         const client = await storage.getClient(input.client_id);
         if (!client) return JSON.stringify({ error: "Client not found" });
-        if (!client.airtableBaseId) return JSON.stringify({ error: "Airtable not configured for this client" });
-        const workLog = await fetchAirtableWorkLog(client);
-        return JSON.stringify(workLog);
+        if (!client.airtableBaseId) return JSON.stringify({ error: `Airtable is not configured for ${client.name} — no Base ID is set in client settings.` });
+        const now = new Date();
+        const endDate = now.toISOString().slice(0, 10);
+        const startDate = new Date(now.getTime() - 90 * 86400000).toISOString().slice(0, 10);
+        const result = await fetchAirtableWorkLog(client.id, startDate, endDate);
+        if (!result.success) return JSON.stringify({ error: result.error });
+        return JSON.stringify(result.data);
       }
 
       case "get_asana_tasks": {
@@ -756,6 +775,7 @@ MANDATORY GROUNDING RULES — never violate these:
 6. If two sources conflict, mention the conflict instead of silently choosing one.
 7. Clearly label any data as coming from a specific source (e.g. "From GSC:", "From GA4 (last 90 days):").
 8. If a source is disconnected, stale, or returns an error — say so and label the answer accordingly.
+9. CRITICAL — Configuration errors are NOT zero-values: If a tool returns a configuration error ("not configured", "missing ID", "no credentials", "not accessible"), do NOT say the metric is zero or absent. Say you could NOT MEASURE it because the source was unavailable. "Cannot measure" is factually accurate. "Zero calls" or "no sessions" is fabrication.
 
 REQUIRED RESPONSE STRUCTURE — always structure answers like this when answering data questions:
 ### Answer

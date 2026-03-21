@@ -116,12 +116,15 @@ async function parseMultipleCsvFiles(files: FileList | File[]): Promise<{ rows: 
 const RAW_METRICS = [
   { key: "whoisReg", label: "WHOIS Reg", type: "date", width: 100, tooltip: "Auto-fetched via RDAP. Edit manually if incorrect." },
   { key: "firstArchive", label: "First Archive", type: "date", width: 110, tooltip: "Oldest Wayback Machine snapshot. Auto-fetched." },
+  { key: "archiveUrl", label: "Archive Link", type: "url", width: 85, tooltip: "Click to open the oldest Wayback Machine snapshot in a new tab." },
   { key: "dr", label: "DR", type: "number", width: 60 },
   { key: "referringDomains", label: "Ref Domains", type: "number", width: 100 },
   { key: "backlinks", label: "Backlinks", type: "number", width: 90 },
   { key: "organicTraffic", label: "Org Traffic", type: "number", width: 100, tooltip: "Client row uses GSC clicks (3-month); competitors use Ahrefs." },
   { key: "organicKeywords", label: "Org Keywords", type: "number", width: 105, tooltip: "Client row uses GSC unique pages (3-month); competitors use Ahrefs." },
   { key: "top10Keywords", label: "Top 10 KW", type: "number", width: 95, tooltip: "Ahrefs Top 1-3 + Top 4-10 combined." },
+  { key: "top1to3Keywords", label: "Top 1-3 KW", type: "number", width: 88, tooltip: "Ahrefs — keywords ranking in positions 1-3." },
+  { key: "top4to10Keywords", label: "Top 4-10 KW", type: "number", width: 92, tooltip: "Ahrefs — keywords ranking in positions 4-10." },
   { key: "indexedPages", label: "Indexed Pg", type: "number", width: 95 },
   { key: "aiVisibilityScore", label: "AI Vis Score", type: "number", width: 100, tooltip: "SEMrush AI Toolkit — enter manually from SEMrush AI Overview report." },
   { key: "aiMentions", label: "AI Mentions", type: "number", width: 98, tooltip: "Enter manually. Count of AI Overview mentions for tracked queries." },
@@ -142,7 +145,9 @@ const DERIVED_METRICS = [
   { key: "mentionRate", label: "Mention Rate", tooltip: "aiMentions ÷ citedSources × 100 (requires manual AI fields)" },
   { key: "rdYield", label: "RD Yield" },
   { key: "contentYield", label: "Content Yield" },
-  { key: "backlinkDensity", label: "BL Density" },
+  { key: "backlinkDensity", label: "BL Density", tooltip: "(Backlinks + RDs) ÷ Indexed Pages" },
+  { key: "snippetDensity", label: "Snippet Density", tooltip: "Featured Snippets ÷ Organic Keywords × 100" },
+  { key: "contentDensity", label: "Content Density", tooltip: "Organic Keywords ÷ Indexed Pages" },
   { key: "informationalDensity", label: "Info Density", tooltip: "Informational KW ÷ Organic KW × 100" },
   { key: "finalScore", label: "Final Score", tooltip: "Weighted rank across key benchmarks (DR×2, traffic×2, keywords×1.5…)" },
   { key: "averageRank", label: "Avg Rank", tooltip: "Simple mean of all individual metric rank positions" },
@@ -309,7 +314,24 @@ function MainEvalTab({ batch }: { batch: EvalBatch }) {
                 </TableCell>
                 {RAW_METRICS.map(m => (
                   <TableCell key={m.key} className="text-center p-1">
-                    <EditableCell value={row.metrics?.[m.key] ?? ""} onChange={v => handleCellChange(row, m.key, v)} type={m.type} />
+                    {m.type === "url" ? (
+                      row.metrics?.[m.key] && row.metrics[m.key] !== "—" ? (
+                        <a
+                          href={row.metrics[m.key]}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-blue-500 hover:text-blue-700 underline"
+                          title={row.metrics[m.key]}
+                          data-testid={`link-archive-${row.id}`}
+                        >
+                          Open
+                        </a>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )
+                    ) : (
+                      <EditableCell value={row.metrics?.[m.key] ?? ""} onChange={v => handleCellChange(row, m.key, v)} type={m.type} />
+                    )}
                   </TableCell>
                 ))}
                 {DERIVED_METRICS.map(m => (

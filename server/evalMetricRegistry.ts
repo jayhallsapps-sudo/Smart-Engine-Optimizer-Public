@@ -32,10 +32,20 @@ export const METRIC_REGISTRY: MetricDefinition[] = [
     label: "First Archive",
     sourceTool: "web_retrieval",
     sourceType: "web_retrieval",
-    retrievalMethod: "Wayback Machine earliest snapshot",
+    retrievalMethod: "Wayback Machine earliest snapshot date",
     rankDirection: "asc",
     refreshable: true,
     fallbackBehavior: "flag as unavailable, skip velocity formulas",
+  },
+  {
+    metricKey: "archiveUrl",
+    label: "Archive Link",
+    sourceTool: "web_retrieval",
+    sourceType: "web_retrieval",
+    retrievalMethod: "Wayback Machine link to earliest snapshot",
+    rankDirection: "asc",
+    refreshable: true,
+    notes: "Clickable Wayback Machine URL for the oldest archived snapshot.",
   },
   {
     metricKey: "archiveAge",
@@ -100,6 +110,24 @@ export const METRIC_REGISTRY: MetricDefinition[] = [
     sourceTool: "ahrefs",
     sourceType: "integration",
     retrievalMethod: "Ahrefs batch analysis (Top 1-3 + Top 4-10 combined)",
+    rankDirection: "desc",
+    refreshable: true,
+  },
+  {
+    metricKey: "top1to3Keywords",
+    label: "Top 1-3 Keywords",
+    sourceTool: "ahrefs",
+    sourceType: "integration",
+    retrievalMethod: "Ahrefs — keywords with best position in 1-3",
+    rankDirection: "desc",
+    refreshable: true,
+  },
+  {
+    metricKey: "top4to10Keywords",
+    label: "Top 4-10 Keywords",
+    sourceTool: "ahrefs",
+    sourceType: "integration",
+    retrievalMethod: "Ahrefs — keywords with best position in 4-10",
     rankDirection: "desc",
     refreshable: true,
   },
@@ -251,10 +279,30 @@ export const METRIC_REGISTRY: MetricDefinition[] = [
     label: "Backlink Density",
     sourceTool: "system",
     sourceType: "derived",
-    calculationFormula: "backlinks / referringDomains",
+    calculationFormula: "(backlinks + referringDomains) / indexedPages",
     rankDirection: "desc",
     refreshable: false,
-    notes: "Backlink concentration per referring domain. Higher = stronger link mix.",
+    notes: "Combined link weight (backlinks + RDs) per indexed page. Higher = stronger link coverage per page.",
+  },
+  {
+    metricKey: "snippetDensity",
+    label: "Snippet Density (%)",
+    sourceTool: "system",
+    sourceType: "derived",
+    calculationFormula: "featuredSnippets / organicKeywords * 100",
+    rankDirection: "desc",
+    refreshable: false,
+    notes: "Percentage of keyword portfolio that earns a featured snippet. Higher = stronger SERP authority.",
+  },
+  {
+    metricKey: "contentDensity",
+    label: "Content Density",
+    sourceTool: "system",
+    sourceType: "derived",
+    calculationFormula: "organicKeywords / indexedPages",
+    rankDirection: "desc",
+    refreshable: false,
+    notes: "Organic keywords per indexed page. Higher = pages are ranking for more terms on average.",
   },
   {
     metricKey: "informationalDensity",
@@ -290,15 +338,17 @@ export const METRIC_REGISTRY: MetricDefinition[] = [
 export const METRIC_KEYS = METRIC_REGISTRY.map(m => m.metricKey);
 
 export const RAW_METRIC_KEYS = [
-  "whoisReg", "firstArchive", "dr", "referringDomains", "backlinks",
-  "organicTraffic", "organicKeywords", "top10Keywords", "indexedPages",
+  "whoisReg", "firstArchive", "archiveUrl", "dr", "referringDomains", "backlinks",
+  "organicTraffic", "organicKeywords", "top10Keywords", "top1to3Keywords", "top4to10Keywords",
+  "indexedPages",
   "aiVisibilityScore", "aiMentions", "citedSources", "informationalKeywords", "featuredSnippets",
 ];
 
 export const DERIVED_METRIC_KEYS = [
   "age", "archiveAge", "kwVelocity", "snippetVelocity", "rdVelocity", "contentVelocity",
   "kwYield", "snippetYield", "mentionRate", "rdYield", "contentYield",
-  "backlinkDensity", "informationalDensity", "finalScore", "averageRank",
+  "backlinkDensity", "snippetDensity", "contentDensity", "informationalDensity",
+  "finalScore", "averageRank",
 ];
 
 // ─── Category Rule Engine ─────────────────────────────────────────────────────

@@ -91,7 +91,8 @@ export async function fetchWhoisReg(domain: string): Promise<string> {
 
 // ─── Wayback Machine earliest snapshot via CDX API ───────────────────────────
 
-export async function fetchFirstArchive(domain: string): Promise<string> {
+export async function fetchFirstArchive(domain: string): Promise<{ date: string; url: string }> {
+  const empty = { date: DASH, url: DASH };
   try {
     const d = cleanDomainForApi(domain);
     const qs = new URLSearchParams({
@@ -103,17 +104,20 @@ export async function fetchFirstArchive(domain: string): Promise<string> {
       from: "19900101",
     }).toString();
     const resp = await fetch(`https://web.archive.org/cdx/search/cdx?${qs}`, {
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(18000),
     });
-    if (!resp.ok) return DASH;
+    if (!resp.ok) { console.warn(`[Wayback] non-ok status ${resp.status} for "${d}"`); return empty; }
     const data = await resp.json();
     // data is [[header], [row]] or [[row]] — first row after header is oldest
-    if (!Array.isArray(data) || data.length < 2) return DASH;
+    if (!Array.isArray(data) || data.length < 2) { console.log(`[Wayback] no archive found for "${d}"`); return empty; }
     const ts = String(data[1]?.[0] ?? "");
-    if (ts.length < 8) return DASH;
+    if (ts.length < 8) return empty;
     // Convert YYYYMMDDHHMMSS to YYYY-MM-DD
-    return `${ts.slice(0, 4)}-${ts.slice(4, 6)}-${ts.slice(6, 8)}`;
-  } catch { return DASH; }
+    const date = `${ts.slice(0, 4)}-${ts.slice(4, 6)}-${ts.slice(6, 8)}`;
+    const url = `https://web.archive.org/web/${ts}/${d}`;
+    console.log(`[Wayback] OK for "${d}" — first=${date}`);
+    return { date, url };
+  } catch (err: any) { console.warn(`[Wayback] timeout/error for "${d}":`, err?.message ?? err); return empty; }
 }
 
 // ─── SEMrush domain data ──────────────────────────────────────────────────────
@@ -158,9 +162,11 @@ async function semrushDomainData(apiKey: string, domain: string): Promise<{
 
     try {
       // Request Ph (keyword), Nq (volume), Po (position), Fk (SERP features), In (intent) columns
+      // display_limit capped at 100: each row costs 1 API unit; 100 covers all keywords for
+      // small/mid competitor domains while preserving account balance.
       const allKwQs = new URLSearchParams({
         type: "domain_organic", domain: d, database: "us",
-        display_limit: "5000", export_columns: "Ph,Nq,Po,Fk,In",
+        display_limit: "100", export_columns: "Ph,Nq,Po,Fk,In",
         display_sort: "nq_desc",
         key: apiKey,
       }).toString();
@@ -200,6 +206,8 @@ async function semrushDomainData(apiKey: string, domain: string): Promise<{
             }).length;
             if (infoCount > 0) informationalKeywords = String(infoCount);
           }
+
+          console.log(`[SEMrush domain_organic] OK for "${d}" — rows=${allKwLines.length} fsCount=${featuredSnippets} infoCount=${informationalKeywords}`);
 
           // Estimate organic traffic from domain_organic if domain_ranks failed:
           // Sum top-100 keyword volumes × CTR proxy (pos 1=0.28, 2=0.15, 3=0.11, 4-10=0.07, 11+=0.02)
@@ -449,14 +457,16 @@ async function ahrefsTop4to10Count(token: string, domain: string): Promise<strin
 export async function fetchCompetitorEvalMetrics(domain: string, opts?: { includeWhoisWayback?: boolean }): Promise<{
   dr: string; referringDomains: string; backlinks: string;
   organicTraffic: string; organicKeywords: string; top10Keywords: string;
+  top1to3Keywords: string; top4to10Keywords: string;
   indexedPages: string; featuredSnippets: string; informationalKeywords: string;
-  whoisReg: string; firstArchive: string;
+  whoisReg: string; firstArchive: string; archiveUrl: string;
 }> {
   const blank = {
     dr: DASH, referringDomains: DASH, backlinks: DASH,
     organicTraffic: DASH, organicKeywords: DASH, top10Keywords: DASH,
+    top1to3Keywords: DASH, top4to10Keywords: DASH,
     indexedPages: DASH, featuredSnippets: DASH, informationalKeywords: DASH,
-    whoisReg: DASH, firstArchive: DASH,
+    whoisReg: DASH, firstArchive: DASH, archiveUrl: DASH,
   };
 
   const [ahrefsToken, semrushKey] = await Promise.all([getAhrefsToken(), getSemrushKey()]);
@@ -471,7 +481,7 @@ export async function fetchCompetitorEvalMetrics(domain: string, opts?: { includ
     ahrefsToken ? ahrefsTop4to10Count(ahrefsToken, domain) : Promise.resolve(DASH),
     semrushKey ? semrushDomainData(semrushKey, domain) : Promise.resolve(null),
     includeWW ? fetchWhoisReg(domain) : Promise.resolve(DASH),
-    includeWW ? fetchFirstArchive(domain) : Promise.resolve(DASH),
+    includeWW ? fetchFirstArchive(domain) : Promise.resolve({ date: DASH, url: DASH }),
   ]);
 
   const dr = drResult.status === "fulfilled" ? drResult.value : DASH;
@@ -481,7 +491,7 @@ export async function fetchCompetitorEvalMetrics(domain: string, opts?: { includ
   const top4to10 = top4to10Result.status === "fulfilled" ? top4to10Result.value : DASH;
   const sem = semrushResult.status === "fulfilled" ? semrushResult.value : null;
   const whois = whoisResult.status === "fulfilled" ? whoisResult.value : DASH;
-  const archive = archiveResult.status === "fulfilled" ? archiveResult.value : DASH;
+  const archiveResult_ = archiveResult.status === "fulfilled" ? archiveResult.value : { date: DASH, url: DASH };
 
   // top1to3 = keywords in positions 1-3 (is_best_position_set_top_3 boolean)
   // top4to10 = keywords in positions 4-10 (best_position_set = "top_4_10" enum)
@@ -506,11 +516,14 @@ export async function fetchCompetitorEvalMetrics(domain: string, opts?: { includ
     organicTraffic,
     organicKeywords,
     top10Keywords: top10Combined,
+    top1to3Keywords: top1to3,
+    top4to10Keywords: top4to10,
     indexedPages: sem?.indexedPages ?? DASH,
     featuredSnippets: sem?.featuredSnippets ?? DASH,
     informationalKeywords: sem?.informationalKeywords ?? DASH,
     whoisReg: whois,
-    firstArchive: archive,
+    firstArchive: archiveResult_.date,
+    archiveUrl: archiveResult_.url,
   };
 }
 
@@ -570,7 +583,12 @@ export function computeDerivedMetrics(raw: Record<string, any>): Record<string, 
     mentionRate: g("citedSources") ? String(Math.round(safeDiv(g("aiMentions"), g("citedSources")) * 100)) : DASH,
     rdYield: g("referringDomains") ? fmtNum(safeDiv(g("organicTraffic"), g("referringDomains"))) : DASH,
     contentYield: g("indexedPages") ? fmtNum(safeDiv(g("organicTraffic"), g("indexedPages"))) : DASH,
-    backlinkDensity: g("referringDomains") ? fmtNum(safeDiv(g("backlinks"), g("referringDomains"))) : DASH,
+    // backlinkDensity: combined link weight (backlinks + referring domains) per indexed page
+    backlinkDensity: g("indexedPages") ? fmtNum(safeDiv(g("backlinks") + g("referringDomains"), g("indexedPages"))) : DASH,
+    // snippetDensity: featured snippets per organic keyword (share of kws owning a snippet)
+    snippetDensity: g("organicKeywords") ? String(Math.round(safeDiv(g("featuredSnippets"), g("organicKeywords")) * 100)) : DASH,
+    // contentDensity: organic keywords per indexed page (keyword coverage efficiency)
+    contentDensity: g("indexedPages") ? fmtNum(safeDiv(g("organicKeywords"), g("indexedPages"))) : DASH,
     // Store informational density as plain number (not "30%")
     informationalDensity: g("organicKeywords") ? String(Math.round(safeDiv(g("informationalKeywords"), g("organicKeywords")) * 100)) : DASH,
   };
@@ -602,7 +620,9 @@ export function computeRanks(rows: Array<{ metrics: any; computed: any }>): Arra
     "informationalKeywords", "featuredSnippets",
     "age", "archiveAge", "kwVelocity", "snippetVelocity", "rdVelocity", "contentVelocity",
     "kwYield", "snippetYield", "rdYield", "contentYield", "backlinkDensity",
+    "snippetDensity", "contentDensity",
     "informationalDensity", "mentionRate",
+    "top1to3Keywords", "top4to10Keywords",
   ];
 
   const allMetrics = [...new Set([

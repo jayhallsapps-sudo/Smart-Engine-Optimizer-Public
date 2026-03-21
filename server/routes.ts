@@ -4262,11 +4262,14 @@ export async function registerRoutes(
         organicTraffic: fetched.organicTraffic,
         organicKeywords: fetched.organicKeywords,
         top10Keywords: fetched.top10Keywords,
+        top1to3Keywords: fetched.top1to3Keywords,
+        top4to10Keywords: fetched.top4to10Keywords,
         indexedPages: fetched.indexedPages,
         featuredSnippets: fetched.featuredSnippets,
         informationalKeywords: fetched.informationalKeywords,
         whoisReg: fetched.whoisReg !== "—" ? fetched.whoisReg : (existing.whoisReg ?? "—"),
         firstArchive: fetched.firstArchive !== "—" ? fetched.firstArchive : (existing.firstArchive ?? "—"),
+        archiveUrl: fetched.archiveUrl !== "—" ? fetched.archiveUrl : (existing.archiveUrl ?? "—"),
       };
       const computed = computeDerivedMetrics(updated);
       const saved = await storage.upsertEvalCompetitorRow({ ...row, metrics: updated, computed } as any);
@@ -4505,6 +4508,8 @@ export async function registerRoutes(
           organicTraffic,
           organicKeywords,
           top10Keywords:         fetched?.top10Keywords ?? "—",
+          top1to3Keywords:       fetched?.top1to3Keywords ?? "—",
+          top4to10Keywords:      fetched?.top4to10Keywords ?? "—",
           indexedPages:          fetched?.indexedPages ?? "—",
           featuredSnippets:      fetched?.featuredSnippets ?? "—",
           informationalKeywords: fetched?.informationalKeywords ?? "—",
@@ -4513,11 +4518,15 @@ export async function registerRoutes(
           citedSources:          "—",
           whoisReg:              fetched?.whoisReg ?? "—",
           firstArchive:          fetched?.firstArchive ?? "—",
+          archiveUrl:            fetched?.archiveUrl ?? "—",
         };
         const computed = computeDerivedMetrics(metrics);
         // sourceTrace: record which API each metric came from
         if (fetched?.dr !== "—") { sourceTrace.dr = "ahrefs"; sourceTrace.referringDomains = "ahrefs"; sourceTrace.backlinks = "ahrefs"; }
         if (fetched?.top10Keywords !== "—") sourceTrace.top10Keywords = "ahrefs";
+        if (fetched?.top1to3Keywords !== "—") sourceTrace.top1to3Keywords = "ahrefs";
+        if (fetched?.top4to10Keywords !== "—") sourceTrace.top4to10Keywords = "ahrefs";
+        if (fetched?.archiveUrl !== "—") sourceTrace.archiveUrl = "wayback";
         // organicTraffic/Keywords: Ahrefs first, SEMrush fallback — trace must reflect actual source
         if (!sourceTrace.organicTraffic && organicTraffic !== "—") {
           // If Ahrefs had it, it would have been used already (see fetchCompetitorEvalMetrics priority)

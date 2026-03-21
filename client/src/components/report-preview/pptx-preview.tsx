@@ -1,6 +1,6 @@
-import { useState, useEffect, useLayoutEffect } from "react";
+import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { ChevronLeft, ChevronRight, Maximize2, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Maximize2, X, ChevronUp, ChevronDown, Copy } from "lucide-react";
 import { ReadModeContext } from "./editable-section";
 import {
   useReportHeader, PAGE_BG, TEXT_PRIMARY, TEXT_SECONDARY, RED, NAVY, SLIDE_W, SLIDE_H,
@@ -30,18 +30,60 @@ interface PptxPreviewProps {
   slides: Slide[];
   edits: Record<string, string>;
   onEdit: (key: string, value: string) => void;
+  onSlidesChange?: (slides: Slide[]) => void;
 }
 
-export function PptxPreview({ slides, edits, onEdit }: PptxPreviewProps) {
-  const visibleSlides = slides.filter(s => !s.hidden);
+export function PptxPreview({ slides, edits, onEdit, onSlidesChange }: PptxPreviewProps) {
+  // Local ordered copy — allows duplicate + re-sort without mutating parent until committed
+  const [orderedSlides, setOrderedSlides] = useState<Slide[]>(() => slides);
+  const slidesRef = useRef(slides);
+
+  // Sync when parent regenerates slides (new report)
+  useEffect(() => {
+    if (slides !== slidesRef.current) {
+      slidesRef.current = slides;
+      setOrderedSlides(slides);
+    }
+  }, [slides]);
+
+  const visibleSlides = orderedSlides.filter(s => !s.hidden);
   const [current, setCurrent] = useState(0);
   const [isPresentMode, setIsPresentMode] = useState(false);
   const headerUrl = useReportHeader();
   const total = visibleSlides.length;
-  const slide = visibleSlides[current];
+  const slide = visibleSlides[Math.min(current, total - 1)];
 
   function prev() { setCurrent(c => Math.max(0, c - 1)); }
   function next() { setCurrent(c => Math.min(total - 1, c + 1)); }
+
+  // ─── Slide management helpers ──────────────────────────────────────
+  function mutateSlides(next: Slide[]) {
+    setOrderedSlides(next);
+    onSlidesChange?.(next);
+  }
+
+  function moveSlide(visibleIdx: number, direction: -1 | 1) {
+    const targetVisible = visibleSlides[visibleIdx];
+    const targetFullIdx = orderedSlides.indexOf(targetVisible);
+    const swapVisibleIdx = visibleIdx + direction;
+    if (swapVisibleIdx < 0 || swapVisibleIdx >= visibleSlides.length) return;
+    const swapFull = orderedSlides.indexOf(visibleSlides[swapVisibleIdx]);
+    const next = [...orderedSlides];
+    [next[targetFullIdx], next[swapFull]] = [next[swapFull], next[targetFullIdx]];
+    mutateSlides(next);
+    setCurrent(swapVisibleIdx);
+  }
+
+  function duplicateSlide(visibleIdx: number) {
+    const source = visibleSlides[visibleIdx];
+    const fullIdx = orderedSlides.indexOf(source);
+    const copy: Slide = { ...source, id: `${source.id}_copy_${Date.now()}` };
+    const next = [...orderedSlides];
+    next.splice(fullIdx + 1, 0, copy);
+    mutateSlides(next);
+    // Navigate to the copy (which appears one after in visible list)
+    setCurrent(visibleIdx + 1);
+  }
 
   useEffect(() => {
     if (!isPresentMode) return;
@@ -89,23 +131,56 @@ export function PptxPreview({ slides, edits, onEdit }: PptxPreviewProps) {
           )}
         </div>
 
+        {/* Thumbnail strip with slide management controls */}
         <div className="w-28 bg-gray-900 overflow-y-auto p-2 flex flex-col gap-2 shrink-0" data-testid="slide-thumbnails">
           {visibleSlides.map((s, i) => (
-            <button
-              key={s.id}
-              onClick={() => setCurrent(i)}
-              className={`relative w-full rounded border-2 overflow-hidden transition-all ${i === current ? "border-red-400" : "border-gray-600 hover:border-gray-400"}`}
-              style={{ paddingTop: "56.25%", background: (s.type === "title" || s.type === "divider") ? RED : PAGE_BG }}
-              data-testid={`thumb-slide-${i}`}
-              title={s.title ?? `Slide ${i + 1}`}
-            >
-              <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-[6px] font-bold truncate px-1" style={{ color: s.type === "title" || s.type === "divider" ? "rgba(255,255,255,0.9)" : NAVY }}>
-                  {s.title ?? `Slide ${i + 1}`}
-                </span>
+            <div key={s.id} className="group relative flex flex-col gap-0.5">
+              {/* Thumbnail */}
+              <button
+                onClick={() => setCurrent(i)}
+                className={`relative w-full rounded border-2 overflow-hidden transition-all ${i === current ? "border-red-400" : "border-gray-600 hover:border-gray-400"}`}
+                style={{ paddingTop: "56.25%", background: (s.type === "title" || s.type === "divider") ? RED : PAGE_BG }}
+                data-testid={`thumb-slide-${i}`}
+                title={s.title ?? `Slide ${i + 1}`}
+              >
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-[6px] font-bold truncate px-1" style={{ color: s.type === "title" || s.type === "divider" ? "rgba(255,255,255,0.9)" : NAVY }}>
+                    {s.title ?? `Slide ${i + 1}`}
+                  </span>
+                </div>
+                <div className="absolute bottom-0.5 right-0.5 text-[6px] text-gray-400">{i + 1}</div>
+              </button>
+
+              {/* Slide action bar — visible on hover or when active */}
+              <div className={`flex items-center justify-between gap-0.5 transition-opacity ${i === current ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
+                <button
+                  onClick={() => moveSlide(i, -1)}
+                  disabled={i === 0}
+                  className="flex-1 flex items-center justify-center p-0.5 rounded bg-gray-800 hover:bg-gray-700 disabled:opacity-20 text-gray-400 hover:text-white transition-colors"
+                  title="Move up"
+                  data-testid={`thumb-move-up-${i}`}
+                >
+                  <ChevronUp className="w-2.5 h-2.5" />
+                </button>
+                <button
+                  onClick={() => duplicateSlide(i)}
+                  className="flex-1 flex items-center justify-center p-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white transition-colors"
+                  title="Duplicate slide"
+                  data-testid={`thumb-duplicate-${i}`}
+                >
+                  <Copy className="w-2.5 h-2.5" />
+                </button>
+                <button
+                  onClick={() => moveSlide(i, 1)}
+                  disabled={i === visibleSlides.length - 1}
+                  className="flex-1 flex items-center justify-center p-0.5 rounded bg-gray-800 hover:bg-gray-700 disabled:opacity-20 text-gray-400 hover:text-white transition-colors"
+                  title="Move down"
+                  data-testid={`thumb-move-down-${i}`}
+                >
+                  <ChevronDown className="w-2.5 h-2.5" />
+                </button>
               </div>
-              <div className="absolute bottom-0.5 right-0.5 text-[6px] text-gray-400">{i + 1}</div>
-            </button>
+            </div>
           ))}
         </div>
       </div>

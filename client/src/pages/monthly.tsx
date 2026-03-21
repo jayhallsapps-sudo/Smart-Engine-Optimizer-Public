@@ -114,6 +114,10 @@ export default function MonthlyPage() {
   const editsRef = useRef(edits);
   editsRef.current = edits;
 
+  const handleSlidesChange = useCallback((slides: any[]) => {
+    setReport((prev: any) => prev ? { ...prev, slides } : prev);
+  }, []);
+
   useEffect(() => {
     const savedId = loadIdRef.current;
     if (!savedId || !clientId) return;
@@ -703,6 +707,7 @@ export default function MonthlyPage() {
               slides={report.slides ?? []}
               edits={edits}
               onEdit={handleEdit}
+              onSlidesChange={handleSlidesChange}
             />
             <SourceDebugPanel sourceFacts={(report as any).sourceFacts} />
           </>

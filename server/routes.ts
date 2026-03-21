@@ -956,11 +956,43 @@ export async function registerRoutes(
       health.gsc = { status: "client_missing_id", detail: "No GSC site URL configured for this client." };
     }
 
-    // GA4
+    // GA4 — verify property is actually accessible via stored credentials
     if (client.ga4PropertyId) {
-      health.ga4 = hasCred("google_analytics_4")
-        ? { status: "ok", detail: `Property: ${client.ga4PropertyId} — credential found, property access unverified until query` }
-        : { status: "credential_missing", detail: "No GA4 credentials stored — reconnect in Setup." };
+      if (!hasCred("google_analytics_4")) {
+        health.ga4 = { status: "credential_missing", detail: "No GA4 credentials stored — reconnect in Setup." };
+      } else {
+        try {
+          const ga4Tokens = await getAllGoogleAccessTokens("google_analytics_4");
+          let propertyFound = false;
+          outer: for (const token of ga4Tokens) {
+            try {
+              let pageToken: string | undefined;
+              do {
+                const url = new URL("https://analyticsadmin.googleapis.com/v1beta/accountSummaries");
+                url.searchParams.set("pageSize", "200");
+                if (pageToken) url.searchParams.set("pageToken", pageToken);
+                const summaryRes = await fetch(url.toString(), { headers: { Authorization: `Bearer ${token}` } });
+                if (!summaryRes.ok) break;
+                const summaryData = await summaryRes.json() as any;
+                for (const account of (summaryData.accountSummaries ?? [])) {
+                  for (const prop of (account.propertySummaries ?? [])) {
+                    if (prop.property === client.ga4PropertyId) {
+                      propertyFound = true;
+                      break outer;
+                    }
+                  }
+                }
+                pageToken = summaryData.nextPageToken;
+              } while (pageToken);
+            } catch { continue; }
+          }
+          health.ga4 = propertyFound
+            ? { status: "ok", detail: `Property: ${client.ga4PropertyId} — verified accessible` }
+            : { status: "credential_missing", detail: `Property ${client.ga4PropertyId} is not accessible via any connected Google account. Connect the correct GA4 account in Setup.` };
+        } catch {
+          health.ga4 = { status: "ok", detail: `Property: ${client.ga4PropertyId} — could not verify (check connectivity)` };
+        }
+      }
     } else {
       health.ga4 = { status: "client_missing_id", detail: "No GA4 property ID configured for this client." };
     }

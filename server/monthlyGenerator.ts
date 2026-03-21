@@ -4,7 +4,7 @@ import { queryGa4, handlesGa4Command, fetchGa4DailyTrend } from "./ga4Client";
 import { queryCallRail, handlesCallRailCommand } from "./callrailClient";
 import { queryCtm, handlesCtmCommand } from "./ctmClient";
 import { querySemrush, handlesSemrushCommand } from "./semrushClient";
-import { fetchAirtableWorkLog } from "./airtable";
+import { fetchAirtableWorkLog, getCreditCost } from "./airtable";
 import { fetchAsanaWorkLog, asanaSectionToCategory, groupAsanaTasks } from "./asanaClient";
 import { clusterQueriesByTopic, topicAdmitConnection } from "./qbrPrepHelpers";
 import { fetchNsmGoalsForSpecificQuarter } from "./sheetsClient";
@@ -23,6 +23,9 @@ export interface MonthlyAmInputs {
   contextAnomalies?: string;
   leadershipNote?: string;
   focusNextMonth?: string;
+  producedBy?: string;
+  quarterlyStrategyFocus?: string;
+  vvobsCount?: string;
 }
 
 function normalizeMonthlyAmInputs(raw: MonthlyAmInputs): MonthlyAmInputs {
@@ -147,6 +150,7 @@ export async function generateMonthly(input: {
     ga4DailyTrend,
     nsmResult,
     ctSummaryResult,
+    airtableProductionResult,
   ] = await Promise.allSettled([
     handlesGscCommand("gsc_qoq_queries" as any)
       ? queryGsc("gsc_qoq_queries" as any, client, calMonthRange)
@@ -200,6 +204,8 @@ export async function generateMonthly(input: {
       : (client as any).ctmAccountId && handlesCtmCommand("ctm_qoq_sources" as any)
         ? queryCtm("ctm_qoq_sources" as any, client, calMonthRange)
         : Promise.resolve(null),
+    // Airtable production view — in-progress audit / production items (no date filter, current state)
+    fetchAirtableWorkLog(client.id, "", "", "production"),
   ]);
 
   const slides: Slide[] = [];
@@ -211,6 +217,7 @@ export async function generateMonthly(input: {
     title: `SEO Monthly Report — ${label}`,
     clientName: client.name,
     date: fmtDate(now),
+    ...(am.producedBy?.trim() ? { producedBy: am.producedBy.trim() } : {}),
   });
 
   // ─── SLIDE 2: Monthly Performance Overview ────────────────────────
@@ -294,9 +301,37 @@ export async function generateMonthly(input: {
           ],
   });
 
+  // ─── SLIDE 2a: SEO Strategy Focus (quarterly tactics) ───────────────────────
+  // Shown when AM has filled in the quarterly strategy focus field.
+  // Mirrors the "SEO Q[N] Tactics" slide in the PDF report.
+  const qNum2 = Math.ceil(input.month / 3);
+  const strategyBullets: string[] = [];
+  if (am.quarterlyStrategyFocus?.trim()) {
+    // AM-provided text: split on newlines or semicolons into bullets
+    const lines = am.quarterlyStrategyFocus.trim().split(/\n|;/).map(l => l.trim()).filter(Boolean);
+    strategyBullets.push(...lines);
+  }
+  // Always include default pillars so slide has substance even without AM input
+  if (strategyBullets.length === 0) {
+    strategyBullets.push(
+      "Capture Demand Early — Answer symptom- and risk-based questions before users identify as needing help, building trust and topical authority early.",
+      "Guide Evaluation — Create treatment-focused and geo-specific pages that help users compare levels of care, facilities, and treatment options.",
+      "Convert With Clarity — Remove friction with clear insurance messaging, admissions CTAs, and credibility signals to convert VOB-ready intent."
+    );
+  }
+  slides.push({
+    id: "strategy_focus",
+    type: "bullets",
+    title: `Q${qNum2} SEO Strategy Focus`,
+    subtitle: `${label} — Scaling with a Treatment Center-Specific SEO Funnel`,
+    bullets: strategyBullets,
+  });
+
   // ─── SLIDE 2b: Top Conversion Sources ───────────────────────────
   // Primary: CallRail source breakdown (callrail_summary → tables[0] = "Calls by Source")
   // Shows which tracking sources (Google My Business, Organic Search, etc.) generated calls.
+  // VVOBs column: populated from AM input (vvobsCount) when call-level VVOB tagging is unavailable.
+  const vvobTotal = parseInt(String(am.vvobsCount ?? "0").replace(/[^0-9]/g, ""), 10) || 0;
   if (ctSummaryResult.status === "fulfilled" && ctSummaryResult.value) {
     const sourceTables = (ctSummaryResult.value as any).tables ?? [];
     if (sourceTables.length > 0 && sourceTables[0].rows?.length > 0) {
@@ -309,15 +344,21 @@ export async function generateMonthly(input: {
         return [...r, share];
       });
       const callProviderLabel = client.callrailCompanyId ? "CallRail" : (client as any).ctmAccountId ? "CTM" : "Call Tracker";
+      // Add VVOBs column (manual entry via AM input; shown as total in first data row)
+      const vvobRows = enhancedRows.map((r: any[], idx: number) => [
+        ...r,
+        idx === 0 && vvobTotal > 0 ? String(vvobTotal) : "—",
+      ]);
       slides.push({
         id: "conversion_sources",
         type: "table",
         title: "Top Conversion Sources",
         subtitle: `${label} — Calls by Tracking Source (${callProviderLabel})`,
         table: {
-          headers: [...sourceTables[0].headers, "Share"],
-          rows: enhancedRows,
+          headers: [...sourceTables[0].headers, "Share", "VVOBs"],
+          rows: vvobRows,
         },
+        ...(vvobTotal === 0 ? { sourceNote: "VVOBs: Enter total in 'VVOB Count' field above to populate" } : {}),
       });
     }
   }
@@ -366,7 +407,7 @@ export async function generateMonthly(input: {
       }));
       const clusters = clusterQueriesByTopic(currQueryData, client);
 
-      const prevClusters = new Map<string, { queryCount: number; impressions: number }>();
+      const prevClusters = new Map<string, { queryCount: number; impressions: number; clicks: number }>();
       if (previousRows.length > 0) {
         const prevQueryData = previousRows.map(r => ({
           query: r.keys?.[0] ?? "",
@@ -380,6 +421,7 @@ export async function generateMonthly(input: {
           prevClusters.set(topic, {
             queryCount: queries.length,
             impressions: queries.reduce((s, q) => s + q.impressions, 0),
+            clicks: queries.reduce((s, q) => s + q.clicks, 0),
           });
         }
       }
@@ -391,10 +433,26 @@ export async function generateMonthly(input: {
         return `${d >= 0 ? "+" : ""}${d.toFixed(1)}%`;
       };
 
+      // Generate a brief trend note per topic based on click and impression movement
+      function topicNote(topic: string, currClicks: number, currImpressions: number, prev?: { queryCount: number; impressions: number; clicks: number }): string {
+        if (!prev) return "New topic this period.";
+        const clickDelta = currClicks - prev.clicks;
+        const impDelta = currImpressions - prev.impressions;
+        const clickPct = prev.clicks > 0 ? ((clickDelta / prev.clicks) * 100) : 0;
+        const impPct = prev.impressions > 0 ? ((impDelta / prev.impressions) * 100) : 0;
+        if (Math.abs(clickPct) < 5 && Math.abs(impPct) < 5) return "Stable MoM.";
+        if (clickPct > 20) return `Strong click growth (+${clickPct.toFixed(0)}% MoM).`;
+        if (clickPct < -20) return `Click decline (${clickPct.toFixed(0)}% MoM) — monitor.`;
+        if (impPct > 15) return `Impression growth (+${impPct.toFixed(0)}% MoM).`;
+        if (impPct < -15) return `Impression decline (${impPct.toFixed(0)}% MoM) — review.`;
+        return `${clickDelta >= 0 ? "+" : ""}${clickDelta} clicks MoM.`;
+      }
+
       const topicRows = [...clusters.entries()]
         .map(([topic, queries]) => ({
           topic,
           queryCount: queries.length,
+          totalClicks: queries.reduce((s, q) => s + q.clicks, 0),
           totalImpressions: queries.reduce((s, q) => s + q.impressions, 0),
           connection: topicAdmitConnection(topic),
         }))
@@ -409,9 +467,11 @@ export async function generateMonthly(input: {
           t.topic,
           String(t.queryCount),
           prev ? pctDelta(t.queryCount, prev.queryCount) : "—",
+          t.totalClicks.toLocaleString("en-US"),
+          prev ? pctDelta(t.totalClicks, prev.clicks) : "—",
           t.totalImpressions.toLocaleString("en-US"),
           prev ? pctDelta(t.totalImpressions, prev.impressions) : "—",
-          t.connection,
+          topicNote(t.topic, t.totalClicks, t.totalImpressions, prev),
         ];
       });
 
@@ -421,7 +481,7 @@ export async function generateMonthly(input: {
         title: "Query Groups",
         subtitle: `${label} vs ${prevMonthLabel} — Topic-Level Aggregation`,
         table: {
-          headers: ["Query Group", "# Queries", "Δ Queries", "Impressions", "Δ Impressions", "Admit Connection"],
+          headers: ["Query Group", "# Queries", "Δ Queries", "Clicks", "Δ Clicks", "Impressions", "Δ Impressions", "Notes"],
           rows: tableRows,
         },
       });
@@ -759,6 +819,89 @@ export async function generateMonthly(input: {
           headers: ["Initiative Area", "Status", "Completed", "Upcoming", "Key Tasks"],
           rows: initiativeRows,
         },
+      });
+    }
+  }
+
+  // ─── SLIDE 8b: Audit Progress (from Airtable production view) ────────────────
+  // Shows in-progress content audit items grouped by audit level
+  const auditLevelMap: Record<string, string> = {
+    "Remove & Redirect": "Redirects",
+    "Cannibal Review": "Redirects",
+    "Content Refresh": "Low Level Rewrite",
+    "New Content": "Low Level Rewrite",
+    "Canonical Review": "Low Level Rewrite",
+  };
+  const auditLevelOrder = ["Redirects", "Low Level Rewrite", "Medium Level Rewrite", "High Level Rewrite"];
+  const auditByLevel: Record<string, string[]> = {};
+
+  if (airtableProductionResult.status === "fulfilled" && airtableProductionResult.value?.success) {
+    const prodData = airtableProductionResult.value.data;
+    for (const [, items] of Object.entries(prodData.byCreditType)) {
+      for (const item of items as any[]) {
+        const rawStatus = item.statusLabel ?? item.status ?? "";
+        const level = auditLevelMap[rawStatus] ?? (item.creditType === "Scale" ? "High Level Rewrite" : "Medium Level Rewrite");
+        if (!auditByLevel[level]) auditByLevel[level] = [];
+        if (item.url) auditByLevel[level].push(item.url);
+        else auditByLevel[level].push(item.task);
+      }
+    }
+  }
+
+  const hasAuditItems = Object.keys(auditByLevel).some(k => auditByLevel[k].length > 0);
+  if (hasAuditItems) {
+    const auditTableRows = auditLevelOrder
+      .filter(level => auditByLevel[level]?.length > 0)
+      .map(level => {
+        const items = auditByLevel[level] ?? [];
+        return [
+          level,
+          String(items.length),
+          items.slice(0, 3).join(", "),
+        ];
+      });
+    slides.push({
+      id: "audit_progress",
+      type: "table",
+      title: `${label} Audit Content`,
+      subtitle: `In-Progress Audit Items by Level (Airtable Production View)`,
+      table: {
+        headers: ["Audit Level", "# Items", "Sample Pages"],
+        rows: auditTableRows,
+      },
+    });
+  }
+
+  // ─── SLIDE 8c: Content Credits Table ──────────────────────────────────────────
+  // Shows published content items with credit type, cost, keyword, and URL.
+  // Mirrors the "Content Completion" table in the PDF report.
+  if (airtableResult.status === "fulfilled" && airtableResult.value?.success) {
+    const aData = airtableResult.value.data;
+    const creditRows: string[][] = [];
+    for (const [, items] of Object.entries(aData.byCreditType)) {
+      for (const item of items as any[]) {
+        const creditLabel = item.creditType === "Scale" ? "New Content" : item.creditType === "Optimization" ? "Optimize" : item.creditType;
+        creditRows.push([
+          item.url ?? item.task,
+          item.targetKeyword ?? "—",
+          "—",
+          item.pageType ?? (item.creditType === "Scale" ? "Blog" : "Page"),
+          creditLabel,
+          getCreditCost(item.creditType),
+        ]);
+      }
+    }
+    if (creditRows.length > 0) {
+      slides.push({
+        id: "content_credits",
+        type: "table",
+        title: `${label} Content Completion`,
+        subtitle: `Published Content — Credit Summary`,
+        table: {
+          headers: ["Page", "Target Keyword", "Current Rank", "Page Type", "Credit Type", "Credit Cost"],
+          rows: creditRows,
+        },
+        sourceNote: "Current Rank: requires GSC cross-reference — update manually or connect live rank tracking.",
       });
     }
   }

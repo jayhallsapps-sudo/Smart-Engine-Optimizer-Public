@@ -76,6 +76,9 @@ export default function MonthlyPage() {
   const [amContextAnomalies, setAmContextAnomalies] = useState("");
   const [amLeadershipNote, setAmLeadershipNote] = useState("");
   const [amFocusNextMonth, setAmFocusNextMonth] = useState("");
+  const [producedBy, setProducedBy] = useState("");
+  const [quarterlyStrategyFocus, setQuarterlyStrategyFocus] = useState("");
+  const [vvobsCount, setVvobsCount] = useState("");
 
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [workflowCtx, setWorkflowCtx] = useState<WorkflowHandoffContext | null>(() =>
@@ -194,6 +197,9 @@ export default function MonthlyPage() {
           contextAnomalies: amContextAnomalies || undefined,
           leadershipNote: amLeadershipNote || undefined,
           focusNextMonth: amFocusNextMonth || undefined,
+          producedBy: producedBy || undefined,
+          quarterlyStrategyFocus: quarterlyStrategyFocus || undefined,
+          vvobsCount: vvobsCount || undefined,
         },
         gapAnswers: params?.gapAnswers,
         gapSessionId: params?.gapSessionId,
@@ -512,6 +518,30 @@ export default function MonthlyPage() {
                 data-testid="input-client-notes"
               />
             </div>
+
+            <div className="space-y-1">
+              <Label className="text-[11px] text-muted-foreground">Produced By</Label>
+              <input
+                type="text"
+                placeholder="e.g. Olivia & Carmen"
+                value={producedBy}
+                onChange={e => setProducedBy(e.target.value)}
+                className="flex h-8 w-full rounded-md border border-input bg-background px-3 py-1 text-xs shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                data-testid="input-produced-by"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-[11px] text-muted-foreground">VVOB Count</Label>
+              <input
+                type="text"
+                placeholder="Total verified VOBs this month (e.g. 13)"
+                value={vvobsCount}
+                onChange={e => setVvobsCount(e.target.value)}
+                className="flex h-8 w-full rounded-md border border-input bg-background px-3 py-1 text-xs shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                data-testid="input-vvobs-count"
+              />
+            </div>
           </div>
 
           {/* Additional Optional Inputs */}
@@ -565,6 +595,16 @@ export default function MonthlyPage() {
                     onChange={e => setAmFocusNextMonth(e.target.value)}
                     className="text-xs resize-none h-14"
                     data-testid="input-am-focus-next-month"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-muted-foreground">Quarterly Strategy Focus</Label>
+                  <Textarea
+                    placeholder="e.g. Q1 focus: build topical authority in addiction treatment…"
+                    value={quarterlyStrategyFocus}
+                    onChange={e => setQuarterlyStrategyFocus(e.target.value)}
+                    className="text-xs resize-none h-14"
+                    data-testid="input-quarterly-strategy-focus"
                   />
                 </div>
               </div>

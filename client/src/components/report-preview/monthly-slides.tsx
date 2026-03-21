@@ -29,6 +29,7 @@ const BODY_INSET = { top: BODY_TOP, left: 16, right: 16, bottom: BODY_BOTTOM };
 
 // ─── MonthlyTitleSlide ────────────────────────────────────────────────────────
 export function MonthlyTitleSlide({ slide, edits, onEdit, headerUrl }: SlideProps) {
+  const producedBy = edits[`${slide.id}_producedBy`] ?? slide.producedBy ?? "";
   return (
     <div style={{ position: "absolute", inset: 0, background: PAGE_BG, fontFamily: "'Calibri', 'Segoe UI', Arial, sans-serif" }}>
       <ReportTopHeaderLarge headerUrl={headerUrl} height={150} />
@@ -41,6 +42,19 @@ export function MonthlyTitleSlide({ slide, edits, onEdit, headerUrl }: SlideProp
           edits={edits}
           onEdit={onEdit}
         />
+        {(producedBy || slide.producedBy !== undefined) && (
+          <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: 9, color: TEXT_SECONDARY, fontStyle: "italic" }}>Produced By:</span>
+            <EditableSection
+              editKey={`${slide.id}_producedBy`}
+              value={producedBy || "—"}
+              edits={edits}
+              onEdit={onEdit}
+              as="span"
+              style={{ fontSize: 10, color: TEXT_PRIMARY, fontWeight: 600 }}
+            />
+          </div>
+        )}
       </div>
       <ReportFooter />
     </div>

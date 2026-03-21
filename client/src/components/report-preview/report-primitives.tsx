@@ -81,6 +81,8 @@ export interface Slide {
   futureIA?: IAItem[];
   clusters?: ContentCluster[];
   hidden?: boolean;
+  producedBy?: string;
+  sourceNote?: string;
 }
 
 // ─── Design tokens (single source of truth for the slide system) ─────────────

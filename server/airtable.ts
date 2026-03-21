@@ -10,6 +10,20 @@ export interface WorkLogItem {
   contentDocUrl?: string;
   status?: string;
   statusLabel?: string;
+  targetKeyword?: string;
+  pageType?: string;
+}
+
+const CREDIT_COST_MAP: Record<string, number> = {
+  Scale: 1,
+  Optimization: 0.5,
+  "CRO Update": 0.5,
+  Other: 0,
+};
+
+export function getCreditCost(creditType: string): string {
+  const cost = CREDIT_COST_MAP[creditType];
+  return cost !== undefined ? String(cost) : "—";
 }
 
 export interface WorkLogResult {
@@ -202,6 +216,8 @@ export async function fetchAirtableWorkLog(
         f["Written Content Doc"] ??
         undefined;
       const contentDocUrl = rawContentDocUrl ? String(rawContentDocUrl).trim() : undefined;
+      const rawKeyword = f["Target Keyword"] ?? f["Keyword"] ?? f["Primary Keyword"] ?? undefined;
+      const rawPageType = f["Page Type"] ?? f["Type"] ?? f["Content Type"] ?? undefined;
       return {
         id: r.id,
         task: String(f["Name"] ?? f["Task"] ?? f["Description"] ?? "Untitled").trim(),
@@ -211,6 +227,8 @@ export async function fetchAirtableWorkLog(
         contentDocUrl: contentDocUrl || undefined,
         status: rawStatus,
         statusLabel: rawStatus ? getStatusLabel(rawStatus) : undefined,
+        targetKeyword: rawKeyword ? String(rawKeyword).trim() : undefined,
+        pageType: rawPageType ? String(rawPageType).trim() : undefined,
       };
     })
     .filter(item => {

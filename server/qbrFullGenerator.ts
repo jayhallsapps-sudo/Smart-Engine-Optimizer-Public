@@ -848,21 +848,38 @@ export async function generateQbrFull(input: {
   });
 
   // ────────────────────────────────────────────────────────────────────────────
-  // SLIDE 17 — SECTION DIVIDER: ROADMAP & ALIGNMENT
+  // SLIDE 17 — ADMISSION OPS CROSS-SELL
   // ────────────────────────────────────────────────────────────────────────────
   slides.push({
-    id: "s17_divider_roadmap",
+    id: "s17_admission_ops",
+    type: "bullets",
+    title: "Get More Out of Your Marketing",
+    subtitle: "Optimize Your Admissions Process to Increase Revenue",
+    bullets: [
+      "Every missed VOB and dropped lead is lost revenue — Admission Ops fixes the gaps so more opportunities become admits.",
+      "Recover revenue lost to slow verification, missed follow-ups, and inconsistent intake workflows.",
+      "Increase admit conversion by accelerating VOB processing and tightening intake performance.",
+      "Eliminate lead leakage with standardized workflows and real-time escalation protocols.",
+      "Complement SEO momentum with faster lead processing — more calls only help if intake can capture them.",
+    ],
+  });
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // SLIDE 18 — SECTION DIVIDER: ROADMAP & ALIGNMENT
+  // ────────────────────────────────────────────────────────────────────────────
+  slides.push({
+    id: "s18_divider_roadmap",
     type: "divider",
     title: "Roadmap & Alignment",
     subtitle: "Content & SEO Roadmap — Next Steps",
   });
 
   // ────────────────────────────────────────────────────────────────────────────
-  // SLIDE 18 — CONTENT & SEO ROADMAP
+  // SLIDE 19 — CONTENT & SEO ROADMAP
   // ────────────────────────────────────────────────────────────────────────────
   if (workRows.length > 0) {
     slides.push({
-      id: "s18_roadmap",
+      id: "s19_roadmap",
       type: "table",
       title: "Content & SEO Roadmap",
       subtitle: `${nextQtrLabel} — Prioritized Deliverables`,
@@ -881,7 +898,7 @@ export async function generateQbrFull(input: {
     ];
     if (norm(am.focusNextQuarter)) roadmapBullets.unshift(norm(am.focusNextQuarter)!);
     slides.push({
-      id: "s18_roadmap",
+      id: "s19_roadmap",
       type: "bullets",
       title: "Content & SEO Roadmap",
       subtitle: `${nextQtrLabel} — Prioritized Initiatives`,
@@ -890,38 +907,71 @@ export async function generateQbrFull(input: {
   }
 
   // ────────────────────────────────────────────────────────────────────────────
-  // SLIDE 19 — SECTION DIVIDER: PARTNERSHIP ITEMS
+  // SLIDE 20 — NEXT STEPS
+  // ────────────────────────────────────────────────────────────────────────────
+  const nextStepBullets: string[] = [
+    "Choose your content credit path — select either the recommended reallocation (no added cost) or the Grow package for faster ranking gains.",
+    "Approve updated SEO roadmap — confirm the prioritized service pages and content updates that will drive call and VOB growth next quarter.",
+    "Activate local visibility enhancements — enable GBP optimization, proximity signals, and supporting location content to strengthen map-driven call volume.",
+  ];
+  if (norm(am.focusNextQuarter) && !nextStepBullets.some(b => b.includes(am.focusNextQuarter!.slice(0, 20)))) {
+    nextStepBullets.push(norm(am.focusNextQuarter)!);
+  }
+  slides.push({
+    id: "s20_next_steps",
+    type: "bullets",
+    title: "Next Steps",
+    subtitle: "Priorities to confirm before next quarter",
+    bullets: nextStepBullets.slice(0, 5),
+  });
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // SLIDE 21 — SECTION DIVIDER: PARTNERSHIP ITEMS
   // ────────────────────────────────────────────────────────────────────────────
   slides.push({
-    id: "s19_divider_partnership",
+    id: "s21_divider_partnership",
     type: "divider",
     title: "Partnership Items",
     subtitle: "Referral Program & Closing",
   });
 
   // ────────────────────────────────────────────────────────────────────────────
-  // SLIDE 20 — WIN-WIN REFERRAL PROGRAM / CLOSING
+  // SLIDE 22 — WIN-WIN REFERRAL PROGRAM
+  // ────────────────────────────────────────────────────────────────────────────
+  slides.push({
+    id: "s22_referral_program",
+    type: "bullets",
+    title: "Win-Win Referral Program",
+    subtitle: "Know another center or business that could use help growing admissions?",
+    bullets: [
+      "Refer them to us — when they become a client, you both win.",
+      "They get expert SEO and marketing support to grow their admissions pipeline.",
+      "You receive a service credit as a thank-you for the introduction.",
+      "Helping others grow helps you grow too.",
+      "If anyone in your network could benefit from our Paid Media, Content, and SEO services, please let us know.",
+    ],
+  });
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // SLIDE 23 — CLOSING / THANK YOU
   // ────────────────────────────────────────────────────────────────────────────
   const closingBullets: string[] = [];
 
   if (norm(am.trackingNotes)) closingBullets.push(norm(am.trackingNotes)!);
+  if (norm(am.leadershipNote)) closingBullets.unshift(`Leadership note: ${norm(am.leadershipNote)}`);
 
   closingBullets.push(
-    "Partnership referral program: Mutual introductions to aligned behavioral health and addiction treatment networks.",
     "Open items: Review NSM goals, confirm next quarter priorities, and approve roadmap.",
     "Next QBR: Scheduled for end of next quarter — interim bi-weekly reports will track progress.",
-    `Thank you — ${client.name} × Webserv`
+    `Thank you for your continued partnership — ${client.name} × Webserv`,
+    "Every partnership helps us move closer to our goal of connecting 30,000 people with treatment by 2030."
   );
 
-  if (norm(am.leadershipNote) && !closingBullets.includes(norm(am.leadershipNote)!)) {
-    closingBullets.unshift(`Leadership note: ${norm(am.leadershipNote)}`);
-  }
-
   slides.push({
-    id: "s20_closing",
+    id: "s23_closing",
     type: "bullets",
-    title: "Partnership Items & Close",
-    subtitle: "Next steps and referral program",
+    title: `Thank You — ${client.name}`,
+    subtitle: "Every partnership helps us connect more people with care",
     bullets: closingBullets.slice(0, 8),
   });
 

@@ -215,6 +215,10 @@ export default function MidStrategyPage() {
     reportSave.markDirty();
   }, [currentCrawlId, comparisonCrawlId, clientName]);
 
+  const handleSlidesChange = useCallback((slides: any[]) => {
+    setReport((prev: any) => prev ? { ...prev, slides } : prev);
+  }, []);
+
   function handleManualSave() {
     if (!report) return;
     const meta = getMeta();
@@ -647,6 +651,7 @@ export default function MidStrategyPage() {
                 slides={report.slides ?? []}
                 edits={edits}
                 onEdit={handleEdit}
+                onSlidesChange={handleSlidesChange}
               />
             </div>
             <SourceDebugPanel sourceFacts={(report as any).sourceFacts} />

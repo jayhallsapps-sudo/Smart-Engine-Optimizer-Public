@@ -247,6 +247,10 @@ export default function QbrFullPage() {
     reportSave.markDirty();
   }, [currentCrawlId, comparisonCrawlId, clientName, quarter, year]);
 
+  const handleSlidesChange = useCallback((slides: any[]) => {
+    setReport((prev: any) => prev ? { ...prev, slides } : prev);
+  }, []);
+
   function handleManualSave() {
     if (!report) return;
     const meta = getMeta();
@@ -739,6 +743,7 @@ export default function QbrFullPage() {
               slides={report.slides ?? []}
               edits={edits}
               onEdit={handleEdit}
+              onSlidesChange={handleSlidesChange}
             />
             <SourceDebugPanel sourceFacts={(report as any).sourceFacts} />
           </>

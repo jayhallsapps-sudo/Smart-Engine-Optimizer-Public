@@ -26,7 +26,7 @@ import type { Client, Command } from "@shared/schema";
 
 // ─── Provider client factory ──────────────────────────────────────────────────
 
-type Provider = "groq" | "gemini" | "openai" | "perplexity";
+type Provider = "groq" | "gemini" | "openai";
 
 interface ProviderConfig {
   client: OpenAI;
@@ -59,19 +59,11 @@ function getProviderConfig(provider: Provider): ProviderConfig {
         model: process.env.OPENAI_MODEL || "gpt-4o",
       };
     }
-    case "perplexity": {
-      const apiKey = process.env.PERPLEXITY_API_KEY;
-      if (!apiKey) throw new Error("PERPLEXITY_API_KEY not configured");
-      return {
-        client: new OpenAI({ apiKey, baseURL: "https://api.perplexity.ai" }),
-        model: process.env.PERPLEXITY_MODEL || "sonar",
-      };
-    }
   }
 }
 
 function getProviderChain(): Provider[] {
-  const order: Provider[] = ["groq", "gemini", "openai", "perplexity"];
+  const order: Provider[] = ["groq", "gemini", "openai"];
   return order.filter((p) => {
     try { getProviderConfig(p); return true; } catch { return false; }
   });

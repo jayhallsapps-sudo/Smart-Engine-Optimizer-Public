@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
+import swooshHeaderImg from "@assets/HEADER_IMAGE_trans_deck_1774199155785.png";
 import { useRoute, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,12 +46,13 @@ interface ElemStyle {
 interface TemplateElement {
   id: string;
   label: string;
-  type: "rect" | "text";
+  type: "rect" | "text" | "image";
   x: number;
   y: number;
   w: number;
   h: number;
   content?: string;
+  src?: string;
   style: ElemStyle;
   locked?: boolean;
 }
@@ -70,43 +72,161 @@ interface TemplateState {
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
 
+// Shared slide elements used on every slide
+const SWOOSH_H = 22;   // % of canvas height the header image occupies
+const FOOTER_Y = 91.5; // % where footer text sits
+
+const SWOOSH_EL = (id = "header-swoosh"): TemplateElement => ({
+  id, label: "Header Swoosh", type: "image",
+  x: 0, y: 0, w: 100, h: SWOOSH_H,
+  src: swooshHeaderImg as string,
+  style: {},
+  locked: true,
+});
+
+const FOOTER_LINE_EL = (id = "footer-line"): TemplateElement => ({
+  id, label: "Footer Line", type: "rect",
+  x: 3, y: 89.5, w: 94, h: 0.4,
+  style: { backgroundColor: "#C0392B", opacity: 0.35 },
+  locked: true,
+});
+
+const FOOTER_TEXT_EL = (id = "footer-text"): TemplateElement => ({
+  id, label: "Footer", type: "text",
+  x: 0, y: FOOTER_Y, w: 100, h: 7,
+  content: "Webserv  |  webserv.io",
+  style: { color: "#9CA3AF", fontSize: 9, textAlign: "center" },
+  locked: true,
+});
+
 const QCR_DEFAULTS: TemplateState = {
   globalStyles: {
     accentColor: "#C0392B",
-    darkColor: "#1B3A6B",
+    darkColor: "#C0392B",
     fontFamily: "Calibri",
   },
   slides: {
     title: [
-      { id: "header-bar", label: "Header Bar", type: "rect", x: 0, y: 0, w: 100, h: 16, locked: false, style: { backgroundColor: "#C0392B" } },
-      { id: "logo-area", label: "Logo Placeholder", type: "rect", x: 79, y: 0.5, w: 20, h: 15, locked: false, style: { backgroundColor: "rgba(255,255,255,0.12)", borderRadius: 4 } },
-      { id: "title-text", label: "Deck Title", type: "text", x: 3, y: 26, w: 94, h: 16, content: "Quarterly Content Roadmap", style: { color: "#1F2937", fontSize: 32, fontWeight: "bold", textAlign: "center" } },
-      { id: "client-text", label: "Client Name", type: "text", x: 3, y: 45, w: 94, h: 11, content: "Acme Corp", style: { color: "#C0392B", fontSize: 20, fontWeight: "bold", textAlign: "center" } },
-      { id: "subtitle-text", label: "Quarter / Date", type: "text", x: 3, y: 57, w: 94, h: 9, content: "Q1 2026  •  Prepared by Webserv", style: { color: "#6B7280", fontSize: 14, textAlign: "center" } },
-      { id: "bottom-bar", label: "Bottom Bar", type: "rect", x: 0, y: 90, w: 100, h: 10, locked: false, style: { backgroundColor: "#1B3A6B" } },
+      SWOOSH_EL("title-swoosh"),
+      {
+        id: "title-text", label: "Deck Title", type: "text",
+        x: 3, y: 28, w: 94, h: 18,
+        content: "Quarterly Content Roadmap",
+        style: { color: "#111827", fontSize: 34, fontWeight: "bold", textAlign: "center" },
+      },
+      {
+        id: "client-text", label: "Client Name", type: "text",
+        x: 3, y: 48, w: 94, h: 12,
+        content: "[Client Name]",
+        style: { color: "#C0392B", fontSize: 22, fontWeight: "bold", textAlign: "center" },
+      },
+      {
+        id: "subtitle-text", label: "Quarter / Date", type: "text",
+        x: 3, y: 62, w: 94, h: 8,
+        content: "Q1 2026  •  Prepared by Webserv",
+        style: { color: "#6B7280", fontSize: 13, textAlign: "center" },
+      },
+      FOOTER_LINE_EL("title-footer-line"),
+      FOOTER_TEXT_EL("title-footer-text"),
     ],
     divider: [
-      { id: "background", label: "Slide Background", type: "rect", x: 0, y: 0, w: 100, h: 100, locked: false, style: { backgroundColor: "#1B3A6B" } },
-      { id: "accent-stripe", label: "Accent Stripe", type: "rect", x: 0, y: 43, w: 5, h: 14, locked: false, style: { backgroundColor: "#C0392B" } },
-      { id: "month-text", label: "Month Label", type: "text", x: 7, y: 34, w: 86, h: 30, content: "January", style: { color: "#FFFFFF", fontSize: 52, fontWeight: "bold" } },
-      { id: "year-label", label: "Year / Sub-label", type: "text", x: 7, y: 63, w: 86, h: 14, content: "2026 Content Plan", style: { color: "rgba(255,255,255,0.55)", fontSize: 17 } },
+      SWOOSH_EL("divider-swoosh"),
+      {
+        id: "accent-rule", label: "Accent Rule", type: "rect",
+        x: 3, y: 30, w: 94, h: 0.7,
+        style: { backgroundColor: "#C0392B" },
+        locked: false,
+      },
+      {
+        id: "month-text", label: "Month Label", type: "text",
+        x: 3, y: 34, w: 94, h: 30,
+        content: "January",
+        style: { color: "#C0392B", fontSize: 54, fontWeight: "bold" },
+      },
+      {
+        id: "year-label", label: "Year / Sub-label", type: "text",
+        x: 3, y: 65, w: 94, h: 12,
+        content: "2026 Content Plan",
+        style: { color: "#6B7280", fontSize: 16 },
+      },
+      FOOTER_LINE_EL("divider-footer-line"),
+      FOOTER_TEXT_EL("divider-footer-text"),
     ],
     strategy: [
-      { id: "header-bar", label: "Header Bar", type: "rect", x: 0, y: 0, w: 100, h: 12, locked: false, style: { backgroundColor: "#C0392B" } },
-      { id: "slide-title", label: "Slide Title", type: "text", x: 3, y: 14, w: 70, h: 9, content: "January — Strategy Overview", style: { color: "#1B3A6B", fontSize: 18, fontWeight: "bold" } },
-      { id: "accent-line", label: "Accent Divider", type: "rect", x: 3, y: 23, w: 94, h: 0.7, locked: false, style: { backgroundColor: "#C0392B" } },
-      { id: "bullets-bg", label: "Content Background", type: "rect", x: 3, y: 26, w: 94, h: 66, locked: false, style: { backgroundColor: "#F9FAFB", borderRadius: 4 } },
-      { id: "bullets-text", label: "Bullets / Content Text", type: "text", x: 4.5, y: 28, w: 91, h: 62, content: "• Strategy bullet 1\n• Strategy bullet 2\n• Strategy bullet 3", style: { color: "#374151", fontSize: 11 } },
+      SWOOSH_EL("strategy-swoosh"),
+      {
+        id: "slide-title", label: "Slide Title", type: "text",
+        x: 3, y: 24, w: 80, h: 8,
+        content: "January — Strategy Overview",
+        style: { color: "#111827", fontSize: 18, fontWeight: "bold" },
+      },
+      {
+        id: "accent-line", label: "Accent Divider", type: "rect",
+        x: 3, y: 33, w: 94, h: 0.6,
+        style: { backgroundColor: "#C0392B" },
+        locked: false,
+      },
+      {
+        id: "bullets-bg", label: "Content Background", type: "rect",
+        x: 3, y: 35, w: 94, h: 52,
+        style: { backgroundColor: "#F9FAFB", borderRadius: 4 },
+        locked: false,
+      },
+      {
+        id: "bullets-text", label: "Bullets / Content Text", type: "text",
+        x: 4.5, y: 37, w: 91, h: 49,
+        content: "• Strategy bullet 1\n• Strategy bullet 2\n• Strategy bullet 3",
+        style: { color: "#374151", fontSize: 11 },
+      },
+      FOOTER_LINE_EL("strategy-footer-line"),
+      FOOTER_TEXT_EL("strategy-footer-text"),
     ],
     production: [
-      { id: "header-bar", label: "Header Bar", type: "rect", x: 0, y: 0, w: 100, h: 12, locked: false, style: { backgroundColor: "#1B3A6B" } },
-      { id: "slide-title", label: "Slide Title", type: "text", x: 3, y: 14, w: 76, h: 9, content: "January — Production Deliverables", style: { color: "#1B3A6B", fontSize: 18, fontWeight: "bold" } },
-      { id: "table-header", label: "Table Header Row", type: "rect", x: 3, y: 26, w: 94, h: 9, locked: false, style: { backgroundColor: "#1B3A6B" } },
-      { id: "table-header-text", label: "Table Header Text", type: "text", x: 3.5, y: 27, w: 93, h: 7.5, content: "Content Type  |  Topic  |  Status  |  URL", style: { color: "#FFFFFF", fontSize: 10, fontWeight: "bold" } },
-      { id: "table-row-alt", label: "Table Alt Row (×3)", type: "rect", x: 3, y: 35, w: 94, h: 7, locked: false, style: { backgroundColor: "#EEF2FF" } },
-      { id: "table-row", label: "Table Row", type: "rect", x: 3, y: 42, w: 94, h: 7, locked: false, style: { backgroundColor: "#FFFFFF" } },
-      { id: "table-row-alt-2", label: "Table Alt Row 2", type: "rect", x: 3, y: 49, w: 94, h: 7, locked: false, style: { backgroundColor: "#EEF2FF" } },
-      { id: "table-row-2", label: "Table Row 2", type: "rect", x: 3, y: 56, w: 94, h: 7, locked: false, style: { backgroundColor: "#FFFFFF" } },
+      SWOOSH_EL("production-swoosh"),
+      {
+        id: "slide-title", label: "Slide Title", type: "text",
+        x: 3, y: 24, w: 80, h: 8,
+        content: "January — Production Deliverables",
+        style: { color: "#111827", fontSize: 18, fontWeight: "bold" },
+      },
+      {
+        id: "table-header", label: "Table Header Row", type: "rect",
+        x: 3, y: 34, w: 94, h: 8,
+        style: { backgroundColor: "#1F2937" },
+        locked: false,
+      },
+      {
+        id: "table-header-text", label: "Table Header Text", type: "text",
+        x: 3.5, y: 35, w: 93, h: 6.5,
+        content: "Task Name  |  Content Type  |  Topic / Keyword  |  Status",
+        style: { color: "#FFFFFF", fontSize: 9, fontWeight: "bold" },
+      },
+      {
+        id: "table-row-alt", label: "Table Row (alt)", type: "rect",
+        x: 3, y: 42, w: 94, h: 6.5,
+        style: { backgroundColor: "#F9FAFB" },
+        locked: false,
+      },
+      {
+        id: "table-row", label: "Table Row", type: "rect",
+        x: 3, y: 48.5, w: 94, h: 6.5,
+        style: { backgroundColor: "#FFFFFF" },
+        locked: false,
+      },
+      {
+        id: "table-row-alt-2", label: "Table Row (alt) 2", type: "rect",
+        x: 3, y: 55, w: 94, h: 6.5,
+        style: { backgroundColor: "#F9FAFB" },
+        locked: false,
+      },
+      {
+        id: "table-row-2", label: "Table Row 2", type: "rect",
+        x: 3, y: 61.5, w: 94, h: 6.5,
+        style: { backgroundColor: "#FFFFFF" },
+        locked: false,
+      },
+      FOOTER_LINE_EL("production-footer-line"),
+      FOOTER_TEXT_EL("production-footer-text"),
     ],
   },
 };
@@ -244,6 +364,7 @@ function SlideCanvas({ elements, selectedId, onSelect, onUpdate }: CanvasEditorP
   const startDrag = useCallback((e: React.MouseEvent, el: TemplateElement) => {
     e.preventDefault();
     e.stopPropagation();
+    if (el.locked) return;
     onSelect(el.id);
     setDrag({ id: el.id, startMouseX: e.clientX, startMouseY: e.clientY, startElX: el.x, startElY: el.y });
   }, [onSelect]);
@@ -280,6 +401,7 @@ function SlideCanvas({ elements, selectedId, onSelect, onUpdate }: CanvasEditorP
       {[...elements].map(el => {
         const isSelected = el.id === selectedId;
         const isText = el.type === "text";
+        const isImage = el.type === "image";
 
         return (
           <div
@@ -292,20 +414,31 @@ function SlideCanvas({ elements, selectedId, onSelect, onUpdate }: CanvasEditorP
               top: `${el.y}%`,
               width: `${el.w}%`,
               height: `${el.h}%`,
-              backgroundColor: el.style.backgroundColor,
+              backgroundColor: !isImage ? el.style.backgroundColor : undefined,
               borderRadius: el.style.borderRadius ? `${el.style.borderRadius}px` : undefined,
               opacity: el.style.opacity,
               border: el.style.border,
-              cursor: drag ? "grabbing" : "grab",
+              cursor: el.locked ? "default" : drag ? "grabbing" : "grab",
               display: "flex",
               alignItems: isText ? "center" : undefined,
               justifyContent: isText ? "center" : undefined,
               boxSizing: "border-box",
               outline: isSelected ? "2px solid #3B82F6" : "none",
               outlineOffset: 1,
-              zIndex: isSelected ? 20 : 1,
+              zIndex: isSelected ? 20 : isImage ? 0 : 1,
+              overflow: "hidden",
             }}
           >
+            {/* Image element (swoosh header) */}
+            {isImage && el.src && (
+              <img
+                src={el.src}
+                alt=""
+                style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top right", display: "block", pointerEvents: "none" }}
+                draggable={false}
+              />
+            )}
+
             {/* Text content */}
             {isText && el.content && (
               <span
@@ -329,7 +462,7 @@ function SlideCanvas({ elements, selectedId, onSelect, onUpdate }: CanvasEditorP
             )}
 
             {/* Resize handles for selected element */}
-            {isSelected && HANDLES.map(h => (
+            {isSelected && !el.locked && HANDLES.map(h => (
               <div
                 key={h}
                 style={handlePosition(h)}
@@ -663,7 +796,19 @@ export default function TemplateEditorPage() {
       .then((data: any) => {
         const saved = data?.qcr_layout?.layout;
         if (saved) {
-          setTemplate(saved);
+          // Re-hydrate image src (Vite asset URLs vary by build; always use the current import)
+          const rehydrated: TemplateState = {
+            ...saved,
+            slides: Object.fromEntries(
+              Object.entries(saved.slides as Record<SlideKey, TemplateElement[]>).map(([key, els]) => [
+                key,
+                (els as TemplateElement[]).map(el =>
+                  el.type === "image" ? { ...el, src: swooshHeaderImg as string } : el
+                ),
+              ])
+            ) as Record<SlideKey, TemplateElement[]>,
+          };
+          setTemplate(rehydrated);
         }
       })
       .catch(() => {})

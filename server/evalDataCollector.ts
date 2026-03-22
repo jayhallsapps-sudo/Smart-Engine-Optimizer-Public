@@ -118,16 +118,14 @@ export async function fetchFirstArchive(domain: string): Promise<{ date: string;
         const ts = String(snap.timestamp);
         if (ts.length >= 8) {
           const date = `${ts.slice(0, 4)}-${ts.slice(4, 6)}-${ts.slice(6, 8)}`;
-          // Normalise to https
           const url = (snap.url as string ?? "").replace(/^http:\/\/web\.archive\.org/, "https://web.archive.org")
             || `https://web.archive.org/web/${ts}/${d}`;
           console.log(`[Wayback] OK (availability) for "${d}" — first=${date}`);
           return { date, url };
         }
-      } else {
-        console.log(`[Wayback] availability: no snapshot for "${d}"`);
-        return empty;
       }
+      // No snapshot in availability API — fall through to CDX for a thorough search
+      console.log(`[Wayback] availability: no snapshot for "${d}", trying CDX...`);
     }
   } catch (e: any) {
     console.warn(`[Wayback] availability API error for "${d}":`, e?.message ?? e);
@@ -310,6 +308,109 @@ async function semrushDomainData(apiKey: string, domain: string): Promise<{
     console.error(`[SEMrush semrushDomainData] Outer error for ${domain}:`, e.message);
     return null;
   }
+}
+
+// ─── SEMrush AI Toolkit — AI Overview visibility metrics ─────────────────────
+// Fetches AI Visibility Score, Mentioned Responses, and Cited Sources for a domain
+// using SEMrush's domain_organic_ai report (AI Overviews domain overview).
+//
+// Column codes in SEMrush AI Overviews domain report:
+//   Ai  = AI Visibility Score (% of tracked queries where domain appears in AI Overview)
+//   AiM = AI Mentions (count of AI Overview responses mentioning the domain)
+//   AiC = AI Citations (count of cited sources links pointing to the domain)
+//
+// Falls back to DASH for any column not returned (plan/API limitation).
+
+export async function fetchSemrushAiData(domain: string): Promise<{
+  aiVisibilityScore: string;
+  aiMentions: string;
+  citedSources: string;
+}> {
+  const empty = { aiVisibilityScore: DASH, aiMentions: DASH, citedSources: DASH };
+  const apiKey = await getSemrushKey();
+  if (!apiKey) return empty;
+  const d = cleanDomainForApi(domain);
+
+  try {
+    // Primary: domain_organic_ai — AI Overviews domain report
+    const qs = new URLSearchParams({
+      type: "domain_organic_ai",
+      domain: d,
+      database: "us",
+      export_columns: "Ai,AiM,AiC",
+      key: apiKey,
+    }).toString();
+    const resp = await fetch(`https://api.semrush.com/?${qs}`, { signal: AbortSignal.timeout(15000) });
+    const text = await resp.text();
+    console.log(`[SEMrush AI] domain_organic_ai for "${d}" — status=${resp.status} body=${text.slice(0, 200)}`);
+
+    if (resp.ok && text && !text.startsWith("ERROR")) {
+      const lines = text.trim().split("\n").filter(Boolean);
+      if (lines.length >= 2) {
+        const headers = lines[0].split(";").map(h => h.trim());
+        const vals = lines[1].split(";").map(v => v.trim());
+        const get = (codes: string[]) => {
+          for (const code of codes) {
+            const i = headers.indexOf(code);
+            if (i >= 0 && vals[i] && vals[i] !== "" && vals[i] !== "0") return vals[i];
+          }
+          return null;
+        };
+
+        // Try multiple possible column name variants SEMrush might use
+        const aiScore  = get(["Ai", "AI Visibility Score", "AI Visibility", "AiVs"]);
+        const aiMent   = get(["AiM", "AI Mentions", "Mentioned Responses", "AiMentions"]);
+        const aiCit    = get(["AiC", "AI Citations", "Cited Sources", "AiCited"]);
+
+        const result = {
+          aiVisibilityScore: aiScore ? fmtNum(aiScore) : DASH,
+          aiMentions:        aiMent  ? fmtNum(aiMent)  : DASH,
+          citedSources:      aiCit   ? fmtNum(aiCit)   : DASH,
+        };
+        console.log(`[SEMrush AI] parsed for "${d}":`, result);
+        return result;
+      }
+    }
+
+    // Fallback: check if domain_ranks exposes AI columns (At = AI traffic, AiTs = AI traffic share)
+    const rankQs = new URLSearchParams({
+      type: "domain_ranks",
+      domain: d,
+      database: "us",
+      export_columns: "Or,Ot,Ai,AiM,AiC,At,AiTs",
+      key: apiKey,
+    }).toString();
+    const rankResp = await fetch(`https://api.semrush.com/?${rankQs}`, { signal: AbortSignal.timeout(12000) });
+    const rankText = await rankResp.text();
+    console.log(`[SEMrush AI] domain_ranks fallback for "${d}" — status=${rankResp.status} body=${rankText.slice(0, 200)}`);
+
+    if (rankResp.ok && rankText && !rankText.startsWith("ERROR")) {
+      const lines = rankText.trim().split("\n").filter(Boolean);
+      if (lines.length >= 2) {
+        const headers = lines[0].split(";").map(h => h.trim());
+        const vals = lines[1].split(";").map(v => v.trim());
+        const get = (codes: string[]) => {
+          for (const code of codes) {
+            const i = headers.indexOf(code);
+            if (i >= 0 && vals[i] && vals[i] !== "" && vals[i] !== "0") return vals[i];
+          }
+          return null;
+        };
+        const aiScore = get(["Ai", "AI Visibility Score", "AiVs", "AiTs"]);
+        const aiMent  = get(["AiM", "AI Mentions", "At"]);
+        const aiCit   = get(["AiC", "AI Citations"]);
+        return {
+          aiVisibilityScore: aiScore ? fmtNum(aiScore) : DASH,
+          aiMentions:        aiMent  ? fmtNum(aiMent)  : DASH,
+          citedSources:      aiCit   ? fmtNum(aiCit)   : DASH,
+        };
+      }
+    }
+  } catch (e: any) {
+    console.error(`[SEMrush AI] Error for "${d}":`, e.message);
+  }
+
+  return empty;
 }
 
 // ─── SEMrush keyword gap (client vs competitors) ──────────────────────────────

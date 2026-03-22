@@ -4326,6 +4326,88 @@ export async function registerRoutes(
     } catch (err: any) { res.status(500).json({ error: err.message }); }
   });
 
+  // ─── Batch-level source column refresh ──────────────────────────────────────
+  // Re-fetches one data source for ALL competitor rows in a batch, then recomputes
+  // derived metrics and ranks across the full set.
+  // POST /api/eval-batches/:batchId/refresh-source?source=all|wayback|rdap|ahrefs|semrush
+
+  app.post("/api/eval-batches/:batchId/refresh-source", async (req, res) => {
+    try {
+      const batchId = Number(req.params.batchId);
+      const source = String(req.query.source ?? "all");
+      const allRows = await storage.getEvalCompetitorRows(batchId);
+      if (!allRows.length) return res.json({ updated: 0 });
+
+      const { fetchCompetitorEvalMetrics, fetchFirstArchive, fetchWhoisReg,
+              computeDerivedMetrics, computeRanks } = await import("./evalDataCollector");
+
+      // Helper to build per-source patch for a single row
+      async function buildPatch(row: any) {
+        const domain = row.websiteUrl ?? "";
+        const existing = (row.metrics as any) ?? {};
+        if (source === "all") {
+          const f = await fetchCompetitorEvalMetrics(domain);
+          return {
+            dr: f.dr, referringDomains: f.referringDomains, backlinks: f.backlinks,
+            organicTraffic: f.organicTraffic, organicKeywords: f.organicKeywords,
+            top10Keywords: f.top10Keywords, top1to3Keywords: f.top1to3Keywords,
+            top4to10Keywords: f.top4to10Keywords, featuredSnippets: f.featuredSnippets,
+            informationalKeywords: f.informationalKeywords, indexedPages: f.indexedPages,
+            firstArchive: f.firstArchive, whoisReg: f.whoisReg,
+          };
+        } else if (source === "wayback") {
+          const firstArchive = await fetchFirstArchive(domain);
+          return { firstArchive };
+        } else if (source === "rdap") {
+          const whoisReg = await fetchWhoisReg(domain);
+          return { whoisReg };
+        } else if (source === "ahrefs") {
+          const f = await fetchCompetitorEvalMetrics(domain, { includeWhoisWayback: false, sourcesFilter: "ahrefs" });
+          return {
+            dr: f.dr, referringDomains: f.referringDomains, backlinks: f.backlinks,
+            organicTraffic: f.organicTraffic, organicKeywords: f.organicKeywords,
+            top10Keywords: f.top10Keywords, top1to3Keywords: f.top1to3Keywords,
+            top4to10Keywords: f.top4to10Keywords,
+          };
+        } else if (source === "semrush") {
+          const f = await fetchCompetitorEvalMetrics(domain, { includeWhoisWayback: false, sourcesFilter: "semrush" });
+          return {
+            indexedPages: f.indexedPages, organicTraffic: f.organicTraffic,
+            featuredSnippets: f.featuredSnippets, informationalKeywords: f.informationalKeywords,
+          };
+        }
+        return {};
+      }
+
+      // Process rows sequentially to avoid rate limiting
+      const updatedRows: any[] = [];
+      for (const row of allRows) {
+        try {
+          const patch = await buildPatch(row);
+          const mergedMetrics = { ...((row.metrics as any) ?? {}), ...patch };
+          const computed = computeDerivedMetrics({ ...mergedMetrics, ...((row.computed as any) ?? {}) });
+          const saved = await storage.upsertEvalCompetitorRow({
+            ...row, metrics: mergedMetrics, computed,
+          } as any);
+          updatedRows.push({ ...row, metrics: mergedMetrics, computed });
+        } catch (e: any) {
+          console.error(`[refresh-source] row ${row.id} failed:`, e.message);
+          updatedRows.push(row);
+        }
+      }
+
+      // Recompute ranks across all rows
+      const ranks = computeRanks(updatedRows.map(r => ({ metrics: r.metrics, computed: r.computed })));
+      for (let i = 0; i < updatedRows.length; i++) {
+        if (updatedRows[i]?.id) {
+          await storage.upsertEvalCompetitorRow({ ...updatedRows[i], ranks: ranks[i] ?? {} } as any);
+        }
+      }
+
+      res.json({ updated: updatedRows.length });
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
   // ─── Eval Crawl Rows ────────────────────────────────────────────────────────
 
   app.get("/api/eval-batches/:batchId/crawl-rows", async (req, res) => {

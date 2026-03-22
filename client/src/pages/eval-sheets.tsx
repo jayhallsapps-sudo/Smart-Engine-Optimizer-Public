@@ -260,10 +260,15 @@ function MainEvalTab({ batch }: { batch: EvalBatch }) {
     mutationFn: ({ id, ...rest }: { id: number; [k: string]: any }) => apiRequest("PATCH", `/api/eval-competitor-rows/${id}`, rest),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/eval-batches", batch.id, "competitors"] }),
   });
-  const refreshRowMut = useMutation({
-    mutationFn: ({ id, source }: { id: number; source: string }) =>
-      apiRequest("POST", `/api/eval-competitor-rows/${id}/refresh?source=${source}`, {}),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/eval-batches", batch.id, "competitors"] }),
+  const [refreshingSource, setRefreshingSource] = useState<string | null>(null);
+  const refreshSourceMut = useMutation({
+    mutationFn: (source: string) =>
+      apiRequest("POST", `/api/eval-batches/${batch.id}/refresh-source?source=${source}`, {}),
+    onSuccess: () => {
+      setRefreshingSource(null);
+      qc.invalidateQueries({ queryKey: ["/api/eval-batches", batch.id, "competitors"] });
+    },
+    onError: () => setRefreshingSource(null),
   });
 
   function handleCellChange(row: any, metricKey: string, value: string) {
@@ -272,6 +277,19 @@ function MainEvalTab({ batch }: { batch: EvalBatch }) {
 
   const total = rows.length;
   if (isLoading) return <div className="flex items-center gap-2 p-6 text-muted-foreground text-sm"><Loader2 className="w-4 h-4 animate-spin" /> Loading...</div>;
+
+  const SOURCE_REFRESH_OPTIONS = [
+    { source: "all",     label: "All Sources" },
+    { source: "ahrefs",  label: "Ahrefs" },
+    { source: "semrush", label: "SEMrush" },
+    { source: "wayback", label: "Wayback" },
+    { source: "rdap",    label: "WHOIS" },
+  ];
+
+  function handleRefreshSource(source: string) {
+    setRefreshingSource(source);
+    refreshSourceMut.mutate(source);
+  }
 
   return (
     <div className="space-y-3">
@@ -286,6 +304,26 @@ function MainEvalTab({ batch }: { batch: EvalBatch }) {
           </Button>
         </div>
       </div>
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-xs text-muted-foreground font-medium">Refresh columns:</span>
+        {SOURCE_REFRESH_OPTIONS.map(({ source, label }) => {
+          const isActive = refreshingSource === source && refreshSourceMut.isPending;
+          return (
+            <Button
+              key={source}
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs gap-1"
+              disabled={refreshSourceMut.isPending}
+              onClick={() => handleRefreshSource(source)}
+              data-testid={`button-refresh-source-${source}`}
+            >
+              {isActive ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+              {label}
+            </Button>
+          );
+        })}
+      </div>
       <div className="overflow-x-auto rounded-md border">
         <Table>
           <TableHeader>
@@ -293,7 +331,6 @@ function MainEvalTab({ batch }: { batch: EvalBatch }) {
               <TableHead className="w-10 text-center sticky left-0 bg-muted/40 z-10">Type</TableHead>
               <TableHead className="min-w-[120px] sticky left-10 bg-muted/40 z-10">Name</TableHead>
               <TableHead className="min-w-[140px]">Website</TableHead>
-              <TableHead className="w-14 text-center">Refresh</TableHead>
               {RAW_METRICS.map(m => {
                 const src = SOURCE_STYLES[m.source];
                 return (
@@ -338,6 +375,7 @@ function MainEvalTab({ batch }: { batch: EvalBatch }) {
                   </TableHead>
                 );
               })}
+              <TableHead className="w-10 text-center"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -351,44 +389,6 @@ function MainEvalTab({ batch }: { batch: EvalBatch }) {
                 </TableCell>
                 <TableCell>
                   <EditableCell value={row.websiteUrl ?? ""} onChange={v => updateCellMut.mutate({ id: row.id, websiteUrl: v } as any)} />
-                </TableCell>
-                <TableCell className="text-center p-1">
-                  <div className="flex items-center justify-center gap-0.5">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost" size="sm"
-                          className="h-6 w-6 p-0 text-muted-foreground hover:text-primary"
-                          disabled={refreshRowMut.isPending}
-                          data-testid={`button-refresh-row-${row.id}`}
-                          title="Refresh data for this row"
-                        >
-                          {refreshRowMut.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="start" className="w-44 text-xs">
-                        <DropdownMenuItem className="text-xs" onClick={() => refreshRowMut.mutate({ id: row.id, source: "all" })}>
-                          Refresh All Sources
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem className="text-xs" onClick={() => refreshRowMut.mutate({ id: row.id, source: "wayback" })}>
-                          Wayback only
-                        </DropdownMenuItem>
-                        <DropdownMenuItem className="text-xs" onClick={() => refreshRowMut.mutate({ id: row.id, source: "rdap" })}>
-                          WHOIS / RDAP only
-                        </DropdownMenuItem>
-                        <DropdownMenuItem className="text-xs" onClick={() => refreshRowMut.mutate({ id: row.id, source: "ahrefs" })}>
-                          Ahrefs only
-                        </DropdownMenuItem>
-                        <DropdownMenuItem className="text-xs" onClick={() => refreshRowMut.mutate({ id: row.id, source: "semrush" })}>
-                          SEMrush only
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive" onClick={() => deleteRowMut.mutate(row.id)} data-testid={`button-delete-row-${row.id}`}>
-                      <Trash2 className="w-3 h-3" />
-                    </Button>
-                  </div>
                 </TableCell>
                 {RAW_METRICS.map(m => {
                   const rankVal = row.ranks?.[m.key];
@@ -441,42 +441,9 @@ function MainEvalTab({ batch }: { batch: EvalBatch }) {
                   );
                 })}
                 <TableCell className="text-center p-1">
-                  <div className="flex items-center justify-center gap-0.5">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost" size="sm"
-                          className="h-6 w-6 p-0 text-muted-foreground hover:text-primary"
-                          disabled={refreshRowMut.isPending}
-                          data-testid={`button-refresh-row-${row.id}`}
-                          title="Refresh data for this row"
-                        >
-                          {refreshRowMut.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-44 text-xs">
-                        <DropdownMenuItem className="text-xs" onClick={() => refreshRowMut.mutate({ id: row.id, source: "all" })}>
-                          Refresh All Sources
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem className="text-xs" onClick={() => refreshRowMut.mutate({ id: row.id, source: "wayback" })}>
-                          Wayback only
-                        </DropdownMenuItem>
-                        <DropdownMenuItem className="text-xs" onClick={() => refreshRowMut.mutate({ id: row.id, source: "rdap" })}>
-                          WHOIS / RDAP only
-                        </DropdownMenuItem>
-                        <DropdownMenuItem className="text-xs" onClick={() => refreshRowMut.mutate({ id: row.id, source: "ahrefs" })}>
-                          Ahrefs only
-                        </DropdownMenuItem>
-                        <DropdownMenuItem className="text-xs" onClick={() => refreshRowMut.mutate({ id: row.id, source: "semrush" })}>
-                          SEMrush only
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive" onClick={() => deleteRowMut.mutate(row.id)} data-testid={`button-delete-row-${row.id}`}>
-                      <Trash2 className="w-3 h-3" />
-                    </Button>
-                  </div>
+                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive" onClick={() => deleteRowMut.mutate(row.id)} data-testid={`button-delete-row-${row.id}`}>
+                    <Trash2 className="w-3 h-3" />
+                  </Button>
                 </TableCell>
               </TableRow>
             ))}

@@ -523,7 +523,11 @@ async function ahrefsTop4to10Count(token: string, domain: string): Promise<strin
 
 // ─── Combined competitor metric fetch ─────────────────────────────────────────
 
-export async function fetchCompetitorEvalMetrics(domain: string, opts?: { includeWhoisWayback?: boolean }): Promise<{
+export async function fetchCompetitorEvalMetrics(domain: string, opts?: {
+  includeWhoisWayback?: boolean;
+  /** "ahrefs" = skip SEMrush; "semrush" = skip Ahrefs; omit = run all */
+  sourcesFilter?: "ahrefs" | "semrush" | "all";
+}): Promise<{
   dr: string; referringDomains: string; backlinks: string;
   organicTraffic: string; organicKeywords: string; top10Keywords: string;
   top1to3Keywords: string; top4to10Keywords: string;
@@ -540,17 +544,20 @@ export async function fetchCompetitorEvalMetrics(domain: string, opts?: { includ
 
   const [ahrefsToken, semrushKey] = await Promise.all([getAhrefsToken(), getSemrushKey()]);
   const includeWW = opts?.includeWhoisWayback ?? true;
+  const sf = opts?.sourcesFilter ?? "all";
+  const useAhrefs = sf !== "semrush";
+  const useSemrush = sf !== "ahrefs";
 
   // Run all API calls in parallel — Ahrefs uses separate v3 endpoints (no /overview)
   const [drResult, blResult, ahrefsKwResult, top1to3Result, top4to10Result, semrushResult, whoisResult, archiveResult] = await Promise.allSettled([
-    ahrefsToken ? ahrefsDomainRating(ahrefsToken, domain) : Promise.resolve(DASH),
-    ahrefsToken ? ahrefsBacklinksStats(ahrefsToken, domain) : Promise.resolve({ backlinks: DASH, referringDomains: DASH }),
-    ahrefsToken ? ahrefsOrganicKeywordsTotal(ahrefsToken, domain) : Promise.resolve(DASH),
-    ahrefsToken ? ahrefsTop1to3Count(ahrefsToken, domain) : Promise.resolve(DASH),
-    ahrefsToken ? ahrefsTop4to10Count(ahrefsToken, domain) : Promise.resolve(DASH),
-    semrushKey ? semrushDomainData(semrushKey, domain) : Promise.resolve(null),
-    includeWW ? fetchWhoisReg(domain) : Promise.resolve(DASH),
-    includeWW ? fetchFirstArchive(domain) : Promise.resolve({ date: DASH, url: DASH }),
+    (useAhrefs && ahrefsToken) ? ahrefsDomainRating(ahrefsToken, domain)                           : Promise.resolve(DASH),
+    (useAhrefs && ahrefsToken) ? ahrefsBacklinksStats(ahrefsToken, domain)                          : Promise.resolve({ backlinks: DASH, referringDomains: DASH }),
+    (useAhrefs && ahrefsToken) ? ahrefsOrganicKeywordsTotal(ahrefsToken, domain)                    : Promise.resolve(DASH),
+    (useAhrefs && ahrefsToken) ? ahrefsTop1to3Count(ahrefsToken, domain)                            : Promise.resolve(DASH),
+    (useAhrefs && ahrefsToken) ? ahrefsTop4to10Count(ahrefsToken, domain)                           : Promise.resolve(DASH),
+    (useSemrush && semrushKey) ? semrushDomainData(semrushKey, domain)                              : Promise.resolve(null),
+    includeWW                  ? fetchWhoisReg(domain)                                              : Promise.resolve(DASH),
+    includeWW                  ? fetchFirstArchive(domain)                                          : Promise.resolve({ date: DASH, url: DASH }),
   ]);
 
   const dr = drResult.status === "fulfilled" ? drResult.value : DASH;

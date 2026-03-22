@@ -4243,34 +4243,71 @@ export async function registerRoutes(
   });
 
   // ─── Per-row metric refresh ──────────────────────────────────────────────────
+  // Accepts ?source=all|wayback|rdap|ahrefs|semrush to limit which APIs are called.
+  // "all" (default) fetches every source.
 
   app.post("/api/eval-competitor-rows/:id/refresh", async (req, res) => {
     try {
       const rowId = Number(req.params.id);
+      const source = String(req.query.source ?? "all");
       const row = await storage.getEvalCompetitorRow(rowId);
       if (!row) return res.status(404).json({ error: "Row not found" });
+      const domain = row.websiteUrl ?? "";
 
-      const { fetchCompetitorEvalMetrics, computeDerivedMetrics, computeRanks } = await import("./evalDataCollector");
-      const fetched = await fetchCompetitorEvalMetrics(row.websiteUrl ?? "");
+      const { fetchCompetitorEvalMetrics, fetchFirstArchive, fetchWhoisReg,
+              computeDerivedMetrics, computeRanks } = await import("./evalDataCollector");
 
       const existing = (row.metrics as any) ?? {};
-      const updated: Record<string, any> = {
-        ...existing,
-        dr: fetched.dr,
-        referringDomains: fetched.referringDomains,
-        backlinks: fetched.backlinks,
-        organicTraffic: fetched.organicTraffic,
-        organicKeywords: fetched.organicKeywords,
-        top10Keywords: fetched.top10Keywords,
-        top1to3Keywords: fetched.top1to3Keywords,
-        top4to10Keywords: fetched.top4to10Keywords,
-        indexedPages: fetched.indexedPages,
-        featuredSnippets: fetched.featuredSnippets,
-        informationalKeywords: fetched.informationalKeywords,
-        whoisReg: fetched.whoisReg !== "—" ? fetched.whoisReg : (existing.whoisReg ?? "—"),
-        firstArchive: fetched.firstArchive !== "—" ? fetched.firstArchive : (existing.firstArchive ?? "—"),
-        archiveUrl: fetched.archiveUrl !== "—" ? fetched.archiveUrl : (existing.archiveUrl ?? "—"),
-      };
+      let patch: Record<string, any> = {};
+
+      if (source === "all") {
+        const fetched = await fetchCompetitorEvalMetrics(domain);
+        patch = {
+          dr: fetched.dr,
+          referringDomains: fetched.referringDomains,
+          backlinks: fetched.backlinks,
+          organicTraffic: fetched.organicTraffic,
+          organicKeywords: fetched.organicKeywords,
+          top10Keywords: fetched.top10Keywords,
+          top1to3Keywords: fetched.top1to3Keywords,
+          top4to10Keywords: fetched.top4to10Keywords,
+          indexedPages: fetched.indexedPages,
+          featuredSnippets: fetched.featuredSnippets,
+          informationalKeywords: fetched.informationalKeywords,
+          whoisReg: fetched.whoisReg !== "—" ? fetched.whoisReg : (existing.whoisReg ?? "—"),
+          firstArchive: fetched.firstArchive !== "—" ? fetched.firstArchive : (existing.firstArchive ?? "—"),
+          archiveUrl: fetched.archiveUrl !== "—" ? fetched.archiveUrl : (existing.archiveUrl ?? "—"),
+        };
+      } else if (source === "wayback") {
+        const archive = await fetchFirstArchive(domain);
+        if (archive.date !== "—") patch.firstArchive = archive.date;
+        if (archive.url !== "—")  patch.archiveUrl   = archive.url;
+      } else if (source === "rdap") {
+        const whois = await fetchWhoisReg(domain);
+        if (whois !== "—") patch.whoisReg = whois;
+      } else if (source === "ahrefs") {
+        const fetched = await fetchCompetitorEvalMetrics(domain, { includeWhoisWayback: false, sourcesFilter: "ahrefs" });
+        patch = {
+          dr: fetched.dr,
+          referringDomains: fetched.referringDomains,
+          backlinks: fetched.backlinks,
+          organicKeywords: fetched.organicKeywords !== "—" ? fetched.organicKeywords : existing.organicKeywords,
+          top10Keywords: fetched.top10Keywords,
+          top1to3Keywords: fetched.top1to3Keywords,
+          top4to10Keywords: fetched.top4to10Keywords,
+        };
+      } else if (source === "semrush") {
+        const fetched = await fetchCompetitorEvalMetrics(domain, { includeWhoisWayback: false, sourcesFilter: "semrush" });
+        patch = {
+          indexedPages: fetched.indexedPages,
+          organicTraffic: fetched.organicTraffic,
+          featuredSnippets: fetched.featuredSnippets,
+          informationalKeywords: fetched.informationalKeywords,
+          organicKeywords: fetched.organicKeywords !== "—" ? fetched.organicKeywords : existing.organicKeywords,
+        };
+      }
+
+      const updated = { ...existing, ...patch };
       const computed = computeDerivedMetrics(updated);
       const saved = await storage.upsertEvalCompetitorRow({ ...row, metrics: updated, computed } as any);
 

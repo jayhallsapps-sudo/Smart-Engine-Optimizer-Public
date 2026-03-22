@@ -6,6 +6,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
@@ -129,7 +136,6 @@ const SOURCE_STYLES: Record<string, { label: string; className: string }> = {
 const RAW_METRICS = [
   { key: "whoisReg",             label: "WHOIS Reg",          source: "rdap",       type: "date",   width: 100, tooltip: "Auto-fetched via RDAP. Edit manually if incorrect." },
   { key: "firstArchive",         label: "First Archive",      source: "wayback",    type: "date",   width: 110, tooltip: "Oldest Wayback Machine snapshot. Auto-fetched." },
-  { key: "archiveUrl",           label: "Archive",            source: "wayback",    type: "url",    width: 80,  tooltip: "Click to open the oldest Wayback Machine snapshot in a new tab." },
   { key: "dr",                   label: "DR",                 source: "ahrefs",     type: "number", width: 60 },
   { key: "referringDomains",     label: "Referring Domains",  source: "ahrefs",     type: "number", width: 115 },
   { key: "backlinks",            label: "Backlinks",          source: "ahrefs",     type: "number", width: 90 },
@@ -255,7 +261,8 @@ function MainEvalTab({ batch }: { batch: EvalBatch }) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/eval-batches", batch.id, "competitors"] }),
   });
   const refreshRowMut = useMutation({
-    mutationFn: (id: number) => apiRequest("POST", `/api/eval-competitor-rows/${id}/refresh`, {}),
+    mutationFn: ({ id, source }: { id: number; source: string }) =>
+      apiRequest("POST", `/api/eval-competitor-rows/${id}/refresh?source=${source}`, {}),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/eval-batches", batch.id, "competitors"] }),
   });
 
@@ -397,16 +404,37 @@ function MainEvalTab({ batch }: { batch: EvalBatch }) {
                 })}
                 <TableCell className="text-center p-1">
                   <div className="flex items-center justify-center gap-0.5">
-                    <Button
-                      variant="ghost" size="sm"
-                      className="h-6 w-6 p-0 text-muted-foreground hover:text-primary"
-                      title="Re-fetch Ahrefs/SEMrush/WHOIS/Wayback for this row"
-                      onClick={() => refreshRowMut.mutate(row.id)}
-                      disabled={refreshRowMut.isPending}
-                      data-testid={`button-refresh-row-${row.id}`}
-                    >
-                      {refreshRowMut.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost" size="sm"
+                          className="h-6 w-6 p-0 text-muted-foreground hover:text-primary"
+                          disabled={refreshRowMut.isPending}
+                          data-testid={`button-refresh-row-${row.id}`}
+                          title="Refresh data for this row"
+                        >
+                          {refreshRowMut.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-44 text-xs">
+                        <DropdownMenuItem className="text-xs" onClick={() => refreshRowMut.mutate({ id: row.id, source: "all" })}>
+                          Refresh All Sources
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem className="text-xs" onClick={() => refreshRowMut.mutate({ id: row.id, source: "wayback" })}>
+                          Wayback only
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className="text-xs" onClick={() => refreshRowMut.mutate({ id: row.id, source: "rdap" })}>
+                          WHOIS / RDAP only
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className="text-xs" onClick={() => refreshRowMut.mutate({ id: row.id, source: "ahrefs" })}>
+                          Ahrefs only
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className="text-xs" onClick={() => refreshRowMut.mutate({ id: row.id, source: "semrush" })}>
+                          SEMrush only
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                     <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive" onClick={() => deleteRowMut.mutate(row.id)} data-testid={`button-delete-row-${row.id}`}>
                       <Trash2 className="w-3 h-3" />
                     </Button>

@@ -39,16 +39,25 @@ interface PptxPreviewProps {
   onSlidesChange?: (slides: Slide[]) => void;
 }
 
+/** Back-fill reportFamily for decks saved before the QCR visual rebuild */
+function normalizeSlides(slides: Slide[]): Slide[] {
+  return slides.map(s =>
+    s.id?.startsWith("qcr_") && !s.reportFamily
+      ? { ...s, reportFamily: "qcr" }
+      : s
+  );
+}
+
 export function PptxPreview({ slides, edits, onEdit, onSlidesChange }: PptxPreviewProps) {
   // Local ordered copy — allows duplicate + re-sort without mutating parent until committed
-  const [orderedSlides, setOrderedSlides] = useState<Slide[]>(() => slides);
+  const [orderedSlides, setOrderedSlides] = useState<Slide[]>(() => normalizeSlides(slides));
   const slidesRef = useRef(slides);
 
   // Sync when parent regenerates slides (new report)
   useEffect(() => {
     if (slides !== slidesRef.current) {
       slidesRef.current = slides;
-      setOrderedSlides(slides);
+      setOrderedSlides(normalizeSlides(slides));
     }
   }, [slides]);
 

@@ -70,163 +70,122 @@ interface TemplateState {
   slides: Record<SlideKey, TemplateElement[]>;
 }
 
-// ─── Defaults ─────────────────────────────────────────────────────────────────
+// ─── Defaults — QCR canvas mirroring qcrPptxGenerator.ts exactly ─────────────
+// PPTX canvas: SW=10" × SH=7.5", ML=MR=0.38"  → x%=(x/10)*100, y%=(y/7.5)*100
+// HDR_H_TITLE=1.45" (19.3%), HDR_H_CONTENT=0.72" (9.6%)
+// FOOTER_LINE_Y=7.17" (95.6%), FOOTER_Y=7.21" (96.1%)
 
-// Shared slide elements used on every slide
-const SWOOSH_H = 22;   // % of canvas height the header image occupies
-const FOOTER_Y = 91.5; // % where footer text sits
+// Helper: PPTX inches → canvas %
+const px = (inch: number) => parseFloat(((inch / 10) * 100).toFixed(2));  // x
+const py = (inch: number) => parseFloat(((inch / 7.5) * 100).toFixed(2)); // y
 
-const SWOOSH_EL = (id = "header-swoosh"): TemplateElement => ({
-  id, label: "Header Swoosh", type: "image",
-  x: 0, y: 0, w: 100, h: SWOOSH_H,
-  src: swooshHeaderImg as string,
-  style: {},
-  locked: true,
-});
+const ML = 0.38;      // left margin inches
+const INNER_W = 9.24; // 10 - 0.38 - 0.38
 
-const FOOTER_LINE_EL = (id = "footer-line"): TemplateElement => ({
-  id, label: "Footer Line", type: "rect",
-  x: 3, y: 89.5, w: 94, h: 0.4,
-  style: { backgroundColor: "#C0392B", opacity: 0.35 },
-  locked: true,
-});
+const HDR_TITLE   = 1.45;
+const HDR_CONTENT = 0.72;
+const FOOTER_LINE_Y_IN = 7.17;
+const FOOTER_Y_IN      = 7.21;
+const FOOTER_H_IN      = 0.22;
 
-const FOOTER_TEXT_EL = (id = "footer-text"): TemplateElement => ({
-  id, label: "Footer", type: "text",
-  x: 0, y: FOOTER_Y, w: 100, h: 7,
-  content: "Webserv  |  webserv.io",
-  style: { color: "#9CA3AF", fontSize: 9, textAlign: "center" },
-  locked: true,
-});
+// Shared elements — NO locked flag, all fully editable
+function swooshEl(id: string, hIn: number): TemplateElement {
+  return { id, label: "Header Swoosh", type: "image", x: 0, y: 0, w: 100, h: py(hIn), src: swooshHeaderImg as string, style: {} };
+}
+function footerLineEl(id: string): TemplateElement {
+  return { id, label: "Footer Separator", type: "rect", x: px(ML), y: py(FOOTER_LINE_Y_IN), w: px(INNER_W), h: 0.15, style: { backgroundColor: "#E5E7EB" } };
+}
+function footerLeftEl(id: string): TemplateElement {
+  return { id, label: "Footer — Webserv", type: "text", x: px(ML), y: py(FOOTER_Y_IN), w: 35, h: py(FOOTER_H_IN), content: "Webserv  |  webserv.io", style: { color: "#6B7280", fontSize: 7, textAlign: "left" } };
+}
+function footerRightEl(id: string): TemplateElement {
+  return { id, label: "Footer — Confidential", type: "text", x: 80, y: py(FOOTER_Y_IN), w: 16.2, h: py(FOOTER_H_IN), content: "CONFIDENTIAL", style: { color: "#C5CBD3", fontSize: 7, textAlign: "right" } };
+}
 
 const QCR_DEFAULTS: TemplateState = {
-  globalStyles: {
-    accentColor: "#C0392B",
-    darkColor: "#C0392B",
-    fontFamily: "Calibri",
-  },
+  globalStyles: { accentColor: "#C0392B", darkColor: "#1B3A6B", fontFamily: "Calibri" },
   slides: {
+
+    // ── TITLE SLIDE ──────────────────────────────────────────────────────────
+    // Elements mirror addQcrTitleSlide() in qcrPptxGenerator.ts
     title: [
-      SWOOSH_EL("title-swoosh"),
-      {
-        id: "title-text", label: "Deck Title", type: "text",
-        x: 3, y: 28, w: 94, h: 18,
-        content: "Quarterly Content Roadmap",
-        style: { color: "#111827", fontSize: 34, fontWeight: "bold", textAlign: "center" },
-      },
-      {
-        id: "client-text", label: "Client Name", type: "text",
-        x: 3, y: 48, w: 94, h: 12,
-        content: "[Client Name]",
-        style: { color: "#C0392B", fontSize: 22, fontWeight: "bold", textAlign: "center" },
-      },
-      {
-        id: "subtitle-text", label: "Quarter / Date", type: "text",
-        x: 3, y: 62, w: 94, h: 8,
-        content: "Q1 2026  •  Prepared by Webserv",
-        style: { color: "#6B7280", fontSize: 13, textAlign: "center" },
-      },
-      FOOTER_LINE_EL("title-footer-line"),
-      FOOTER_TEXT_EL("title-footer-text"),
+      // Light-gray slide background (#F8FAFC)
+      { id: "title-bg", label: "Slide Background", type: "rect", x: 0, y: 0, w: 100, h: 100, style: { backgroundColor: "#F8FAFC" } },
+      // Swoosh image — tall (1.45")
+      swooshEl("title-swoosh", HDR_TITLE),
+      // Deck title (left-aligned, below swoosh) — y = HDR_H_TITLE + 0.35 = 1.80"
+      { id: "title-text", label: "Deck Title", type: "text", x: px(ML), y: py(HDR_TITLE + 0.35), w: px(INNER_W), h: py(0.75), content: "Quarterly Content Roadmap", style: { color: "#111827", fontSize: 28, fontWeight: "bold", textAlign: "left" } },
+      // Short red accent rule — y = HDR_H_TITLE + 1.14 = 2.59", w=1.2"
+      { id: "title-accent-rule", label: "Accent Rule (short)", type: "rect", x: px(ML), y: py(HDR_TITLE + 1.14), w: px(1.2), h: py(0.035), style: { backgroundColor: "#C0392B" } },
+      // Client name (accent color) — y = HDR_H_TITLE + 1.20 = 2.65"
+      { id: "title-client", label: "Client Name", type: "text", x: px(ML), y: py(HDR_TITLE + 1.20), w: px(INNER_W), h: py(0.5), content: "[Client Name]", style: { color: "#C0392B", fontSize: 17, fontWeight: "bold", textAlign: "left" } },
+      // Date / quarter — y = HDR_H_TITLE + 1.78 = 3.23"
+      { id: "title-date", label: "Quarter / Date", type: "text", x: px(ML), y: py(HDR_TITLE + 1.78), w: px(INNER_W), h: py(0.35), content: "Q1 2026  •  Prepared by Webserv", style: { color: "#6B7280", fontSize: 10, textAlign: "left" } },
+      footerLineEl("title-footer-line"),
+      footerLeftEl("title-footer-left"),
+      footerRightEl("title-footer-right"),
     ],
+
+    // ── MONTH DIVIDER SLIDE ───────────────────────────────────────────────────
+    // Elements mirror addQcrDividerSlide() in qcrPptxGenerator.ts
+    // No swoosh — navy background, left red vertical stripe, large white text
     divider: [
-      SWOOSH_EL("divider-swoosh"),
-      {
-        id: "accent-rule", label: "Accent Rule", type: "rect",
-        x: 3, y: 30, w: 94, h: 0.7,
-        style: { backgroundColor: "#C0392B" },
-        locked: false,
-      },
-      {
-        id: "month-text", label: "Month Label", type: "text",
-        x: 3, y: 34, w: 94, h: 30,
-        content: "January",
-        style: { color: "#C0392B", fontSize: 54, fontWeight: "bold" },
-      },
-      {
-        id: "year-label", label: "Year / Sub-label", type: "text",
-        x: 3, y: 65, w: 94, h: 12,
-        content: "2026 Content Plan",
-        style: { color: "#6B7280", fontSize: 16 },
-      },
-      FOOTER_LINE_EL("divider-footer-line"),
-      FOOTER_TEXT_EL("divider-footer-text"),
+      // Full-slide navy background
+      { id: "div-bg", label: "Navy Background", type: "rect", x: 0, y: 0, w: 100, h: 100, style: { backgroundColor: "#1B3A6B" } },
+      // Left vertical red stripe — x=0, y=SH*0.36=2.7", w=0.18", h=SH*0.28=2.1"
+      { id: "div-stripe", label: "Left Red Stripe", type: "rect", x: 0, y: 36, w: px(0.18), h: 28, style: { backgroundColor: "#C0392B" } },
+      // Large month name — y=SH*0.27=2.025" → 27%, h=SH*0.32=2.4" → 32%
+      { id: "div-month", label: "Month Name", type: "text", x: px(ML), y: 27, w: px(INNER_W * 0.88), h: 32, content: "January 2026", style: { color: "#FFFFFF", fontSize: 48, fontWeight: "bold", textAlign: "left" } },
+      // Subtitle — y=SH*0.60=4.5" → 60%, h=SH*0.14=1.05" → 14%
+      { id: "div-subtitle", label: "Sub-label / Quarter", type: "text", x: px(ML), y: 60, w: px(INNER_W * 0.88), h: 14, content: "2026 Content Plan", style: { color: "#FFFFFF", fontSize: 14, textAlign: "left", opacity: 0.55 } },
+      // Corner Webserv label — x≈8.6" → 86%, y=SH-0.38=7.12" → 94.9%
+      { id: "div-webserv", label: "Webserv Watermark", type: "text", x: 86, y: py(7.12), w: 10, h: py(0.28), content: "Webserv", style: { color: "#FFFFFF", fontSize: 9, textAlign: "right", opacity: 0.45 } },
     ],
+
+    // ── STRATEGY / BULLETS SLIDE ──────────────────────────────────────────────
+    // Elements mirror addQcrStrategySlide() in qcrPptxGenerator.ts
     strategy: [
-      SWOOSH_EL("strategy-swoosh"),
-      {
-        id: "slide-title", label: "Slide Title", type: "text",
-        x: 3, y: 24, w: 80, h: 8,
-        content: "January — Strategy Overview",
-        style: { color: "#111827", fontSize: 18, fontWeight: "bold" },
-      },
-      {
-        id: "accent-line", label: "Accent Divider", type: "rect",
-        x: 3, y: 33, w: 94, h: 0.6,
-        style: { backgroundColor: "#C0392B" },
-        locked: false,
-      },
-      {
-        id: "bullets-bg", label: "Content Background", type: "rect",
-        x: 3, y: 35, w: 94, h: 52,
-        style: { backgroundColor: "#F9FAFB", borderRadius: 4 },
-        locked: false,
-      },
-      {
-        id: "bullets-text", label: "Bullets / Content Text", type: "text",
-        x: 4.5, y: 37, w: 91, h: 49,
-        content: "• Strategy bullet 1\n• Strategy bullet 2\n• Strategy bullet 3",
-        style: { color: "#374151", fontSize: 11 },
-      },
-      FOOTER_LINE_EL("strategy-footer-line"),
-      FOOTER_TEXT_EL("strategy-footer-text"),
+      // Light-gray background
+      { id: "strat-bg", label: "Slide Background", type: "rect", x: 0, y: 0, w: 100, h: 100, style: { backgroundColor: "#F8FAFC" } },
+      // Swoosh — short (0.72")
+      swooshEl("strat-swoosh", HDR_CONTENT),
+      // Slide title OVERLAID on swoosh in white — y=HDR_H_CONTENT*0.1=0.072"
+      { id: "strat-title", label: "Slide Title (on swoosh)", type: "text", x: px(ML), y: py(HDR_CONTENT * 0.1), w: px(INNER_W * 0.78), h: py(HDR_CONTENT * 0.8), content: "January — Strategy Overview", style: { color: "#FFFFFF", fontSize: 12, fontWeight: "bold", textAlign: "left" } },
+      // Gray subtitle — y=bodyY=0.84" (HDR_H_CONTENT+0.12)
+      { id: "strat-subtitle", label: "Subtitle / Period", type: "text", x: px(ML), y: py(HDR_CONTENT + 0.12), w: px(INNER_W), h: py(0.26), content: "Quarterly Strategy", style: { color: "#6B7280", fontSize: 8, fontStyle: "italic", textAlign: "left" } },
+      // Red accent rule — y=bodyY+0.32=1.16"
+      { id: "strat-rule", label: "Accent Rule", type: "rect", x: px(ML), y: py(HDR_CONTENT + 0.12 + 0.32), w: px(INNER_W), h: 0.25, style: { backgroundColor: "#C0392B", opacity: 0.3 } },
+      // Bullets body — y=1.26"
+      { id: "strat-bullets", label: "Bullets / Body Text", type: "text", x: px(ML), y: py(HDR_CONTENT + 0.12 + 0.42), w: px(INNER_W), h: py(FOOTER_LINE_Y_IN - (HDR_CONTENT + 0.12 + 0.42) - 0.06), content: "•  Strategy bullet 1\n•  Strategy bullet 2\n•  Strategy bullet 3\n•  Strategy bullet 4", style: { color: "#374151", fontSize: 10, textAlign: "left" } },
+      footerLineEl("strat-footer-line"),
+      footerLeftEl("strat-footer-left"),
+      footerRightEl("strat-footer-right"),
     ],
+
+    // ── PRODUCTION TABLE SLIDE ────────────────────────────────────────────────
+    // Elements mirror addQcrTableSlide() in qcrPptxGenerator.ts
     production: [
-      SWOOSH_EL("production-swoosh"),
-      {
-        id: "slide-title", label: "Slide Title", type: "text",
-        x: 3, y: 24, w: 80, h: 8,
-        content: "January — Production Deliverables",
-        style: { color: "#111827", fontSize: 18, fontWeight: "bold" },
-      },
-      {
-        id: "table-header", label: "Table Header Row", type: "rect",
-        x: 3, y: 34, w: 94, h: 8,
-        style: { backgroundColor: "#1F2937" },
-        locked: false,
-      },
-      {
-        id: "table-header-text", label: "Table Header Text", type: "text",
-        x: 3.5, y: 35, w: 93, h: 6.5,
-        content: "Task Name  |  Content Type  |  Topic / Keyword  |  Status",
-        style: { color: "#FFFFFF", fontSize: 9, fontWeight: "bold" },
-      },
-      {
-        id: "table-row-alt", label: "Table Row (alt)", type: "rect",
-        x: 3, y: 42, w: 94, h: 6.5,
-        style: { backgroundColor: "#F9FAFB" },
-        locked: false,
-      },
-      {
-        id: "table-row", label: "Table Row", type: "rect",
-        x: 3, y: 48.5, w: 94, h: 6.5,
-        style: { backgroundColor: "#FFFFFF" },
-        locked: false,
-      },
-      {
-        id: "table-row-alt-2", label: "Table Row (alt) 2", type: "rect",
-        x: 3, y: 55, w: 94, h: 6.5,
-        style: { backgroundColor: "#F9FAFB" },
-        locked: false,
-      },
-      {
-        id: "table-row-2", label: "Table Row 2", type: "rect",
-        x: 3, y: 61.5, w: 94, h: 6.5,
-        style: { backgroundColor: "#FFFFFF" },
-        locked: false,
-      },
-      FOOTER_LINE_EL("production-footer-line"),
-      FOOTER_TEXT_EL("production-footer-text"),
+      // Light-gray background
+      { id: "prod-bg", label: "Slide Background", type: "rect", x: 0, y: 0, w: 100, h: 100, style: { backgroundColor: "#F8FAFC" } },
+      // Swoosh — short (0.72")
+      swooshEl("prod-swoosh", HDR_CONTENT),
+      // Slide title OVERLAID on swoosh in white
+      { id: "prod-title", label: "Slide Title (on swoosh)", type: "text", x: px(ML), y: py(HDR_CONTENT * 0.1), w: px(INNER_W * 0.78), h: py(HDR_CONTENT * 0.8), content: "January — Production Deliverables", style: { color: "#FFFFFF", fontSize: 12, fontWeight: "bold", textAlign: "left" } },
+      // Subtitle — y=bodyY=0.84"
+      { id: "prod-subtitle", label: "Subtitle / Period", type: "text", x: px(ML), y: py(HDR_CONTENT + 0.12), w: px(INNER_W), h: py(0.26), content: "Q1 2026 Production Tasks", style: { color: "#6B7280", fontSize: 8, fontStyle: "italic", textAlign: "left" } },
+      // Table header row (dark #1F2937) — y=bodyY+0.30=1.14"
+      { id: "prod-tbl-hdr", label: "Table Header Row", type: "rect", x: px(ML), y: py(HDR_CONTENT + 0.12 + 0.30), w: px(INNER_W), h: py(0.27), style: { backgroundColor: "#1F2937" } },
+      { id: "prod-tbl-hdr-text", label: "Table Header Text", type: "text", x: px(ML), y: py(HDR_CONTENT + 0.12 + 0.30), w: px(INNER_W), h: py(0.27), content: "Task Name  |  Content Type  |  Topic / Keyword  |  Status", style: { color: "#FFFFFF", fontSize: 8, fontWeight: "bold", textAlign: "left" } },
+      // Alternating data rows (6 rows shown as preview)
+      { id: "prod-row-1", label: "Table Row 1 (white)", type: "rect", x: px(ML), y: py(HDR_CONTENT + 0.12 + 0.57), w: px(INNER_W), h: py(0.27), style: { backgroundColor: "#FFFFFF" } },
+      { id: "prod-row-2", label: "Table Row 2 (alt)", type: "rect", x: px(ML), y: py(HDR_CONTENT + 0.12 + 0.84), w: px(INNER_W), h: py(0.27), style: { backgroundColor: "#F9FAFB" } },
+      { id: "prod-row-3", label: "Table Row 3 (white)", type: "rect", x: px(ML), y: py(HDR_CONTENT + 0.12 + 1.11), w: px(INNER_W), h: py(0.27), style: { backgroundColor: "#FFFFFF" } },
+      { id: "prod-row-4", label: "Table Row 4 (alt)", type: "rect", x: px(ML), y: py(HDR_CONTENT + 0.12 + 1.38), w: px(INNER_W), h: py(0.27), style: { backgroundColor: "#F9FAFB" } },
+      { id: "prod-row-5", label: "Table Row 5 (white)", type: "rect", x: px(ML), y: py(HDR_CONTENT + 0.12 + 1.65), w: px(INNER_W), h: py(0.27), style: { backgroundColor: "#FFFFFF" } },
+      { id: "prod-row-6", label: "Table Row 6 (alt)", type: "rect", x: px(ML), y: py(HDR_CONTENT + 0.12 + 1.92), w: px(INNER_W), h: py(0.27), style: { backgroundColor: "#F9FAFB" } },
+      footerLineEl("prod-footer-line"),
+      footerLeftEl("prod-footer-left"),
+      footerRightEl("prod-footer-right"),
     ],
   },
 };
@@ -425,7 +384,7 @@ function SlideCanvas({ elements, selectedId, onSelect, onUpdate }: CanvasEditorP
               boxSizing: "border-box",
               outline: isSelected ? "2px solid #3B82F6" : "none",
               outlineOffset: 1,
-              zIndex: isSelected ? 20 : isImage ? 0 : 1,
+              zIndex: isSelected ? 20 : undefined,
               overflow: "hidden",
             }}
           >
@@ -555,40 +514,49 @@ function PropertiesPanel({ element, onUpdate, onDelete, onDuplicate }: PropsPane
 
       <Separator />
 
-      {/* Background color */}
-      <div className="space-y-1.5">
-        <Label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Fill Color</Label>
-        <div className="flex items-center gap-2">
-          <input
-            type="color"
-            value={element.style.backgroundColor?.startsWith("#") ? element.style.backgroundColor : "#ffffff"}
-            onChange={e => patchStyle({ backgroundColor: e.target.value })}
-            className="w-7 h-7 rounded cursor-pointer border"
-            data-testid="input-element-bg-color"
-          />
-          <Input
-            value={element.style.backgroundColor ?? ""}
-            onChange={e => patchStyle({ backgroundColor: e.target.value })}
-            className="h-7 text-xs font-mono px-2 flex-1"
-            placeholder="transparent"
-            data-testid="input-element-bg-hex"
-          />
+      {element.type === "image" ? (
+        <div className="space-y-1.5">
+          <Label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Image</Label>
+          <p className="text-[10px] text-muted-foreground">Header swoosh image. Resize and reposition using the canvas controls.</p>
         </div>
-      </div>
+      ) : (
+        <>
+          {/* Background color */}
+          <div className="space-y-1.5">
+            <Label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Fill Color</Label>
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                value={element.style.backgroundColor?.startsWith("#") ? element.style.backgroundColor : "#ffffff"}
+                onChange={e => patchStyle({ backgroundColor: e.target.value })}
+                className="w-7 h-7 rounded cursor-pointer border"
+                data-testid="input-element-bg-color"
+              />
+              <Input
+                value={element.style.backgroundColor ?? ""}
+                onChange={e => patchStyle({ backgroundColor: e.target.value })}
+                className="h-7 text-xs font-mono px-2 flex-1"
+                placeholder="transparent"
+                data-testid="input-element-bg-hex"
+              />
+            </div>
+          </div>
 
-      {/* Border radius */}
-      <div className="space-y-1.5">
-        <Label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Border Radius (px)</Label>
-        <Input
-          type="number"
-          min={0}
-          max={50}
-          value={element.style.borderRadius ?? 0}
-          onChange={e => patchStyle({ borderRadius: parseInt(e.target.value) || 0 })}
-          className="h-7 text-xs px-2"
-          data-testid="input-element-border-radius"
-        />
-      </div>
+          {/* Border radius */}
+          <div className="space-y-1.5">
+            <Label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Border Radius (px)</Label>
+            <Input
+              type="number"
+              min={0}
+              max={50}
+              value={element.style.borderRadius ?? 0}
+              onChange={e => patchStyle({ borderRadius: parseInt(e.target.value) || 0 })}
+              className="h-7 text-xs px-2"
+              data-testid="input-element-border-radius"
+            />
+          </div>
+        </>
+      )}
 
       {element.type === "text" && (
         <>

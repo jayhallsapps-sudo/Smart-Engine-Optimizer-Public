@@ -70,36 +70,30 @@ interface TemplateState {
   slides: Record<SlideKey, TemplateElement[]>;
 }
 
-// ─── Defaults — QCR canvas mirroring qcrPptxGenerator.ts exactly ─────────────
-// PPTX canvas: SW=10" × SH=7.5", ML=MR=0.38"  → x%=(x/10)*100, y%=(y/7.5)*100
-// HDR_H_TITLE=1.45" (19.3%), HDR_H_CONTENT=0.72" (9.6%)
-// FOOTER_LINE_Y=7.17" (95.6%), FOOTER_Y=7.21" (96.1%)
+// ─── Defaults ─────────────────────────────────────────────────────────────────
+// All positions/sizes are canvas-% (x/w=% of canvas width, y/h=% of canvas height).
+// Font sizes use canvas-display units where px_displayed = fontSize * 0.32.
+// To read as canvas px: 22→7px, 28→9px, 34→11px, 44→14px, 56→18px, 90→29px, 140→45px.
 
-// Helper: PPTX inches → canvas %
-const px = (inch: number) => parseFloat(((inch / 10) * 100).toFixed(2));  // x
-const py = (inch: number) => parseFloat(((inch / 7.5) * 100).toFixed(2)); // y
+// Shared canvas geometry
+const CL = 4;           // left margin %
+const CW = 92;          // inner width %
+const FOOTER_LINE_Y = 90;
+const FOOTER_Y = 91.5;
+const FOOTER_H = 7;
+const ROW_H = 7;        // table data row height %
 
-const ML = 0.38;      // left margin inches
-const INNER_W = 9.24; // 10 - 0.38 - 0.38
-
-const HDR_TITLE   = 1.45;
-const HDR_CONTENT = 0.72;
-const FOOTER_LINE_Y_IN = 7.17;
-const FOOTER_Y_IN      = 7.21;
-const FOOTER_H_IN      = 0.22;
-
-// Shared elements — NO locked flag, all fully editable
-function swooshEl(id: string, hIn: number): TemplateElement {
-  return { id, label: "Header Swoosh", type: "image", x: 0, y: 0, w: 100, h: py(hIn), src: swooshHeaderImg as string, style: {} };
+function swooshEl(id: string, h: number): TemplateElement {
+  return { id, label: "Header Swoosh", type: "image", x: 0, y: 0, w: 100, h, src: swooshHeaderImg as string, style: {} };
 }
 function footerLineEl(id: string): TemplateElement {
-  return { id, label: "Footer Separator", type: "rect", x: px(ML), y: py(FOOTER_LINE_Y_IN), w: px(INNER_W), h: 0.15, style: { backgroundColor: "#E5E7EB" } };
+  return { id, label: "Footer Line", type: "rect", x: CL, y: FOOTER_LINE_Y, w: CW, h: 0.5, style: { backgroundColor: "#E5E7EB" } };
 }
 function footerLeftEl(id: string): TemplateElement {
-  return { id, label: "Footer — Webserv", type: "text", x: px(ML), y: py(FOOTER_Y_IN), w: 35, h: py(FOOTER_H_IN), content: "Webserv  |  webserv.io", style: { color: "#6B7280", fontSize: 7, textAlign: "left" } };
+  return { id, label: "Footer — Webserv", type: "text", x: CL, y: FOOTER_Y, w: 40, h: FOOTER_H, content: "Webserv  |  webserv.io", style: { color: "#6B7280", fontSize: 22, textAlign: "left" } };
 }
 function footerRightEl(id: string): TemplateElement {
-  return { id, label: "Footer — Confidential", type: "text", x: 80, y: py(FOOTER_Y_IN), w: 16.2, h: py(FOOTER_H_IN), content: "CONFIDENTIAL", style: { color: "#C5CBD3", fontSize: 7, textAlign: "right" } };
+  return { id, label: "Footer — Confidential", type: "text", x: 55, y: FOOTER_Y, w: 41, h: FOOTER_H, content: "CONFIDENTIAL", style: { color: "#C5CBD3", fontSize: 22, textAlign: "right" } };
 }
 
 const QCR_DEFAULTS: TemplateState = {
@@ -107,82 +101,57 @@ const QCR_DEFAULTS: TemplateState = {
   slides: {
 
     // ── TITLE SLIDE ──────────────────────────────────────────────────────────
-    // Elements mirror addQcrTitleSlide() in qcrPptxGenerator.ts
     title: [
-      // Light-gray slide background (#F8FAFC)
-      { id: "title-bg", label: "Slide Background", type: "rect", x: 0, y: 0, w: 100, h: 100, style: { backgroundColor: "#F8FAFC" } },
-      // Swoosh image — tall (1.45")
-      swooshEl("title-swoosh", HDR_TITLE),
-      // Deck title (left-aligned, below swoosh) — y = HDR_H_TITLE + 0.35 = 1.80"
-      { id: "title-text", label: "Deck Title", type: "text", x: px(ML), y: py(HDR_TITLE + 0.35), w: px(INNER_W), h: py(0.75), content: "Quarterly Content Roadmap", style: { color: "#111827", fontSize: 28, fontWeight: "bold", textAlign: "left" } },
-      // Short red accent rule — y = HDR_H_TITLE + 1.14 = 2.59", w=1.2"
-      { id: "title-accent-rule", label: "Accent Rule (short)", type: "rect", x: px(ML), y: py(HDR_TITLE + 1.14), w: px(1.2), h: py(0.035), style: { backgroundColor: "#C0392B" } },
-      // Client name (accent color) — y = HDR_H_TITLE + 1.20 = 2.65"
-      { id: "title-client", label: "Client Name", type: "text", x: px(ML), y: py(HDR_TITLE + 1.20), w: px(INNER_W), h: py(0.5), content: "[Client Name]", style: { color: "#C0392B", fontSize: 17, fontWeight: "bold", textAlign: "left" } },
-      // Date / quarter — y = HDR_H_TITLE + 1.78 = 3.23"
-      { id: "title-date", label: "Quarter / Date", type: "text", x: px(ML), y: py(HDR_TITLE + 1.78), w: px(INNER_W), h: py(0.35), content: "Q1 2026  •  Prepared by Webserv", style: { color: "#6B7280", fontSize: 10, textAlign: "left" } },
+      { id: "title-bg",          label: "Slide Background",   type: "rect", x: 0,  y: 0,  w: 100, h: 100, style: { backgroundColor: "#F8FAFC" } },
+      swooshEl("title-swoosh", 22),
+      { id: "title-text",        label: "Deck Title",          type: "text", x: CL, y: 27,  w: CW, h: 14, content: "Quarterly Content Roadmap",   style: { color: "#111827", fontSize: 56, fontWeight: "bold", textAlign: "left" } },
+      { id: "title-rule",        label: "Accent Rule",         type: "rect", x: CL, y: 42,  w: 15, h: 1,  style: { backgroundColor: "#C0392B" } },
+      { id: "title-client",      label: "Client Name",         type: "text", x: CL, y: 44,  w: CW, h: 10, content: "[Client Name]",                style: { color: "#C0392B", fontSize: 44, fontWeight: "bold", textAlign: "left" } },
+      { id: "title-date",        label: "Quarter / Date",      type: "text", x: CL, y: 56,  w: CW, h: 7,  content: "Q1 2026  •  Prepared by Webserv", style: { color: "#6B7280", fontSize: 28, textAlign: "left" } },
       footerLineEl("title-footer-line"),
       footerLeftEl("title-footer-left"),
       footerRightEl("title-footer-right"),
     ],
 
     // ── MONTH DIVIDER SLIDE ───────────────────────────────────────────────────
-    // Elements mirror addQcrDividerSlide() in qcrPptxGenerator.ts
-    // No swoosh — navy background, left red vertical stripe, large white text
+    // Navy bg, vertical red stripe left, large white month text — no swoosh
     divider: [
-      // Full-slide navy background
-      { id: "div-bg", label: "Navy Background", type: "rect", x: 0, y: 0, w: 100, h: 100, style: { backgroundColor: "#1B3A6B" } },
-      // Left vertical red stripe — x=0, y=SH*0.36=2.7", w=0.18", h=SH*0.28=2.1"
-      { id: "div-stripe", label: "Left Red Stripe", type: "rect", x: 0, y: 36, w: px(0.18), h: 28, style: { backgroundColor: "#C0392B" } },
-      // Large month name — y=SH*0.27=2.025" → 27%, h=SH*0.32=2.4" → 32%
-      { id: "div-month", label: "Month Name", type: "text", x: px(ML), y: 27, w: px(INNER_W * 0.88), h: 32, content: "January 2026", style: { color: "#FFFFFF", fontSize: 48, fontWeight: "bold", textAlign: "left" } },
-      // Subtitle — y=SH*0.60=4.5" → 60%, h=SH*0.14=1.05" → 14%
-      { id: "div-subtitle", label: "Sub-label / Quarter", type: "text", x: px(ML), y: 60, w: px(INNER_W * 0.88), h: 14, content: "2026 Content Plan", style: { color: "#FFFFFF", fontSize: 14, textAlign: "left", opacity: 0.55 } },
-      // Corner Webserv label — x≈8.6" → 86%, y=SH-0.38=7.12" → 94.9%
-      { id: "div-webserv", label: "Webserv Watermark", type: "text", x: 86, y: py(7.12), w: 10, h: py(0.28), content: "Webserv", style: { color: "#FFFFFF", fontSize: 9, textAlign: "right", opacity: 0.45 } },
+      { id: "div-bg",       label: "Navy Background",   type: "rect", x: 0,   y: 0,  w: 100, h: 100, style: { backgroundColor: "#1B3A6B" } },
+      { id: "div-stripe",   label: "Left Red Stripe",   type: "rect", x: 0,   y: 36, w: 2,   h: 28,  style: { backgroundColor: "#C0392B" } },
+      { id: "div-month",    label: "Month Name",         type: "text", x: CL,  y: 27, w: 82,  h: 34,  content: "January 2026", style: { color: "#FFFFFF", fontSize: 140, fontWeight: "bold", textAlign: "left" } },
+      { id: "div-subtitle", label: "Sub-label / Quarter",type: "text", x: CL,  y: 62, w: 82,  h: 12,  content: "2026 Content Plan",  style: { color: "#FFFFFF", fontSize: 40, textAlign: "left", opacity: 0.6 } },
+      { id: "div-webserv",  label: "Webserv Watermark", type: "text", x: 82,  y: 93, w: 14,  h: 5,   content: "Webserv",            style: { color: "#FFFFFF", fontSize: 26, textAlign: "right", opacity: 0.5 } },
     ],
 
     // ── STRATEGY / BULLETS SLIDE ──────────────────────────────────────────────
-    // Elements mirror addQcrStrategySlide() in qcrPptxGenerator.ts
+    // Short swoosh (14%), slide title WHITE overlaid on swoosh, then body
     strategy: [
-      // Light-gray background
-      { id: "strat-bg", label: "Slide Background", type: "rect", x: 0, y: 0, w: 100, h: 100, style: { backgroundColor: "#F8FAFC" } },
-      // Swoosh — short (0.72")
-      swooshEl("strat-swoosh", HDR_CONTENT),
-      // Slide title OVERLAID on swoosh in white — y=HDR_H_CONTENT*0.1=0.072"
-      { id: "strat-title", label: "Slide Title (on swoosh)", type: "text", x: px(ML), y: py(HDR_CONTENT * 0.1), w: px(INNER_W * 0.78), h: py(HDR_CONTENT * 0.8), content: "January — Strategy Overview", style: { color: "#FFFFFF", fontSize: 12, fontWeight: "bold", textAlign: "left" } },
-      // Gray subtitle — y=bodyY=0.84" (HDR_H_CONTENT+0.12)
-      { id: "strat-subtitle", label: "Subtitle / Period", type: "text", x: px(ML), y: py(HDR_CONTENT + 0.12), w: px(INNER_W), h: py(0.26), content: "Quarterly Strategy", style: { color: "#6B7280", fontSize: 8, fontStyle: "italic", textAlign: "left" } },
-      // Red accent rule — y=bodyY+0.32=1.16"
-      { id: "strat-rule", label: "Accent Rule", type: "rect", x: px(ML), y: py(HDR_CONTENT + 0.12 + 0.32), w: px(INNER_W), h: 0.25, style: { backgroundColor: "#C0392B", opacity: 0.3 } },
-      // Bullets body — y=1.26"
-      { id: "strat-bullets", label: "Bullets / Body Text", type: "text", x: px(ML), y: py(HDR_CONTENT + 0.12 + 0.42), w: px(INNER_W), h: py(FOOTER_LINE_Y_IN - (HDR_CONTENT + 0.12 + 0.42) - 0.06), content: "•  Strategy bullet 1\n•  Strategy bullet 2\n•  Strategy bullet 3\n•  Strategy bullet 4", style: { color: "#374151", fontSize: 10, textAlign: "left" } },
+      { id: "strat-bg",      label: "Slide Background",         type: "rect", x: 0,  y: 0,    w: 100, h: 100, style: { backgroundColor: "#F8FAFC" } },
+      swooshEl("strat-swoosh", 14),
+      { id: "strat-title",   label: "Slide Title (on swoosh)",  type: "text", x: CL, y: 1.5,  w: 72,  h: 11,  content: "January — Strategy Overview",   style: { color: "#FFFFFF", fontSize: 36, fontWeight: "bold", textAlign: "left" } },
+      { id: "strat-subtitle",label: "Subtitle / Period",        type: "text", x: CL, y: 16.5, w: CW,  h: 5,   content: "Quarterly Strategy",            style: { color: "#6B7280", fontSize: 26, fontStyle: "italic", textAlign: "left" } },
+      { id: "strat-rule",    label: "Accent Rule",              type: "rect", x: CL, y: 22,   w: CW,  h: 0.5, style: { backgroundColor: "#C0392B", opacity: 0.4 } },
+      { id: "strat-bullets", label: "Bullets / Body Text",      type: "text", x: CL, y: 24,   w: CW,  h: 64,  content: "•  Strategy bullet 1\n•  Strategy bullet 2\n•  Strategy bullet 3\n•  Strategy bullet 4", style: { color: "#374151", fontSize: 28, textAlign: "left" } },
       footerLineEl("strat-footer-line"),
       footerLeftEl("strat-footer-left"),
       footerRightEl("strat-footer-right"),
     ],
 
     // ── PRODUCTION TABLE SLIDE ────────────────────────────────────────────────
-    // Elements mirror addQcrTableSlide() in qcrPptxGenerator.ts
+    // Short swoosh, table with dark header + alternating rows
     production: [
-      // Light-gray background
-      { id: "prod-bg", label: "Slide Background", type: "rect", x: 0, y: 0, w: 100, h: 100, style: { backgroundColor: "#F8FAFC" } },
-      // Swoosh — short (0.72")
-      swooshEl("prod-swoosh", HDR_CONTENT),
-      // Slide title OVERLAID on swoosh in white
-      { id: "prod-title", label: "Slide Title (on swoosh)", type: "text", x: px(ML), y: py(HDR_CONTENT * 0.1), w: px(INNER_W * 0.78), h: py(HDR_CONTENT * 0.8), content: "January — Production Deliverables", style: { color: "#FFFFFF", fontSize: 12, fontWeight: "bold", textAlign: "left" } },
-      // Subtitle — y=bodyY=0.84"
-      { id: "prod-subtitle", label: "Subtitle / Period", type: "text", x: px(ML), y: py(HDR_CONTENT + 0.12), w: px(INNER_W), h: py(0.26), content: "Q1 2026 Production Tasks", style: { color: "#6B7280", fontSize: 8, fontStyle: "italic", textAlign: "left" } },
-      // Table header row (dark #1F2937) — y=bodyY+0.30=1.14"
-      { id: "prod-tbl-hdr", label: "Table Header Row", type: "rect", x: px(ML), y: py(HDR_CONTENT + 0.12 + 0.30), w: px(INNER_W), h: py(0.27), style: { backgroundColor: "#1F2937" } },
-      { id: "prod-tbl-hdr-text", label: "Table Header Text", type: "text", x: px(ML), y: py(HDR_CONTENT + 0.12 + 0.30), w: px(INNER_W), h: py(0.27), content: "Task Name  |  Content Type  |  Topic / Keyword  |  Status", style: { color: "#FFFFFF", fontSize: 8, fontWeight: "bold", textAlign: "left" } },
-      // Alternating data rows (6 rows shown as preview)
-      { id: "prod-row-1", label: "Table Row 1 (white)", type: "rect", x: px(ML), y: py(HDR_CONTENT + 0.12 + 0.57), w: px(INNER_W), h: py(0.27), style: { backgroundColor: "#FFFFFF" } },
-      { id: "prod-row-2", label: "Table Row 2 (alt)", type: "rect", x: px(ML), y: py(HDR_CONTENT + 0.12 + 0.84), w: px(INNER_W), h: py(0.27), style: { backgroundColor: "#F9FAFB" } },
-      { id: "prod-row-3", label: "Table Row 3 (white)", type: "rect", x: px(ML), y: py(HDR_CONTENT + 0.12 + 1.11), w: px(INNER_W), h: py(0.27), style: { backgroundColor: "#FFFFFF" } },
-      { id: "prod-row-4", label: "Table Row 4 (alt)", type: "rect", x: px(ML), y: py(HDR_CONTENT + 0.12 + 1.38), w: px(INNER_W), h: py(0.27), style: { backgroundColor: "#F9FAFB" } },
-      { id: "prod-row-5", label: "Table Row 5 (white)", type: "rect", x: px(ML), y: py(HDR_CONTENT + 0.12 + 1.65), w: px(INNER_W), h: py(0.27), style: { backgroundColor: "#FFFFFF" } },
-      { id: "prod-row-6", label: "Table Row 6 (alt)", type: "rect", x: px(ML), y: py(HDR_CONTENT + 0.12 + 1.92), w: px(INNER_W), h: py(0.27), style: { backgroundColor: "#F9FAFB" } },
+      { id: "prod-bg",          label: "Slide Background",          type: "rect", x: 0,  y: 0,             w: 100, h: 100,   style: { backgroundColor: "#F8FAFC" } },
+      swooshEl("prod-swoosh", 14),
+      { id: "prod-title",       label: "Slide Title (on swoosh)",   type: "text", x: CL, y: 1.5,           w: 72,  h: 11,    content: "January — Production Deliverables", style: { color: "#FFFFFF", fontSize: 36, fontWeight: "bold", textAlign: "left" } },
+      { id: "prod-subtitle",    label: "Subtitle / Period",         type: "text", x: CL, y: 16.5,          w: CW,  h: 5,     content: "Q1 2026 Production Tasks",          style: { color: "#6B7280", fontSize: 26, fontStyle: "italic", textAlign: "left" } },
+      { id: "prod-tbl-hdr",     label: "Table Header Row",          type: "rect", x: CL, y: 22.5,          w: CW,  h: ROW_H, style: { backgroundColor: "#1F2937" } },
+      { id: "prod-tbl-hdr-txt", label: "Table Header Text",         type: "text", x: CL, y: 22.5,          w: CW,  h: ROW_H, content: "Task Name  |  Content Type  |  Topic / Keyword  |  Status", style: { color: "#FFFFFF", fontSize: 26, fontWeight: "bold", textAlign: "left" } },
+      { id: "prod-row-1",       label: "Table Row 1",               type: "rect", x: CL, y: 22.5 + ROW_H,   w: CW,  h: ROW_H, style: { backgroundColor: "#FFFFFF" } },
+      { id: "prod-row-2",       label: "Table Row 2 (alt)",         type: "rect", x: CL, y: 22.5 + ROW_H*2, w: CW,  h: ROW_H, style: { backgroundColor: "#F9FAFB" } },
+      { id: "prod-row-3",       label: "Table Row 3",               type: "rect", x: CL, y: 22.5 + ROW_H*3, w: CW,  h: ROW_H, style: { backgroundColor: "#FFFFFF" } },
+      { id: "prod-row-4",       label: "Table Row 4 (alt)",         type: "rect", x: CL, y: 22.5 + ROW_H*4, w: CW,  h: ROW_H, style: { backgroundColor: "#F9FAFB" } },
+      { id: "prod-row-5",       label: "Table Row 5",               type: "rect", x: CL, y: 22.5 + ROW_H*5, w: CW,  h: ROW_H, style: { backgroundColor: "#FFFFFF" } },
+      { id: "prod-row-6",       label: "Table Row 6 (alt)",         type: "rect", x: CL, y: 22.5 + ROW_H*6, w: CW,  h: ROW_H, style: { backgroundColor: "#F9FAFB" } },
       footerLineEl("prod-footer-line"),
       footerLeftEl("prod-footer-left"),
       footerRightEl("prod-footer-right"),

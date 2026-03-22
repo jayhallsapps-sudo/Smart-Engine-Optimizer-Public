@@ -2723,6 +2723,68 @@ export async function registerRoutes(
     }
   });
 
+  // ─── Quarterly Content Roadmap ────────────────────────────────────────────
+
+  app.post("/api/reports/quarterly-content-roadmap/generate", async (req, res) => {
+    const { clientId, quarter, year } = req.body;
+    if (!clientId || !quarter || !year) {
+      return res.status(400).json({ message: "clientId, quarter, and year are required" });
+    }
+    try {
+      const { generateQuarterlyContentRoadmap } = await import("./quarterlyContentRoadmapGenerator");
+      const result = await generateQuarterlyContentRoadmap({
+        clientId: Number(clientId),
+        quarter: Number(quarter),
+        year: Number(year),
+      });
+      res.json(result);
+    } catch (err: any) {
+      console.error("[QCR] Generation error:", err);
+      res.status(500).json({ message: "Failed to generate Quarterly Content Roadmap: " + err.message });
+    }
+  });
+
+  app.post("/api/reports/quarterly-content-roadmap/pptx", async (req, res) => {
+    const t0 = Date.now();
+    const { json, edits } = req.body as { json: any; edits?: Record<string, string> };
+    if (!json || !json.slides?.length) {
+      logExport("QCR PPTX", t0, false, "No slides");
+      return res.status(400).json({ message: "No slide data found. Generate the report first." });
+    }
+    try {
+      const sections: SectionData[] = (json.slides ?? [])
+        .filter((s: any) => s.type !== "title" && s.type !== "divider")
+        .map((s: any, idx: number) => {
+          const items: any[] = [];
+          if (s.table) {
+            const resolvedRows = (s.table.rows as any[][]).map((row: any[], ri: number) =>
+              row.map((cell: any, ci: number) => edits?.[`${s.id}_cell_${ri}_${ci}`] ?? String(cell))
+            );
+            const tableKey = `${s.id}_table`;
+            const crRows = parseCustomRowsFromEdits(edits, tableKey);
+            items.push({ tables: [{ title: edits?.[`${s.id}_subtitle`] ?? s.subtitle ?? "", headers: s.table.headers, rows: [...resolvedRows, ...crRows] }] });
+          }
+          if (s.bullets) {
+            items.push({ manualText: (s.bullets as string[]).map((b: string, bi: number) => edits?.[`${s.id}_bullet_${bi}`] ?? b).join("\n") });
+          }
+          return { sectionId: `slide_${idx}`, title: edits?.[`${s.id}_title`] ?? s.title ?? "", items };
+        });
+      const clientName = edits?.["qcr_title_client"] ?? json.client_name ?? "Client";
+      const reportTitle = edits?.["qcr_title_title"] ?? json.report_title ?? "Quarterly Content Roadmap";
+      const generatedAt = json.generated_at ? new Date(json.generated_at).toLocaleDateString("en-US") : new Date().toLocaleDateString("en-US");
+      const buffer = await generatePptx(clientName, reportTitle, generatedAt, sections);
+      const slug = clientName.toLowerCase().replace(/\s+/g, "_");
+      const qLabel = (json.quarter_label ?? "quarterly").replace(/\s/g, "_");
+      logExport("QCR PPTX", t0, true);
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
+      res.setHeader("Content-Disposition", `attachment; filename="${slug}_Content_Roadmap_${qLabel}.pptx"`);
+      res.send(buffer);
+    } catch (err: any) {
+      logExport("QCR PPTX", t0, false, err.message);
+      res.status(500).json({ message: "Failed to generate PPTX: " + err.message });
+    }
+  });
+
   // ─── Mid-Strategy SEO Report ─────────────────────────────────────────────
   app.post("/api/reports/mid-strategy/health-check", async (req, res) => {
     const { clientId } = req.body;

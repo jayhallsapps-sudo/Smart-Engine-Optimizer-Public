@@ -227,6 +227,21 @@ const REGISTRY: ReportTypeDefinition[] = [
     phase: 1,
     implemented: true,
   },
+
+  // ── Quarterly Content Roadmap ─────────────────────────────────────────────
+  {
+    id: "quarterly_content_roadmap",
+    displayName: "Quarterly Content Roadmap",
+    description: "Client-facing quarterly content planning deck. Pulls monthly strategy from QBS and production deliverables from Airtable for each month in the selected quarter. Exported as PPTX.",
+    family: "slideshow",
+    audience: "client",
+    exportFormats: ["pptx", "pdf"],
+    route: "/quarterly-content-roadmap",
+    sectionCommandsManifest: {},
+    order: 8,
+    phase: 1,
+    implemented: true,
+  },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

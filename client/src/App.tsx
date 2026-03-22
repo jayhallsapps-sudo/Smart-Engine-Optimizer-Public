@@ -36,6 +36,7 @@ import AdminTemplatesPage from "@/pages/admin-templates";
 import AcaPage from "@/pages/aca";
 import SavedReportsPage from "@/pages/saved-reports";
 import DiscoverabilityPage from "@/pages/discoverability";
+import QuarterlyContentRoadmapPage from "@/pages/quarterly-content-roadmap";
 
 function RootRedirect() {
   const [, setLocation] = useLocation();
@@ -100,6 +101,7 @@ function Router() {
       <Route path="/discoverability" component={DiscoverabilityPage} />
       <Route path="/eval-sheets" component={EvalSheetsPage} />
       <Route path="/mid-strategy-deck" component={MidStrategyDeckPage} />
+      <Route path="/quarterly-content-roadmap" component={QuarterlyContentRoadmapPage} />
       <Route component={NotFound} />
     </Switch>
   );

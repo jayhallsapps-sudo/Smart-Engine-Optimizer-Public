@@ -126,38 +126,41 @@ const QCR_DEFAULTS: TemplateState = {
       footerRightEl("div-footer-right"),
     ],
 
-    // ── STRATEGY / BULLETS SLIDE ──────────────────────────────────────────────
-    // Short swoosh (14%), slide title WHITE overlaid on swoosh, then body
+    // ── STRATEGY SLIDE ────────────────────────────────────────────────────────
+    // Light gray bg, NO swoosh, small italic label, large month name with red dot,
+    // two body paragraphs on left half, Webserv logo bottom-left
     strategy: [
-      { id: "strat-bg",      label: "Slide Background",         type: "rect", x: 0,  y: 0,    w: 100, h: 100, style: { backgroundColor: "#F8FAFC" } },
-      swooshEl("strat-swoosh", 14),
-      { id: "strat-title",   label: "Slide Title (on swoosh)",  type: "text", x: CL, y: 1.5,  w: 72,  h: 11,  content: "January — Strategy Overview",   style: { color: "#FFFFFF", fontSize: 36, fontWeight: "bold", textAlign: "left" } },
-      { id: "strat-subtitle",label: "Subtitle / Period",        type: "text", x: CL, y: 16.5, w: CW,  h: 5,   content: "Quarterly Strategy",            style: { color: "#6B7280", fontSize: 26, fontStyle: "italic", textAlign: "left" } },
-      { id: "strat-rule",    label: "Accent Rule",              type: "rect", x: CL, y: 22,   w: CW,  h: 0.5, style: { backgroundColor: "#C0392B", opacity: 0.4 } },
-      { id: "strat-bullets", label: "Bullets / Body Text",      type: "text", x: CL, y: 24,   w: CW,  h: 64,  content: "•  Strategy bullet 1\n•  Strategy bullet 2\n•  Strategy bullet 3\n•  Strategy bullet 4", style: { color: "#374151", fontSize: 28, textAlign: "left" } },
-      footerLineEl("strat-footer-line"),
-      footerLeftEl("strat-footer-left"),
-      footerRightEl("strat-footer-right"),
+      { id: "strat-bg",      label: "Slide Background",    type: "rect", x: 0,    y: 0,    w: 100, h: 100, style: { backgroundColor: "#E8E8E8" } },
+      { id: "strat-label",   label: "SEO Strategy Label",  type: "text", x: 7,    y: 26,   w: 28,  h: 5,   content: "SEO Strategy", style: { color: "#9CA3AF", fontSize: 20, fontStyle: "italic", textAlign: "left" } },
+      { id: "strat-dot",     label: "Red Bullet Dot",      type: "rect", x: 3.2,  y: 31.5, w: 2.5, h: 4.5, style: { backgroundColor: "#C0392B", borderRadius: 100 } },
+      { id: "strat-month",   label: "Month Name",          type: "text", x: 7,    y: 29,   w: 52,  h: 14,  content: "June", style: { color: "#111827", fontSize: 120, fontWeight: "bold", textAlign: "left" } },
+      { id: "strat-body1",   label: "Strategy Body — Para 1", type: "text", x: 7, y: 45,   w: 43,  h: 24,  content: "This month builds on foundational stabilization by expanding coverage of high-intent treatment topics and capturing demand across both service and informational search. Work this month includes launching and scaling core pages, publishing high-traffic educational content designed to support lead capture, and aligning site-wide conversion elements with the structural changes already in place.", style: { color: "#374151", fontSize: 20, textAlign: "left" } },
+      { id: "strat-body2",   label: "Strategy Body — Para 2", type: "text", x: 7, y: 70,   w: 43,  h: 16,  content: "This phase shifts the strategy from cleanup and stabilization to intent-driven growth, ensuring the site can capture users earlier in their decision process while reinforcing core service authority.", style: { color: "#374151", fontSize: 20, textAlign: "left" } },
+      { id: "strat-logo-bg", label: "Webserv Icon",        type: "rect", x: 4,    y: 87,   w: 4,   h: 6.5, style: { backgroundColor: "#C0392B", borderRadius: 6 } },
+      { id: "strat-logo",    label: "Webserv Wordmark",    type: "text", x: 9,    y: 87,   w: 18,  h: 6.5, content: "webserv", style: { color: "#111827", fontSize: 28, fontWeight: "bold", textAlign: "left" } },
     ],
 
     // ── PRODUCTION TABLE SLIDE ────────────────────────────────────────────────
-    // Short swoosh, table with dark header + alternating rows
+    // White bg, NO swoosh, large month name at top, then full-width table:
+    // dark header (6 cols) + sample data rows + gray summary row
     production: [
-      { id: "prod-bg",          label: "Slide Background",          type: "rect", x: 0,  y: 0,             w: 100, h: 100,   style: { backgroundColor: "#F8FAFC" } },
-      swooshEl("prod-swoosh", 14),
-      { id: "prod-title",       label: "Slide Title (on swoosh)",   type: "text", x: CL, y: 1.5,           w: 72,  h: 11,    content: "January — Production Deliverables", style: { color: "#FFFFFF", fontSize: 36, fontWeight: "bold", textAlign: "left" } },
-      { id: "prod-subtitle",    label: "Subtitle / Period",         type: "text", x: CL, y: 16.5,          w: CW,  h: 5,     content: "Q1 2026 Production Tasks",          style: { color: "#6B7280", fontSize: 26, fontStyle: "italic", textAlign: "left" } },
-      { id: "prod-tbl-hdr",     label: "Table Header Row",          type: "rect", x: CL, y: 22.5,          w: CW,  h: ROW_H, style: { backgroundColor: "#1F2937" } },
-      { id: "prod-tbl-hdr-txt", label: "Table Header Text",         type: "text", x: CL, y: 22.5,          w: CW,  h: ROW_H, content: "Task Name  |  Content Type  |  Topic / Keyword  |  Status", style: { color: "#FFFFFF", fontSize: 26, fontWeight: "bold", textAlign: "left" } },
-      { id: "prod-row-1",       label: "Table Row 1",               type: "rect", x: CL, y: 22.5 + ROW_H,   w: CW,  h: ROW_H, style: { backgroundColor: "#FFFFFF" } },
-      { id: "prod-row-2",       label: "Table Row 2 (alt)",         type: "rect", x: CL, y: 22.5 + ROW_H*2, w: CW,  h: ROW_H, style: { backgroundColor: "#F9FAFB" } },
-      { id: "prod-row-3",       label: "Table Row 3",               type: "rect", x: CL, y: 22.5 + ROW_H*3, w: CW,  h: ROW_H, style: { backgroundColor: "#FFFFFF" } },
-      { id: "prod-row-4",       label: "Table Row 4 (alt)",         type: "rect", x: CL, y: 22.5 + ROW_H*4, w: CW,  h: ROW_H, style: { backgroundColor: "#F9FAFB" } },
-      { id: "prod-row-5",       label: "Table Row 5",               type: "rect", x: CL, y: 22.5 + ROW_H*5, w: CW,  h: ROW_H, style: { backgroundColor: "#FFFFFF" } },
-      { id: "prod-row-6",       label: "Table Row 6 (alt)",         type: "rect", x: CL, y: 22.5 + ROW_H*6, w: CW,  h: ROW_H, style: { backgroundColor: "#F9FAFB" } },
-      footerLineEl("prod-footer-line"),
-      footerLeftEl("prod-footer-left"),
-      footerRightEl("prod-footer-right"),
+      { id: "prod-bg",       label: "Slide Background",    type: "rect", x: 0,  y: 0,    w: 100, h: 100,  style: { backgroundColor: "#FFFFFF" } },
+      { id: "prod-month",    label: "Month Name",          type: "text", x: CL, y: 2,    w: 65,  h: 18,   content: "June", style: { color: "#111827", fontSize: 140, fontWeight: "bold", textAlign: "left" } },
+      // Table
+      { id: "prod-hdr",      label: "Table Header Row",    type: "rect", x: CL, y: 21,   w: CW,  h: 8.5,  style: { backgroundColor: "#1F2937" } },
+      { id: "prod-hdr-txt",  label: "Table Header Text",   type: "text", x: CL, y: 21,   w: CW,  h: 8.5,  content: "Credit Cost   Credit Type   URL   New URL   Date Published   Reasoning", style: { color: "#FFFFFF", fontSize: 20, fontWeight: "bold", textAlign: "left" } },
+      { id: "prod-r1",       label: "Row 1",               type: "rect", x: CL, y: 29.5, w: CW,  h: 8,    style: { backgroundColor: "#FFFFFF", border: "1px solid #D1D5DB" } },
+      { id: "prod-r1-txt",   label: "Row 1 Text",          type: "text", x: CL, y: 29.5, w: CW,  h: 8,    content: "1   Scale   N/a   /blog/end-stage-alcoholism   March 3   High-traffic blog – lead capture", style: { color: "#374151", fontSize: 17, textAlign: "left" } },
+      { id: "prod-r2",       label: "Row 2",               type: "rect", x: CL, y: 37.5, w: CW,  h: 8,    style: { backgroundColor: "#FFFFFF", border: "1px solid #D1D5DB" } },
+      { id: "prod-r2-txt",   label: "Row 2 Text",          type: "text", x: CL, y: 37.5, w: CW,  h: 8,    content: "1   Scale   /alcohol-addiction-treatment/   /what-we-treat/alcohol-addiction-treatment   March 6   Stabilizing core service pages", style: { color: "#374151", fontSize: 17, textAlign: "left" } },
+      { id: "prod-r3",       label: "Row 3",               type: "rect", x: CL, y: 45.5, w: CW,  h: 8,    style: { backgroundColor: "#FFFFFF", border: "1px solid #D1D5DB" } },
+      { id: "prod-r3-txt",   label: "Row 3 Text",          type: "text", x: CL, y: 45.5, w: CW,  h: 8,    content: "1   Scale   /opioid-addiction-treatment/   /what-we-treat/opioid-addiction-treatment   March 11   Stabilizing core service pages", style: { color: "#374151", fontSize: 17, textAlign: "left" } },
+      { id: "prod-r4",       label: "Row 4",               type: "rect", x: CL, y: 53.5, w: CW,  h: 8,    style: { backgroundColor: "#FFFFFF", border: "1px solid #D1D5DB" } },
+      { id: "prod-r4-txt",   label: "Row 4 Text",          type: "text", x: CL, y: 53.5, w: CW,  h: 8,    content: "2   Service   N/a   /levels-of-care/detox-services/alcohol-detox   March 18   Stabilizing core service pages", style: { color: "#374151", fontSize: 17, textAlign: "left" } },
+      { id: "prod-r5",       label: "Row 5",               type: "rect", x: CL, y: 61.5, w: CW,  h: 8,    style: { backgroundColor: "#FFFFFF", border: "1px solid #D1D5DB" } },
+      { id: "prod-r5-txt",   label: "Row 5 Text",          type: "text", x: CL, y: 61.5, w: CW,  h: 8,    content: "0   CRO Update   N/a   https://[client].com/   March 30   Requires update to align with structural changes", style: { color: "#374151", fontSize: 17, textAlign: "left" } },
+      { id: "prod-summ",     label: "Summary Row",         type: "rect", x: CL, y: 69.5, w: CW,  h: 10,   style: { backgroundColor: "#C9CACB" } },
+      { id: "prod-summ-txt", label: "Summary Text",        type: "text", x: CL, y: 69.5, w: CW,  h: 10,   content: "8 total Credits   *Credit types allocated by Webserv on level of work   URL changes required for better information architecture   Due dates subject to change due to internal Webserv production workflows", style: { color: "#374151", fontSize: 16, textAlign: "left" } },
     ],
   },
 };
@@ -365,7 +368,7 @@ function SlideCanvas({ elements, selectedId, onSelect, onUpdate }: CanvasEditorP
               <img
                 src={el.src}
                 alt=""
-                style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top right", display: "block", pointerEvents: "none" }}
+                style={{ width: "100%", height: "100%", objectFit: "fill", display: "block", pointerEvents: "none" }}
                 draggable={false}
               />
             )}

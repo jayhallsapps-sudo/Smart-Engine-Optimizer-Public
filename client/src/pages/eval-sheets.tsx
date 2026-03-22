@@ -293,6 +293,7 @@ function MainEvalTab({ batch }: { batch: EvalBatch }) {
               <TableHead className="w-10 text-center sticky left-0 bg-muted/40 z-10">Type</TableHead>
               <TableHead className="min-w-[120px] sticky left-10 bg-muted/40 z-10">Name</TableHead>
               <TableHead className="min-w-[140px]">Website</TableHead>
+              <TableHead className="w-14 text-center">Refresh</TableHead>
               {RAW_METRICS.map(m => {
                 const src = SOURCE_STYLES[m.source];
                 return (
@@ -337,7 +338,6 @@ function MainEvalTab({ batch }: { batch: EvalBatch }) {
                   </TableHead>
                 );
               })}
-              <TableHead className="w-16 text-center">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -351,6 +351,44 @@ function MainEvalTab({ batch }: { batch: EvalBatch }) {
                 </TableCell>
                 <TableCell>
                   <EditableCell value={row.websiteUrl ?? ""} onChange={v => updateCellMut.mutate({ id: row.id, websiteUrl: v } as any)} />
+                </TableCell>
+                <TableCell className="text-center p-1">
+                  <div className="flex items-center justify-center gap-0.5">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost" size="sm"
+                          className="h-6 w-6 p-0 text-muted-foreground hover:text-primary"
+                          disabled={refreshRowMut.isPending}
+                          data-testid={`button-refresh-row-${row.id}`}
+                          title="Refresh data for this row"
+                        >
+                          {refreshRowMut.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="w-44 text-xs">
+                        <DropdownMenuItem className="text-xs" onClick={() => refreshRowMut.mutate({ id: row.id, source: "all" })}>
+                          Refresh All Sources
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem className="text-xs" onClick={() => refreshRowMut.mutate({ id: row.id, source: "wayback" })}>
+                          Wayback only
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className="text-xs" onClick={() => refreshRowMut.mutate({ id: row.id, source: "rdap" })}>
+                          WHOIS / RDAP only
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className="text-xs" onClick={() => refreshRowMut.mutate({ id: row.id, source: "ahrefs" })}>
+                          Ahrefs only
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className="text-xs" onClick={() => refreshRowMut.mutate({ id: row.id, source: "semrush" })}>
+                          SEMrush only
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive" onClick={() => deleteRowMut.mutate(row.id)} data-testid={`button-delete-row-${row.id}`}>
+                      <Trash2 className="w-3 h-3" />
+                    </Button>
+                  </div>
                 </TableCell>
                 {RAW_METRICS.map(m => {
                   const rankVal = row.ranks?.[m.key];

@@ -113,14 +113,17 @@ const QCR_DEFAULTS: TemplateState = {
       footerRightEl("title-footer-right"),
     ],
 
-    // ── MONTH DIVIDER SLIDE ───────────────────────────────────────────────────
-    // Navy bg, vertical red stripe left, large white month text — no swoosh
+    // ── MONTH COVER SLIDE ─────────────────────────────────────────────────────
+    // White bg + swoosh (matches BiWeekly visual style), large dark month text
     divider: [
-      { id: "div-bg",       label: "Navy Background",   type: "rect", x: 0,   y: 0,  w: 100, h: 100, style: { backgroundColor: "#1B3A6B" } },
-      { id: "div-stripe",   label: "Left Red Stripe",   type: "rect", x: 0,   y: 36, w: 2,   h: 28,  style: { backgroundColor: "#C0392B" } },
-      { id: "div-month",    label: "Month Name",         type: "text", x: CL,  y: 27, w: 82,  h: 34,  content: "January 2026", style: { color: "#FFFFFF", fontSize: 140, fontWeight: "bold", textAlign: "left" } },
-      { id: "div-subtitle", label: "Sub-label / Quarter",type: "text", x: CL,  y: 62, w: 82,  h: 12,  content: "2026 Content Plan",  style: { color: "#FFFFFF", fontSize: 40, textAlign: "left", opacity: 0.6 } },
-      { id: "div-webserv",  label: "Webserv Watermark", type: "text", x: 82,  y: 93, w: 14,  h: 5,   content: "Webserv",            style: { color: "#FFFFFF", fontSize: 26, textAlign: "right", opacity: 0.5 } },
+      { id: "div-bg",       label: "Slide Background",    type: "rect",  x: 0,  y: 0,    w: 100, h: 100,   style: { backgroundColor: "#FFFFFF" } },
+      swooshEl("div-swoosh", 22),
+      { id: "div-rule",     label: "Red Accent Rule",     type: "rect",  x: CL, y: 26,   w: 14,  h: 1,     style: { backgroundColor: "#C0392B" } },
+      { id: "div-month",    label: "Month Name",          type: "text",  x: CL, y: 28,   w: 82,  h: 24,    content: "January 2026",      style: { color: "#111827", fontSize: 90, fontWeight: "bold", textAlign: "left" } },
+      { id: "div-subtitle", label: "Quarter / Plan Label",type: "text",  x: CL, y: 53,   w: 82,  h: 8,     content: "Q1 2026 Content Plan", style: { color: "#6B7280", fontSize: 32, textAlign: "left" } },
+      footerLineEl("div-footer-line"),
+      footerLeftEl("div-footer-left"),
+      footerRightEl("div-footer-right"),
     ],
 
     // ── STRATEGY / BULLETS SLIDE ──────────────────────────────────────────────
@@ -161,7 +164,7 @@ const QCR_DEFAULTS: TemplateState = {
 
 const SLIDE_LABELS: Record<SlideKey, string> = {
   title: "Title Slide",
-  divider: "Month Divider",
+  divider: "Month Cover",
   strategy: "Strategy Slide",
   production: "Production Table",
 };
@@ -306,7 +309,7 @@ function SlideCanvas({ elements, selectedId, onSelect, onUpdate }: CanvasEditorP
   const HANDLES: ResizeState["handle"][] = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
   function handlePosition(handle: ResizeState["handle"]) {
     const h = handle;
-    const s = { position: "absolute" as const, width: 8, height: 8, backgroundColor: "#3B82F6", border: "1px solid #fff", borderRadius: 2, cursor: `${h}-resize`, zIndex: 30 };
+    const s = { position: "absolute" as const, width: 8, height: 8, backgroundColor: "#C0392B", border: "1px solid #fff", borderRadius: 2, cursor: `${h}-resize`, zIndex: 30 };
     if (h === "nw") return { ...s, top: -4, left: -4 };
     if (h === "n") return { ...s, top: -4, left: "calc(50% - 4px)" };
     if (h === "ne") return { ...s, top: -4, right: -4 };
@@ -351,7 +354,7 @@ function SlideCanvas({ elements, selectedId, onSelect, onUpdate }: CanvasEditorP
               alignItems: isText ? "center" : undefined,
               justifyContent: isText ? "center" : undefined,
               boxSizing: "border-box",
-              outline: isSelected ? "2px solid #3B82F6" : "none",
+              outline: isSelected ? "2px solid #C0392B" : "none",
               outlineOffset: 1,
               zIndex: isSelected ? 20 : undefined,
               overflow: "hidden",
@@ -484,9 +487,34 @@ function PropertiesPanel({ element, onUpdate, onDelete, onDuplicate }: PropsPane
       <Separator />
 
       {element.type === "image" ? (
-        <div className="space-y-1.5">
-          <Label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Image</Label>
-          <p className="text-[10px] text-muted-foreground">Header swoosh image. Resize and reposition using the canvas controls.</p>
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Image Source</Label>
+            {element.src && (
+              <img src={element.src} alt="" className="w-full rounded border object-cover" style={{ maxHeight: 60 }} />
+            )}
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Upload Image</Label>
+            <label className="flex items-center gap-2 cursor-pointer px-2 py-1.5 rounded border border-dashed text-[10px] text-muted-foreground hover:bg-muted transition-colors" data-testid="button-upload-image">
+              <span>Choose file…</span>
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={e => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = ev => {
+                    onUpdate(element.id, { src: ev.target?.result as string });
+                  };
+                  reader.readAsDataURL(file);
+                }}
+              />
+            </label>
+            <p className="text-[9px] text-muted-foreground">PNG, JPG, SVG. Replaces current image.</p>
+          </div>
         </div>
       ) : (
         <>
@@ -522,6 +550,18 @@ function PropertiesPanel({ element, onUpdate, onDelete, onDuplicate }: PropsPane
               onChange={e => patchStyle({ borderRadius: parseInt(e.target.value) || 0 })}
               className="h-7 text-xs px-2"
               data-testid="input-element-border-radius"
+            />
+          </div>
+
+          {/* Border */}
+          <div className="space-y-1.5">
+            <Label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Border (CSS)</Label>
+            <Input
+              value={element.style.border ?? ""}
+              onChange={e => patchStyle({ border: e.target.value || undefined })}
+              placeholder="e.g. 2px solid #C0392B"
+              className="h-7 text-xs px-2 font-mono"
+              data-testid="input-element-border"
             />
           </div>
         </>
@@ -809,6 +849,31 @@ export default function TemplateEditorPage() {
     setSelectedId(null);
   }
 
+  function addElement(el: TemplateElement) {
+    setTemplate(prev => ({
+      ...prev,
+      slides: { ...prev.slides, [activeSlide]: [...prev.slides[activeSlide], el] },
+    }));
+    setSelectedId(el.id);
+  }
+
+  function addTextElement() {
+    const id = `text-${Date.now()}`;
+    addElement({ id, label: "New Text", type: "text", x: 10, y: 30, w: 40, h: 12, content: "Text here", style: { color: "#111827", fontSize: 28, textAlign: "left" } });
+  }
+
+  function addRectElement() {
+    const id = `rect-${Date.now()}`;
+    addElement({ id, label: "New Shape", type: "rect", x: 10, y: 30, w: 30, h: 10, style: { backgroundColor: "#C0392B" } });
+  }
+
+  function addImageElement(src: string, label = "Uploaded Image") {
+    const id = `img-${Date.now()}`;
+    addElement({ id, label, type: "image", x: 5, y: 5, w: 40, h: 25, src, style: {} });
+  }
+
+  const imageUploadRef = useRef<HTMLInputElement>(null);
+
   async function handleSave() {
     setSaving(true);
     try {
@@ -938,6 +1003,50 @@ export default function TemplateEditorPage() {
 
               <Separator />
 
+              {/* Add element section */}
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Add Element</p>
+                <div className="grid grid-cols-3 gap-1">
+                  <button
+                    onClick={addTextElement}
+                    className="px-2 py-1.5 rounded border text-[10px] hover:bg-muted transition-colors text-center"
+                    data-testid="button-add-text"
+                    title="Add text element"
+                  >Text</button>
+                  <button
+                    onClick={addRectElement}
+                    className="px-2 py-1.5 rounded border text-[10px] hover:bg-muted transition-colors text-center"
+                    data-testid="button-add-shape"
+                    title="Add shape element"
+                  >Shape</button>
+                  <label
+                    className="px-2 py-1.5 rounded border text-[10px] hover:bg-muted transition-colors text-center cursor-pointer"
+                    data-testid="button-add-image"
+                    title="Upload and add image"
+                  >
+                    Image
+                    <input
+                      ref={imageUploadRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={e => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = ev => {
+                          addImageElement(ev.target?.result as string, file.name.replace(/\.[^.]+$/, ""));
+                        };
+                        reader.readAsDataURL(file);
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <Separator />
+
               {/* Element list for current slide */}
               <div className="space-y-1.5">
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Slide Elements</p>
@@ -946,7 +1055,7 @@ export default function TemplateEditorPage() {
                     key={el.id}
                     onClick={() => setSelectedId(el.id === selectedId ? null : el.id)}
                     className={`w-full text-left px-2 py-1.5 rounded text-[10px] transition-colors flex items-center gap-1.5 ${
-                      el.id === selectedId ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300" : "hover:bg-muted text-foreground"
+                      el.id === selectedId ? "bg-[#C0392B]/10 text-[#C0392B] font-medium" : "hover:bg-muted text-foreground"
                     }`}
                     data-testid={`element-list-${el.id}`}
                   >

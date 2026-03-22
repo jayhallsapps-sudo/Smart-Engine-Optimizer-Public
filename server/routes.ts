@@ -4340,7 +4340,7 @@ export async function registerRoutes(
       if (!allRows.length) return res.json({ updated: 0 });
 
       const { fetchCompetitorEvalMetrics, fetchFirstArchive, fetchWhoisReg,
-              fetchSemrushAiData, computeDerivedMetrics, computeRanks } = await import("./evalDataCollector");
+              computeDerivedMetrics, computeRanks } = await import("./evalDataCollector");
 
       // Per-column fetch — only re-fetches the one metric key requested
       async function buildColumnPatch(row: any, col: string) {
@@ -4351,12 +4351,6 @@ export async function registerRoutes(
         if (col === "firstArchive") {
           const arch = await fetchFirstArchive(domain);
           return { firstArchive: arch.date, archiveUrl: arch.url };
-        }
-        // SEMrush AI Toolkit columns
-        if (["aiVisibilityScore", "aiMentions", "citedSources"].includes(col)) {
-          const ai = await fetchSemrushAiData(domain);
-          // Return all three together — they come from the same API call
-          return { aiVisibilityScore: ai.aiVisibilityScore, aiMentions: ai.aiMentions, citedSources: ai.citedSources };
         }
         // Ahrefs-backed columns
         if (["dr", "referringDomains", "backlinks", "organicKeywords",

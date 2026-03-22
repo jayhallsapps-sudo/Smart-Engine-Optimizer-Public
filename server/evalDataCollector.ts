@@ -89,47 +89,82 @@ export async function fetchWhoisReg(domain: string): Promise<string> {
   } catch { return DASH; }
 }
 
-// ─── Wayback Machine earliest snapshot via CDX API ───────────────────────────
+// ─── Wayback Machine earliest snapshot ───────────────────────────────────────
+//
+// Two-stage approach:
+//   Stage 1 – availability API (fast, <3s typical):
+//     Request the snapshot "closest" to 1996-01-01. Because the Wayback Machine
+//     searches forward in time when no match is found before the requested date,
+//     this reliably returns the FIRST EVER snapshot for any domain that wasn't
+//     archived in the 1990s (i.e. virtually all small RV-park sites).
+//   Stage 2 – CDX API (authoritative but slow, up to 25s):
+//     Used only if the availability API fails or returns no snapshot. Searches
+//     the full index with a status:200 filter to skip redirect/error captures.
 
 export async function fetchFirstArchive(domain: string): Promise<{ date: string; url: string }> {
   const empty = { date: DASH, url: DASH };
   const d = cleanDomainForApi(domain);
-  const qs = new URLSearchParams({
-    url: d,
-    output: "json",
-    limit: "1",
-    fl: "timestamp",
-    fastLatest: "false",
-    from: "19900101",
+
+  // ── Stage 1: availability API ──────────────────────────────────────────────
+  try {
+    const availQs = new URLSearchParams({ url: d, timestamp: "19960101000000" }).toString();
+    const availResp = await fetch(`https://archive.org/wayback/available?${availQs}`, {
+      signal: AbortSignal.timeout(8000),
+    });
+    if (availResp.ok) {
+      const json = await availResp.json();
+      const snap = json?.archived_snapshots?.closest;
+      if (snap?.timestamp && snap?.available) {
+        const ts = String(snap.timestamp);
+        if (ts.length >= 8) {
+          const date = `${ts.slice(0, 4)}-${ts.slice(4, 6)}-${ts.slice(6, 8)}`;
+          // Normalise to https
+          const url = (snap.url as string ?? "").replace(/^http:\/\/web\.archive\.org/, "https://web.archive.org")
+            || `https://web.archive.org/web/${ts}/${d}`;
+          console.log(`[Wayback] OK (availability) for "${d}" — first=${date}`);
+          return { date, url };
+        }
+      } else {
+        console.log(`[Wayback] availability: no snapshot for "${d}"`);
+        return empty;
+      }
+    }
+  } catch (e: any) {
+    console.warn(`[Wayback] availability API error for "${d}":`, e?.message ?? e);
+  }
+
+  // ── Stage 2: CDX API fallback ──────────────────────────────────────────────
+  const cdxQs = new URLSearchParams({
+    url: d, output: "json", limit: "1", fl: "timestamp",
+    filter: "statuscode:200", from: "19960101",
   }).toString();
 
-  async function attempt(): Promise<{ date: string; url: string } | null> {
+  async function cdxAttempt(): Promise<{ date: string; url: string } | null> {
     try {
-      const resp = await fetch(`https://web.archive.org/cdx/search/cdx?${qs}`, {
-        signal: AbortSignal.timeout(22000),
+      const resp = await fetch(`https://web.archive.org/cdx/search/cdx?${cdxQs}`, {
+        signal: AbortSignal.timeout(25000),
       });
-      if (!resp.ok) { console.warn(`[Wayback] non-ok status ${resp.status} for "${d}"`); return null; }
+      if (!resp.ok) { console.warn(`[Wayback] CDX non-ok ${resp.status} for "${d}"`); return null; }
       const data = await resp.json();
-      if (!Array.isArray(data) || data.length < 2) { console.log(`[Wayback] no archive found for "${d}"`); return empty; }
+      if (!Array.isArray(data) || data.length < 2) { console.log(`[Wayback] CDX no archive for "${d}"`); return empty; }
       const ts = String(data[1]?.[0] ?? "");
       if (ts.length < 8) return empty;
       const date = `${ts.slice(0, 4)}-${ts.slice(4, 6)}-${ts.slice(6, 8)}`;
       const url = `https://web.archive.org/web/${ts}/${d}`;
-      console.log(`[Wayback] OK for "${d}" — first=${date}`);
+      console.log(`[Wayback] OK (CDX) for "${d}" — first=${date}`);
       return { date, url };
     } catch (err: any) {
-      console.warn(`[Wayback] timeout/error for "${d}":`, err?.message ?? err);
+      console.warn(`[Wayback] CDX timeout/error for "${d}":`, err?.message ?? err);
       return null;
     }
   }
 
-  const first = await attempt();
-  if (first !== null) return first;
-  // Retry once after a short pause
-  console.log(`[Wayback] Retrying for "${d}"...`);
+  const cdx1 = await cdxAttempt();
+  if (cdx1 !== null) return cdx1;
+  console.log(`[Wayback] CDX retrying for "${d}"...`);
   await new Promise(r => setTimeout(r, 2000));
-  const retry = await attempt();
-  return retry ?? empty;
+  const cdx2 = await cdxAttempt();
+  return cdx2 ?? empty;
 }
 
 // ─── SEMrush domain data ──────────────────────────────────────────────────────

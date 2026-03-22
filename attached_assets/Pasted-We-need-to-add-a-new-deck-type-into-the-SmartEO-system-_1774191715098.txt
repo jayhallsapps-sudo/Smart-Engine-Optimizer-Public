@@ -1,0 +1,255 @@
+We need to add a new deck type into the SmartEO system: Quarterly Content Roadmap.
+
+Critical rule:
+Do not break, replace, regress, restyle, or interfere with any existing decks, reports, modules, routes, editors, templates, data pipelines, or document generation flows. This must be added as a net-new, isolated feature with minimal surface-area changes. Existing deck generation must continue to work exactly as it does now.
+
+Goal:
+Build a new SmartEO deck generator for a Quarterly Content Roadmap presentation based on the attached PowerPoint template:
+[CLIENT NAME] - Quarterly Content Roadmap.pptx
+
+High-level intent:
+This deck is a quarter-specific planning deck that:
+1. Pulls monthly strategy narrative from the client’s QBS for the selected quarter.
+2. Pulls monthly production-table items from Airtable.
+3. Formats the slides to visually match Webserv reporting standards already used elsewhere in SmartEO, especially the bi-weekly report look and feel for tables, lines, reds, headers, spacing, and overall polish.
+4. Allows manual editing of all text fields after generation, same as our normal editable behavior.
+
+Important template instruction:
+Any yellow boxes in the template are Olivia ADR notes only. They are instructions for how to fill the page. They must never appear in the final generated deck.
+
+==================================================
+FEATURE NAME
+==================================================
+
+Add a new deck type:
+Quarterly Content Roadmap
+
+Internal identifier:
+quarterly_content_roadmap
+
+Keep it isolated from monthly decks, bi-weekly decks, QBR decks, and any other current report/deck types.
+
+==================================================
+NON-NEGOTIABLES
+==================================================
+
+1. No regressions
+- Do not modify shared logic in a way that changes existing deck or report output.
+- Reuse shared components only through safe feature-specific configuration.
+- Prefer additive changes over invasive refactors.
+- If any shared code must be touched, verify that all existing generators still behave exactly as before.
+
+2. Manual editability
+- Every generated text block in this new deck must remain manually editable in the UI.
+- Do not flatten text into non-editable images or render paths that remove edit access.
+
+3. ADR note removal
+- Yellow note boxes from the template are instructions only and must not render in the final deck.
+- Do not convert those notes into visible slide elements.
+
+4. Quarter-aware data source mapping
+- The deck is quarter-based.
+- A Q2 deck must pull from that client’s Q2 QBS and the Airtable production records for April, May, and June.
+- The month names and month order must be derived from the selected quarter.
+
+5. Styling
+- Use the attached quarterly roadmap template as the structural design basis.
+- Use the Webserv swoosh/header asset across the top.
+- For tables and line styling, inherit the same visual language already established in the bi-weekly report system: reds, headers, lines, table treatment, spacing, polish.
+- Do not copy the bi-weekly report layout. Borrow the visual styling only.
+
+==================================================
+REQUIRED INPUTS
+==================================================
+
+The new deck generator must require and use all of the following:
+
+- selected client from the report creator
+- selected quarter from the report creator
+- client name derived directly from the selected client
+- deck date set automatically to today’s date
+- prepared by field left blank so it can be filled in manually
+- editable text behavior enabled on every slide text area
+
+There is no fallback behavior here. These are required behaviors.
+
+==================================================
+DATA SOURCES
+==================================================
+
+1. QBS source
+Use the client’s QBS for the selected quarter.
+
+From QBS, pull:
+- the monthly SEO strategy narrative for each month in the quarter
+- the reasoning behind the planned monthly work
+- any relevant monthly rationale text that explains why the work was chosen and how it supports site and business goals
+
+Important:
+- The strategy copy must explain why the selected monthly work matters.
+- Do not mention tier structures in the final strategy narration.
+- The writing should sound strategic, client-facing, and aligned with Webserv standards.
+
+2. Airtable source
+Pull from the Airtable production table for the selected client.
+
+For each month in the selected quarter, fetch the planned production items relevant to that month.
+
+The monthly tables/slides must be built from Airtable records. Use the relevant client-facing fields needed to display a clean roadmap, such as:
+- deliverable title
+- deliverable type
+- month
+- status if appropriate for client-facing display
+- any clean display notes needed for proper naming
+
+Do not expose:
+- Airtable record IDs
+- internal-only notes
+- internal workflow clutter
+- automation fields
+- staff-only process metadata
+- raw backend field names if they are ugly client-facing labels
+
+3. Template asset
+Use the attached PPTX as the structural and layout reference.
+
+4. Header asset
+Use the attached Webserv swoosh/header asset across the top of the deck.
+
+==================================================
+QUARTER LOGIC
+==================================================
+
+Quarter mapping must be deterministic:
+
+Q1 = January, February, March
+Q2 = April, May, June
+Q3 = July, August, September
+Q4 = October, November, December
+
+If the user selects a quarter, the generator must:
+- identify the correct three months
+- pull the matching QBS quarter
+- pull the matching Airtable records for those three months
+- populate the deck in month order
+
+==================================================
+DECK CONTENT RULES
+==================================================
+
+Build the deck to match the attached template slide-for-slide.
+
+For each slide:
+- preserve the intended layout and structure from the template
+- remove all yellow ADR instruction boxes
+- replace placeholder text with real generated content
+- keep every editable text area editable after generation
+
+Where strategy text appears for each month:
+- populate it from the selected quarter’s QBS
+- include the strategic reasoning from the QBS for that month
+- keep it concise, useful, and client-facing
+- do not dump raw notes into the slide
+- transform internal planning language into polished presentation copy
+
+Where monthly tables appear:
+- populate them from Airtable production records for that month
+- format them to match the existing SmartEO/Webserv report styling conventions
+- keep the tables clean, readable, and presentation-ready
+- use consistent headers, spacing, borders, line weights, and red accent styling that matches the bi-weekly design language
+
+==================================================
+TEXT EDITING BEHAVIOR
+==================================================
+
+All text on the slides must support manual editing after generation.
+
+That includes:
+- title text
+- subtitle text
+- strategy text
+- month labels
+- table headers
+- table cell text
+- any supporting commentary text
+- prepared by field
+- any freeform narrative fields in the deck
+
+The prepared by field must generate as blank.
+The date field must generate as today’s date.
+The client name must generate from the selected client in the creator.
+
+==================================================
+DESIGN / UI IMPLEMENTATION RULES
+==================================================
+
+Use the attached Quarterly Content Roadmap template as the master structural reference.
+Use the current SmartEO deck-generation architecture and styling system where possible.
+Use the bi-weekly report’s visual system for:
+- red accent color logic
+- header and line treatment
+- table polish
+- spacing rhythm
+- border styling
+- clean presentation hierarchy
+
+Do not:
+- redesign the deck from scratch
+- change other deck templates
+- alter the bi-weekly report itself
+- restyle unrelated report types
+- introduce a shared styling change that affects all generators unintentionally
+
+==================================================
+IMPLEMENTATION APPROACH
+==================================================
+
+Implement this as a new isolated generator and associated configuration path.
+
+Required implementation behavior:
+- add a new report/deck type for Quarterly Content Roadmap
+- wire it into the creator UI
+- allow client selection
+- allow quarter selection
+- auto-fill client name from selected client
+- auto-fill today’s date
+- leave prepared by blank
+- pull QBS content for the selected client and quarter
+- pull Airtable production content for the selected client and quarter months
+- render slides from the attached template structure
+- remove yellow ADR boxes from final output
+- keep all slide text editable
+- preserve all existing deck and report behavior
+
+==================================================
+VALIDATION REQUIREMENTS
+==================================================
+
+Before considering implementation complete, verify all of the following:
+
+1. Existing deck and report types still generate correctly
+2. Quarterly Content Roadmap appears as a new selectable deck type
+3. Selecting a client correctly fills the client name
+4. Selecting a quarter correctly maps the three months
+5. The correct QBS quarter is used
+6. The correct Airtable monthly records are used
+7. Yellow ADR boxes do not appear in the final deck
+8. The Webserv swoosh appears across the top
+9. Tables visually align with Webserv bi-weekly styling conventions
+10. All text remains manually editable
+11. Prepared by is blank by default
+12. Date defaults to today’s date
+13. No other templates, modules, or generators changed visually or functionally
+
+==================================================
+OUTPUT EXPECTATION
+==================================================
+
+Deliver the full implementation for this new deck type inside SmartEO.
+
+Also provide:
+1. a concise summary of what files were added or changed
+2. a clear explanation of how QBS content is mapped into the monthly strategy slides
+3. a clear explanation of how Airtable data is mapped into the monthly tables
+4. confirmation of what was done to prevent regressions in existing decks and reports
+5. confirmation that all text remains manually editable

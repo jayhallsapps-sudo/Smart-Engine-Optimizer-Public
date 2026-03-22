@@ -1,0 +1,408 @@
+We need to expand SmartEO in two connected ways, and both must be implemented without breaking any existing reports, decks, modules, routes, editors, templates, saves, exports, or UI flows.
+
+CRITICAL RULE:
+Do not break, replace, regress, restyle, or interfere with any existing report types, deck generators, template behavior, document generation, save/load flows, PPTX exports, sidebar navigation, routes, or editing features. Existing functionality must continue to work exactly as it does now.
+
+This work must be additive, isolated, and safe.
+
+==================================================
+PRIMARY OBJECTIVES
+==================================================
+
+Build both of the following:
+
+1. A new Quarterly Content Roadmap deck type inside SmartEO
+2. A restored and expanded Templates area in the left sidebar, with a real WYSIWYG template editor so template layout/design can be adjusted visually without code
+
+These should work together.
+
+The Quarterly Content Roadmap must be available as a report/deck type for generation.
+The Quarterly Content Roadmap must also exist as a template inside Templates so its design/layout can be visually edited.
+
+==================================================
+PART 1 — QUARTERLY CONTENT ROADMAP DECK
+==================================================
+
+Add a new deck type:
+Quarterly Content Roadmap
+
+Internal identifier:
+quarterly_content_roadmap
+
+Route:
+Use the existing pattern for report/deck routes and register this deck cleanly.
+
+Purpose:
+This is a quarter-based planning deck that:
+- pulls month-specific strategy content from the selected client’s QBS for the selected quarter and year
+- pulls month-specific production deliverables from Airtable
+- presents the quarter in a polished deck format
+- uses editable text everywhere
+- supports PPTX export
+- uses a visual style aligned with our Webserv reporting language
+- uses the Webserv swoosh/header across the top
+
+Important:
+The attached deck template contains yellow instruction boxes. Those yellow boxes are Olivia’s ADR comments and must never appear in final preview, saved output, or PPTX export.
+
+==================================================
+PART 2 — RESTORE AND EXPAND TEMPLATES IN LEFT SIDEBAR
+==================================================
+
+Put Templates back into the left sidebar.
+
+Templates must be a visible, stable left-sidebar destination again.
+
+Inside Templates:
+- all templates must be listed
+- each template must be selectable
+- the Quarterly Content Roadmap template must appear there
+- template editing must be visual, not code-only
+
+The Templates section must become the design/layout control center for deck/report templates.
+
+==================================================
+TEMPLATE EDITOR REQUIREMENTS
+==================================================
+
+Build a true WYSIWYG template editor inside Templates.
+
+The template editor must allow me to visually edit template elements directly, without needing to touch code.
+
+Required editing capabilities:
+- select elements
+- move elements around on the page/canvas
+- reposition headers, shapes, text boxes, tables, logos, dividers, and other layout objects
+- resize elements
+- delete elements
+- duplicate elements
+- edit text directly
+- change fonts
+- change font size
+- change font weight
+- apply bold
+- apply italic if supported by current text engine
+- change text color
+- change fill/background color
+- change border color
+- change line weight if applicable
+- change alignment
+- adjust spacing/padding where supported
+- adjust table styling where supported
+- change page/header positioning so assets can be correctly butted to the side of the page
+- save template changes
+- reload saved template changes
+- use the saved template in downstream deck generation
+
+This must function as a real visual editor, not a fake settings panel.
+
+==================================================
+TEMPLATE SYSTEM BEHAVIOR
+==================================================
+
+The Templates system must support:
+- template list view
+- template detail/edit view
+- template save/update behavior
+- template version-safe storage
+- template usage by generator routes
+- template layout reuse during deck generation
+
+Template edits must affect future generated decks that use that template.
+Template edits must not retroactively corrupt already saved/generated reports unless the current system already behaves that way by design.
+
+If the current architecture already has some template framework, extend it safely.
+If the current architecture has lost the left sidebar Templates entry, restore it cleanly.
+
+==================================================
+QUARTERLY CONTENT ROADMAP — REQUIRED INPUTS
+==================================================
+
+The Quarterly Content Roadmap generator must require and use all of the following:
+
+- selected client from the report creator
+- selected quarter from the report creator
+- selected year from the report creator
+- client name derived directly from the selected client
+- deck date set automatically to today’s date
+- prepared by field left blank so I can fill it in manually
+- editable text behavior enabled on every slide text area
+
+There is no optional behavior here.
+
+==================================================
+QUARTER / MONTH LOGIC
+==================================================
+
+Quarter mapping must be deterministic:
+
+Q1 = January, February, March
+Q2 = April, May, June
+Q3 = July, August, September
+Q4 = October, November, December
+
+If a user selects a client + quarter + year, the system must:
+- map the quarter to the correct three months
+- locate the correct QBS for that client and that quarter/year
+- locate the correct Airtable production records for those three months
+- populate the deck in month order
+
+==================================================
+QBS DATA MAPPING
+==================================================
+
+Use the selected client’s QBS for the selected quarter/year.
+
+For each of the three months in the quarter, pull:
+- the monthly SEO strategy content
+- the reasoning behind the planned work
+- the monthly plan/rationale that explains why the work matters
+
+Output expectations for QBS-derived copy:
+- polished
+- client-facing
+- concise
+- strategic
+- not raw notes
+- not internal planning dump
+- not mentioning tier structures unless such language already exists and is absolutely required
+
+The month strategy sections in the deck must come directly from the relevant QBS month content.
+
+==================================================
+AIRTABLE DATA MAPPING
+==================================================
+
+Use Airtable production data for the selected client and selected quarter months.
+
+For each month, pull the production deliverables that belong in the roadmap.
+
+The monthly production tables/slides must be built from Airtable records.
+
+Only show clean client-facing fields in the deck.
+Do not expose:
+- record IDs
+- backend-only metadata
+- internal staff notes
+- automation fields
+- workflow clutter
+- ugly raw field keys
+
+Each month’s records must be:
+- filtered to the selected client
+- filtered to the correct month/year
+- sorted cleanly for presentation
+- rendered in a polished table matching Webserv visual conventions
+
+==================================================
+DECK STRUCTURE
+==================================================
+
+Build the Quarterly Content Roadmap deck using the attached template structure.
+
+Use the template as the structural foundation.
+Use the Templates system as the editable source of truth for the layout/design.
+
+The deck should follow this structure unless the attached template dictates a more exact slide order:
+- Title slide
+- Quarter overview slide
+- Month divider slide
+- Month strategy slide
+- Month production table slide
+- repeated for each of the three months in the quarter
+
+If the attached template combines some of those into fewer slides, follow the template structure exactly.
+
+Every visible text area must remain editable after generation.
+
+==================================================
+DESIGN RULES
+==================================================
+
+Use the attached Quarterly Content Roadmap deck template as the layout/design baseline.
+Use the Webserv swoosh/header across the top.
+Use the visual language from the bi-weekly report for:
+- red accents
+- line styling
+- headers
+- borders
+- spacing rhythm
+- table treatment
+- overall polish
+
+Do not redesign all SmartEO reports.
+Do not push shared design changes into unrelated generators.
+Do not alter other templates unless required to restore Templates functionality itself.
+
+==================================================
+EDITOR BEHAVIOR FOR GENERATED DECKS
+==================================================
+
+Generated Quarterly Content Roadmap decks must still allow normal manual editing of text after generation.
+
+Editable fields must include:
+- title
+- subtitle
+- quarter label
+- overview content
+- month labels
+- strategy text
+- table headers
+- table row text
+- prepared by
+- any supporting narrative text
+- any footer/helper text already part of the template
+
+Edits made in the deck/report editor must persist through save/load and flow through to PPTX export.
+
+==================================================
+EDITOR BEHAVIOR FOR TEMPLATES
+==================================================
+
+Template editing is different from report content editing.
+
+Inside Templates, I must be able to visually control layout/design, including:
+- move a header if it is not flush to the page edge
+- remove an unwanted element entirely
+- adjust colors/fonts/sizes without code
+- tweak positioning visually
+- save template changes for future use
+
+Content generation logic still comes from the generator/data mapping.
+Template editing controls presentation/layout.
+
+==================================================
+PPTX EXPORT
+==================================================
+
+The Quarterly Content Roadmap must support PPTX export.
+
+The export must:
+- match the generated deck structure
+- use edited content values
+- use the current template layout
+- exclude yellow ADR instruction boxes
+- preserve manually edited text
+- preserve edited table content where supported by current export architecture
+
+Reuse existing shared PPTX export utilities wherever safe.
+Do not alter export behavior for other deck/report types.
+
+==================================================
+SIDEBAR / NAVIGATION REQUIREMENTS
+==================================================
+
+Restore Templates to the left sidebar.
+
+The left sidebar must include Templates as a visible destination.
+Selecting Templates must open the template list.
+Selecting a template must open the visual template editor.
+
+The Quarterly Content Roadmap must be available both:
+- in the report/deck creator flow
+- in Templates
+
+==================================================
+IMPLEMENTATION SAFETY
+==================================================
+
+Required safety approach:
+- use additive changes
+- isolate the Quarterly Content Roadmap generator
+- isolate template-editor enhancements
+- reuse shared utilities carefully
+- avoid invasive refactors unless absolutely necessary
+- if shared code must be touched, verify that existing generators still behave exactly as before
+
+==================================================
+REQUIRED DELIVERABLES
+==================================================
+
+Implement all of the following:
+
+1. Quarterly Content Roadmap generator
+2. Quarterly Content Roadmap creator/report page
+3. Quarterly Content Roadmap PPTX export
+4. Templates restored in left sidebar
+5. Template list UI
+6. Visual template editor UI
+7. Quarterly Content Roadmap template available in Templates
+8. Template save/load behavior
+9. Integration so generator uses template layout/design
+10. Preservation of existing report/deck behavior
+
+==================================================
+VALIDATION REQUIREMENTS
+==================================================
+
+Before calling this complete, verify and report all of the following:
+
+A. Quarterly Content Roadmap
+- appears in the creator flow
+- accepts client, quarter, and year
+- fills client name correctly
+- fills today’s date correctly
+- leaves prepared by blank
+- pulls the correct QBS data
+- pulls the correct Airtable production data
+- renders in correct month order
+- keeps all slide text editable
+- exports to PPTX correctly
+
+B. Templates
+- Templates appears in the left sidebar
+- all templates are listed
+- Quarterly Content Roadmap template is listed
+- template opens in visual editor
+- elements can be selected
+- elements can be moved
+- elements can be resized where appropriate
+- elements can be deleted
+- text can be edited
+- fonts can be changed
+- colors can be changed
+- template can be saved
+- saved template changes are reflected in future deck generation
+
+C. Non-regression
+- existing generators still work
+- existing PPTX exports still work
+- existing save/load still works
+- existing routes still work
+- existing sidebar navigation still works
+- no unrelated templates changed visually or functionally
+
+==================================================
+RESPONSE FORMAT I WANT BACK
+==================================================
+
+Do not give me a shallow summary.
+
+Give me an audit-style response that includes:
+
+1. Exact files added and changed
+2. Exact purpose of each file
+3. Exact routes added or changed
+4. Exact data flow for QBS mapping
+5. Exact data flow for Airtable mapping
+6. Exact template system architecture
+7. Exact sidebar/template restoration details
+8. Exact visual editor capabilities implemented
+9. Exact proof of edit persistence
+10. Exact proof of PPTX export behavior
+11. Exact non-regression checks performed
+
+Also generate a real sample artifact for Anchored Tides:
+- generate a sample Quarterly Content Roadmap using Anchored Tides
+- provide a direct easy-to-download PPTX link
+- summarize what populated successfully and what was missing
+- paste the sample slide content into the response in readable form
+
+Be honest about any gaps.
+Do not present assumptions as completed features.
+
+End your response with:
+- remaining risks
+- anything still unverified
+- what I should inspect first
+- whether this is production-ready right now

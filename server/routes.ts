@@ -3455,13 +3455,14 @@ export async function registerRoutes(
 
   app.post("/api/template/save", (req, res) => {
     try {
-      const { templateType, accentColor, purposeText, footerText, sectionTitles, imageBase64 } = req.body as {
-        templateType?: "biweekly" | "monthly" | "qbr";
+      const { templateType, accentColor, purposeText, footerText, sectionTitles, imageBase64, layout } = req.body as {
+        templateType?: string;
         accentColor?: string;
         purposeText?: string;
         footerText?: string;
         sectionTitles?: Record<string, string>;
         imageBase64?: string;
+        layout?: any;
       };
       const cfg = readTemplateConfig();
       const type = templateType ?? "biweekly";
@@ -3470,6 +3471,7 @@ export async function registerRoutes(
       if (purposeText !== undefined) cfg[type].purposeText = purposeText;
       if (footerText !== undefined) cfg[type].footerText = footerText;
       if (sectionTitles !== undefined) cfg[type].sectionTitles = sectionTitles;
+      if (layout !== undefined) cfg[type].layout = layout;
       // Top-level accentColor kept for backward compat
       if (type === "biweekly" && accentColor !== undefined) cfg.accentColor = accentColor.replace("#", "");
       fs.writeFileSync(TEMPLATE_CONFIG_PATH, JSON.stringify(cfg, null, 2));

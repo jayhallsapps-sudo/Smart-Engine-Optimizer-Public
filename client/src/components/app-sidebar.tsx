@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   ExternalLink, Settings, LogOut, Shield, User, ChevronDown, Check,
   BookOpen, Layers, Lock, Unlock, KeyRound, Eye, EyeOff, LayoutTemplate,
-  BarChart3, Presentation,
+  BarChart3, Presentation, PanelsTopLeft,
 } from "lucide-react";
 import {
   Sidebar,
@@ -416,6 +416,29 @@ export function AppSidebar() {
             <Link href="/mid-strategy-deck" title="Mid-Strategy Deck">
               <button className="p-1.5 rounded hover:bg-muted transition-colors" data-testid="link-mid-strategy-deck-collapsed">
                 <Presentation className="w-4 h-4 text-muted-foreground" />
+              </button>
+            </Link>
+          </div>
+        )}
+
+        <SidebarDivider />
+        <SidebarSectionLabel label="Templates" />
+        {!collapsed ? (
+          <div className="px-1 py-1">
+            <Link
+              href="/templates"
+              className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition-colors"
+              data-testid="link-templates"
+            >
+              <PanelsTopLeft className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+              <span className="text-xs text-foreground">Templates</span>
+            </Link>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-1 py-1">
+            <Link href="/templates" title="Templates">
+              <button className="p-1.5 rounded hover:bg-muted transition-colors" data-testid="link-templates-collapsed">
+                <PanelsTopLeft className="w-4 h-4 text-muted-foreground" />
               </button>
             </Link>
           </div>

@@ -38,9 +38,6 @@ export async function querySemrush(
   client: Client,
   dateRange: string
 ): Promise<CommandResult | null> {
-  // SEMrush API calls are currently disabled to preserve account credits.
-  // Return null so callers fall back to mock data or leave the section blank.
-  return null;
   const domain = extractDomain(client.gscSiteUrl ?? client.ahrefsProjectUrl);
   if (!domain) return null;
   const apiKey = await getSemrushKey();

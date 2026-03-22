@@ -463,6 +463,7 @@ export async function generateQuarterlyContentRoadmap(
     clientName,
     date: today,
     producedBy: "",
+    reportFamily: "qcr",
   });
 
   // Slide 2 — Quarter Overview
@@ -473,6 +474,7 @@ export async function generateQuarterlyContentRoadmap(
     sectionLabel: "Quarter Overview",
     subtitle: `Planned content production and SEO strategy for ${MONTH_NAMES[m0]}–${MONTH_NAMES_SHORT[m2]} ${year}`,
     bullets: overviewBullets,
+    reportFamily: "qcr",
   });
 
   // Slides 3–5: Month 1
@@ -482,6 +484,7 @@ export async function generateQuarterlyContentRoadmap(
     type: "divider",
     title: `${month0Name} ${year}`,
     subtitle: "Monthly Strategy & Content Plan",
+    reportFamily: "qcr",
   });
   slides.push({
     id: "qcr_m1_strategy",
@@ -490,6 +493,7 @@ export async function generateQuarterlyContentRoadmap(
     sectionLabel: `${month0Name} Strategy`,
     subtitle: "Monthly strategic rationale — edit to reflect the approved plan for this month.",
     bullets: buildMonthStrategyBullets(0, month0Name, quarter, year, stratCtx),
+    reportFamily: "qcr",
   });
   slides.push({
     id: "qcr_m1_table",
@@ -503,6 +507,7 @@ export async function generateQuarterlyContentRoadmap(
       headers: TABLE_HEADERS,
       rows: prod0.hasData ? prod0.rows : [["No deliverables found for this month", "", "", ""]],
     },
+    reportFamily: "qcr",
   });
 
   // Slides 6–8: Month 2
@@ -512,6 +517,7 @@ export async function generateQuarterlyContentRoadmap(
     type: "divider",
     title: `${month1Name} ${year}`,
     subtitle: "Monthly Strategy & Content Plan",
+    reportFamily: "qcr",
   });
   slides.push({
     id: "qcr_m2_strategy",
@@ -520,6 +526,7 @@ export async function generateQuarterlyContentRoadmap(
     sectionLabel: `${month1Name} Strategy`,
     subtitle: "Monthly strategic rationale — edit to reflect the approved plan for this month.",
     bullets: buildMonthStrategyBullets(1, month1Name, quarter, year, stratCtx),
+    reportFamily: "qcr",
   });
   slides.push({
     id: "qcr_m2_table",
@@ -533,6 +540,7 @@ export async function generateQuarterlyContentRoadmap(
       headers: TABLE_HEADERS,
       rows: prod1.hasData ? prod1.rows : [["No deliverables found for this month", "", "", ""]],
     },
+    reportFamily: "qcr",
   });
 
   // Slides 9–11: Month 3
@@ -542,6 +550,7 @@ export async function generateQuarterlyContentRoadmap(
     type: "divider",
     title: `${month2Name} ${year}`,
     subtitle: "Monthly Strategy & Content Plan",
+    reportFamily: "qcr",
   });
   slides.push({
     id: "qcr_m3_strategy",
@@ -550,6 +559,7 @@ export async function generateQuarterlyContentRoadmap(
     sectionLabel: `${month2Name} Strategy`,
     subtitle: "Monthly strategic rationale — edit to reflect the approved plan for this month.",
     bullets: buildMonthStrategyBullets(2, month2Name, quarter, year, stratCtx),
+    reportFamily: "qcr",
   });
   slides.push({
     id: "qcr_m3_table",
@@ -563,6 +573,7 @@ export async function generateQuarterlyContentRoadmap(
       headers: TABLE_HEADERS,
       rows: prod2.hasData ? prod2.rows : [["No deliverables found for this month", "", "", ""]],
     },
+    reportFamily: "qcr",
   });
 
   const result: QcrReportJson = {

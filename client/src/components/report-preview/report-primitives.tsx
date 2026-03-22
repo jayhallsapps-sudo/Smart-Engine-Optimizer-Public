@@ -2,7 +2,7 @@ import { useState, useEffect, useContext } from "react";
 import { EditableSection, ReadModeContext } from "./editable-section";
 import { MetricCard } from "./report-chart";
 import { getCustomRows, setCustomRows } from "./report-table";
-import deckHeaderImg from "@assets/HEADER_IMAGE_trans_deck_1773949292894.png";
+import deckHeaderImg from "@assets/HEADER_IMAGE_trans_deck_1774198073365.png";
 
 // ─── Slide type definition — lives here to avoid circular imports ─────────────
 export interface DecisionOption {
@@ -83,6 +83,7 @@ export interface Slide {
   hidden?: boolean;
   producedBy?: string;
   sourceNote?: string;
+  reportFamily?: string;
 }
 
 // ─── Design tokens (single source of truth for the slide system) ─────────────
@@ -385,6 +386,7 @@ export function SlideTableWithCustomRows({
   edits,
   onEdit,
   maxRows = 18,
+  darkHeader = false,
 }: {
   slideId: string;
   tableKey: string;
@@ -393,6 +395,7 @@ export function SlideTableWithCustomRows({
   edits: Record<string, string>;
   onEdit: (k: string, v: string) => void;
   maxRows?: number;
+  darkHeader?: boolean;
 }) {
   const readMode = useContext(ReadModeContext);
   const tableId = `${slideId}_${tableKey}`;
@@ -400,6 +403,10 @@ export function SlideTableWithCustomRows({
   const colCount = headers.length;
   const cellPadding = "3px 6px";
   const fontSize = 8;
+
+  const hdrBg   = darkHeader ? "#1F2937" : TABLE_HEADER_BG;
+  const hdrText = darkHeader ? "#FFFFFF"  : TABLE_HEADER_TEXT;
+  const hdrWeight: number = darkHeader ? 700 : TABLE_HEADER_WEIGHT;
 
   function addRow() {
     setCustomRows(tableId, [...customRows, Array(colCount).fill("")], onEdit);
@@ -418,9 +425,9 @@ export function SlideTableWithCustomRows({
     <div>
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize, border: `1px solid ${BORDER_COLOR}`, overflow: "hidden" }}>
         <thead>
-          <tr style={{ backgroundColor: TABLE_HEADER_BG }}>
+          <tr style={{ backgroundColor: hdrBg }}>
             {headers.map((h, hi) => (
-              <th key={hi} style={{ color: TABLE_HEADER_TEXT, padding: cellPadding, textAlign: "left", fontWeight: TABLE_HEADER_WEIGHT, fontSize: Math.max(fontSize - 1, 7), borderBottom: `1px solid ${BORDER_COLOR}`, whiteSpace: "nowrap" }}>
+              <th key={hi} style={{ color: hdrText, padding: cellPadding, textAlign: "left", fontWeight: hdrWeight, fontSize: Math.max(fontSize - 1, 7), borderBottom: darkHeader ? "none" : `1px solid ${BORDER_COLOR}`, whiteSpace: "nowrap" }}>
                 {h}
               </th>
             ))}

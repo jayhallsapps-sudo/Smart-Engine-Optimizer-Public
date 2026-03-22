@@ -2762,11 +2762,21 @@ export async function registerRoutes(
         fontFamily:  qcrLayout?.globalStyles?.fontFamily  ?? templateCfg?.qcr_layout?.fontFamily  ?? "Calibri",
       };
 
-      // ── Map slides to QcrPptxSection (bullet or table) ─────────────────────
+      // ── Map slides to QcrPptxSection ──────────────────────────────────────
+      // Include divider slides (rendered as branded month-break slides) and
+      // exclude only the cover title slide (handled separately).
       const sections = (json.slides ?? [])
-        .filter((s: any) => s.type !== "title" && s.type !== "divider")
-        .map((s: any, idx: number) => {
+        .filter((s: any) => s.type !== "title")
+        .map((s: any) => {
           const title = edits?.[`${s.id}_title`] ?? s.title ?? "";
+          if (s.type === "divider") {
+            return {
+              title,
+              isDivider: true as const,
+              dividerMonth: title,
+              dividerSubtitle: edits?.[`${s.id}_subtitle`] ?? s.subtitle ?? "",
+            };
+          }
           if (s.table) {
             const resolvedRows = (s.table.rows as any[][]).map((row: any[], ri: number) =>
               row.map((cell: any, ci: number) => edits?.[`${s.id}_cell_${ri}_${ci}`] ?? String(cell))

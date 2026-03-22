@@ -20,6 +20,12 @@ import {
   MonthlyIaComparisonSlide,
   MonthlyTwoColSlide,
 } from "./monthly-slides";
+import {
+  QcrTitleSlide,
+  QcrDividerSlide,
+  QcrStrategySlide,
+  QcrProductionSlide,
+} from "./qcr-slides";
 
 // Slide type lives in report-primitives to avoid circular imports; re-export for server consumers
 import type { Slide, DecisionOption, IAItem, ContentCluster } from "./report-primitives";
@@ -139,7 +145,7 @@ export function PptxPreview({ slides, edits, onEdit, onSlidesChange }: PptxPrevi
               <button
                 onClick={() => setCurrent(i)}
                 className={`relative w-full rounded border-2 overflow-hidden transition-all ${i === current ? "border-red-400" : "border-gray-600 hover:border-gray-400"}`}
-                style={{ paddingTop: "56.25%", background: (s.type === "title" || s.type === "divider") ? RED : PAGE_BG }}
+                style={{ paddingTop: "56.25%", background: s.reportFamily === "qcr" && s.type === "divider" ? NAVY : (s.type === "title" || s.type === "divider") ? RED : PAGE_BG }}
                 data-testid={`thumb-slide-${i}`}
                 title={s.title ?? `Slide ${i + 1}`}
               >
@@ -290,6 +296,17 @@ export function SlideRenderer({
   }
 
   const props = { slide, edits, onEdit, headerUrl };
+
+  // ── QCR slides get their own visual treatment ────────────────────────────
+  if (slide.reportFamily === "qcr") {
+    switch (slide.type) {
+      case "title":   return <QcrTitleSlide    {...props} />;
+      case "divider": return <QcrDividerSlide  {...props} />;
+      case "bullets": return <QcrStrategySlide {...props} />;
+      case "table":   return <QcrProductionSlide {...props} />;
+      default:        break;
+    }
+  }
 
   switch (slide.type) {
     case "title":         return <MonthlyTitleSlide {...props} />;

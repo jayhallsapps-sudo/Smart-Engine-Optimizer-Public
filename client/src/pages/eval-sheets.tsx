@@ -113,44 +113,56 @@ async function parseMultipleCsvFiles(files: FileList | File[]): Promise<{ rows: 
 
 // ─── Raw / Derived metric definitions ────────────────────────────────────────
 
+// Source tag color config
+const SOURCE_STYLES: Record<string, { label: string; className: string }> = {
+  ahrefs:   { label: "Ahrefs",   className: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400" },
+  semrush:  { label: "SEMrush",  className: "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400" },
+  gsc:      { label: "GSC",      className: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
+  wayback:  { label: "Wayback",  className: "bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400" },
+  rdap:     { label: "RDAP",     className: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400" },
+  manual:   { label: "Manual",   className: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" },
+  computed: { label: "Computed", className: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
+  "ahrefs/gsc": { label: "Ahrefs/GSC", className: "bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400" },
+};
+
 const RAW_METRICS = [
-  { key: "whoisReg", label: "WHOIS Reg", type: "date", width: 100, tooltip: "Auto-fetched via RDAP. Edit manually if incorrect." },
-  { key: "firstArchive", label: "First Archive", type: "date", width: 110, tooltip: "Oldest Wayback Machine snapshot. Auto-fetched." },
-  { key: "archiveUrl", label: "Archive Link", type: "url", width: 85, tooltip: "Click to open the oldest Wayback Machine snapshot in a new tab." },
-  { key: "dr", label: "DR", type: "number", width: 60 },
-  { key: "referringDomains", label: "Ref Domains", type: "number", width: 100 },
-  { key: "backlinks", label: "Backlinks", type: "number", width: 90 },
-  { key: "organicTraffic", label: "Org Traffic", type: "number", width: 100, tooltip: "Client row uses GSC clicks (3-month); competitors use Ahrefs." },
-  { key: "organicKeywords", label: "Org Keywords", type: "number", width: 105, tooltip: "Client row uses GSC unique pages (3-month); competitors use Ahrefs." },
-  { key: "top10Keywords", label: "Top 10 KW", type: "number", width: 95, tooltip: "Ahrefs Top 1-3 + Top 4-10 combined." },
-  { key: "top1to3Keywords", label: "Top 1-3 KW", type: "number", width: 88, tooltip: "Ahrefs — keywords ranking in positions 1-3." },
-  { key: "top4to10Keywords", label: "Top 4-10 KW", type: "number", width: 92, tooltip: "Ahrefs — keywords ranking in positions 4-10." },
-  { key: "indexedPages", label: "Indexed Pg", type: "number", width: 95 },
-  { key: "aiVisibilityScore", label: "AI Vis Score", type: "number", width: 100, tooltip: "SEMrush AI Toolkit — enter manually from SEMrush AI Overview report." },
-  { key: "aiMentions", label: "AI Mentions", type: "number", width: 98, tooltip: "Enter manually. Count of AI Overview mentions for tracked queries." },
-  { key: "citedSources", label: "Cited Sources", type: "number", width: 105, tooltip: "Enter manually. Count of cited sources in AI Overviews for this domain." },
-  { key: "informationalKeywords", label: "Info KW", type: "number", width: 80 },
-  { key: "featuredSnippets", label: "Feat Snippets", type: "number", width: 110 },
+  { key: "whoisReg",             label: "WHOIS Reg",     source: "rdap",       type: "date",   width: 100, tooltip: "Auto-fetched via RDAP. Edit manually if incorrect." },
+  { key: "firstArchive",         label: "First Archive", source: "wayback",    type: "date",   width: 110, tooltip: "Oldest Wayback Machine snapshot. Auto-fetched." },
+  { key: "archiveUrl",           label: "Archive Link",  source: "wayback",    type: "url",    width: 85,  tooltip: "Click to open the oldest Wayback Machine snapshot in a new tab." },
+  { key: "dr",                   label: "DR",            source: "ahrefs",     type: "number", width: 60 },
+  { key: "referringDomains",     label: "Ref Domains",   source: "ahrefs",     type: "number", width: 100 },
+  { key: "backlinks",            label: "Backlinks",     source: "ahrefs",     type: "number", width: 90 },
+  { key: "organicTraffic",       label: "Org Traffic",   source: "ahrefs/gsc", type: "number", width: 100, tooltip: "Client row uses GSC clicks (3-month); competitors use Ahrefs." },
+  { key: "organicKeywords",      label: "Org Keywords",  source: "ahrefs/gsc", type: "number", width: 105, tooltip: "Client row uses GSC unique pages (3-month); competitors use Ahrefs." },
+  { key: "top10Keywords",        label: "Top 10 KW",     source: "ahrefs",     type: "number", width: 95,  tooltip: "Ahrefs Top 1-3 + Top 4-10 combined." },
+  { key: "top1to3Keywords",      label: "Top 1-3 KW",    source: "ahrefs",     type: "number", width: 88,  tooltip: "Ahrefs — keywords ranking in positions 1-3." },
+  { key: "top4to10Keywords",     label: "Top 4-10 KW",   source: "ahrefs",     type: "number", width: 92,  tooltip: "Ahrefs — keywords ranking in positions 4-10." },
+  { key: "indexedPages",         label: "Indexed Pg",    source: "semrush",    type: "number", width: 95 },
+  { key: "aiVisibilityScore",    label: "AI Vis Score",  source: "manual",     type: "number", width: 100, tooltip: "SEMrush AI Toolkit — enter manually from SEMrush AI Overview report." },
+  { key: "aiMentions",           label: "AI Mentions",   source: "manual",     type: "number", width: 98,  tooltip: "Enter manually. Count of AI Overview mentions for tracked queries." },
+  { key: "citedSources",         label: "Cited Sources", source: "manual",     type: "number", width: 105, tooltip: "Enter manually. Count of cited sources in AI Overviews for this domain." },
+  { key: "informationalKeywords",label: "Info KW",       source: "semrush",    type: "number", width: 80 },
+  { key: "featuredSnippets",     label: "Feat Snippets", source: "semrush",    type: "number", width: 110 },
 ];
 
 const DERIVED_METRICS = [
-  { key: "age", label: "Age (yrs)" },
-  { key: "archiveAge", label: "Archive Age" },
-  { key: "kwVelocity", label: "KW Velocity" },
-  { key: "snippetVelocity", label: "Snippet Vel." },
-  { key: "rdVelocity", label: "RD Velocity" },
-  { key: "contentVelocity", label: "Content Vel." },
-  { key: "kwYield", label: "KW Yield" },
-  { key: "snippetYield", label: "Snip Yield" },
-  { key: "mentionRate", label: "Mention Rate", tooltip: "aiMentions ÷ citedSources × 100 (requires manual AI fields)" },
-  { key: "rdYield", label: "RD Yield" },
-  { key: "contentYield", label: "Content Yield" },
-  { key: "backlinkDensity", label: "BL Density", tooltip: "(Backlinks + RDs) ÷ Indexed Pages" },
-  { key: "snippetDensity", label: "Snippet Density", tooltip: "Featured Snippets ÷ Organic Keywords × 100" },
-  { key: "contentDensity", label: "Content Density", tooltip: "Organic Keywords ÷ Indexed Pages" },
-  { key: "informationalDensity", label: "Info Density", tooltip: "Informational KW ÷ Organic KW × 100" },
-  { key: "finalScore", label: "Final Score", tooltip: "Weighted rank across key benchmarks (DR×2, traffic×2, keywords×1.5…)" },
-  { key: "averageRank", label: "Avg Rank", tooltip: "Simple mean of all individual metric rank positions" },
+  { key: "age",                  label: "Age (yrs)",       source: "computed" },
+  { key: "archiveAge",           label: "Archive Age",     source: "computed" },
+  { key: "kwVelocity",           label: "KW Velocity",     source: "computed" },
+  { key: "snippetVelocity",      label: "Snippet Vel.",    source: "computed" },
+  { key: "rdVelocity",           label: "RD Velocity",     source: "computed" },
+  { key: "contentVelocity",      label: "Content Vel.",    source: "computed" },
+  { key: "kwYield",              label: "KW Yield",        source: "computed" },
+  { key: "snippetYield",         label: "Snip Yield",      source: "computed" },
+  { key: "mentionRate",          label: "Mention Rate",    source: "computed", tooltip: "aiMentions ÷ citedSources × 100 (requires manual AI fields)" },
+  { key: "rdYield",              label: "RD Yield",        source: "computed" },
+  { key: "contentYield",         label: "Content Yield",   source: "computed" },
+  { key: "backlinkDensity",      label: "BL Density",      source: "computed", tooltip: "(Backlinks + RDs) ÷ Indexed Pages" },
+  { key: "snippetDensity",       label: "Snippet Density", source: "computed", tooltip: "Featured Snippets ÷ Organic Keywords × 100" },
+  { key: "contentDensity",       label: "Content Density", source: "computed", tooltip: "Organic Keywords ÷ Indexed Pages" },
+  { key: "informationalDensity", label: "Info Density",    source: "computed", tooltip: "Informational KW ÷ Organic KW × 100" },
+  { key: "finalScore",           label: "Final Score",     source: "computed", tooltip: "Weighted rank across key benchmarks (DR×2, traffic×2, keywords×1.5…)" },
+  { key: "averageRank",          label: "Avg Rank",        source: "computed", tooltip: "Simple mean of all individual metric rank positions" },
 ];
 
 const PAGE_CATEGORIES = [
@@ -273,30 +285,50 @@ function MainEvalTab({ batch }: { batch: EvalBatch }) {
               <TableHead className="w-10 text-center sticky left-0 bg-muted/40 z-10">Type</TableHead>
               <TableHead className="min-w-[120px] sticky left-10 bg-muted/40 z-10">Name</TableHead>
               <TableHead className="min-w-[140px]">Website</TableHead>
-              {RAW_METRICS.map(m => (
-                <TableHead key={m.key} className="text-center" style={{ minWidth: m.width }}>
-                  <span className="flex items-center justify-center gap-0.5">
-                    {m.label}
-                    {(m as any).tooltip && (
-                      <span title={(m as any).tooltip} className="cursor-help">
-                        <Info className="w-2.5 h-2.5 text-amber-500 inline-block" />
+              {RAW_METRICS.map(m => {
+                const src = SOURCE_STYLES[m.source];
+                return (
+                  <TableHead key={m.key} className="text-center" style={{ minWidth: m.width }}>
+                    <div className="flex flex-col items-center gap-0.5">
+                      <span className="flex items-center gap-0.5">
+                        {m.label}
+                        {m.tooltip && (
+                          <span title={m.tooltip} className="cursor-help">
+                            <Info className="w-2.5 h-2.5 text-amber-500 inline-block" />
+                          </span>
+                        )}
                       </span>
-                    )}
-                  </span>
-                </TableHead>
-              ))}
-              {DERIVED_METRICS.map(m => (
-                <TableHead key={m.key} className="text-center bg-blue-50/50 dark:bg-blue-900/10 min-w-[90px]">
-                  <span className="flex items-center justify-center gap-0.5">
-                    {m.label}
-                    {(m as any).tooltip && (
-                      <span title={(m as any).tooltip} className="cursor-help">
-                        <Info className="w-2.5 h-2.5 text-amber-500 inline-block" />
+                      {src && (
+                        <span className={`text-[8px] font-semibold px-1 py-0 rounded leading-4 ${src.className}`}>
+                          {src.label}
+                        </span>
+                      )}
+                    </div>
+                  </TableHead>
+                );
+              })}
+              {DERIVED_METRICS.map(m => {
+                const src = SOURCE_STYLES[m.source];
+                return (
+                  <TableHead key={m.key} className="text-center bg-blue-50/50 dark:bg-blue-900/10 min-w-[90px]">
+                    <div className="flex flex-col items-center gap-0.5">
+                      <span className="flex items-center gap-0.5">
+                        {m.label}
+                        {m.tooltip && (
+                          <span title={m.tooltip} className="cursor-help">
+                            <Info className="w-2.5 h-2.5 text-amber-500 inline-block" />
+                          </span>
+                        )}
                       </span>
-                    )}
-                  </span>
-                </TableHead>
-              ))}
+                      {src && (
+                        <span className={`text-[8px] font-semibold px-1 py-0 rounded leading-4 ${src.className}`}>
+                          {src.label}
+                        </span>
+                      )}
+                    </div>
+                  </TableHead>
+                );
+              })}
               <TableHead className="w-16 text-center">Actions</TableHead>
             </TableRow>
           </TableHeader>

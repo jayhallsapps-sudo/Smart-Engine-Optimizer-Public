@@ -35,6 +35,7 @@ import { buildGoogleAuthUrl, exchangeCodeForToken, callbackHtml, isGoogleConfigu
 import { testCredential } from "./connectionTest";
 import { insertSfReportSchema, insertCallTrackingReportSchema, amInputsSchema, migrateLegacyAmInputs, insertReportCommentSchema, updateReportCommentSchema } from "@shared/schema";
 import { generateBiweeklyDocx, generatePptx, generateMidStrategyPptx, generateQbrPrepDocx } from "./reportGenerators";
+import { generateQcrPptx } from "./qcrPptxGenerator";
 import { generateBiweeklyPdf, generateMonthlyPdf } from "./pdfGenerator";
 import { generatePdfViaPuppeteer } from "./puppeteerPdfGenerator";
 import type { SectionData } from "./reportGenerators";
@@ -2752,27 +2753,40 @@ export async function registerRoutes(
       return res.status(400).json({ message: "No slide data found. Generate the report first." });
     }
     try {
-      const sections: SectionData[] = (json.slides ?? [])
+      // ── Read saved template styling (if committed) ──────────────────────────
+      const templateCfg = readTemplateConfig();
+      const qcrLayout = templateCfg?.qcr_layout?.layout ?? {};
+      const templateOpts = {
+        accentColor: qcrLayout?.globalStyles?.accentColor ?? templateCfg?.qcr_layout?.accentColor ?? "C0392B",
+        darkColor:   qcrLayout?.globalStyles?.darkColor   ?? templateCfg?.qcr_layout?.darkColor   ?? "1B3A6B",
+        fontFamily:  qcrLayout?.globalStyles?.fontFamily  ?? templateCfg?.qcr_layout?.fontFamily  ?? "Calibri",
+      };
+
+      // ── Map slides to QcrPptxSection (bullet or table) ─────────────────────
+      const sections = (json.slides ?? [])
         .filter((s: any) => s.type !== "title" && s.type !== "divider")
         .map((s: any, idx: number) => {
-          const items: any[] = [];
+          const title = edits?.[`${s.id}_title`] ?? s.title ?? "";
           if (s.table) {
             const resolvedRows = (s.table.rows as any[][]).map((row: any[], ri: number) =>
               row.map((cell: any, ci: number) => edits?.[`${s.id}_cell_${ri}_${ci}`] ?? String(cell))
             );
             const tableKey = `${s.id}_table`;
             const crRows = parseCustomRowsFromEdits(edits, tableKey);
-            items.push({ tables: [{ title: edits?.[`${s.id}_subtitle`] ?? s.subtitle ?? "", headers: s.table.headers, rows: [...resolvedRows, ...crRows] }] });
+            return { title, table: { headers: s.table.headers, rows: [...resolvedRows, ...crRows] } };
           }
           if (s.bullets) {
-            items.push({ manualText: (s.bullets as string[]).map((b: string, bi: number) => edits?.[`${s.id}_bullet_${bi}`] ?? b).join("\n") });
+            const bullets = (s.bullets as string[]).map((b: string, bi: number) => edits?.[`${s.id}_bullet_${bi}`] ?? b);
+            return { title, bullets };
           }
-          return { sectionId: `slide_${idx}`, title: edits?.[`${s.id}_title`] ?? s.title ?? "", items };
+          return { title, bullets: [] };
         });
+
       const clientName = edits?.["qcr_title_client"] ?? json.client_name ?? "Client";
       const reportTitle = edits?.["qcr_title_title"] ?? json.report_title ?? "Quarterly Content Roadmap";
       const generatedAt = json.generated_at ? new Date(json.generated_at).toLocaleDateString("en-US") : new Date().toLocaleDateString("en-US");
-      const buffer = await generatePptx(clientName, reportTitle, generatedAt, sections);
+
+      const buffer = await generateQcrPptx(clientName, reportTitle, generatedAt, sections, templateOpts);
       const slug = clientName.toLowerCase().replace(/\s+/g, "_");
       const qLabel = (json.quarter_label ?? "quarterly").replace(/\s/g, "_");
       logExport("QCR PPTX", t0, true);
@@ -3453,6 +3467,10 @@ export async function registerRoutes(
     res.send(fs.readFileSync(HEADER_IMAGE_PATH));
   });
 
+  const ALLOWED_TEMPLATE_TYPES = new Set([
+    "biweekly", "monthly", "qbr", "qbr_prep", "qcr_layout", "mid_strategy",
+  ]);
+
   app.post("/api/template/save", (req, res) => {
     try {
       const { templateType, accentColor, purposeText, footerText, sectionTitles, imageBase64, layout } = req.body as {
@@ -3466,6 +3484,9 @@ export async function registerRoutes(
       };
       const cfg = readTemplateConfig();
       const type = templateType ?? "biweekly";
+      if (!ALLOWED_TEMPLATE_TYPES.has(type)) {
+        return res.status(400).json({ message: `Invalid templateType "${type}". Allowed: ${[...ALLOWED_TEMPLATE_TYPES].join(", ")}` });
+      }
       if (!cfg[type]) cfg[type] = {};
       if (accentColor !== undefined) cfg[type].accentColor = accentColor.replace("#", "");
       if (purposeText !== undefined) cfg[type].purposeText = purposeText;

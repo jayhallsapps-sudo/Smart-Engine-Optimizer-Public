@@ -16,7 +16,7 @@
 
 import { storage } from "./storage";
 import { listSavedReportsByClientAndType } from "./savedReportService";
-import { fetchAirtableWorkLog, getCreditTypeLabel } from "./airtable";
+import { fetchAirtableWorkLog } from "./airtable";
 import type { Slide } from "../client/src/components/report-preview/report-primitives";
 
 // ─── Quarter helpers ──────────────────────────────────────────────────────────
@@ -125,21 +125,93 @@ interface QbsStrategyContext {
   futureLabel: string;
 }
 
-function extractQbsStrategy(qbsJson: any): QbsStrategyContext {
-  if (!qbsJson) {
-    return {
-      quarterSummary: "",
-      categoryThemes: [],
-      topOpportunities: [],
-      manualThoughts: "",
-      futureLabel: "",
-    };
-  }
+/**
+ * Detects whether a QBS JSON blob is v1 or v2 schema.
+ *
+ * v1 keys: executive_summary, opportunity_backlog, future_window_label, sourceSnapshotJson
+ * v2 keys: section6Priorities, section1Goals, sourceSnapshot
+ */
+function isV2QbsSchema(qbsJson: any): boolean {
+  return (
+    qbsJson?.section6Priorities != null ||
+    qbsJson?.section1Goals != null ||
+    qbsJson?.sourceSnapshot != null
+  );
+}
 
+/**
+ * v2 adapter — reads the live QBR Prep schema used by all current clients.
+ *
+ * Field precedence:
+ *   1. section6Priorities.priorities (sorted by priority number asc)
+ *      → each priority contributes one categoryTheme: "[initiative]: [first sentence of action]"
+ *      → topOpportunities = Tier 1 priorities only, short form: "[actionType]: [initiative]"
+ *   2. sourceSnapshot.manualInputs.amThoughts / hypothesis → quarterSummary & manualThoughts
+ *   3. sourceSnapshot.manualInputs.prevQtrAssessment → additional manualThoughts context
+ *   4. section1Goals.rows[0].goal → appended to manualThoughts if no AM thoughts available
+ *
+ * Month distribution: categoryThemes array is distributed across months by
+ * buildMonthStrategyBullets() using ceil(n/3) per month.
+ */
+function extractQbsStrategyV2(qbsJson: any): QbsStrategyContext {
+  const rawPriorities: any[] = qbsJson.section6Priorities?.priorities ?? [];
+  const priorities = [...rawPriorities].sort(
+    (a, b) => (Number(a.priority) || 99) - (Number(b.priority) || 99),
+  );
+
+  const manualInputs = qbsJson.sourceSnapshot?.manualInputs ?? {};
+  const goals: any[] = qbsJson.section1Goals?.rows ?? [];
+
+  const categoryThemes = priorities
+    .map((p: any) => {
+      const initiative: string = p.initiative ?? p.actionType ?? "Priority";
+      const action: string = p.action ?? "";
+      const firstSentence = action.split(/\.\s/)[0].slice(0, 130);
+      return `${initiative}: ${firstSentence}`;
+    })
+    .filter(Boolean)
+    .slice(0, 9);
+
+  const topOpportunities = priorities
+    .filter((p: any) => p.tier === "Tier 1")
+    .map((p: any) => `${p.actionType ?? "SEO"}: ${p.initiative ?? p.action?.slice(0, 60) ?? ""}`)
+    .slice(0, 4);
+
+  const amThoughts: string =
+    manualInputs.amThoughts ?? manualInputs.hypothesis ?? "";
+  const prevAssessment: string = manualInputs.prevQtrAssessment ?? "";
+
+  const manualThoughtsSentence = amThoughts
+    ? amThoughts.split(".")[0].trim() + "."
+    : prevAssessment
+    ? prevAssessment.split(".")[0].trim() + "."
+    : goals[0]?.goal
+    ? `Quarter target: ${goals[0].goal}`
+    : "";
+
+  const quarterSummary =
+    manualInputs.amThoughts?.split(".")[0] ??
+    goals[0]?.goal ??
+    "";
+
+  return {
+    quarterSummary,
+    categoryThemes,
+    topOpportunities,
+    manualThoughts: manualThoughtsSentence,
+    futureLabel: "",
+  };
+}
+
+/**
+ * v1 adapter — reads the legacy QBR Prep schema (executive_summary, opportunity_backlog, etc.)
+ * Preserved unchanged so existing v1 clients continue to work.
+ */
+function extractQbsStrategyV1(qbsJson: any): QbsStrategyContext {
   const summary = qbsJson.executive_summary ?? {};
   const opps = (qbsJson.opportunity_backlog ?? []) as Array<{
     category_name: string;
-    opportunities: Array<{ opportunity_title: string; why_it_matters: string; recommended_next_step: string }>;
+    opportunities: Array<{ opportunity_title: string }>;
   }>;
 
   const categoryThemes = opps
@@ -170,6 +242,21 @@ function extractQbsStrategy(qbsJson: any): QbsStrategyContext {
     manualThoughts,
     futureLabel: qbsJson.future_window_label ?? "",
   };
+}
+
+function extractQbsStrategy(qbsJson: any): QbsStrategyContext {
+  if (!qbsJson) {
+    return {
+      quarterSummary: "",
+      categoryThemes: [],
+      topOpportunities: [],
+      manualThoughts: "",
+      futureLabel: "",
+    };
+  }
+  return isV2QbsSchema(qbsJson)
+    ? extractQbsStrategyV2(qbsJson)
+    : extractQbsStrategyV1(qbsJson);
 }
 
 /**
@@ -216,6 +303,46 @@ function buildMonthStrategyBullets(
   return bullets.filter(Boolean);
 }
 
+// ─── Airtable type normalization ──────────────────────────────────────────────
+
+/**
+ * Infers a clean client-facing content type from the deliverable task name.
+ *
+ * Many Airtable bases embed the content type in the task name using the pattern:
+ *   "[CLIENT ABBR] - [Type] - [Category] - [Topic]"
+ * e.g. "AT - CRO Update - Treatment Modalities - relapse definition"
+ *      "AT - Half Scale - Guide - recovery cycle"
+ *
+ * Precedence:
+ *   1. Parse the task name for the second dash-delimited segment and map it.
+ *   2. If parseable but not in the map, return the raw segment (better than "Other").
+ *   3. If the raw creditType is not "Other", return it unchanged.
+ *   4. Fallback: "Deliverable" (never expose "Other" to clients).
+ */
+const TASK_TYPE_MAP: Record<string, string> = {
+  "Scale": "New Content",
+  "Half Scale": "Half-Scale Content",
+  "Optimization": "Content Optimization",
+  "CRO Update": "CRO/UX Update",
+  "Service": "Service Page",
+  "Technical": "Technical SEO",
+  "Link Building": "Link Building",
+  "Citation": "Citations",
+  "GBP": "GBP Update",
+  "Blog": "Blog Post",
+  "Landing": "Landing Page",
+  "Local": "Local SEO",
+};
+
+function inferContentTypeFromTask(task: string, rawCreditType: string): string {
+  const match = task.match(/^[A-Z]{1,6}\s*-\s*([^-]+?)\s*-/i);
+  if (match) {
+    const extracted = match[1].trim();
+    return TASK_TYPE_MAP[extracted] ?? extracted;
+  }
+  return rawCreditType === "Other" ? "Deliverable" : rawCreditType;
+}
+
 // ─── Airtable production fetcher ──────────────────────────────────────────────
 
 interface MonthProductionResult {
@@ -242,7 +369,7 @@ async function fetchMonthProduction(
   const items = Object.values(result.data.byCreditType).flat();
   const rows: (string | number)[][] = items.map(item => [
     item.task,
-    getCreditTypeLabel(item.creditType),
+    inferContentTypeFromTask(item.task, item.creditType),
     item.targetKeyword ?? "—",
     item.statusLabel ?? item.status ?? "—",
   ]);

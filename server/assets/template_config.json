@@ -11,5 +11,8 @@
   "qbr": {
     "accentColor": "1B3A6B",
     "highlightColor": "E8F0FE"
+  },
+  "qcr_layout": {
+    "accentColor": "1A5276"
   }
 }

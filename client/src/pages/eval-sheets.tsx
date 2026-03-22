@@ -134,22 +134,22 @@ const SOURCE_STYLES: Record<string, { label: string; className: string }> = {
 };
 
 const RAW_METRICS = [
-  { key: "whoisReg",             label: "WHOIS Reg",          source: "rdap",       type: "date",   width: 100, tooltip: "Auto-fetched via RDAP. Edit manually if incorrect." },
-  { key: "firstArchive",         label: "First Archive",      source: "wayback",    type: "date",   width: 110, tooltip: "Oldest Wayback Machine snapshot. Auto-fetched." },
-  { key: "dr",                   label: "DR",                 source: "ahrefs",     type: "number", width: 60 },
-  { key: "referringDomains",     label: "Referring Domains",  source: "ahrefs",     type: "number", width: 115 },
-  { key: "backlinks",            label: "Backlinks",          source: "ahrefs",     type: "number", width: 90 },
-  { key: "indexedPages",         label: "Indexed Pages",      source: "semrush",    type: "number", width: 100 },
-  { key: "aiVisibilityScore",    label: "AI Visibility Score",source: "semrush",    type: "number", width: 110, tooltip: "SEMrush AI Toolkit — enter manually from SEMrush AI Overview report." },
-  { key: "aiMentions",           label: "Mentioned Responses",source: "semrush",    type: "number", width: 120, tooltip: "Enter manually. Count of AI Overview mentions for tracked queries." },
-  { key: "citedSources",         label: "Cited Sources",      source: "semrush",    type: "number", width: 105, tooltip: "Enter manually. Count of cited sources in AI Overviews for this domain." },
-  { key: "organicTraffic",       label: "Organic Traffic",    source: "semrush/gsc",type: "number", width: 105, tooltip: "Client: GSC 3-month clicks. Competitors: SEMrush (est. from top-100 kw volumes when domain_ranks unavailable)." },
-  { key: "organicKeywords",      label: "Organic Keywords",   source: "ahrefs/gsc", type: "number", width: 110, planCap: 25, tooltip: "Client: GSC unique pages (3-month). Competitors: Ahrefs organic-keywords count. Capped at 25 by API plan — shows 25+ if at limit." },
-  { key: "top10Keywords",        label: "Top 10 Keywords",    source: "ahrefs",     type: "number", width: 105, planCap: 25, tooltip: "Ahrefs: Top 1-3 + Top 4-10 combined count. Capped at 25 by API plan." },
-  { key: "top1to3Keywords",      label: "Top 1-3 KW",         source: "ahrefs",     type: "number", width: 88,  planCap: 25, tooltip: "Ahrefs — keywords ranking in positions 1-3. Capped at 25 by API plan." },
-  { key: "top4to10Keywords",     label: "Top 4-10 KW",        source: "ahrefs",     type: "number", width: 92,  planCap: 25, tooltip: "Ahrefs — keywords ranking in positions 4-10. Capped at 25 by API plan." },
-  { key: "informationalKeywords",label: "Informational KW",   source: "semrush",    type: "number", width: 105, tooltip: "SEMrush: count of keywords with Informational intent in top-100." },
-  { key: "featuredSnippets",     label: "Featured Snippets",  source: "semrush",    type: "number", width: 115, tooltip: "SEMrush: count of keywords with a Featured Snippet SERP feature in top-100." },
+  { key: "whoisReg",             label: "WHOIS Reg",          source: "rdap",       type: "date",   width: 100, refreshable: true,  tooltip: "Auto-fetched via RDAP. Edit manually if incorrect." },
+  { key: "firstArchive",         label: "First Archive",      source: "wayback",    type: "date",   width: 110, refreshable: true,  tooltip: "Oldest Wayback Machine snapshot. Auto-fetched." },
+  { key: "dr",                   label: "DR",                 source: "ahrefs",     type: "number", width: 60,  refreshable: true },
+  { key: "referringDomains",     label: "Referring Domains",  source: "ahrefs",     type: "number", width: 115, refreshable: true },
+  { key: "backlinks",            label: "Backlinks",          source: "ahrefs",     type: "number", width: 90,  refreshable: true },
+  { key: "indexedPages",         label: "Indexed Pages",      source: "semrush",    type: "number", width: 100, refreshable: true },
+  { key: "aiVisibilityScore",    label: "AI Visibility Score",source: "semrush",    type: "number", width: 110, refreshable: false, tooltip: "SEMrush AI Toolkit — enter manually from SEMrush AI Overview report." },
+  { key: "aiMentions",           label: "Mentioned Responses",source: "semrush",    type: "number", width: 120, refreshable: false, tooltip: "Enter manually. Count of AI Overview mentions for tracked queries." },
+  { key: "citedSources",         label: "Cited Sources",      source: "semrush",    type: "number", width: 105, refreshable: false, tooltip: "Enter manually. Count of cited sources in AI Overviews for this domain." },
+  { key: "organicTraffic",       label: "Organic Traffic",    source: "semrush/gsc",type: "number", width: 105, refreshable: true,  tooltip: "Client: GSC 3-month clicks. Competitors: SEMrush (est. from top-100 kw volumes when domain_ranks unavailable)." },
+  { key: "organicKeywords",      label: "Organic Keywords",   source: "ahrefs/gsc", type: "number", width: 110, refreshable: true,  planCap: 25, tooltip: "Client: GSC unique pages (3-month). Competitors: Ahrefs organic-keywords count. Capped at 25 by API plan — shows 25+ if at limit." },
+  { key: "top10Keywords",        label: "Top 10 Keywords",    source: "ahrefs",     type: "number", width: 105, refreshable: true,  planCap: 25, tooltip: "Ahrefs: Top 1-3 + Top 4-10 combined count. Capped at 25 by API plan." },
+  { key: "top1to3Keywords",      label: "Top 1-3 KW",         source: "ahrefs",     type: "number", width: 88,  refreshable: true,  planCap: 25, tooltip: "Ahrefs — keywords ranking in positions 1-3. Capped at 25 by API plan." },
+  { key: "top4to10Keywords",     label: "Top 4-10 KW",        source: "ahrefs",     type: "number", width: 92,  refreshable: true,  planCap: 25, tooltip: "Ahrefs — keywords ranking in positions 4-10. Capped at 25 by API plan." },
+  { key: "informationalKeywords",label: "Informational KW",   source: "semrush",    type: "number", width: 105, refreshable: true,  tooltip: "SEMrush: count of keywords with Informational intent in top-100." },
+  { key: "featuredSnippets",     label: "Featured Snippets",  source: "semrush",    type: "number", width: 115, refreshable: true,  tooltip: "SEMrush: count of keywords with a Featured Snippet SERP feature in top-100." },
 ];
 
 const DERIVED_METRICS = [
@@ -260,15 +260,15 @@ function MainEvalTab({ batch }: { batch: EvalBatch }) {
     mutationFn: ({ id, ...rest }: { id: number; [k: string]: any }) => apiRequest("PATCH", `/api/eval-competitor-rows/${id}`, rest),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/eval-batches", batch.id, "competitors"] }),
   });
-  const [refreshingSource, setRefreshingSource] = useState<string | null>(null);
-  const refreshSourceMut = useMutation({
-    mutationFn: (source: string) =>
-      apiRequest("POST", `/api/eval-batches/${batch.id}/refresh-source?source=${source}`, {}),
+  const [refreshingColumn, setRefreshingColumn] = useState<string | null>(null);
+  const refreshColumnMut = useMutation({
+    mutationFn: (column: string) =>
+      apiRequest("POST", `/api/eval-batches/${batch.id}/refresh-source?column=${column}`, {}),
     onSuccess: () => {
-      setRefreshingSource(null);
+      setRefreshingColumn(null);
       qc.invalidateQueries({ queryKey: ["/api/eval-batches", batch.id, "competitors"] });
     },
-    onError: () => setRefreshingSource(null),
+    onError: () => setRefreshingColumn(null),
   });
 
   function handleCellChange(row: any, metricKey: string, value: string) {
@@ -278,23 +278,15 @@ function MainEvalTab({ batch }: { batch: EvalBatch }) {
   const total = rows.length;
   if (isLoading) return <div className="flex items-center gap-2 p-6 text-muted-foreground text-sm"><Loader2 className="w-4 h-4 animate-spin" /> Loading...</div>;
 
-  const SOURCE_REFRESH_OPTIONS = [
-    { source: "all",     label: "All Sources" },
-    { source: "ahrefs",  label: "Ahrefs" },
-    { source: "semrush", label: "SEMrush" },
-    { source: "wayback", label: "Wayback" },
-    { source: "rdap",    label: "WHOIS" },
-  ];
-
-  function handleRefreshSource(source: string) {
-    setRefreshingSource(source);
-    refreshSourceMut.mutate(source);
+  function handleRefreshColumn(column: string) {
+    setRefreshingColumn(column);
+    refreshColumnMut.mutate(column);
   }
 
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">{rows.length} rows · Click any cell to edit manually</p>
+        <p className="text-sm text-muted-foreground">{rows.length} rows · Click any cell to edit manually · Click <RefreshCw className="w-3 h-3 inline-block" /> in a column header to refresh that column for all rows</p>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => exportMainEvalCsv(rows)} data-testid="button-export-csv">
             <Download className="w-3.5 h-3.5 mr-1" /> Export CSV
@@ -303,26 +295,6 @@ function MainEvalTab({ batch }: { batch: EvalBatch }) {
             <Plus className="w-3.5 h-3.5 mr-1" /> Add Row
           </Button>
         </div>
-      </div>
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-xs text-muted-foreground font-medium">Refresh columns:</span>
-        {SOURCE_REFRESH_OPTIONS.map(({ source, label }) => {
-          const isActive = refreshingSource === source && refreshSourceMut.isPending;
-          return (
-            <Button
-              key={source}
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs gap-1"
-              disabled={refreshSourceMut.isPending}
-              onClick={() => handleRefreshSource(source)}
-              data-testid={`button-refresh-source-${source}`}
-            >
-              {isActive ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-              {label}
-            </Button>
-          );
-        })}
       </div>
       <div className="overflow-x-auto rounded-md border">
         <Table>
@@ -333,6 +305,7 @@ function MainEvalTab({ batch }: { batch: EvalBatch }) {
               <TableHead className="min-w-[140px]">Website</TableHead>
               {RAW_METRICS.map(m => {
                 const src = SOURCE_STYLES[m.source];
+                const isRefreshing = refreshingColumn === m.key && refreshColumnMut.isPending;
                 return (
                   <TableHead key={m.key} className="text-center" style={{ minWidth: m.width }}>
                     <div className="flex flex-col items-center gap-0.5">
@@ -342,6 +315,19 @@ function MainEvalTab({ batch }: { batch: EvalBatch }) {
                           <span title={m.tooltip} className="cursor-help">
                             <Info className="w-2.5 h-2.5 text-amber-500 inline-block" />
                           </span>
+                        )}
+                        {m.refreshable && (
+                          <button
+                            title={`Refresh ${m.label} for all rows`}
+                            disabled={refreshColumnMut.isPending}
+                            onClick={() => handleRefreshColumn(m.key)}
+                            className="ml-0.5 text-muted-foreground hover:text-primary disabled:opacity-40 cursor-pointer"
+                            data-testid={`button-refresh-col-${m.key}`}
+                          >
+                            {isRefreshing
+                              ? <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                              : <RefreshCw className="w-2.5 h-2.5" />}
+                          </button>
                         )}
                       </span>
                       {src && (

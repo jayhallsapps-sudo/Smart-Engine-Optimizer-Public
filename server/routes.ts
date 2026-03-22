@@ -4334,6 +4334,7 @@ export async function registerRoutes(
   app.post("/api/eval-batches/:batchId/refresh-source", async (req, res) => {
     try {
       const batchId = Number(req.params.batchId);
+      const column = req.query.column ? String(req.query.column) : null;
       const source = String(req.query.source ?? "all");
       const allRows = await storage.getEvalCompetitorRows(batchId);
       if (!allRows.length) return res.json({ updated: 0 });
@@ -4341,10 +4342,33 @@ export async function registerRoutes(
       const { fetchCompetitorEvalMetrics, fetchFirstArchive, fetchWhoisReg,
               computeDerivedMetrics, computeRanks } = await import("./evalDataCollector");
 
+      // Per-column fetch — only re-fetches the one metric key requested
+      async function buildColumnPatch(row: any, col: string) {
+        const domain = row.websiteUrl ?? "";
+        if (col === "whoisReg") {
+          return { whoisReg: await fetchWhoisReg(domain) };
+        }
+        if (col === "firstArchive") {
+          return { firstArchive: await fetchFirstArchive(domain) };
+        }
+        // Ahrefs-backed columns
+        if (["dr", "referringDomains", "backlinks", "organicKeywords",
+             "top10Keywords", "top1to3Keywords", "top4to10Keywords", "organicTraffic"].includes(col)) {
+          const f = await fetchCompetitorEvalMetrics(domain, { includeWhoisWayback: false, sourcesFilter: "ahrefs" });
+          return { [col]: (f as any)[col] };
+        }
+        // SEMrush-backed columns
+        if (["indexedPages", "featuredSnippets", "informationalKeywords"].includes(col)) {
+          const f = await fetchCompetitorEvalMetrics(domain, { includeWhoisWayback: false, sourcesFilter: "semrush" });
+          return { [col]: (f as any)[col] };
+        }
+        return {};
+      }
+
       // Helper to build per-source patch for a single row
       async function buildPatch(row: any) {
+        if (column) return buildColumnPatch(row, column);
         const domain = row.websiteUrl ?? "";
-        const existing = (row.metrics as any) ?? {};
         if (source === "all") {
           const f = await fetchCompetitorEvalMetrics(domain);
           return {
@@ -4356,11 +4380,9 @@ export async function registerRoutes(
             firstArchive: f.firstArchive, whoisReg: f.whoisReg,
           };
         } else if (source === "wayback") {
-          const firstArchive = await fetchFirstArchive(domain);
-          return { firstArchive };
+          return { firstArchive: await fetchFirstArchive(domain) };
         } else if (source === "rdap") {
-          const whoisReg = await fetchWhoisReg(domain);
-          return { whoisReg };
+          return { whoisReg: await fetchWhoisReg(domain) };
         } else if (source === "ahrefs") {
           const f = await fetchCompetitorEvalMetrics(domain, { includeWhoisWayback: false, sourcesFilter: "ahrefs" });
           return {

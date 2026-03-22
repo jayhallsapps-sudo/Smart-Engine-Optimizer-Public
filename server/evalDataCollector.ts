@@ -173,12 +173,13 @@ async function semrushDomainData(apiKey: string, domain: string): Promise<{
     let informationalKeywords = DASH;
 
     try {
-      // Request Ph (keyword), Nq (volume), Po (position), Fk (SERP features), In (intent) columns
+      // Request Ph (keyword), Nq (volume), Po (position), Fk (SERP features), In (intent), Ur (landing URL).
+      // Adding Ur lets us count unique landing pages → Indexed Pages proxy that works for ALL domains.
       // display_limit capped at 100: each row costs 1 API unit; 100 covers all keywords for
       // small/mid competitor domains while preserving account balance.
       const allKwQs = new URLSearchParams({
         type: "domain_organic", domain: d, database: "us",
-        display_limit: "100", export_columns: "Ph,Nq,Po,Fk,In",
+        display_limit: "100", export_columns: "Ph,Nq,Po,Fk,In,Ur",
         display_sort: "nq_desc",
         key: apiKey,
       }).toString();
@@ -201,10 +202,27 @@ async function semrushDomainData(apiKey: string, domain: string): Promise<{
           const inIdx  = hdri("Intent", "In");
           const poIdx  = hdri("Position", "Po");
           const nqIdx  = hdri("Search Volume", "Nq");
+          const urIdx  = hdri("URL", "Ur");
 
           // organicKeywords fallback: if domain_ranks returned nothing, use the domain_organic count
           if (organicKeywords === DASH && allKwLines.length > 0) {
             organicKeywords = String(allKwLines.length);
+          }
+
+          // Indexed Pages: count unique landing URLs from domain_organic.
+          // This mirrors what you see in the SEMrush UI for any domain — it's based on
+          // their crawler data, not the organic-traffic tracking threshold. Works for small domains.
+          if (indexedPages === DASH && urIdx >= 0) {
+            const uniqueUrls = new Set<string>();
+            for (const line of allKwLines) {
+              const cols = line.split(";");
+              const url = (cols[urIdx] ?? "").trim();
+              if (url) uniqueUrls.add(url);
+            }
+            if (uniqueUrls.size > 0) {
+              indexedPages = String(uniqueUrls.size);
+              console.log(`[SEMrush domain_organic] Indexed pages from unique URLs: ${uniqueUrls.size} for "${d}"`);
+            }
           }
 
           // Featured snippets: SERP feature code "Featured snippet" in SEMrush = Fk value containing "12"

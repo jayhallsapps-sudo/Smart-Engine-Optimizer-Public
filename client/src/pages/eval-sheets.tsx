@@ -138,10 +138,10 @@ const RAW_METRICS = [
   { key: "aiMentions",           label: "Mentioned Responses",source: "semrush",    type: "number", width: 120, tooltip: "Enter manually. Count of AI Overview mentions for tracked queries." },
   { key: "citedSources",         label: "Cited Sources",      source: "semrush",    type: "number", width: 105, tooltip: "Enter manually. Count of cited sources in AI Overviews for this domain." },
   { key: "organicTraffic",       label: "Organic Traffic",    source: "semrush/gsc",type: "number", width: 105, tooltip: "Client: GSC 3-month clicks. Competitors: SEMrush (est. from top-100 kw volumes when domain_ranks unavailable)." },
-  { key: "organicKeywords",      label: "Organic Keywords",   source: "ahrefs/gsc", type: "number", width: 110, tooltip: "Client: GSC unique pages (3-month). Competitors: Ahrefs organic-keywords count." },
-  { key: "top10Keywords",        label: "Top 10 Keywords",    source: "ahrefs",     type: "number", width: 105, tooltip: "Ahrefs: Top 1-3 + Top 4-10 combined count." },
-  { key: "top1to3Keywords",      label: "Top 1-3 KW",         source: "ahrefs",     type: "number", width: 88,  tooltip: "Ahrefs — keywords ranking in positions 1-3." },
-  { key: "top4to10Keywords",     label: "Top 4-10 KW",        source: "ahrefs",     type: "number", width: 92,  tooltip: "Ahrefs — keywords ranking in positions 4-10." },
+  { key: "organicKeywords",      label: "Organic Keywords",   source: "ahrefs/gsc", type: "number", width: 110, planCap: 25, tooltip: "Client: GSC unique pages (3-month). Competitors: Ahrefs organic-keywords count. Capped at 25 by API plan — shows 25+ if at limit." },
+  { key: "top10Keywords",        label: "Top 10 Keywords",    source: "ahrefs",     type: "number", width: 105, planCap: 25, tooltip: "Ahrefs: Top 1-3 + Top 4-10 combined count. Capped at 25 by API plan." },
+  { key: "top1to3Keywords",      label: "Top 1-3 KW",         source: "ahrefs",     type: "number", width: 88,  planCap: 25, tooltip: "Ahrefs — keywords ranking in positions 1-3. Capped at 25 by API plan." },
+  { key: "top4to10Keywords",     label: "Top 4-10 KW",        source: "ahrefs",     type: "number", width: 92,  planCap: 25, tooltip: "Ahrefs — keywords ranking in positions 4-10. Capped at 25 by API plan." },
   { key: "informationalKeywords",label: "Informational KW",   source: "semrush",    type: "number", width: 105, tooltip: "SEMrush: count of keywords with Informational intent in top-100." },
   { key: "featuredSnippets",     label: "Featured Snippets",  source: "semrush",    type: "number", width: 115, tooltip: "SEMrush: count of keywords with a Featured Snippet SERP feature in top-100." },
 ];
@@ -367,7 +367,12 @@ function MainEvalTab({ batch }: { batch: EvalBatch }) {
                         </div>
                       ) : (
                         <div className="flex flex-col items-center gap-0.5">
-                          <EditableCell value={row.metrics?.[m.key] ?? ""} onChange={v => handleCellChange(row, m.key, v)} type={m.type} />
+                          <div className="relative">
+                            <EditableCell value={row.metrics?.[m.key] ?? ""} onChange={v => handleCellChange(row, m.key, v)} type={m.type} />
+                            {(m as any).planCap && row.metrics?.[m.key] === String((m as any).planCap) && (
+                              <span className="absolute -top-1 -right-2 text-[9px] font-bold text-amber-500 leading-none" title="Value may be higher — capped at plan limit">+</span>
+                            )}
+                          </div>
                           {hasRank && <RankBadge rank={rankVal} total={total} />}
                         </div>
                       )}

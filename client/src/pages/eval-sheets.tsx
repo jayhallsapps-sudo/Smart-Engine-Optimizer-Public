@@ -122,27 +122,28 @@ const SOURCE_STYLES: Record<string, { label: string; className: string }> = {
   rdap:     { label: "RDAP",     className: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400" },
   manual:   { label: "Manual",   className: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" },
   computed: { label: "Computed", className: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
-  "ahrefs/gsc": { label: "Ahrefs/GSC", className: "bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400" },
+  "ahrefs/gsc":   { label: "Ahrefs/GSC",   className: "bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400" },
+  "semrush/gsc":  { label: "SEMrush/GSC", className: "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400" },
 };
 
 const RAW_METRICS = [
-  { key: "whoisReg",             label: "WHOIS Reg",     source: "rdap",       type: "date",   width: 100, tooltip: "Auto-fetched via RDAP. Edit manually if incorrect." },
-  { key: "firstArchive",         label: "First Archive", source: "wayback",    type: "date",   width: 110, tooltip: "Oldest Wayback Machine snapshot. Auto-fetched." },
-  { key: "archiveUrl",           label: "Archive Link",  source: "wayback",    type: "url",    width: 85,  tooltip: "Click to open the oldest Wayback Machine snapshot in a new tab." },
-  { key: "dr",                   label: "DR",            source: "ahrefs",     type: "number", width: 60 },
-  { key: "referringDomains",     label: "Ref Domains",   source: "ahrefs",     type: "number", width: 100 },
-  { key: "backlinks",            label: "Backlinks",     source: "ahrefs",     type: "number", width: 90 },
-  { key: "organicTraffic",       label: "Org Traffic",   source: "ahrefs/gsc", type: "number", width: 100, tooltip: "Client row uses GSC clicks (3-month); competitors use Ahrefs." },
-  { key: "organicKeywords",      label: "Org Keywords",  source: "ahrefs/gsc", type: "number", width: 105, tooltip: "Client row uses GSC unique pages (3-month); competitors use Ahrefs." },
-  { key: "top10Keywords",        label: "Top 10 KW",     source: "ahrefs",     type: "number", width: 95,  tooltip: "Ahrefs Top 1-3 + Top 4-10 combined." },
-  { key: "top1to3Keywords",      label: "Top 1-3 KW",    source: "ahrefs",     type: "number", width: 88,  tooltip: "Ahrefs — keywords ranking in positions 1-3." },
-  { key: "top4to10Keywords",     label: "Top 4-10 KW",   source: "ahrefs",     type: "number", width: 92,  tooltip: "Ahrefs — keywords ranking in positions 4-10." },
-  { key: "indexedPages",         label: "Indexed Pg",    source: "semrush",    type: "number", width: 95 },
-  { key: "aiVisibilityScore",    label: "AI Vis Score",  source: "manual",     type: "number", width: 100, tooltip: "SEMrush AI Toolkit — enter manually from SEMrush AI Overview report." },
-  { key: "aiMentions",           label: "AI Mentions",   source: "manual",     type: "number", width: 98,  tooltip: "Enter manually. Count of AI Overview mentions for tracked queries." },
-  { key: "citedSources",         label: "Cited Sources", source: "manual",     type: "number", width: 105, tooltip: "Enter manually. Count of cited sources in AI Overviews for this domain." },
-  { key: "informationalKeywords",label: "Info KW",       source: "semrush",    type: "number", width: 80 },
-  { key: "featuredSnippets",     label: "Feat Snippets", source: "semrush",    type: "number", width: 110 },
+  { key: "whoisReg",             label: "WHOIS Reg",          source: "rdap",       type: "date",   width: 100, tooltip: "Auto-fetched via RDAP. Edit manually if incorrect." },
+  { key: "firstArchive",         label: "First Archive",      source: "wayback",    type: "date",   width: 110, tooltip: "Oldest Wayback Machine snapshot. Auto-fetched." },
+  { key: "archiveUrl",           label: "Archive",            source: "wayback",    type: "url",    width: 80,  tooltip: "Click to open the oldest Wayback Machine snapshot in a new tab." },
+  { key: "dr",                   label: "DR",                 source: "ahrefs",     type: "number", width: 60 },
+  { key: "referringDomains",     label: "Referring Domains",  source: "ahrefs",     type: "number", width: 115 },
+  { key: "backlinks",            label: "Backlinks",          source: "ahrefs",     type: "number", width: 90 },
+  { key: "indexedPages",         label: "Indexed Pages",      source: "semrush",    type: "number", width: 100 },
+  { key: "aiVisibilityScore",    label: "AI Visibility Score",source: "semrush",    type: "number", width: 110, tooltip: "SEMrush AI Toolkit — enter manually from SEMrush AI Overview report." },
+  { key: "aiMentions",           label: "Mentioned Responses",source: "semrush",    type: "number", width: 120, tooltip: "Enter manually. Count of AI Overview mentions for tracked queries." },
+  { key: "citedSources",         label: "Cited Sources",      source: "semrush",    type: "number", width: 105, tooltip: "Enter manually. Count of cited sources in AI Overviews for this domain." },
+  { key: "organicTraffic",       label: "Organic Traffic",    source: "semrush/gsc",type: "number", width: 105, tooltip: "Client: GSC 3-month clicks. Competitors: SEMrush (est. from top-100 kw volumes when domain_ranks unavailable)." },
+  { key: "organicKeywords",      label: "Organic Keywords",   source: "ahrefs/gsc", type: "number", width: 110, tooltip: "Client: GSC unique pages (3-month). Competitors: Ahrefs organic-keywords count." },
+  { key: "top10Keywords",        label: "Top 10 Keywords",    source: "ahrefs",     type: "number", width: 105, tooltip: "Ahrefs: Top 1-3 + Top 4-10 combined count." },
+  { key: "top1to3Keywords",      label: "Top 1-3 KW",         source: "ahrefs",     type: "number", width: 88,  tooltip: "Ahrefs — keywords ranking in positions 1-3." },
+  { key: "top4to10Keywords",     label: "Top 4-10 KW",        source: "ahrefs",     type: "number", width: 92,  tooltip: "Ahrefs — keywords ranking in positions 4-10." },
+  { key: "informationalKeywords",label: "Informational KW",   source: "semrush",    type: "number", width: 105, tooltip: "SEMrush: count of keywords with Informational intent in top-100." },
+  { key: "featuredSnippets",     label: "Featured Snippets",  source: "semrush",    type: "number", width: 115, tooltip: "SEMrush: count of keywords with a Featured Snippet SERP feature in top-100." },
 ];
 
 const DERIVED_METRICS = [
@@ -344,35 +345,51 @@ function MainEvalTab({ batch }: { batch: EvalBatch }) {
                 <TableCell>
                   <EditableCell value={row.websiteUrl ?? ""} onChange={v => updateCellMut.mutate({ id: row.id, websiteUrl: v } as any)} />
                 </TableCell>
-                {RAW_METRICS.map(m => (
-                  <TableCell key={m.key} className="text-center p-1">
-                    {m.type === "url" ? (
-                      row.metrics?.[m.key] && row.metrics[m.key] !== "—" ? (
-                        <a
-                          href={row.metrics[m.key]}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-blue-500 hover:text-blue-700 underline"
-                          title={row.metrics[m.key]}
-                          data-testid={`link-archive-${row.id}`}
-                        >
-                          Open
-                        </a>
+                {RAW_METRICS.map(m => {
+                  const rankVal = row.ranks?.[m.key];
+                  const hasRank = rankVal && rankVal !== "—";
+                  return (
+                    <TableCell key={m.key} className="text-center p-1">
+                      {m.type === "url" ? (
+                        <div className="flex flex-col items-center gap-0.5">
+                          {row.metrics?.[m.key] && row.metrics[m.key] !== "—" ? (
+                            <a
+                              href={row.metrics[m.key]}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-blue-500 hover:text-blue-700 underline"
+                              title={row.metrics[m.key]}
+                              data-testid={`link-archive-${row.id}`}
+                            >Open</a>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </div>
                       ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )
-                    ) : (
-                      <EditableCell value={row.metrics?.[m.key] ?? ""} onChange={v => handleCellChange(row, m.key, v)} type={m.type} />
-                    )}
-                  </TableCell>
-                ))}
-                {DERIVED_METRICS.map(m => (
-                  <TableCell key={m.key} className="text-center p-1 bg-blue-50/30 dark:bg-blue-900/10">
-                    {m.key === "finalScore" || m.key === "averageRank"
-                      ? <RankBadge rank={row.ranks?.[m.key] ?? row.computed?.[m.key] ?? "—"} total={total} />
-                      : <span className="text-xs text-muted-foreground">{fmtMetric(m.key, row.computed?.[m.key] ?? "—")}</span>}
-                  </TableCell>
-                ))}
+                        <div className="flex flex-col items-center gap-0.5">
+                          <EditableCell value={row.metrics?.[m.key] ?? ""} onChange={v => handleCellChange(row, m.key, v)} type={m.type} />
+                          {hasRank && <RankBadge rank={rankVal} total={total} />}
+                        </div>
+                      )}
+                    </TableCell>
+                  );
+                })}
+                {DERIVED_METRICS.map(m => {
+                  const rankVal = row.ranks?.[m.key];
+                  const hasRank = rankVal && rankVal !== "—";
+                  return (
+                    <TableCell key={m.key} className="text-center p-1 bg-blue-50/30 dark:bg-blue-900/10">
+                      {m.key === "finalScore" || m.key === "averageRank" ? (
+                        <RankBadge rank={row.ranks?.[m.key] ?? row.computed?.[m.key] ?? "—"} total={total} />
+                      ) : (
+                        <div className="flex flex-col items-center gap-0.5">
+                          <span className="text-xs text-muted-foreground">{fmtMetric(m.key, row.computed?.[m.key] ?? "—")}</span>
+                          {hasRank && <RankBadge rank={rankVal} total={total} />}
+                        </div>
+                      )}
+                    </TableCell>
+                  );
+                })}
                 <TableCell className="text-center p-1">
                   <div className="flex items-center justify-center gap-0.5">
                     <Button

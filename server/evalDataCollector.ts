@@ -93,31 +93,43 @@ export async function fetchWhoisReg(domain: string): Promise<string> {
 
 export async function fetchFirstArchive(domain: string): Promise<{ date: string; url: string }> {
   const empty = { date: DASH, url: DASH };
-  try {
-    const d = cleanDomainForApi(domain);
-    const qs = new URLSearchParams({
-      url: d,
-      output: "json",
-      limit: "1",
-      fl: "timestamp",
-      fastLatest: "false",
-      from: "19900101",
-    }).toString();
-    const resp = await fetch(`https://web.archive.org/cdx/search/cdx?${qs}`, {
-      signal: AbortSignal.timeout(18000),
-    });
-    if (!resp.ok) { console.warn(`[Wayback] non-ok status ${resp.status} for "${d}"`); return empty; }
-    const data = await resp.json();
-    // data is [[header], [row]] or [[row]] — first row after header is oldest
-    if (!Array.isArray(data) || data.length < 2) { console.log(`[Wayback] no archive found for "${d}"`); return empty; }
-    const ts = String(data[1]?.[0] ?? "");
-    if (ts.length < 8) return empty;
-    // Convert YYYYMMDDHHMMSS to YYYY-MM-DD
-    const date = `${ts.slice(0, 4)}-${ts.slice(4, 6)}-${ts.slice(6, 8)}`;
-    const url = `https://web.archive.org/web/${ts}/${d}`;
-    console.log(`[Wayback] OK for "${d}" — first=${date}`);
-    return { date, url };
-  } catch (err: any) { console.warn(`[Wayback] timeout/error for "${d}":`, err?.message ?? err); return empty; }
+  const d = cleanDomainForApi(domain);
+  const qs = new URLSearchParams({
+    url: d,
+    output: "json",
+    limit: "1",
+    fl: "timestamp",
+    fastLatest: "false",
+    from: "19900101",
+  }).toString();
+
+  async function attempt(): Promise<{ date: string; url: string } | null> {
+    try {
+      const resp = await fetch(`https://web.archive.org/cdx/search/cdx?${qs}`, {
+        signal: AbortSignal.timeout(22000),
+      });
+      if (!resp.ok) { console.warn(`[Wayback] non-ok status ${resp.status} for "${d}"`); return null; }
+      const data = await resp.json();
+      if (!Array.isArray(data) || data.length < 2) { console.log(`[Wayback] no archive found for "${d}"`); return empty; }
+      const ts = String(data[1]?.[0] ?? "");
+      if (ts.length < 8) return empty;
+      const date = `${ts.slice(0, 4)}-${ts.slice(4, 6)}-${ts.slice(6, 8)}`;
+      const url = `https://web.archive.org/web/${ts}/${d}`;
+      console.log(`[Wayback] OK for "${d}" — first=${date}`);
+      return { date, url };
+    } catch (err: any) {
+      console.warn(`[Wayback] timeout/error for "${d}":`, err?.message ?? err);
+      return null;
+    }
+  }
+
+  const first = await attempt();
+  if (first !== null) return first;
+  // Retry once after a short pause
+  console.log(`[Wayback] Retrying for "${d}"...`);
+  await new Promise(r => setTimeout(r, 2000));
+  const retry = await attempt();
+  return retry ?? empty;
 }
 
 // ─── SEMrush domain data ──────────────────────────────────────────────────────
@@ -179,8 +191,16 @@ async function semrushDomainData(apiKey: string, domain: string): Promise<{
           const hdr = rawLines[0].split(";");
           allKwLines = rawLines.slice(1); // data rows only
 
-          const fkIdx = hdr.indexOf("Fk");
-          const inIdx = hdr.indexOf("In");
+          // SEMrush returns FULL column names in the response header, not the abbreviated export_columns codes.
+          // We try both the full name and the abbreviated code as a fallback.
+          const hdri = (full: string, abbr: string) => {
+            const fi = hdr.indexOf(full);
+            return fi >= 0 ? fi : hdr.indexOf(abbr);
+          };
+          const fkIdx = hdri("SERP Features", "Fk");
+          const inIdx  = hdri("Intent", "In");
+          const poIdx  = hdri("Position", "Po");
+          const nqIdx  = hdri("Search Volume", "Nq");
 
           // organicKeywords fallback: if domain_ranks returned nothing, use the domain_organic count
           if (organicKeywords === DASH && allKwLines.length > 0) {
@@ -198,7 +218,7 @@ async function semrushDomainData(apiKey: string, domain: string): Promise<{
             if (fsCount > 0) featuredSnippets = String(fsCount);
           }
 
-          // Informational keywords: In column = "Informational"
+          // Informational keywords: Intent column = "Informational"
           if (inIdx >= 0) {
             const infoCount = allKwLines.filter(line => {
               const cols = line.split(";");
@@ -207,24 +227,20 @@ async function semrushDomainData(apiKey: string, domain: string): Promise<{
             if (infoCount > 0) informationalKeywords = String(infoCount);
           }
 
-          console.log(`[SEMrush domain_organic] OK for "${d}" — rows=${allKwLines.length} fsCount=${featuredSnippets} infoCount=${informationalKeywords}`);
+          console.log(`[SEMrush domain_organic] OK for "${d}" — rows=${allKwLines.length} fkIdx=${fkIdx} inIdx=${inIdx} poIdx=${poIdx} nqIdx=${nqIdx} fsCount=${featuredSnippets} infoCount=${informationalKeywords}`);
 
           // Estimate organic traffic from domain_organic if domain_ranks failed:
           // Sum top-100 keyword volumes × CTR proxy (pos 1=0.28, 2=0.15, 3=0.11, 4-10=0.07, 11+=0.02)
-          if (organicTraffic === DASH) {
-            const poIdx = hdr.indexOf("Po");
-            const nqIdx = hdr.indexOf("Nq");
-            if (poIdx >= 0 && nqIdx >= 0) {
-              let estTraffic = 0;
-              for (const line of allKwLines.slice(0, 100)) {
-                const cols = line.split(";");
-                const pos = parseInt(cols[poIdx] ?? "0") || 0;
-                const vol = parseInt(cols[nqIdx] ?? "0") || 0;
-                const ctr = pos === 1 ? 0.28 : pos === 2 ? 0.15 : pos === 3 ? 0.11 : pos <= 10 ? 0.07 : 0.02;
-                estTraffic += vol * ctr;
-              }
-              if (estTraffic > 0) organicTraffic = fmtNum(Math.round(estTraffic));
+          if (organicTraffic === DASH && poIdx >= 0 && nqIdx >= 0) {
+            let estTraffic = 0;
+            for (const line of allKwLines.slice(0, 100)) {
+              const cols = line.split(";");
+              const pos = parseInt(cols[poIdx] ?? "0") || 0;
+              const vol = parseInt(cols[nqIdx] ?? "0") || 0;
+              const ctr = pos === 1 ? 0.28 : pos === 2 ? 0.15 : pos === 3 ? 0.11 : pos <= 10 ? 0.07 : 0.02;
+              estTraffic += vol * ctr;
             }
+            if (estTraffic > 0) organicTraffic = fmtNum(Math.round(estTraffic));
           }
         } else {
           console.log(`[SEMrush domain_organic] No data rows for ${d}`);

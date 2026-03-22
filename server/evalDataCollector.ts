@@ -379,8 +379,8 @@ async function ahrefsOrganicKeywordsTotal(token: string, domain: string): Promis
     const d = cleanDomainForApi(domain);
     const today = new Date().toISOString().slice(0, 10);
     // Ahrefs v3 organic-keywords endpoint returns { keywords: [...] } — no meta.total.
-    // Fetch up to 1000 keywords and count; for small RV park sites this captures all.
-    const qs = new URLSearchParams({ select: "keyword", target: d, mode: "domain", limit: "1000", date: today }).toString();
+    // limit=25 matches the plan's per-query row cap; avoids billing for rows that are never returned.
+    const qs = new URLSearchParams({ select: "keyword", target: d, mode: "domain", limit: "25", date: today }).toString();
     const resp = await fetch(`https://api.ahrefs.com/v3/site-explorer/organic-keywords?${qs}`, {
       headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
       signal: AbortSignal.timeout(20000),
@@ -406,7 +406,7 @@ async function ahrefsTop1to3Count(token: string, domain: string): Promise<string
     const today = new Date().toISOString().slice(0, 10);
     // Ahrefs v3: use the boolean column "is_best_position_set_top_3" to filter keywords ranking 1-3
     const where = JSON.stringify({ field: "is_best_position_set_top_3", is: ["eq", true] });
-    const qs = new URLSearchParams({ select: "keyword", target: d, mode: "domain", limit: "1000", date: today, where }).toString();
+    const qs = new URLSearchParams({ select: "keyword", target: d, mode: "domain", limit: "25", date: today, where }).toString();
     const resp = await fetch(`https://api.ahrefs.com/v3/site-explorer/organic-keywords?${qs}`, {
       headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
       signal: AbortSignal.timeout(20000),
@@ -432,7 +432,7 @@ async function ahrefsTop4to10Count(token: string, domain: string): Promise<strin
     const today = new Date().toISOString().slice(0, 10);
     // Ahrefs v3: best_position_set enum — "top_4_10" = keywords with best position in 4-10
     const where = JSON.stringify({ field: "best_position_set", is: ["eq", "top_4_10"] });
-    const qs = new URLSearchParams({ select: "keyword", target: d, mode: "domain", limit: "1000", date: today, where }).toString();
+    const qs = new URLSearchParams({ select: "keyword", target: d, mode: "domain", limit: "25", date: today, where }).toString();
     const resp = await fetch(`https://api.ahrefs.com/v3/site-explorer/organic-keywords?${qs}`, {
       headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
       signal: AbortSignal.timeout(20000),

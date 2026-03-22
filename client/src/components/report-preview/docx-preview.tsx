@@ -564,7 +564,7 @@ function DocxSectionBlock({
             })}
             {hasNsm && (
               <div className="mt-3 border rounded-md overflow-hidden text-[11px]" style={{ borderColor: accentColor + "40" }}>
-                <div className="px-3 py-1.5 font-semibold" style={{ backgroundColor: accentColor + "18", color: accentColor }}>
+                <div className="px-3 py-1.5 font-semibold" style={{ backgroundColor: "#FEF6F1", color: accentColor, borderLeft: `4px solid ${accentColor}` }}>
                   NSM Goals — {nsmQuarter}
                 </div>
                 <table className="w-full">
@@ -653,7 +653,7 @@ function DocxSectionBlock({
         return (
           <div>
             <div className="border rounded-md overflow-hidden text-[11px]" style={{ borderColor: accentColor + "40" }}>
-              <div className="px-3 py-1.5 font-semibold text-[11px]" style={{ backgroundColor: "#FDF2F0", color: accentColor }}>
+              <div className="px-3 py-1.5 font-semibold text-[11px]" style={{ backgroundColor: "#FEF6F1", color: accentColor, borderLeft: `4px solid ${accentColor}` }}>
                 Progress &amp; Quick Wins
               </div>
               <table className="w-full text-xs border-collapse">
@@ -750,12 +750,12 @@ function DocxSectionBlock({
       )}
 
       {section.table && (
-        <div style={{ border: "1px solid #C0392B28", borderRadius: 6, overflow: "hidden", marginTop: 4 }}>
+        <div style={{ border: "1px solid #E5E7EB", borderRadius: 4, overflow: "hidden", marginTop: 4 }}>
           <table className="w-full text-xs border-collapse">
             <thead>
-              <tr style={{ backgroundColor: "#C0392B0D" }}>
+              <tr style={{ backgroundColor: "#F9FAFB" }}>
                 {section.table.headers.map(h => (
-                  <th key={h} className="text-left px-2 py-1.5 text-[9px]" style={{ color: "#C0392B", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: "1px solid #C0392B20" }}>
+                  <th key={h} className="text-left px-2 py-1.5 text-[9px]" style={{ color: "#9CA3AF", fontWeight: 500, borderBottom: "1px solid #E5E7EB" }}>
                     {h}
                   </th>
                 ))}
@@ -763,9 +763,9 @@ function DocxSectionBlock({
             </thead>
             <tbody>
               {section.table.rows.map((row, ri) => (
-                <tr key={ri} style={{ background: ri % 2 === 1 ? "#FBF8F7" : "white" }}>
+                <tr key={ri} style={{ background: "white" }}>
                   {row.map((cell, ci) => (
-                    <td key={ci} className="px-2 py-1.5 text-[10px]" style={{ borderBottom: "1px solid #F3EDED" }}>{String(cell)}</td>
+                    <td key={ci} className="px-2 py-1.5 text-[10px]" style={{ borderBottom: "1px solid #F3F4F6" }}>{String(cell)}</td>
                   ))}
                 </tr>
               ))}

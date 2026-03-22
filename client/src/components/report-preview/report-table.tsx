@@ -199,24 +199,23 @@ export function ReportTable({
   return (
     <div
       style={{
-        border: `1px solid ${accent}28`,
-        borderRadius: 6,
+        border: "1px solid #E5E7EB",
+        borderRadius: 4,
         overflow: "hidden",
         marginBottom: 12,
-        backgroundColor: "#FFFDFB",
+        backgroundColor: "#FFFFFF",
       }}
     >
       {title && (
         <div
           style={{
-            padding: "5px 10px",
+            padding: "6px 10px",
             fontWeight: 700,
             fontSize: "9px",
-            backgroundColor: `${accent}12`,
+            backgroundColor: "#FEF6F1",
             color: accent,
-            borderBottom: `1px solid ${accent}20`,
-            textTransform: "uppercase",
-            letterSpacing: "0.05em",
+            borderLeft: `4px solid ${accent}`,
+            borderBottom: "1px solid #F0DDD6",
           }}
         >
           {title}
@@ -231,19 +230,17 @@ export function ReportTable({
           </colgroup>
         )}
         <thead>
-          <tr style={{ backgroundColor: `${accent}0D` }}>
+          <tr style={{ backgroundColor: "#F9FAFB" }}>
             {headers.map((h, i) => (
               <th
                 key={i}
                 style={{
                   padding: "5px 8px",
                   textAlign: "left",
-                  fontWeight: 600,
+                  fontWeight: 500,
                   fontSize: "9px",
-                  color: accent,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.06em",
-                  borderBottom: `1px solid ${accent}20`,
+                  color: "#9CA3AF",
+                  borderBottom: "1px solid #E5E7EB",
                 }}
               >
                 {h}
@@ -256,11 +253,7 @@ export function ReportTable({
             <tr
               key={ri}
               style={{
-                backgroundColor: highlightSet.has(ri)
-                  ? "#FFFBEB"
-                  : ri % 2 === 1
-                  ? "#FBF8F7"
-                  : "white",
+                backgroundColor: highlightSet.has(ri) ? "#FFFBEB" : "white",
               }}
             >
               {row.map((cell, ci) => (
@@ -268,7 +261,7 @@ export function ReportTable({
                   key={ci}
                   style={{
                     padding: "6px 8px",
-                    borderBottom: "1px solid #F3EDED",
+                    borderBottom: "1px solid #F3F4F6",
                     verticalAlign: "top",
                     lineHeight: 1.4,
                     wordBreak: "break-word",

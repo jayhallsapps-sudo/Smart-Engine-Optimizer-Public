@@ -846,9 +846,9 @@ export function QbrPrepPreview({
                   )}
                 </colgroup>
                 <thead>
-                  <tr style={{ backgroundColor: `${ACCENT}0D` }}>
+                  <tr style={{ backgroundColor: "#F9FAFB" }}>
                     {["Topic", ...(hasTopicDeltas ? ["# Queries", "QoQ Queries", "TOTAL IMP.", "QOQ IMP."] : []), "Example Queries", "🔗 Admits"].map(h => (
-                      <th key={h} style={{ padding: "5px 8px", textAlign: h === "🔗 Admits" ? "center" : "left", fontWeight: 600, fontSize: "9px", color: ACCENT, textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: `1px solid ${ACCENT}20`, wordBreak: "break-word" }}>{h}</th>
+                      <th key={h} style={{ padding: "5px 8px", textAlign: h === "🔗 Admits" ? "center" : "left", fontWeight: 500, fontSize: "9px", color: "#9CA3AF", borderBottom: "1px solid #E5E7EB", wordBreak: "break-word" }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -919,9 +919,9 @@ export function QbrPrepPreview({
                   )}
                 </colgroup>
                 <thead>
-                  <tr style={{ backgroundColor: `${ACCENT}0D` }}>
+                  <tr style={{ backgroundColor: "#F9FAFB" }}>
                     {["Page", "Clicks", ...(hasPageDeltas ? ["QoQ Clicks", "TOTAL IMP.", "QOQ IMP.", "# Queries", "QoQ Queries"] : []), "CTR", "🔗 Admits"].map(h => (
-                      <th key={h} style={{ padding: "5px 8px", textAlign: h === "🔗 Admits" ? "center" : "left", fontWeight: 600, fontSize: "9px", color: ACCENT, textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: `1px solid ${ACCENT}20`, wordBreak: "break-word" }}>{h}</th>
+                      <th key={h} style={{ padding: "5px 8px", textAlign: h === "🔗 Admits" ? "center" : "left", fontWeight: 500, fontSize: "9px", color: "#9CA3AF", borderBottom: "1px solid #E5E7EB", wordBreak: "break-word" }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -1125,16 +1125,16 @@ export function QbrPrepPreview({
                               <col style={{ width: "7%" }} />
                             </colgroup>
                             <thead>
-                              <tr style={{ backgroundColor: `${ACCENT}0D` }}>
+                              <tr style={{ backgroundColor: "#F9FAFB" }}>
                                 {(kwSharedSource ? ["Keyword", "Suggested Type", "Target", "Why It's Suggested"] : ["Keyword", "Suggested Type", "Target", "Why It's Suggested", "Source"]).map(h => (
-                                  <th key={h} style={{ padding: "5px 8px", textAlign: "left", fontWeight: 600, fontSize: "9px", color: ACCENT, textTransform: "uppercase" as const, letterSpacing: "0.06em", borderBottom: `1px solid ${ACCENT}20`, wordBreak: "break-word" }}>{h}</th>
+                                  <th key={h} style={{ padding: "5px 8px", textAlign: "left", fontWeight: 500, fontSize: "9px", color: "#9CA3AF", borderBottom: "1px solid #E5E7EB", wordBreak: "break-word" }}>{h}</th>
                                 ))}
                                 {kwSharedSource && (
-                                  <th style={{ padding: "5px 8px", textAlign: "left", fontWeight: 600, fontSize: "9px", color: ACCENT, textTransform: "uppercase" as const, letterSpacing: "0.06em", borderBottom: `1px solid ${ACCENT}20` }}>
+                                  <th style={{ padding: "5px 8px", textAlign: "left", fontWeight: 500, fontSize: "9px", color: "#9CA3AF", borderBottom: "1px solid #E5E7EB" }}>
                                     <SourceBadge source={kwSharedSource} />
                                   </th>
                                 )}
-                                <th style={{ padding: "5px 8px", borderBottom: `1px solid ${ACCENT}20` }} />
+                                <th style={{ padding: "5px 8px", borderBottom: "1px solid #E5E7EB" }} />
                               </tr>
                             </thead>
                             <tbody>

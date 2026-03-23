@@ -293,8 +293,21 @@ const ACA_TOOLS_ANTHROPIC_FORMAT: AnthroCTool[] = [
   },
   {
     name: "get_notion_strategy_bank",
-    description: "Get the Notion Strategy Bank — contains strategy recommendations, service offerings, and playbook entries organized by category.",
-    input_schema: { type: "object", properties: {}, required: [] },
+    description: "Get entries from the Notion Strategy Bank — contains strategy recommendations, service offerings, and playbook entries organized by category. Always provide a 'search' keyword to filter entries relevant to the question (e.g. 'content', 'technical', 'backlinks'). Without a search term, only the first 120 entries are returned.",
+    input_schema: {
+      type: "object",
+      properties: {
+        search: {
+          type: "string",
+          description: "Keyword to filter entries by (case-insensitive match on service, description, and category). Use this to narrow results to what's relevant to the user's question.",
+        },
+        max_entries: {
+          type: "number",
+          description: "Maximum entries to return. Default: 120. Max allowed: 200.",
+        },
+      },
+      required: [],
+    },
   },
   {
     name: "get_saved_reports",
@@ -496,7 +509,27 @@ async function executeTool(name: string, input: Record<string, any>): Promise<st
 
       case "get_notion_strategy_bank": {
         const data = await fetchStrategyBank();
-        return JSON.stringify(data);
+        const maxEntries = Math.min(Number(input.max_entries ?? 120), 200);
+        let entries = data.entries;
+        if (input.search && typeof input.search === "string" && input.search.trim()) {
+          const kw = input.search.trim().toLowerCase();
+          entries = entries.filter(e =>
+            e.service?.toLowerCase().includes(kw) ||
+            e.description?.toLowerCase().includes(kw) ||
+            e.category?.toLowerCase().includes(kw)
+          );
+        }
+        const totalBeforeCap = entries.length;
+        entries = entries.slice(0, maxEntries);
+        return JSON.stringify({
+          fetchedAt: data.fetchedAt,
+          totalEntries: data.entries.length,
+          matchedEntries: totalBeforeCap,
+          returnedEntries: entries.length,
+          truncated: totalBeforeCap > maxEntries,
+          searchTerm: input.search ?? null,
+          entries,
+        });
       }
 
       case "get_saved_reports": {

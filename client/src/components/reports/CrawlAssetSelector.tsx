@@ -60,6 +60,8 @@ interface CrawlAssetSelectorProps {
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
+const MAX_FILES_PER_BATCH = 20;
+
 const FILE_TYPE_OPTIONS = [
   { value: "internal",         label: "Internal" },
   { value: "page_titles",      label: "Page Titles" },
@@ -195,7 +197,15 @@ export function CrawlAssetSelector({
     const files = Array.from(e.target.files ?? []);
     if (!files.length) return;
     e.target.value = "";
-    setQueuedFiles(files.map(f => ({ file: f, fileType: detectFileType(f.name), status: "pending" })));
+    const capped = files.slice(0, MAX_FILES_PER_BATCH);
+    if (files.length > MAX_FILES_PER_BATCH) {
+      toast({
+        title: `Only first ${MAX_FILES_PER_BATCH} files selected`,
+        description: `You selected ${files.length} files. Maximum is ${MAX_FILES_PER_BATCH} per batch.`,
+        variant: "destructive",
+      });
+    }
+    setQueuedFiles(capped.map(f => ({ file: f, fileType: detectFileType(f.name), status: "pending" })));
     setSessionNameInput(defaultSessionName());
     setShowQueue(true);
   };
@@ -406,7 +416,7 @@ export function CrawlAssetSelector({
             </div>
 
             <div className="space-y-2">
-              <Label className="text-xs font-medium">Files ({queuedFiles.length})</Label>
+              <Label className="text-xs font-medium">Files ({queuedFiles.length} / {MAX_FILES_PER_BATCH} max)</Label>
               <div className="border rounded-md divide-y max-h-64 overflow-y-auto">
                 {queuedFiles.map((qf, idx) => (
                   <div key={idx} className="flex items-center gap-2 px-3 py-2">

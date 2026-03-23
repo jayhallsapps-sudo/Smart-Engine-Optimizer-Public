@@ -1723,7 +1723,7 @@ export async function registerRoutes(
     );
     const report = await storage.createSfReport({ ...parsed.data, assetName });
     const allReports = await storage.getSfReports(clientId);
-    const MAX_SF_REPORTS = 24;
+    const MAX_SF_REPORTS = 60;
     if (allReports.length > MAX_SF_REPORTS) {
       const toDelete = allReports.slice(MAX_SF_REPORTS);
       for (const old of toDelete) {

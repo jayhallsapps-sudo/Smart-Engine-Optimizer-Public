@@ -46,3 +46,7 @@ integrations = ["google-drive:1.0.0", "asana:1.0.0", "google-docs:1.0.0", "notio
 
 [userenv.shared]
 ADMIN_TOKEN = "4f9c2b8d7e1a6c3f0b5d9a2e7c1f4b8d6a3e9f2c7b1d5a8e3f6c0b4d9a2e7c1"
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 20000

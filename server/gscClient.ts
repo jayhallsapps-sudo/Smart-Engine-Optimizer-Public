@@ -243,3 +243,87 @@ export function handlesGscCommand(command: Command): boolean {
     "gsc_high_impressions_low_ctr",
   ].includes(command);
 }
+
+export interface GscRawQueryParams {
+  dimensions: string[];
+  date_range?: string;
+  row_limit?: number;
+  query_filter?: string;
+  search_type?: string;
+}
+
+export async function queryGscRaw(
+  params: GscRawQueryParams,
+  client: Client
+): Promise<string> {
+  if (!client.gscSiteUrl) {
+    return JSON.stringify({ error: `GSC is not configured for ${client.name} — no site URL is set.` });
+  }
+
+  const dateRange = params.date_range || "last_90_vs_prev_90";
+  const { startDate, endDate } = dateRangeToGoogleDates(dateRange);
+  const siteUrl = client.gscSiteUrl;
+  const rowLimit = Math.min(params.row_limit ?? 25, 100);
+  const validDimensions = ["query", "page", "country", "device", "date"];
+  const dimensions = params.dimensions.filter((d) => validDimensions.includes(d));
+  if (dimensions.length === 0) {
+    return JSON.stringify({ error: `No valid dimensions provided. Valid options: ${validDimensions.join(", ")}` });
+  }
+
+  try {
+    return await tryWithGoogleTokens("google_search_console", async (accessToken) => {
+      const body: any = {
+        startDate,
+        endDate,
+        dimensions,
+        rowLimit,
+      };
+      if (params.search_type) body.searchType = params.search_type;
+
+      const dimensionFilterGroups: any[] = [];
+      if (params.query_filter) {
+        dimensionFilterGroups.push({
+          filters: [{
+            dimension: "query",
+            operator: "contains",
+            expression: params.query_filter,
+          }],
+        });
+      }
+      if (dimensionFilterGroups.length > 0) body.dimensionFilterGroups = dimensionFilterGroups;
+
+      const resp = await fetch(
+        `https://searchconsole.googleapis.com/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`,
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }
+      );
+      const data = await resp.json() as any;
+      if (!resp.ok) throw new Error(data.error?.message || `GSC API error ${resp.status}`);
+
+      const rows = data.rows ?? [];
+      const metricHeaders = ["clicks", "impressions", "ctr", "position"];
+      const headers = [...dimensions, ...metricHeaders];
+      const tableRows = rows.map((r: any) => [
+        ...r.keys,
+        formatNum(r.clicks ?? 0),
+        formatNum(r.impressions ?? 0),
+        `${((r.ctr ?? 0) * 100).toFixed(2)}%`,
+        (r.position ?? 0).toFixed(1),
+      ]);
+
+      return JSON.stringify({
+        command: "query_google_search_console_raw",
+        clientName: client.name,
+        dateRange,
+        dimensions,
+        rowCount: tableRows.length,
+        table: { headers, rows: tableRows },
+      });
+    });
+  } catch (err: any) {
+    return JSON.stringify({ error: `GSC raw query failed for ${client.name}: ${err.message}` });
+  }
+}

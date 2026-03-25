@@ -19,7 +19,7 @@ export async function seedDatabase() {
       semrushProjectId: "proj-atr-001",
       screamingFrogProfile: null,
       brandTerms: ["anchored tides", "anchored tides recovery"],
-      leadEvents: ["insurance_verification", "admissions_form", "call_click", "contact_form"],
+      leadEvents: ["phone_call", "form_submit"],
       moneyPages: ["/programs/detox", "/programs/residential", "/insurance", "/admissions", "/contact"],
       callrailOrganicSourceTerms: ["google / organic"],
       ctmOrganicSourceTerms: [],

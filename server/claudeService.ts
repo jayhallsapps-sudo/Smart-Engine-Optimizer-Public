@@ -10,8 +10,8 @@ import OpenAI from "openai";
 import * as cheerio from "cheerio";
 import { setAiActive } from "./aiProvider";
 import { storage } from "./storage";
-import { queryGsc } from "./gscClient";
-import { queryGa4 } from "./ga4Client";
+import { queryGsc, queryGscRaw } from "./gscClient";
+import { queryGa4, queryGa4Raw } from "./ga4Client";
 import { queryCallRail } from "./callrailClient";
 import { queryCtm } from "./ctmClient";
 import { querySemrush } from "./semrushClient";
@@ -72,8 +72,8 @@ function getProviderChain(): Provider[] {
 // ─── Integration → tool mapping ───────────────────────────────────────────────
 
 const INTEGRATION_TO_TOOLS: Record<string, string[]> = {
-  gsc: ["query_google_search_console"],
-  ga4: ["query_google_analytics"],
+  gsc: ["query_google_search_console", "query_google_search_console_raw"],
+  ga4: ["query_google_analytics", "query_google_analytics_raw"],
   callrail: ["query_callrail"],
   ctm: ["query_ctm"],
   semrush: ["query_semrush"],
@@ -177,6 +177,77 @@ const ACA_TOOLS_ANTHROPIC_FORMAT: AnthroCTool[] = [
         },
       },
       required: ["client_id", "command"],
+    },
+  },
+  {
+    name: "query_google_analytics_raw",
+    description: "Run a flexible, custom GA4 report with any combination of dimensions and metrics. Use this when the user asks an exploratory question not covered by the preset commands — e.g. traffic by channel, events list, device breakdown, country breakdown, or any custom dimension/metric combination. Prefer this over query_google_analytics when the preset commands don't match the question.",
+    input_schema: {
+      type: "object",
+      properties: {
+        client_id: { type: "number", description: "The client ID" },
+        dimensions: {
+          type: "array",
+          items: { type: "string" },
+          description: "GA4 dimension names to group by. Valid options: sessionDefaultChannelGrouping, landingPage, pagePath, deviceCategory, country, city, eventName, date, week, month, year, browser, operatingSystem, userAgeBracket, userGender, newVsReturning, sessionSource, sessionMedium, sessionCampaignName.",
+        },
+        metrics: {
+          type: "array",
+          items: { type: "string" },
+          description: "GA4 metric names to measure. Valid options: sessions, newUsers, totalUsers, eventCount, conversions, bounceRate, averageSessionDuration, screenPageViews, engagedSessions, engagementRate, userEngagementDuration.",
+        },
+        date_range: {
+          type: "string",
+          description: "Date range. Presets: last_14_vs_prev_14, last_30_vs_prev_30, last_90_vs_prev_90 (default), last_365_vs_prev_365, qtd. Custom: custom:YYYY-MM-DD:YYYY-MM-DD.",
+        },
+        channel_filter: {
+          type: "string",
+          description: "Optional: filter to a specific channel group exactly, e.g. 'Organic Search', 'Direct', 'Referral', 'Paid Search', 'Organic Social', 'Email'.",
+        },
+        event_filter: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional: filter to specific event names, e.g. ['phone_call', 'form_submit']. Use the client's configured leadEvents when filtering for conversion events.",
+        },
+        limit: {
+          type: "number",
+          description: "Maximum number of rows to return (default 25, max 100).",
+        },
+      },
+      required: ["client_id", "dimensions", "metrics"],
+    },
+  },
+  {
+    name: "query_google_search_console_raw",
+    description: "Run a flexible, custom GSC query with any combination of dimensions. Use this for exploratory questions not covered by preset commands — e.g. impressions by device, clicks by country, queries containing a keyword, image/video search data, or any non-standard breakdown. Prefer this over query_google_search_console when the preset commands don't cover the question.",
+    input_schema: {
+      type: "object",
+      properties: {
+        client_id: { type: "number", description: "The client ID" },
+        dimensions: {
+          type: "array",
+          items: { type: "string" },
+          description: "GSC dimensions to group by. Valid options: query, page, country, device, date. Can combine multiple.",
+        },
+        date_range: {
+          type: "string",
+          description: "Date range. Presets: last_14_vs_prev_14, last_30_vs_prev_30, last_90_vs_prev_90 (default), last_365_vs_prev_365, qtd. Custom: custom:YYYY-MM-DD:YYYY-MM-DD.",
+        },
+        row_limit: {
+          type: "number",
+          description: "Maximum number of rows (default 25, max 100).",
+        },
+        query_filter: {
+          type: "string",
+          description: "Optional: filter results to queries containing this substring (case-insensitive).",
+        },
+        search_type: {
+          type: "string",
+          enum: ["web", "image", "video"],
+          description: "Optional: search type filter (default is web).",
+        },
+      },
+      required: ["client_id", "dimensions"],
     },
   },
   {
@@ -553,6 +624,37 @@ async function executeTool(name: string, input: Record<string, any>): Promise<st
         return JSON.stringify(logs);
       }
 
+      case "query_google_analytics_raw": {
+        const client = await storage.getClient(input.client_id);
+        if (!client) return JSON.stringify({ error: "Client not found" });
+        return await queryGa4Raw(
+          {
+            dimensions: input.dimensions ?? [],
+            metrics: input.metrics ?? [],
+            date_range: input.date_range,
+            channel_filter: input.channel_filter,
+            event_filter: input.event_filter,
+            limit: input.limit,
+          },
+          client
+        );
+      }
+
+      case "query_google_search_console_raw": {
+        const client = await storage.getClient(input.client_id);
+        if (!client) return JSON.stringify({ error: "Client not found" });
+        return await queryGscRaw(
+          {
+            dimensions: input.dimensions ?? [],
+            date_range: input.date_range,
+            row_limit: input.row_limit,
+            query_filter: input.query_filter,
+            search_type: input.search_type,
+          },
+          client
+        );
+      }
+
       case "query_website": {
         const client = await storage.getClient(input.client_id);
         if (!client) return JSON.stringify({ error: "Client not found" });
@@ -623,8 +725,10 @@ AVAILABLE DATA SOURCES (via tools):
 - Notion (Strategy Bank): strategy recommendations, playbooks, service offerings
 
 TOOL ROUTING — follow this exactly:
-- Page traffic, clicks, impressions, CTR, search position → query_google_search_console
-- Organic sessions, conversions, landing page performance, leads → query_google_analytics
+- Standard report comparisons (QoQ, landing pages, funnels, YoY) → query_google_analytics (preset commands)
+- Exploratory GA4 questions (traffic by channel, events list, device breakdown, country breakdown, custom breakdowns) → query_google_analytics_raw
+- Standard GSC reports (top queries, page performance, CTR opportunities) → query_google_search_console (preset commands)
+- Exploratory GSC questions (impressions by device, clicks by country, keyword substring filter, image/video search) → query_google_search_console_raw
 - Phone calls, call volume, call-driving pages → query_callrail or query_ctm
 - Keyword footprint, competitor rankings, share of voice → query_semrush or query_ahrefs
 - Local search visibility, GBP reviews/calls/directions → query_gbp
@@ -635,6 +739,23 @@ TOOL ROUTING — follow this exactly:
 - Strategy notes, playbook recommendations → get_notion_strategy_bank
 - Page HTML content, meta tags, heading structure, on-page copy → query_website
 - NEVER use query_website to answer performance, traffic, ranking, or conversion questions.
+
+GA4 RAW QUERY REFERENCE (use with query_google_analytics_raw):
+Valid dimensions: sessionDefaultChannelGrouping, landingPage, pagePath, deviceCategory, country, city, eventName, date, week, month, year, browser, operatingSystem, userAgeBracket, userGender, newVsReturning, sessionSource, sessionMedium, sessionCampaignName.
+Valid metrics: sessions, newUsers, totalUsers, eventCount, conversions, bounceRate, averageSessionDuration, screenPageViews, engagedSessions, engagementRate, userEngagementDuration.
+- Use sessionDefaultChannelGrouping as a dimension to break down traffic by channel (Organic Search, Direct, Referral, Paid Search, Organic Social, Email, etc.)
+- Use eventName as a dimension + eventCount as a metric to see all events firing on the site
+- Use eventName as a dimension + conversions as a metric to see which events are tracked as conversions
+- Use the client's configured leadEvents as event_filter when the question is about lead conversions
+- For conversion event questions, always call get_client_details first to retrieve the client's leadEvents
+
+GSC RAW QUERY REFERENCE (use with query_google_search_console_raw):
+Valid dimensions: query, page, country, device, date (can combine multiple).
+All results include clicks, impressions, CTR, and position automatically.
+- Use device dimension to see impressions/clicks split by mobile/desktop/tablet
+- Use country dimension to see geographic breakdown
+- Use query_filter to find queries containing a specific keyword
+- Use search_type "image" or "video" to query non-web search types
 
 MANDATORY GROUNDING RULES — never violate these:
 1. ALWAYS call the appropriate tool(s) before answering any data question. Never guess or make up numbers.

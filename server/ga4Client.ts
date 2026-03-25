@@ -348,3 +348,94 @@ export function handlesGa4Command(command: Command): boolean {
     "ga4_yoy_comparison",
   ].includes(command);
 }
+
+export interface Ga4RawQueryParams {
+  dimensions: string[];
+  metrics: string[];
+  date_range?: string;
+  channel_filter?: string;
+  event_filter?: string[];
+  limit?: number;
+}
+
+export async function queryGa4Raw(
+  params: Ga4RawQueryParams,
+  client: Client
+): Promise<string> {
+  if (!client.ga4PropertyId) {
+    return JSON.stringify({ error: `GA4 is not configured for ${client.name} — no property ID is set.` });
+  }
+
+  const dateRange = params.date_range || "last_90_vs_prev_90";
+  const { startDate, endDate } = dateRangeToGoogleDates(dateRange);
+  const propertyId = client.ga4PropertyId;
+  const limit = Math.min(params.limit ?? 25, 100);
+
+  try {
+    return await tryWithGoogleTokens("google_analytics_4", async (accessToken: string) => {
+      const body: any = {
+        dateRanges: [{ startDate, endDate }],
+        dimensions: params.dimensions.map((name) => ({ name })),
+        metrics: params.metrics.map((name) => ({ name })),
+        limit,
+      };
+
+      const filters: any[] = [];
+      if (params.channel_filter) {
+        filters.push({
+          filter: {
+            fieldName: "sessionDefaultChannelGrouping",
+            stringFilter: { value: params.channel_filter, matchType: "EXACT" },
+          },
+        });
+      }
+      if (params.event_filter && params.event_filter.length > 0) {
+        filters.push({
+          filter: {
+            fieldName: "eventName",
+            inListFilter: { values: params.event_filter },
+          },
+        });
+      }
+      if (filters.length === 1) {
+        body.dimensionFilter = filters[0];
+      } else if (filters.length > 1) {
+        body.dimensionFilter = { andGroup: { expressions: filters } };
+      }
+
+      const data = await runReport(accessToken, propertyId, body);
+      const dimNames = params.dimensions;
+      const metNames = params.metrics;
+
+      const headers = [...dimNames, ...metNames];
+      const rows = (data.rows ?? []).map((row: any) => {
+        const dims = (row.dimensionValues ?? []).map((d: any) => d.value ?? "");
+        const mets = (row.metricValues ?? []).map((m: any) => {
+          const v = parseFloat(m.value ?? "0");
+          return Number.isInteger(v) ? fmtN(v) : v.toFixed(4);
+        });
+        return [...dims, ...mets];
+      });
+
+      return JSON.stringify({
+        command: "query_google_analytics_raw",
+        clientName: client.name,
+        dateRange,
+        dimensions: dimNames,
+        metrics: metNames,
+        rowCount: rows.length,
+        table: { headers, rows },
+      });
+    });
+  } catch (err: any) {
+    const msg = err.message || "";
+    const lmsg = msg.toLowerCase();
+    if (lmsg.includes("permission") || lmsg.includes("forbidden") || lmsg.includes("403") || lmsg.includes("insufficient") || lmsg.includes("not authorized")) {
+      return JSON.stringify({ error: `GA4 property ${propertyId} is not accessible with the stored credentials.` });
+    }
+    if (lmsg.includes("no credentials") || lmsg.includes("no valid credentials")) {
+      return JSON.stringify({ error: `GA4 credentials are not configured or could not be refreshed.` });
+    }
+    return JSON.stringify({ error: `GA4 raw query failed for ${client.name}: ${msg}` });
+  }
+}

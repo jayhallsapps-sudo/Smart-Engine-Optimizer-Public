@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { getAuthHeaders } from "@/lib/queryClient";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -176,7 +176,6 @@ export function CrawlAssetSelector({
   onComparisonChange,
   showComparison = false,
 }: CrawlAssetSelectorProps) {
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -309,9 +308,9 @@ export function CrawlAssetSelector({
 
   return (
     <div className="space-y-2">
-      {/* Hidden file input — triggered by the Upload option inside the dropdown */}
+      {/* File input — opened via label click (direct user gesture, supports multi-select) */}
       <input
-        ref={fileInputRef}
+        id="sf-crawl-file-input"
         type="file"
         accept=".csv"
         multiple
@@ -322,30 +321,32 @@ export function CrawlAssetSelector({
       {/* Current Crawl */}
       <div className="space-y-1">
         <Label className="text-xs font-medium text-muted-foreground">Current Crawl</Label>
-        <Select
-          value={currentCrawlId != null ? String(currentCrawlId) : ""}
-          onValueChange={v => {
-            if (v === "__upload__") { fileInputRef.current?.click(); return; }
-            onCurrentChange(v ? Number(v) : null);
-          }}
-          disabled={isLoading}
-        >
-          <SelectTrigger data-testid="select-current-crawl" className="h-8 text-xs w-full">
-            <SelectValue placeholder={isLoading ? "Loading..." : "Select crawl session..."} />
-          </SelectTrigger>
-          <SelectContent>
-            {sessions.map(s => (
-              <SelectItem key={s.primaryFileId} value={String(s.primaryFileId)} data-testid={`option-crawl-${s.primaryFileId}`}>
-                {sessionLabel(s)}
-              </SelectItem>
-            ))}
-            <SelectSeparator />
-            <SelectItem value="__upload__" data-testid="btn-upload-crawl" className="text-muted-foreground">
-              <Upload className="w-3 h-3 mr-1.5 inline-block" />
-              Upload new crawl...
-            </SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex gap-1.5">
+          <Select
+            value={currentCrawlId != null ? String(currentCrawlId) : ""}
+            onValueChange={v => onCurrentChange(v ? Number(v) : null)}
+            disabled={isLoading}
+          >
+            <SelectTrigger data-testid="select-current-crawl" className="h-8 text-xs flex-1 min-w-0">
+              <SelectValue placeholder={isLoading ? "Loading..." : "Select crawl session..."} />
+            </SelectTrigger>
+            <SelectContent>
+              {sessions.map(s => (
+                <SelectItem key={s.primaryFileId} value={String(s.primaryFileId)} data-testid={`option-crawl-${s.primaryFileId}`}>
+                  {sessionLabel(s)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <label
+            htmlFor="sf-crawl-file-input"
+            data-testid="btn-upload-crawl"
+            className="inline-flex items-center justify-center h-8 w-8 shrink-0 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground cursor-pointer transition-colors"
+            title="Upload new crawl (up to 20 CSV files)"
+          >
+            <Upload className="w-3.5 h-3.5" />
+          </label>
+        </div>
         {currentSession && currentSession.files.length > 1 && (
           <p className="text-[10px] text-muted-foreground pl-0.5">
             {currentSession.files.map(f => {
@@ -360,30 +361,31 @@ export function CrawlAssetSelector({
       {showComparison && onComparisonChange && (
         <div className="space-y-1">
           <Label className="text-xs font-medium text-muted-foreground">Comparison Crawl</Label>
-          <Select
-            value={comparisonCrawlId != null ? String(comparisonCrawlId) : ""}
-            onValueChange={v => {
-              if (v === "__upload__") { fileInputRef.current?.click(); return; }
-              onComparisonChange(v ? Number(v) : null);
-            }}
-            disabled={isLoading}
-          >
-            <SelectTrigger data-testid="select-comparison-crawl" className="h-8 text-xs w-full">
-              <SelectValue placeholder="Select comparison session..." />
-            </SelectTrigger>
-            <SelectContent>
-              {sessions.map(s => (
-                <SelectItem key={s.primaryFileId} value={String(s.primaryFileId)}>
-                  {sessionLabel(s)}
-                </SelectItem>
-              ))}
-              <SelectSeparator />
-              <SelectItem value="__upload__" className="text-muted-foreground">
-                <Upload className="w-3 h-3 mr-1.5 inline-block" />
-                Upload new crawl...
-              </SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex gap-1.5">
+            <Select
+              value={comparisonCrawlId != null ? String(comparisonCrawlId) : ""}
+              onValueChange={v => onComparisonChange(v ? Number(v) : null)}
+              disabled={isLoading}
+            >
+              <SelectTrigger data-testid="select-comparison-crawl" className="h-8 text-xs flex-1 min-w-0">
+                <SelectValue placeholder="Select comparison session..." />
+              </SelectTrigger>
+              <SelectContent>
+                {sessions.map(s => (
+                  <SelectItem key={s.primaryFileId} value={String(s.primaryFileId)}>
+                    {sessionLabel(s)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <label
+              htmlFor="sf-crawl-file-input"
+              className="inline-flex items-center justify-center h-8 w-8 shrink-0 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground cursor-pointer transition-colors"
+              title="Upload new crawl (up to 20 CSV files)"
+            >
+              <Upload className="w-3.5 h-3.5" />
+            </label>
+          </div>
           {comparisonSession && comparisonSession.files.length > 1 && (
             <p className="text-[10px] text-muted-foreground pl-0.5">
               {comparisonSession.files.map(f => {

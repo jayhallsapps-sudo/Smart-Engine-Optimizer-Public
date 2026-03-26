@@ -138,26 +138,47 @@ function ColorField({ label, value, onChange, testId }: {
   onChange: (v: string) => void;
   testId?: string;
 }) {
+  const [hex, setHex] = useState(value);
+
+  // Keep hex input in sync when value changes externally
+  useEffect(() => { setHex(value); }, [value]);
+
+  const handleHexBlur = () => {
+    // Validate and apply hex on blur
+    const cleaned = hex.startsWith("#") ? hex : `#${hex}`;
+    const valid = /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(cleaned);
+    if (valid) {
+      onChange(cleaned);
+    } else {
+      setHex(value); // revert if invalid
+    }
+  };
+
   return (
     <div className="flex items-center justify-between gap-2">
       <Label className="text-[11px] text-muted-foreground min-w-0 flex-1 truncate">{label}</Label>
       <div className="flex items-center gap-1.5 shrink-0">
-        <div
-          className="w-6 h-6 rounded border border-border shrink-0 cursor-pointer overflow-hidden"
+        <label
+          className="w-7 h-7 rounded border border-border shrink-0 cursor-pointer block relative"
           style={{ backgroundColor: value }}
+          title={`Pick ${label} color`}
         >
           <input
             type="color"
             value={value}
             onChange={e => onChange(e.target.value)}
-            className="opacity-0 w-full h-full cursor-pointer"
+            className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
             data-testid={testId}
           />
-        </div>
+        </label>
         <Input
-          value={value}
-          onChange={e => onChange(e.target.value)}
+          value={hex}
+          onChange={e => { setHex(e.target.value); if (/^#[0-9A-Fa-f]{6}$/.test(e.target.value)) onChange(e.target.value); }}
+          onBlur={handleHexBlur}
+          onKeyDown={e => { if (e.key === "Enter") handleHexBlur(); }}
           className="h-6 w-20 text-[10px] px-1.5 font-mono"
+          placeholder="#000000"
+          data-testid={testId ? `${testId}-hex` : undefined}
         />
       </div>
     </div>
@@ -560,7 +581,45 @@ export default function ThemePage() {
   useFontInjection(draft.headingFont, draft.bodyFont);
 
   const update = useCallback(<K extends keyof ThemeTokens>(key: K, value: ThemeTokens[K]) => {
-    setDraft(prev => ({ ...prev, [key]: value }));
+    setDraft(prev => {
+      const next = { ...prev, [key]: value };
+
+      // Smart cascade: when primary or secondary color changes, update all
+      // backgrounds and tokens that currently reference those colors so the
+      // preview immediately reflects the change everywhere it matters.
+      if (key === "primaryColor") {
+        const oldColor = prev.primaryColor;
+        const newColor = value as string;
+        const updatedBgs = { ...prev.backgrounds };
+        for (const bgKey of Object.keys(updatedBgs) as (keyof typeof updatedBgs)[]) {
+          const bg = { ...updatedBgs[bgKey] };
+          if (bg.solidColor === oldColor) bg.solidColor = newColor;
+          if (bg.gradientFrom === oldColor) bg.gradientFrom = newColor;
+          if (bg.gradientTo === oldColor) bg.gradientTo = newColor;
+          updatedBgs[bgKey] = bg;
+        }
+        next.backgrounds = updatedBgs;
+        if (prev.headerColor === oldColor) (next as any).headerColor = newColor;
+        if (prev.tableHeaderBg === oldColor) (next as any).tableHeaderBg = newColor;
+        if (prev.calloutBorderColor === oldColor) (next as any).calloutBorderColor = newColor;
+      }
+
+      if (key === "secondaryColor") {
+        const oldColor = prev.secondaryColor;
+        const newColor = value as string;
+        const updatedBgs = { ...prev.backgrounds };
+        for (const bgKey of Object.keys(updatedBgs) as (keyof typeof updatedBgs)[]) {
+          const bg = { ...updatedBgs[bgKey] };
+          if (bg.solidColor === oldColor) bg.solidColor = newColor;
+          if (bg.gradientFrom === oldColor) bg.gradientFrom = newColor;
+          if (bg.gradientTo === oldColor) bg.gradientTo = newColor;
+          updatedBgs[bgKey] = bg;
+        }
+        next.backgrounds = updatedBgs;
+      }
+
+      return next;
+    });
     setIsDirty(true);
   }, []);
 
@@ -862,6 +921,9 @@ export default function ThemePage() {
 
           <Section title="Colors" icon={Palette}>
             <div className="space-y-2">
+              <p className="text-[10px] text-muted-foreground leading-snug bg-muted/40 rounded px-2 py-1.5">
+                Changing Primary or Secondary cascades to slide backgrounds, headers, and tables that use that color.
+              </p>
               <ColorField label="Primary" value={draft.primaryColor} onChange={c => update("primaryColor", c)} testId="color-primary" />
               <ColorField label="Secondary" value={draft.secondaryColor} onChange={c => update("secondaryColor", c)} testId="color-secondary" />
               <ColorField label="Accent" value={draft.accentColor} onChange={c => update("accentColor", c)} testId="color-accent" />

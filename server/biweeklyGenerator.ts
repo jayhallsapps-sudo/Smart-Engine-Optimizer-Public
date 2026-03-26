@@ -187,16 +187,13 @@ function buildInternalAmNotes(params: {
   newContentDid: BulletItem[];
   newContentNext: BulletItem[];
   optDid: BulletItem[];
-  sfPriorities: string[];
-  hasSf: boolean;
   noAirtable: boolean;
   windowLabel: string;
 }): InternalAmNotes {
-  const { clientName, nsmGoals, newContentDid, newContentNext, optDid, sfPriorities, hasSf, noAirtable, windowLabel } = params;
+  const { clientName, nsmGoals, newContentDid, newContentNext, optDid, noAirtable, windowLabel } = params;
 
   const missingInputs: string[] = [];
   if (noAirtable) missingInputs.push("Airtable not connected — content rows will be empty");
-  if (!hasSf) missingInputs.push("No Screaming Frog crawl uploaded — technical priorities are estimated");
   if (!nsmGoals || (!nsmGoals.sessionsGoal || nsmGoals.sessionsGoal === "—")) missingInputs.push("NSM sheet data not found — verify Google Sheets connection");
 
   const talkingPoints: string[] = [];
@@ -205,11 +202,9 @@ function buildInternalAmNotes(params: {
   }
   if (newContentDid.length > 0) talkingPoints.push(`${newContentDid.length} content item${newContentDid.length !== 1 ? "s" : ""} published/completed this period`);
   if (optDid.length > 0) talkingPoints.push(`${optDid.length} optimization item${optDid.length !== 1 ? "s" : ""} completed`);
-  if (sfPriorities.length > 0 && hasSf) talkingPoints.push(`Top technical issue: ${sfPriorities[0]}`);
   if (newContentNext.length > 0) talkingPoints.push(`${newContentNext.length} content item${newContentNext.length !== 1 ? "s" : ""} planned for the next 2 weeks`);
 
   const risksCarryForwards: string[] = [];
-  if (!hasSf) risksCarryForwards.push("Technical SEO 'What's Next' uses estimated priorities — upload a fresh Screaming Frog crawl to confirm");
   if (noAirtable) risksCarryForwards.push("Content rows are empty until Airtable is connected");
 
   const clientQuestions = [
@@ -298,8 +293,8 @@ SECTION RULES:
 - content.whatsNext: narrate what content is being written or planned next. Name the specific article/topic.
 - optimization.whatWeDid: narrate specific page improvements made (title tags, meta, structure, CRO changes).
 - optimization.whatsNext: narrate what optimization work is queued up next.
-- technical.whatWeDid: narrate specific technical fixes completed (crawl issues resolved, redirects fixed, etc).
-- technical.whatsNext: narrate upcoming technical priorities with brief rationale.
+- technical.whatWeDid: narrate specific technical SEO tasks completed (from Asana). Keep it specific and outcome-focused.
+- technical.whatsNext: narrate upcoming technical SEO tasks queued in Asana with brief rationale.
 - local.whatWeDid: narrate GBP or local SEO work completed.
 - local.whatsNext: narrate upcoming local/GBP priorities.
 
@@ -529,9 +524,8 @@ export async function generateBiweekly(input: {
   const optDid: BulletItem[] = noAirtable ? [] : publishedOptimization.map(i => ({ text: i.task, url: i.url ?? undefined, source: "Airtable" }));
   const optNext: BulletItem[] = noAirtable ? [] : productionOptimization.map(i => ({ text: i.task, source: "Airtable" }));
 
-  const techDid: BulletItem[] = [...sfDidItems, ...asanaTechDid];
-  const sfPrioritiesRich: BulletItem[] = sfPriorities.map(t => ({ text: t, source: hasSf ? "Screaming Frog" : undefined }));
-  const techNext: BulletItem[] = sfPrioritiesRich.length > 0 ? sfPrioritiesRich : [...asanaTechNext];
+  const techDid: BulletItem[] = [...asanaTechDid];
+  const techNext: BulletItem[] = [...asanaTechNext];
 
   const asanaLocalDid: BulletItem[] = (asanaCompletedByCategory["Local SEO"] ?? []).map(t => ({ text: t.name, source: "Asana" }));
   const asanaLocalNext: BulletItem[] = (asanaUpcomingByCategory["Local SEO"] ?? []).map(t => ({ text: t.name, source: "Asana" }));
@@ -556,8 +550,8 @@ export async function generateBiweekly(input: {
   const finalNewContentNext = n ? applyNarration(n.content.whatsNext,        newContentNext,  "Airtable")                       : newContentNext;
   const finalOptDid         = n ? applyNarration(n.optimization.whatWeDid,   optDid,          "Airtable")                       : optDid;
   const finalOptNext        = n ? applyNarration(n.optimization.whatsNext,   optNext,         "Airtable")                       : optNext;
-  const finalTechDid        = n ? applyNarration(n.technical.whatWeDid,      techDid,         hasSf ? "Screaming Frog" : "Asana") : techDid;
-  const finalTechNext       = n ? applyNarration(n.technical.whatsNext,      techNext,        hasSf ? "Screaming Frog" : "Asana") : techNext;
+  const finalTechDid        = n ? applyNarration(n.technical.whatWeDid,      techDid,         "Asana") : techDid;
+  const finalTechNext       = n ? applyNarration(n.technical.whatsNext,      techNext,        "Asana") : techNext;
   const finalLocalDid       = n ? applyNarration(n.local.whatWeDid,          asanaLocalDid,   "Asana")                          : asanaLocalDid;
   const finalLocalNext      = n ? applyNarration(n.local.whatsNext,          asanaLocalNext,  "Asana")                          : asanaLocalNext;
 
@@ -580,10 +574,8 @@ export async function generateBiweekly(input: {
       "Technical SEO",
       finalTechDid,
       finalTechNext,
-      hasSf
-        ? "No completed technical fixes were logged for this reporting window. Active issues identified in the latest crawl are under review."
-        : "No completed technical SEO work was logged for this reporting window.",
-      techNext[0]?.text ?? "Review Core Web Vitals scores and resolve any crawl errors flagged in the latest Screaming Frog audit."
+      "No completed technical SEO work was logged for this reporting window.",
+      techNext[0]?.text ?? "Review Core Web Vitals scores and address any open technical issues in the queue."
     ),
     makeRow(
       "Local SEO",
@@ -625,8 +617,6 @@ export async function generateBiweekly(input: {
     newContentDid,
     newContentNext,
     optDid,
-    sfPriorities,
-    hasSf,
     noAirtable,
     windowLabel,
   });

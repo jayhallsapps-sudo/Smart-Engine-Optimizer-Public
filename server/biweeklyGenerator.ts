@@ -235,10 +235,6 @@ async function narrateBiweeklySections(params: {
   newContentNext: BulletItem[];
   optDid: BulletItem[];
   optNext: BulletItem[];
-  techDid: BulletItem[];
-  techNext: BulletItem[];
-  localDid: BulletItem[];
-  localNext: BulletItem[];
 }): Promise<{ narration: NarratedSections; provider: string } | null> {
   const hasAI = !!(
     process.env.ANTHROPIC_API_KEY ||
@@ -251,8 +247,6 @@ async function narrateBiweeklySections(params: {
   const allRaw = [
     ...params.newContentDid, ...params.newContentNext,
     ...params.optDid, ...params.optNext,
-    ...params.techDid, ...params.techNext,
-    ...params.localDid, ...params.localNext,
   ];
   if (allRaw.length === 0) return null;
 
@@ -266,14 +260,6 @@ async function narrateBiweeklySections(params: {
     optimization: {
       completedThisPeriod: params.optDid.map(i => i.text),
       upcomingNextPeriod: params.optNext.map(i => i.text),
-    },
-    technical: {
-      completedThisPeriod: params.techDid.map(i => i.text),
-      upcomingNextPeriod: params.techNext.map(i => i.text),
-    },
-    local: {
-      completedThisPeriod: params.localDid.map(i => i.text),
-      upcomingNextPeriod: params.localNext.map(i => i.text),
     },
   };
 
@@ -293,10 +279,6 @@ SECTION RULES:
 - content.whatsNext: narrate what content is being written or planned next. Name the specific article/topic.
 - optimization.whatWeDid: narrate specific page improvements made (title tags, meta, structure, CRO changes).
 - optimization.whatsNext: narrate what optimization work is queued up next.
-- technical.whatWeDid: narrate specific technical SEO tasks completed (from Asana). Keep it specific and outcome-focused.
-- technical.whatsNext: narrate upcoming technical SEO tasks queued in Asana with brief rationale.
-- local.whatWeDid: narrate GBP or local SEO work completed.
-- local.whatsNext: narrate upcoming local/GBP priorities.
 
 FALLBACK RULE: If a section has zero items in the evidence, return an empty array for that sub-key. Do NOT invent content or write generic filler.`;
 
@@ -309,9 +291,7 @@ Return ONLY a JSON object. Use 1–3 bullets per non-empty section. Empty sectio
 
 {
   "content": { "whatWeDid": [], "whatsNext": [] },
-  "optimization": { "whatWeDid": [], "whatsNext": [] },
-  "technical": { "whatWeDid": [], "whatsNext": [] },
-  "local": { "whatWeDid": [], "whatsNext": [] }
+  "optimization": { "whatWeDid": [], "whatsNext": [] }
 }`;
 
   try {
@@ -538,10 +518,6 @@ export async function generateBiweekly(input: {
     newContentNext,
     optDid,
     optNext,
-    techDid,
-    techNext,
-    localDid: asanaLocalDid,
-    localNext: asanaLocalNext,
   });
 
   const n = narrationResult?.narration;
@@ -550,10 +526,12 @@ export async function generateBiweekly(input: {
   const finalNewContentNext = n ? applyNarration(n.content.whatsNext,        newContentNext,  "Airtable")                       : newContentNext;
   const finalOptDid         = n ? applyNarration(n.optimization.whatWeDid,   optDid,          "Airtable")                       : optDid;
   const finalOptNext        = n ? applyNarration(n.optimization.whatsNext,   optNext,         "Airtable")                       : optNext;
-  const finalTechDid        = n ? applyNarration(n.technical.whatWeDid,      techDid,         "Asana") : techDid;
-  const finalTechNext       = n ? applyNarration(n.technical.whatsNext,      techNext,        "Asana") : techNext;
-  const finalLocalDid       = n ? applyNarration(n.local.whatWeDid,          asanaLocalDid,   "Asana")                          : asanaLocalDid;
-  const finalLocalNext      = n ? applyNarration(n.local.whatsNext,          asanaLocalNext,  "Asana")                          : asanaLocalNext;
+  // Technical SEO and Local SEO come from Asana and are already in client-ready language.
+  // Do NOT pass through AI narration — use verbatim task names to avoid hallucination.
+  const finalTechDid        = techDid;
+  const finalTechNext       = techNext;
+  const finalLocalDid       = asanaLocalDid;
+  const finalLocalNext      = asanaLocalNext;
 
   const workLog: NonNullable<DocxSection["workLog"]> = [
     makeRow(

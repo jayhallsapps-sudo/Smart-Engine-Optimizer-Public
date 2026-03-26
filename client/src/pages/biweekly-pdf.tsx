@@ -9,6 +9,15 @@ function applyBulletEdits(bullets: string[], sectionId: string, edits: Record<st
   return bullets.map((b, i) => edits[`${sectionId}_bullet_${i}`] ?? b);
 }
 
+function parseCustomRows(edits: Record<string, string>, tableId: string): string[][] {
+  try {
+    const raw = edits["__cr__" + tableId];
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch { return []; }
+}
+
 function applyWorkLogEdits(workLog: any[], sectionId: string, edits: Record<string, string>): any[] {
   return workLog.map((row: any, ri: number) => {
     const editedDid = edits[`${sectionId}_worklog_${ri}_did`];
@@ -221,9 +230,18 @@ export default function BiweeklyPdf() {
   const partnerBullets = partnerSection
     ? applyBulletEdits(partnerSection.bullets ?? [], "bw_partnership", edits)
     : [];
-  const workLog = progressSection?.workLog?.length
+  const baseWorkLog = progressSection?.workLog?.length
     ? applyWorkLogEdits(progressSection.workLog, "bw_progress", edits)
     : [];
+  const crRows = parseCustomRows(edits, "bw_progress").map(cr => ({
+    area: cr[0] ?? "",
+    items: (cr[1] ?? "").split("\n").filter(Boolean).map(t => ({ text: t })),
+    nextItemsRich: (cr[2] ?? "").split("\n").filter(Boolean).map(t => ({ text: t })),
+  }));
+  const workLog = [...baseWorkLog, ...crRows];
+
+  const nsmNotes = edits["bw_nsm_notes"];
+  const hasNsmNotes = nsmNotes && nsmNotes.trim() && nsmNotes !== "Add notes on NSM progress...";
 
   return (
     <div data-report-root style={{ background: "white", margin: 0, padding: 0 }}>
@@ -281,6 +299,11 @@ export default function BiweeklyPdf() {
             <div style={{ marginBottom: "16px" }}>
               <SectionHeading num={2} title="Performance Pulse" />
               {pulseSection.metrics && <PulseParagraph metrics={pulseSection.metrics} />}
+              {hasNsmNotes && (
+                <div style={{ marginTop: "8px", padding: "8px 12px", backgroundColor: "#F9FAFB", borderLeft: `3px solid ${ACCENT}`, borderRadius: "0 4px 4px 0", fontSize: "11px", color: "#374151", whiteSpace: "pre-wrap" }}>
+                  {nsmNotes}
+                </div>
+              )}
             </div>
           )}
 

@@ -257,9 +257,9 @@ const PREVIEW_TABS: { id: PreviewSlide; label: string }[] = [
 
 const PAGE_TABS: { id: PreviewPage; label: string }[] = [
   { id: "cover", label: "Cover" },
-  { id: "executive", label: "Summary" },
-  { id: "data", label: "Data Table" },
-  { id: "detail", label: "Detail" },
+  { id: "executive", label: "Exec. Summary" },
+  { id: "data", label: "GSC Data" },
+  { id: "detail", label: "Sprint" },
 ];
 
 function SlideFrame({ tokens, children, bgKey }: {
@@ -510,134 +510,240 @@ function SummarySlidePreview({ tokens }: { tokens: ThemeTokens }) {
   );
 }
 
-// ─── Page Previews (DOCX-style letter/A4 pages) ──────────────────────────────
+// ─── Page Previews (DOCX-style, Bi-Weekly report source of truth) ────────────
 
-function PageFrame({ tokens, children }: { tokens: ThemeTokens; children: React.ReactNode }) {
-  const bg = tokens.backgrounds.global;
+// Natural page dimensions — content is rendered at full size and scaled to fit
+const PAGE_W = 612; // letter width in points (px at 96dpi equiv)
+const PAGE_H = PAGE_W * (11 / 8.5); // ~792px
+
+function usePageScale(ref: React.RefObject<HTMLDivElement>) {
+  const [scale, setScale] = useState(1);
+  useEffect(() => {
+    if (!ref.current) return;
+    const obs = new ResizeObserver(entries => {
+      const w = entries[0].contentRect.width;
+      setScale(w / PAGE_W);
+    });
+    obs.observe(ref.current);
+    return () => obs.disconnect();
+  }, [ref]);
+  return scale;
+}
+
+function PageFrame({ tokens, children, pageNum = 1 }: { tokens: ThemeTokens; children: React.ReactNode; pageNum?: number }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const scale = usePageScale(containerRef);
+  const br = Math.round(tokens.borderRadius / 4);
+
   return (
     <div
-      className="relative w-full flex flex-col overflow-hidden shadow-md"
-      style={{
-        ...bgStyle(bg),
-        aspectRatio: "8.5/11",
-        fontFamily: tokens.bodyFont,
-        borderRadius: `${tokens.borderRadius / 3}px`,
-      }}
+      ref={containerRef}
+      className="w-full shadow-lg"
+      style={{ aspectRatio: `${PAGE_W} / ${PAGE_H}`, overflow: "hidden", borderRadius: `${br}px` }}
     >
-      {/* Page header bar */}
-      <div
-        className="w-full flex items-center justify-between px-5 shrink-0"
-        style={{ backgroundColor: tokens.headerColor, minHeight: "32px" }}
-      >
-        <span style={{ color: tokens.headerTextColor, fontFamily: tokens.headingFont, fontSize: "10px", fontWeight: tokens.headingWeight }}>
-          {tokens.brandName}
-        </span>
-        <span style={{ color: `${tokens.headerTextColor}99`, fontSize: "8px" }}>{tokens.tagline}</span>
-      </div>
-      {/* Page body */}
-      <div className="flex-1 min-h-0 px-8 py-5 flex flex-col gap-3 overflow-hidden">
-        {children}
-      </div>
-      {/* Page footer */}
-      <div
-        className="w-full flex items-center justify-between px-5 shrink-0"
-        style={{ backgroundColor: tokens.footerColor, minHeight: "22px" }}
-      >
-        <span style={{ color: tokens.footerTextColor, fontSize: "7px" }}>Confidential · {tokens.brandName}</span>
-        {tokens.showPageNumbers && <span style={{ color: tokens.footerTextColor, fontSize: "7px" }}>1</span>}
+      <div style={{
+        width: `${PAGE_W}px`,
+        height: `${PAGE_H}px`,
+        transform: `scale(${scale})`,
+        transformOrigin: "top left",
+        display: "flex",
+        flexDirection: "column",
+        ...bgStyle(tokens.backgrounds.global),
+        fontFamily: tokens.bodyFont,
+      }}>
+        {/* Header */}
+        <div style={{ backgroundColor: tokens.headerColor, height: "46px", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 36px", flexShrink: 0 }}>
+          <span style={{ color: tokens.headerTextColor, fontFamily: tokens.headingFont, fontSize: "13px", fontWeight: tokens.headingWeight, letterSpacing: "0.02em" }}>
+            {tokens.brandName}
+          </span>
+          <span style={{ color: `${tokens.headerTextColor}B0`, fontSize: "11px", fontFamily: tokens.bodyFont }}>
+            {tokens.tagline}
+          </span>
+        </div>
+        {/* Body */}
+        <div style={{ flex: 1, padding: "28px 40px 20px", display: "flex", flexDirection: "column", gap: "16px" }}>
+          {children}
+        </div>
+        {/* Footer */}
+        <div style={{ height: "30px", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 36px", flexShrink: 0, backgroundColor: tokens.footerColor, borderTop: `1px solid ${tokens.tableBorderColor}` }}>
+          <span style={{ color: tokens.footerTextColor, fontSize: "10px", fontFamily: tokens.bodyFont }}>Confidential — {tokens.brandName}</span>
+          {tokens.showPageNumbers && <span style={{ color: tokens.footerTextColor, fontSize: "10px" }}>Page {pageNum}</span>}
+        </div>
       </div>
     </div>
   );
 }
 
+// Shared sub-components for pages
+function PageSectionTitle({ tokens, children }: { tokens: ThemeTokens; children: React.ReactNode }) {
+  return (
+    <div>
+      <h1 style={{ fontFamily: tokens.headingFont, fontSize: `${tokens.headingMD}px`, fontWeight: tokens.headingWeight, color: tokens.primaryColor, margin: 0, lineHeight: 1.2 }}>
+        {children}
+      </h1>
+      <div style={{ height: "2px", backgroundColor: tokens.secondaryColor, width: "48px", marginTop: "6px", borderRadius: "2px" }} />
+    </div>
+  );
+}
+
+function PageSubTitle({ tokens, children }: { tokens: ThemeTokens; children: React.ReactNode }) {
+  return (
+    <h2 style={{ fontFamily: tokens.headingFont, fontSize: `${tokens.headingSM}px`, fontWeight: tokens.headingWeight, color: tokens.primaryColor, margin: 0, display: "flex", alignItems: "center", gap: "8px" }}>
+      <span style={{ display: "inline-block", width: "4px", height: "14px", backgroundColor: tokens.secondaryColor, borderRadius: "2px", flexShrink: 0 }} />
+      {children}
+    </h2>
+  );
+}
+
+function PageBullet({ tokens, children, accent = false }: { tokens: ThemeTokens; children: React.ReactNode; accent?: boolean }) {
+  return (
+    <div style={{ display: "flex", alignItems: "flex-start", gap: "10px" }}>
+      <div style={{ width: "6px", height: "6px", borderRadius: "50%", backgroundColor: accent ? tokens.accentColor : tokens.secondaryColor, flexShrink: 0, marginTop: "5px" }} />
+      <span style={{ fontFamily: tokens.bodyFont, fontSize: `${tokens.bodyMD}px`, color: "#334155", lineHeight: 1.55 }}>{children}</span>
+    </div>
+  );
+}
+
+function PageCallout({ tokens, children }: { tokens: ThemeTokens; children: React.ReactNode }) {
+  return (
+    <div style={{ backgroundColor: tokens.calloutBg, border: `1px solid ${tokens.calloutBorderColor}`, borderLeft: `3px solid ${tokens.calloutBorderColor}`, borderRadius: `${Math.round(tokens.borderRadius / 4)}px`, padding: "10px 14px" }}>
+      <span style={{ fontFamily: tokens.bodyFont, fontSize: `${tokens.bodySM}px`, color: tokens.calloutText, lineHeight: 1.55 }}>{children}</span>
+    </div>
+  );
+}
+
+// ── Page 1: Cover ──────────────────────────────────────────────────────────────
 function CoverPagePreview({ tokens }: { tokens: ThemeTokens }) {
   return (
-    <PageFrame tokens={tokens}>
-      <div className="flex-1 flex flex-col justify-center gap-4">
-        <div className="w-12 h-1" style={{ backgroundColor: tokens.secondaryColor }} />
-        <div>
-          <h1 style={{ fontFamily: tokens.headingFont, fontSize: `${tokens.headingXL * 0.45}px`, fontWeight: tokens.headingWeight, color: tokens.primaryColor, lineHeight: 1.2 }}>
+    <PageFrame tokens={tokens} pageNum={1}>
+      {/* Title block — centered vertically by pushing with spacer */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: "24px" }}>
+        {/* Accent bar */}
+        <div style={{ width: "64px", height: "4px", backgroundColor: tokens.secondaryColor, borderRadius: "2px" }} />
+
+        {/* Report title */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+          <h1 style={{ fontFamily: tokens.headingFont, fontSize: `${tokens.headingXL}px`, fontWeight: tokens.headingWeight, color: tokens.primaryColor, lineHeight: 1.15, margin: 0 }}>
             Bi-Weekly SEO Report
           </h1>
-          <p style={{ fontFamily: tokens.bodyFont, fontSize: `${tokens.bodyMD * 0.75}px`, color: "#64748B", marginTop: "6px" }}>
-            Anchored Tides Recovery · October 1–15, 2025
+          <p style={{ fontFamily: tokens.bodyFont, fontSize: `${tokens.bodyLG}px`, color: "#64748B", margin: 0 }}>
+            Anchored Tides Recovery
+          </p>
+          <p style={{ fontFamily: tokens.bodyFont, fontSize: `${tokens.bodyMD}px`, color: "#94A3B8", margin: 0 }}>
+            October 1–15, 2025 · Sprint 21
           </p>
         </div>
-        <div className="space-y-1.5" style={{ borderLeft: `3px solid ${tokens.primaryColor}`, paddingLeft: "10px" }}>
-          <p style={{ fontFamily: tokens.bodyFont, fontSize: `${tokens.bodySM * 0.75}px`, color: "#334155" }}>Prepared by: {tokens.brandName}</p>
-          <p style={{ fontFamily: tokens.bodyFont, fontSize: `${tokens.bodySM * 0.75}px`, color: "#334155" }}>Period: Oct 1–15, 2025</p>
-          <p style={{ fontFamily: tokens.bodyFont, fontSize: `${tokens.bodySM * 0.75}px`, color: "#334155" }}>Report Type: Bi-Weekly</p>
+
+        {/* Meta info block */}
+        <div style={{ borderLeft: `3px solid ${tokens.primaryColor}`, paddingLeft: "14px", display: "flex", flexDirection: "column", gap: "6px", marginTop: "8px" }}>
+          {[
+            ["Prepared by", tokens.brandName],
+            ["Report period", "Oct 1–15, 2025"],
+            ["Report type", "Bi-Weekly"],
+            ["Next report", "Oct 31, 2025"],
+          ].map(([label, val]) => (
+            <div key={label} style={{ display: "flex", gap: "8px" }}>
+              <span style={{ fontFamily: tokens.bodyFont, fontSize: `${tokens.bodySM}px`, color: "#94A3B8", minWidth: "100px" }}>{label}</span>
+              <span style={{ fontFamily: tokens.bodyFont, fontSize: `${tokens.bodySM}px`, color: "#334155", fontWeight: 600 }}>{val}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* NSM snapshot */}
+        <div style={{ backgroundColor: tokens.calloutBg, border: `1px solid ${tokens.calloutBorderColor}`, borderRadius: `${Math.round(tokens.borderRadius / 4)}px`, padding: "12px 16px", display: "flex", gap: "32px" }}>
+          {[
+            ["Q4 Goal", "5,400 sessions"],
+            ["QTD Actual", "4,821 sessions"],
+            ["Pace", "On track ✓"],
+          ].map(([label, val]) => (
+            <div key={label} style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+              <span style={{ fontFamily: tokens.bodyFont, fontSize: `${tokens.bodySM}px`, color: "#94A3B8" }}>{label}</span>
+              <span style={{ fontFamily: tokens.headingFont, fontSize: `${tokens.headingSM}px`, fontWeight: tokens.headingWeight, color: tokens.primaryColor }}>{val}</span>
+            </div>
+          ))}
         </div>
       </div>
     </PageFrame>
   );
 }
 
+// ── Page 2: Executive Summary ──────────────────────────────────────────────────
 function ExecutiveSummaryPagePreview({ tokens }: { tokens: ThemeTokens }) {
   const kpis = [
     { label: "Organic Sessions", value: "4,821", delta: "+12%", up: true },
     { label: "Organic Clicks", value: "2,103", delta: "+8%", up: true },
-    { label: "Avg. Position", value: "14.2", delta: "−1.3", up: true },
-    { label: "Total Calls", value: "38", delta: "−4%", up: false },
+    { label: "Avg. Position", value: "14.2", delta: "↑1.3 pos", up: true },
+    { label: "Organic Calls", value: "38", delta: "−4%", up: false },
   ];
   return (
-    <PageFrame tokens={tokens}>
-      <h1 style={{ fontFamily: tokens.headingFont, fontSize: `${tokens.headingMD * 0.65}px`, fontWeight: tokens.headingWeight, color: tokens.primaryColor }}>
-        Executive Summary
-      </h1>
-      <div className="w-full h-px" style={{ backgroundColor: tokens.primaryColor, opacity: 0.2 }} />
-      <p style={{ fontFamily: tokens.bodyFont, fontSize: `${tokens.bodyMD * 0.7}px`, color: "#334155", lineHeight: 1.6 }}>
-        Organic performance continued its positive trend this period. Sessions grew 12% week-over-week driven by improved rankings on high-intent treatment keywords. Call volume from organic sources remains healthy at 38 contacts.
-      </p>
-      <div className="grid grid-cols-4 gap-2">
+    <PageFrame tokens={tokens} pageNum={2}>
+      <PageSectionTitle tokens={tokens}>Executive Summary</PageSectionTitle>
+
+      {/* QTD pacing callout */}
+      <div style={{ backgroundColor: `${tokens.primaryColor}0D`, border: `1px solid ${tokens.primaryColor}30`, borderRadius: `${Math.round(tokens.borderRadius / 4)}px`, padding: "10px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ fontFamily: tokens.bodyFont, fontSize: `${tokens.bodySM}px`, color: tokens.primaryColor, fontWeight: 600 }}>Q4 NSM Pacing</span>
+        <span style={{ fontFamily: tokens.headingFont, fontSize: `${tokens.bodyMD}px`, fontWeight: tokens.headingWeight, color: tokens.primaryColor }}>4,821 / 5,400 sessions — On Track</span>
+        <span style={{ fontFamily: tokens.bodyFont, fontSize: `${tokens.bodySM}px`, color: tokens.successColor, fontWeight: 700 }}>89%</span>
+      </div>
+
+      {/* KPI cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: "10px" }}>
         {kpis.map(k => (
-          <div key={k.label} className="p-2 rounded" style={{ backgroundColor: tokens.cardBg, border: `1px solid ${tokens.cardBorderColor}`, borderRadius: `${tokens.borderRadius / 3}px` }}>
-            <p style={{ fontSize: "6px", color: "#64748B", fontFamily: tokens.bodyFont }}>{k.label}</p>
-            <p style={{ fontFamily: tokens.headingFont, fontSize: `${tokens.headingMD * 0.6}px`, fontWeight: tokens.headingWeight, color: tokens.primaryColor }}>{k.value}</p>
-            <p style={{ fontSize: "6px", fontWeight: 600, color: k.up ? tokens.successColor : tokens.errorColor }}>{k.delta}</p>
+          <div key={k.label} style={{ backgroundColor: tokens.cardBg, border: `1px solid ${tokens.cardBorderColor}`, borderTop: `3px solid ${tokens.secondaryColor}`, borderRadius: `${Math.round(tokens.borderRadius / 4)}px`, padding: "12px 10px", display: "flex", flexDirection: "column", gap: "4px" }}>
+            <span style={{ fontFamily: tokens.bodyFont, fontSize: `${tokens.bodySM - 1}px`, color: "#64748B" }}>{k.label}</span>
+            <span style={{ fontFamily: tokens.headingFont, fontSize: `${tokens.headingLG}px`, fontWeight: tokens.headingWeight, color: tokens.primaryColor, lineHeight: 1 }}>{k.value}</span>
+            <span style={{ fontFamily: tokens.bodyFont, fontSize: `${tokens.bodySM - 1}px`, fontWeight: 700, color: k.up ? tokens.successColor : tokens.errorColor }}>{k.delta} vs prior period</span>
           </div>
         ))}
       </div>
-      <div className="rounded p-2.5" style={{ backgroundColor: tokens.calloutBg, border: `1px solid ${tokens.calloutBorderColor}`, borderRadius: `${tokens.borderRadius / 3}px` }}>
-        <p style={{ fontFamily: tokens.bodyFont, fontSize: `${tokens.bodySM * 0.7}px`, color: tokens.calloutText, lineHeight: 1.5 }}>
-          <strong>Key Insight:</strong> The "addiction treatment orange county" cluster gained 3 positions averaging 8.2 in Google Search Console — directly tied to the updated service pages published last month.
-        </p>
+
+      {/* Summary paragraph */}
+      <p style={{ fontFamily: tokens.bodyFont, fontSize: `${tokens.bodyMD}px`, color: "#334155", lineHeight: 1.65, margin: 0 }}>
+        Organic performance strengthened this period. Sessions grew 12% driven by improved rankings on high-intent treatment queries. The "addiction treatment orange county" cluster gained 3 positions, now averaging 8.2 in GSC — tied to service pages published last month. Call volume sits at 38, which is slightly below pace but within range given the two-week window.
+      </p>
+
+      {/* Key insight */}
+      <PageCallout tokens={tokens}>
+        <strong>Key Insight:</strong> Service page updates are showing traction in GSC. The IOP and PHP pages both crossed page 1 this period. Recommend continuing the content refresh cadence before the next crawl window.
+      </PageCallout>
+
+      <PageSubTitle tokens={tokens}>Work Completed (Oct 1–15)</PageSubTitle>
+      <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+        {[
+          "Published IOP service page refresh targeting high-intent treatment keywords",
+          "Fixed 12 broken internal links surfaced in Screaming Frog crawl",
+          "Optimized meta titles and H1s across all 8 money pages",
+        ].map((item, i) => <PageBullet key={i} tokens={tokens}>{item}</PageBullet>)}
       </div>
-      <h2 style={{ fontFamily: tokens.headingFont, fontSize: `${tokens.headingSM * 0.65}px`, fontWeight: tokens.headingWeight, color: tokens.primaryColor }}>Work Completed</h2>
-      {["Published 4 new service pages targeting high-intent keywords", "Fixed 12 broken internal links found in Screaming Frog audit", "Optimized meta titles + H1s across all 8 money pages"].map((item, i) => (
-        <div key={i} className="flex items-start gap-2">
-          <div className="w-1 h-1 rounded-full mt-1.5 shrink-0" style={{ backgroundColor: tokens.secondaryColor }} />
-          <span style={{ fontFamily: tokens.bodyFont, fontSize: `${tokens.bodySM * 0.7}px`, color: "#334155", lineHeight: 1.5 }}>{item}</span>
-        </div>
-      ))}
     </PageFrame>
   );
 }
 
+// ── Page 3: Data Table (GSC Top Queries) ──────────────────────────────────────
 function DataTablePagePreview({ tokens }: { tokens: ThemeTokens }) {
   const rows = [
-    ["addiction treatment orange county", "341", "8.2", "1.4%", "↑3"],
-    ["womens drug rehab california", "218", "12.5", "2.1%", "→0"],
-    ["outpatient rehab near me", "187", "15.3", "1.8%", "↑2"],
-    ["alcohol detox center", "156", "9.7", "2.4%", "↓1"],
-    ["dual diagnosis treatment", "134", "18.2", "0.9%", "↑5"],
-    ["inpatient rehab california", "121", "21.4", "0.7%", "↑4"],
-    ["medically assisted detox", "98", "24.1", "0.6%", "→0"],
+    ["addiction treatment orange county", "341", "1,820", "8.2", "1.4%", "↑3"],
+    ["womens drug rehab california",       "218", "1,140", "12.5","2.1%", "→0"],
+    ["outpatient rehab near me",           "187", "980",   "15.3","1.8%", "↑2"],
+    ["alcohol detox center",               "156", "870",   "9.7", "2.4%", "↓1"],
+    ["dual diagnosis treatment",           "134", "760",   "18.2","0.9%", "↑5"],
+    ["inpatient rehab california",         "121", "620",   "21.4","0.7%", "↑4"],
+    ["medically assisted detox",           "98",  "510",   "24.1","0.6%", "→0"],
+    ["php treatment program",              "84",  "430",   "19.6","0.8%", "↑6"],
   ];
+  const br = Math.round(tokens.borderRadius / 4);
   return (
-    <PageFrame tokens={tokens}>
-      <h1 style={{ fontFamily: tokens.headingFont, fontSize: `${tokens.headingMD * 0.65}px`, fontWeight: tokens.headingWeight, color: tokens.primaryColor }}>
-        Top Organic Queries by Clicks
-      </h1>
-      <p style={{ fontFamily: tokens.bodyFont, fontSize: `${tokens.bodySM * 0.7}px`, color: "#64748B" }}>
-        Source: Google Search Console · Period: Oct 1–15, 2025
+    <PageFrame tokens={tokens} pageNum={3}>
+      <PageSectionTitle tokens={tokens}>Top Organic Queries — GSC</PageSectionTitle>
+      <p style={{ fontFamily: tokens.bodyFont, fontSize: `${tokens.bodySM}px`, color: "#94A3B8", margin: 0 }}>
+        Source: Google Search Console · Oct 1–15, 2025 · Brand terms excluded
       </p>
-      <div className="overflow-hidden" style={{ borderRadius: `${tokens.borderRadius / 3}px`, border: `1px solid ${tokens.tableBorderColor}` }}>
-        <table className="w-full" style={{ fontFamily: tokens.bodyFont, fontSize: "7px", borderCollapse: "collapse" }}>
+      <div style={{ border: `1px solid ${tokens.tableBorderColor}`, borderRadius: `${br}px`, overflow: "hidden" }}>
+        <table style={{ width: "100%", fontFamily: tokens.bodyFont, fontSize: `${tokens.bodySM}px`, borderCollapse: "collapse" }}>
           <thead>
             <tr style={{ backgroundColor: tokens.tableHeaderBg }}>
-              {["Query", "Clicks", "Position", "CTR", "Δ Pos"].map(h => (
-                <td key={h} className="px-2.5 py-1.5" style={{ color: tokens.tableHeaderText, fontWeight: 600, fontSize: "6.5px" }}>{h}</td>
+              {["Query", "Clicks", "Impr.", "Position", "CTR", "Δ Pos"].map((h, i) => (
+                <td key={h} style={{ color: tokens.tableHeaderText, fontWeight: 700, fontSize: `${tokens.bodySM - 1}px`, padding: "10px 12px", textAlign: i === 0 ? "left" : "right" }}>{h}</td>
               ))}
             </tr>
           </thead>
@@ -645,54 +751,67 @@ function DataTablePagePreview({ tokens }: { tokens: ThemeTokens }) {
             {rows.map((row, i) => (
               <tr key={i} style={{ backgroundColor: i % 2 === 1 ? tokens.tableAltRowBg : tokens.cardBg }}>
                 {row.map((cell, j) => (
-                  <td key={j} className="px-2.5 py-1" style={{ color: j === 4 ? (cell.startsWith("↑") ? tokens.successColor : cell.startsWith("↓") ? tokens.errorColor : "#94A3B8") : tokens.tableBodyText, borderTop: `1px solid ${tokens.tableBorderColor}`, fontSize: "6.5px", fontWeight: j === 4 ? 600 : 400 }}>{cell}</td>
+                  <td key={j} style={{
+                    color: j === 5 ? (cell.startsWith("↑") ? tokens.successColor : cell.startsWith("↓") ? tokens.errorColor : "#94A3B8") : tokens.tableBodyText,
+                    borderTop: `1px solid ${tokens.tableBorderColor}`,
+                    fontSize: `${tokens.bodySM - 1}px`,
+                    fontWeight: j === 5 ? 700 : 400,
+                    padding: "8px 12px",
+                    textAlign: j === 0 ? "left" : "right",
+                  }}>{cell}</td>
                 ))}
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <div className="rounded p-2" style={{ backgroundColor: tokens.calloutBg, border: `1px solid ${tokens.calloutBorderColor}`, borderRadius: `${tokens.borderRadius / 3}px` }}>
-        <p style={{ fontFamily: tokens.bodyFont, fontSize: `${tokens.bodySM * 0.65}px`, color: tokens.calloutText, lineHeight: 1.4 }}>
-          <strong>Note:</strong> Position improvements above reflect 2-week averages compared to the prior period. Click data sourced from GSC with brand terms filtered.
-        </p>
-      </div>
+      <PageCallout tokens={tokens}>
+        <strong>Note:</strong> Position deltas reflect 2-week period-over-period averages. Clicks and impressions reflect raw GSC data for the Oct 1–15 window. Branded queries excluded. PHP page movement is the highlight — +6 positions in one sprint.
+      </PageCallout>
     </PageFrame>
   );
 }
 
+// ── Page 4: Sprint Summary (Work Completed + Next Sprint) ─────────────────────
 function DetailPagePreview({ tokens }: { tokens: ThemeTokens }) {
   return (
-    <PageFrame tokens={tokens}>
-      <h1 style={{ fontFamily: tokens.headingFont, fontSize: `${tokens.headingMD * 0.65}px`, fontWeight: tokens.headingWeight, color: tokens.primaryColor }}>
-        SEO Health &amp; Technical Audit
-      </h1>
-      <div className="w-full h-px" style={{ backgroundColor: tokens.primaryColor, opacity: 0.2 }} />
-      <p style={{ fontFamily: tokens.bodyFont, fontSize: `${tokens.bodyMD * 0.7}px`, color: "#334155", lineHeight: 1.7 }}>
-        Our bi-weekly Screaming Frog crawl completed on October 14th. The site is in strong overall health with 312 indexable pages. Core Web Vitals remain in the green across all money pages. Three technical items are flagged for resolution before the next crawl.
-      </p>
-      <h2 style={{ fontFamily: tokens.headingFont, fontSize: `${tokens.headingSM * 0.65}px`, fontWeight: tokens.headingWeight, color: tokens.primaryColor }}>
-        Open Technical Issues
-      </h2>
-      {[
-        { label: "Warning", text: "4 pages with duplicate meta descriptions across service area variations" },
-        { label: "Error", text: "2 images missing alt text on the About and Contact pages" },
-        { label: "Info", text: "Schema markup missing from the FAQ page — add HowTo or FAQ schema" },
-      ].map((item, i) => (
-        <div key={i} className="flex items-start gap-2 p-2 rounded" style={{ backgroundColor: i === 0 ? `${tokens.warningColor}15` : i === 1 ? `${tokens.errorColor}12` : tokens.cardBg, border: `1px solid ${i === 0 ? tokens.warningColor : i === 1 ? tokens.errorColor : tokens.cardBorderColor}`, borderRadius: `${tokens.borderRadius / 3}px` }}>
-          <span style={{ fontFamily: tokens.bodyFont, fontSize: "6px", fontWeight: 700, color: i === 0 ? tokens.warningColor : i === 1 ? tokens.errorColor : "#64748B", whiteSpace: "nowrap", marginTop: "1px" }}>{item.label}</span>
-          <span style={{ fontFamily: tokens.bodyFont, fontSize: `${tokens.bodySM * 0.65}px`, color: "#334155", lineHeight: 1.5 }}>{item.text}</span>
-        </div>
-      ))}
-      <h2 style={{ fontFamily: tokens.headingFont, fontSize: `${tokens.headingSM * 0.65}px`, fontWeight: tokens.headingWeight, color: tokens.primaryColor }}>
-        Next Steps
-      </h2>
-      {["Resolve duplicate meta descriptions by end of week", "Add alt text to 2 flagged images", "Implement FAQ schema on the FAQ page before next GSC report"].map((item, i) => (
-        <div key={i} className="flex items-start gap-2">
-          <div className="w-1 h-1 rounded-full mt-1.5 shrink-0" style={{ backgroundColor: tokens.accentColor }} />
-          <span style={{ fontFamily: tokens.bodyFont, fontSize: `${tokens.bodySM * 0.65}px`, color: "#334155", lineHeight: 1.6 }}>{item}</span>
-        </div>
-      ))}
+    <PageFrame tokens={tokens} pageNum={4}>
+      <PageSectionTitle tokens={tokens}>Sprint Summary</PageSectionTitle>
+
+      <PageSubTitle tokens={tokens}>Completed — Oct 1–15, 2025</PageSubTitle>
+      <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+        {[
+          "IOP service page refresh — published and indexed (1 credit)",
+          "PHP program page updated with new clinical copy (1 credit)",
+          "12 broken internal links resolved from Screaming Frog crawl",
+          "Meta title and H1 revisions on 8 money pages",
+          "GBP post published with October special event + photo",
+        ].map((item, i) => <PageBullet key={i} tokens={tokens}>{item}</PageBullet>)}
+      </div>
+
+      <PageSubTitle tokens={tokens}>Planned — Oct 16–31, 2025</PageSubTitle>
+      <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+        {[
+          "Detox service page refresh — Tier 1 priority, 1 credit",
+          "Dual diagnosis hub page — new, 2 credits",
+          "Resolve 4 duplicate meta descriptions on service area variations",
+          "Implement FAQ schema on FAQ page",
+        ].map((item, i) => <PageBullet key={i} tokens={tokens} accent={true}>{item}</PageBullet>)}
+      </div>
+
+      <PageSubTitle tokens={tokens}>Technical Flags (Screaming Frog)</PageSubTitle>
+      <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+        {[
+          { sev: "Warning", text: "4 pages with duplicate meta descriptions — service area variations", color: tokens.warningColor, bg: `${tokens.warningColor}12` },
+          { sev: "Error", text: "2 images missing alt text — About and Contact pages", color: tokens.errorColor, bg: `${tokens.errorColor}10` },
+          { sev: "Info", text: "FAQ schema missing — HowTo or FAQ schema recommended", color: tokens.accentColor, bg: `${tokens.accentColor}10` },
+        ].map((item, i) => (
+          <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: "10px", backgroundColor: item.bg, border: `1px solid ${item.color}40`, borderLeft: `3px solid ${item.color}`, borderRadius: `${Math.round(tokens.borderRadius / 4)}px`, padding: "8px 12px" }}>
+            <span style={{ fontFamily: tokens.bodyFont, fontSize: `${tokens.bodySM - 1}px`, fontWeight: 700, color: item.color, whiteSpace: "nowrap", marginTop: "1px", minWidth: "48px" }}>{item.sev}</span>
+            <span style={{ fontFamily: tokens.bodyFont, fontSize: `${tokens.bodySM}px`, color: "#334155", lineHeight: 1.5 }}>{item.text}</span>
+          </div>
+        ))}
+      </div>
     </PageFrame>
   );
 }

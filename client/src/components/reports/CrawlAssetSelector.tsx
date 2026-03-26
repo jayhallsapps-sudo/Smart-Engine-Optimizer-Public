@@ -63,7 +63,7 @@ interface CrawlAssetSelectorProps {
 const MAX_FILES_PER_BATCH = 20;
 
 const FILE_TYPE_OPTIONS = [
-  { value: "internal",         label: "Internal" },
+  { value: "internal",         label: "Internal (All Pages)" },
   { value: "page_titles",      label: "Page Titles" },
   { value: "meta_description", label: "Meta Descriptions" },
   { value: "meta_keywords",    label: "Meta Keywords" },
@@ -71,7 +71,13 @@ const FILE_TYPE_OPTIONS = [
   { value: "h2",               label: "H2" },
   { value: "images",           label: "Images" },
   { value: "canonicals",       label: "Canonicals" },
+  { value: "inlinks",          label: "Inlinks" },
   { value: "outlinks",         label: "Outlinks" },
+  { value: "pagination",       label: "Pagination" },
+  { value: "sitemaps",         label: "Sitemaps" },
+  { value: "response_codes",   label: "Response Codes" },
+  { value: "directives",       label: "Directives / NoIndex" },
+  { value: "pagespeed",        label: "PageSpeed" },
   { value: "issues",           label: "Issues Report" },
   { value: "rendered",         label: "Rendered Page" },
   { value: "other",            label: "Other" },
@@ -85,17 +91,41 @@ const FILE_TYPE_LABEL: Record<string, string> = Object.fromEntries(
 
 function detectFileType(filename: string): string {
   const lower = filename.toLowerCase();
+  // Issues must come first — "issues_overview" contains "issue" but is very specific
+  if (lower.includes("issues_overview") || lower.includes("issue_overview")) return "issues";
   if (lower.includes("issues")) return "issues";
-  if (lower.includes("internal") || lower.includes("all_inlink")) return "internal";
-  if (lower.includes("page_title") || lower.includes("pagetitle")) return "page_titles";
-  if (lower.includes("meta_keyword") || lower.includes("metakeyword")) return "meta_keywords";
-  if (lower.includes("meta_desc") || lower.includes("metadesc")) return "meta_description";
-  if (/\bh1\b/.test(lower) || lower.startsWith("h1") || lower.includes("_h1") || lower.includes("-h1")) return "h1";
-  if (/\bh2\b/.test(lower) || lower.startsWith("h2") || lower.includes("_h2") || lower.includes("-h2")) return "h2";
-  if (lower.includes("image") || lower.includes("_img")) return "images";
+  // Response codes — check before "internal" / generic terms
+  if (lower.includes("response_code") || lower.includes("response-code") || lower.startsWith("4xx") || lower.startsWith("3xx") || lower.startsWith("5xx") || lower.includes("client_error") || lower.includes("server_error") || lower.includes("redirection")) return "response_codes";
+  // Directives / NoIndex
+  if (lower.includes("directive") || lower.includes("noindex") || lower.includes("no_index") || lower.includes("no-index")) return "directives";
+  // Sitemaps
+  if (lower.includes("sitemap")) return "sitemaps";
+  // Pagination
+  if (lower.includes("pagination")) return "pagination";
+  // PageSpeed
+  if (lower.includes("pagespeed") || lower.includes("page_speed") || lower.includes("psi")) return "pagespeed";
+  // Internal / All pages
+  if (lower.includes("internal_all") || lower.includes("internal-all") || (lower.includes("internal") && lower.includes("all"))) return "internal";
+  if (lower.includes("all_inlink")) return "internal";
+  // Page titles
+  if (lower.includes("page_title") || lower.includes("pagetitle") || lower.includes("page-title")) return "page_titles";
+  // Meta
+  if (lower.includes("meta_keyword") || lower.includes("metakeyword") || lower.includes("meta-keyword")) return "meta_keywords";
+  if (lower.includes("meta_desc") || lower.includes("metadesc") || lower.includes("meta-desc") || lower.includes("meta_description")) return "meta_description";
+  // Headings — use _h1/_h2 patterns (word boundary won't work inside underscored names reliably)
+  if (lower.startsWith("h1_") || lower.startsWith("h1-") || lower.includes("_h1_") || lower.includes("_h1.") || lower.includes("-h1_") || lower.endsWith("_h1") || /\bh1\b/.test(lower)) return "h1";
+  if (lower.startsWith("h2_") || lower.startsWith("h2-") || lower.includes("_h2_") || lower.includes("_h2.") || lower.includes("-h2_") || lower.endsWith("_h2") || /\bh2\b/.test(lower)) return "h2";
+  // Images
+  if (lower.includes("image") || lower.includes("_img") || lower.includes("missing_alt")) return "images";
+  // Canonicals
   if (lower.includes("canonical")) return "canonicals";
+  // Links
+  if (lower.startsWith("inlink") || lower.includes("_inlink") || lower.includes("inbound_link")) return "inlinks";
   if (lower.includes("outlink") || lower.includes("outbound")) return "outlinks";
+  // Rendered
   if (lower.includes("rendered")) return "rendered";
+  // Internal fallback (generic "internal" filename)
+  if (lower.includes("internal")) return "internal";
   return "other";
 }
 
@@ -225,7 +255,9 @@ export function CrawlAssetSelector({
     const MAX_ROWS: Record<string, number> = {
       internal: 15000, h1: 10000, h2: 10000,
       meta_description: 10000, meta_keywords: 10000, page_titles: 10000,
-      canonicals: 10000, images: 5000, outlinks: 5000, issues: 500,
+      canonicals: 10000, images: 5000, outlinks: 5000, inlinks: 10000,
+      issues: 500, pagination: 5000, sitemaps: 5000,
+      response_codes: 5000, directives: 5000, pagespeed: 5000,
     };
 
     // Upload sequentially — one file at a time to avoid overwhelming the browser
@@ -407,15 +439,20 @@ export function CrawlAssetSelector({
 
           <div className="space-y-4 py-1">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Session Name</Label>
+              <Label className="text-xs font-medium">
+                Session Name <span className="text-destructive">*</span>
+              </Label>
               <Input
                 data-testid="input-session-name"
                 value={sessionNameInput}
                 onChange={e => setSessionNameInput(e.target.value)}
                 placeholder="e.g. March 2026"
-                className="h-8 text-sm"
+                className={`h-8 text-sm ${!sessionNameInput.trim() ? "border-destructive focus-visible:ring-destructive" : ""}`}
                 disabled={uploading}
               />
+              {!sessionNameInput.trim() && (
+                <p className="text-[10px] text-destructive">Session name is required before uploading.</p>
+              )}
             </div>
 
             <div className="space-y-2">

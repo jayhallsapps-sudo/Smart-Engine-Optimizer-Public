@@ -683,7 +683,7 @@ function DocxSectionBlock({
                           items={row.items}
                           edits={edits}
                           onEdit={onEdit}
-                          bulletChar="☐"
+                          bulletChar="✓"
                         />
                       </td>
                       <td className="px-3 py-1.5 border-b border-gray-100 border-l text-[10px] align-top" style={{ borderLeftColor: "#E5E7EB" }}>
@@ -693,7 +693,7 @@ function DocxSectionBlock({
                           items={row.nextItemsRich ?? row.nextItems?.map(t => ({ text: t }))}
                           edits={edits}
                           onEdit={onEdit}
-                          bulletChar="✓"
+                          bulletChar="☐"
                         />
                       </td>
                     </tr>

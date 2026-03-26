@@ -200,20 +200,27 @@ function buildBwWorkLogTable(rows: WorkLogRow[]): Table {
     if (items && items.length > 0) {
       return items.map(item =>
         new Paragraph({
-          bullet: { level: 0 },
           spacing: { after: 40 },
           children: item.url
-            ? [new ExternalHyperlink({ link: item.url, children: [new TextRun({ text: item.text, size: 18, style: "Hyperlink" })] })]
-            : [new TextRun({ text: item.text, size: 18 })],
+            ? [
+                new TextRun({ text: "✓  ", size: 18, color: "16a34a", bold: true }),
+                new ExternalHyperlink({ link: item.url, children: [new TextRun({ text: item.text, size: 18, style: "Hyperlink" })] }),
+              ]
+            : [
+                new TextRun({ text: "✓  ", size: 18, color: "16a34a", bold: true }),
+                new TextRun({ text: item.text, size: 18 }),
+              ],
         })
       );
     }
     const lines = (fallbackText || "—").split("\n").map(l => l.trim()).filter(Boolean);
     return lines.map(line =>
       new Paragraph({
-        bullet: { level: 0 },
         spacing: { after: 40 },
-        children: [new TextRun({ text: line, size: 18 })],
+        children: [
+          new TextRun({ text: "✓  ", size: 18, color: "16a34a", bold: true }),
+          new TextRun({ text: line, size: 18 }),
+        ],
       })
     );
   }
@@ -226,7 +233,7 @@ function buildBwWorkLogTable(rows: WorkLogRow[]): Table {
       new Paragraph({
         spacing: { after: 40 },
         children: [
-          new TextRun({ text: "✓  ", size: 18, color: "16a34a", bold: true }),
+          new TextRun({ text: "☐  ", size: 18, color: "6B7280" }),
           new TextRun({ text: line, size: 18 }),
         ],
       })

@@ -12,12 +12,14 @@ function WorkLogBulletCell({
   items,
   edits,
   onEdit,
+  bulletChar = "•",
 }: {
   editKey: string;
   rawValue: string;
   items?: BulletItem[];
   edits: Record<string, string>;
   onEdit: (k: string, v: string) => void;
+  bulletChar?: string;
 }) {
   const readMode = useContext(ReadModeContext);
   const [editing, setEditing] = useState(false);
@@ -75,7 +77,7 @@ function WorkLogBulletCell({
       ) : (
         displayItems.map((item, ii) => (
           <li key={ii} className="flex items-start gap-1.5 flex-wrap">
-            <span className="text-gray-400 mt-px shrink-0">•</span>
+            <span className="mt-px shrink-0" style={{ color: bulletChar === "✓" ? "#16a34a" : "#9CA3AF" }}>{bulletChar}</span>
             <span className="flex items-start gap-1 flex-1 flex-wrap">
               {item.url && !wasEdited ? (
                 <a
@@ -690,6 +692,7 @@ function DocxSectionBlock({
                           items={row.nextItemsRich ?? row.nextItems?.map(t => ({ text: t }))}
                           edits={edits}
                           onEdit={onEdit}
+                          bulletChar="✓"
                         />
                       </td>
                     </tr>

@@ -219,21 +219,16 @@ function buildBwWorkLogTable(rows: WorkLogRow[]): Table {
   }
 
   function makeNextParagraphs(nextItems: string[] | undefined, fallbackText: string): Paragraph[] {
-    if (nextItems && nextItems.length > 0) {
-      return nextItems.map(item =>
-        new Paragraph({
-          bullet: { level: 0 },
-          spacing: { after: 40 },
-          children: [new TextRun({ text: item, size: 18 })],
-        })
-      );
-    }
-    const lines = (fallbackText || "—").split("\n").map(l => l.trim()).filter(Boolean);
-    return lines.map(line =>
+    const toRender = (nextItems && nextItems.length > 0)
+      ? nextItems
+      : (fallbackText || "—").split("\n").map(l => l.trim()).filter(Boolean);
+    return toRender.map(line =>
       new Paragraph({
-        bullet: { level: 0 },
         spacing: { after: 40 },
-        children: [new TextRun({ text: line, size: 18 })],
+        children: [
+          new TextRun({ text: "✓  ", size: 18, color: "16a34a", bold: true }),
+          new TextRun({ text: line, size: 18 }),
+        ],
       })
     );
   }

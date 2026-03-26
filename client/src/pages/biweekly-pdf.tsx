@@ -164,7 +164,7 @@ function WorkLogTable({ workLog }: { workLog: any[] }) {
               <td style={{ padding: "5px 10px", fontSize: "10px", verticalAlign: "top", borderBottom: "1px solid #F3F4F6", borderLeft: "1px solid #E5E7EB" }}>
                 {(row.nextItemsRich ?? []).map((item: any, ii: number) => (
                   <div key={ii} style={{ display: "flex", alignItems: "flex-start", gap: "4px", marginBottom: "2px" }}>
-                    <span style={{ color: ACCENT, flexShrink: 0, marginTop: "1px" }}>•</span>
+                    <span style={{ color: "#16a34a", flexShrink: 0, marginTop: "1px", fontWeight: 700 }}>✓</span>
                     <span>{item.text}{item.source ? <> <SourceBadge source={item.source} /></> : null}</span>
                   </div>
                 ))}

@@ -517,12 +517,12 @@ const PAGE_W = 612; // letter width in points (px at 96dpi equiv)
 const PAGE_H = PAGE_W * (11 / 8.5); // ~792px
 
 function usePageScale(ref: React.RefObject<HTMLDivElement>) {
-  const [scale, setScale] = useState(1);
+  const [scale, setScale] = useState(0.88);
   useEffect(() => {
     if (!ref.current) return;
     const obs = new ResizeObserver(entries => {
       const w = entries[0].contentRect.width;
-      setScale(w / PAGE_W);
+      setScale(Math.min(1, w / PAGE_W));
     });
     obs.observe(ref.current);
     return () => obs.disconnect();
@@ -1424,7 +1424,7 @@ export default function ThemePage() {
           </div>
 
           {/* Preview content */}
-          <div className="flex-1 min-h-0 flex items-center justify-center p-6 overflow-auto">
+          <div className={`flex-1 min-h-0 flex justify-center p-6 overflow-auto ${previewMode === "pages" ? "items-start" : "items-center"}`}>
             {previewMode === "slides" ? (
               <div className="w-full max-w-3xl shadow-xl rounded-lg overflow-hidden border border-border">
                 {activeSlide === "title" && <TitleSlidePreview tokens={draft} />}
@@ -1436,7 +1436,7 @@ export default function ThemePage() {
                 {activeSlide === "summary" && <SummarySlidePreview tokens={draft} />}
               </div>
             ) : (
-              <div className="w-full max-w-2xl shadow-xl border border-border">
+              <div className="w-full max-w-[540px]">
                 {activePage === "cover" && <CoverPagePreview tokens={draft} />}
                 {activePage === "executive" && <ExecutiveSummaryPagePreview tokens={draft} />}
                 {activePage === "data" && <DataTablePagePreview tokens={draft} />}

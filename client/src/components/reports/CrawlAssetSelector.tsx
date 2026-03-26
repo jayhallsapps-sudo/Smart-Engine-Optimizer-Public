@@ -219,20 +219,26 @@ export function CrawlAssetSelector({
     const sessionId = crypto.randomUUID();
     const reportDate = new Date().toISOString().split("T")[0];
     let firstId: number | null = null;
+    let successCount = 0;
+    let failCount = 0;
 
-    const results = await Promise.allSettled(
-      queuedFiles.map(async (qf, idx) => {
-        setQueuedFiles(prev => prev.map((f, i) => i === idx ? { ...f, status: "uploading" } : f));
+    const MAX_ROWS: Record<string, number> = {
+      internal: 15000, h1: 10000, h2: 10000,
+      meta_description: 10000, meta_keywords: 10000, page_titles: 10000,
+      canonicals: 10000, images: 5000, outlinks: 5000, issues: 500,
+    };
+
+    // Upload sequentially — one file at a time to avoid overwhelming the browser
+    // with simultaneous large JSON payloads and blocking the main thread.
+    for (let idx = 0; idx < queuedFiles.length; idx++) {
+      const qf = queuedFiles[idx];
+      setQueuedFiles(prev => prev.map((f, i) => i === idx ? { ...f, status: "uploading" } : f));
+      try {
         const text = await qf.file.text();
         const cleanText = text.replace(/^\uFEFF/, "");
         const rows = parseCSV(cleanText);
         if (rows.length < 1) throw new Error("Empty CSV");
         const headers = rows[0];
-        const MAX_ROWS: Record<string, number> = {
-          internal: 15000, h1: 10000, h2: 10000,
-          meta_description: 10000, meta_keywords: 10000, page_titles: 10000,
-          canonicals: 10000, images: 5000, outlinks: 5000, issues: 500,
-        };
         const cap = MAX_ROWS[qf.fileType] ?? 10000;
         const data = rows.slice(1, cap + 1).map(cells => {
           const row: Record<string, string> = {};
@@ -261,20 +267,15 @@ export function CrawlAssetSelector({
         }
         const created = await res.json();
         setQueuedFiles(prev => prev.map((f, i) => i === idx ? { ...f, status: "done" } : f));
-        return created;
-      })
-    );
-
-    results.forEach((r, idx) => {
-      if (r.status === "rejected") {
-        setQueuedFiles(prev => prev.map((f, i) => i === idx ? { ...f, status: "error", errorMsg: r.reason?.message } : f));
-      } else if (r.value?.fileType === "internal" || firstId === null) {
-        firstId = r.value?.id ?? firstId;
+        if (created?.fileType === "internal" || firstId === null) {
+          firstId = created?.id ?? firstId;
+        }
+        successCount++;
+      } catch (err: any) {
+        setQueuedFiles(prev => prev.map((f, i) => i === idx ? { ...f, status: "error", errorMsg: err?.message } : f));
+        failCount++;
       }
-    });
-
-    const successCount = results.filter(r => r.status === "fulfilled").length;
-    const failCount = results.length - successCount;
+    }
 
     await queryClient.invalidateQueries({ queryKey: [`/api/clients/${clientId}/crawl-sessions`] });
     await queryClient.invalidateQueries({ queryKey: [`/api/crawl-assets?clientId=${clientId}`] });

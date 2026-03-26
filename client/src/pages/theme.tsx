@@ -56,6 +56,8 @@ import {
   AlertCircle,
   Eye,
   Sparkles,
+  Presentation,
+  BookOpen,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -240,6 +242,8 @@ function BackgroundEditor({ label, value, onChange }: {
 // ─── Preview Slides ───────────────────────────────────────────────────────────
 
 type PreviewSlide = "title" | "kpi" | "chart" | "table" | "content" | "divider" | "summary";
+type PreviewPage = "cover" | "executive" | "data" | "detail";
+type PreviewMode = "slides" | "pages";
 
 const PREVIEW_TABS: { id: PreviewSlide; label: string }[] = [
   { id: "title", label: "Title" },
@@ -249,6 +253,13 @@ const PREVIEW_TABS: { id: PreviewSlide; label: string }[] = [
   { id: "content", label: "Content" },
   { id: "divider", label: "Divider" },
   { id: "summary", label: "Summary" },
+];
+
+const PAGE_TABS: { id: PreviewPage; label: string }[] = [
+  { id: "cover", label: "Cover" },
+  { id: "executive", label: "Summary" },
+  { id: "data", label: "Data Table" },
+  { id: "detail", label: "Detail" },
 ];
 
 function SlideFrame({ tokens, children, bgKey }: {
@@ -486,56 +497,190 @@ function SummarySlidePreview({ tokens }: { tokens: ThemeTokens }) {
   );
 }
 
-function LivePreview({ tokens, activeSlide }: { tokens: ThemeTokens; activeSlide: PreviewSlide }) {
-  const components: Record<PreviewSlide, React.ReactNode> = {
-    title: <TitleSlidePreview tokens={tokens} />,
-    kpi: <KpiSlidePreview tokens={tokens} />,
-    chart: <ChartSlidePreview tokens={tokens} />,
-    table: <TableSlidePreview tokens={tokens} />,
-    content: <ContentSlidePreview tokens={tokens} />,
-    divider: <DividerSlidePreview tokens={tokens} />,
-    summary: <SummarySlidePreview tokens={tokens} />,
-  };
+// ─── Page Previews (DOCX-style letter/A4 pages) ──────────────────────────────
 
+function PageFrame({ tokens, children }: { tokens: ThemeTokens; children: React.ReactNode }) {
+  const bg = tokens.backgrounds.global;
   return (
-    <div className="flex-1 min-h-0 flex flex-col gap-3 p-5 overflow-y-auto">
-      <div className="flex items-center gap-2 flex-wrap shrink-0">
-        {PREVIEW_TABS.map(tab => (
-          <span
-            key={tab.id}
-            className={`text-[11px] px-2.5 py-1 rounded-full cursor-pointer transition-colors ${activeSlide === tab.id ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}
-            data-testid={`tab-preview-${tab.id}`}
-          >
-            {tab.label}
-          </span>
-        ))}
+    <div
+      className="relative w-full flex flex-col overflow-hidden shadow-md"
+      style={{
+        ...bgStyle(bg),
+        aspectRatio: "8.5/11",
+        fontFamily: tokens.bodyFont,
+        borderRadius: `${tokens.borderRadius / 3}px`,
+      }}
+    >
+      {/* Page header bar */}
+      <div
+        className="w-full flex items-center justify-between px-5 shrink-0"
+        style={{ backgroundColor: tokens.headerColor, minHeight: "32px" }}
+      >
+        <span style={{ color: tokens.headerTextColor, fontFamily: tokens.headingFont, fontSize: "10px", fontWeight: tokens.headingWeight }}>
+          {tokens.brandName}
+        </span>
+        <span style={{ color: `${tokens.headerTextColor}99`, fontSize: "8px" }}>{tokens.tagline}</span>
       </div>
-
-      <div className="flex-1 min-h-0">
-        <div className="w-full shadow-lg rounded-lg overflow-hidden border border-border">
-          {components[activeSlide]}
-        </div>
+      {/* Page body */}
+      <div className="flex-1 min-h-0 px-8 py-5 flex flex-col gap-3 overflow-hidden">
+        {children}
       </div>
-
-      <div className="grid grid-cols-4 gap-2 shrink-0">
-        {PREVIEW_TABS.filter(t => t.id !== activeSlide).slice(0, 4).map(tab => {
-          const mini: Record<PreviewSlide, React.ReactNode> = {
-            title: <TitleSlidePreview tokens={tokens} />,
-            kpi: <KpiSlidePreview tokens={tokens} />,
-            chart: <ChartSlidePreview tokens={tokens} />,
-            table: <TableSlidePreview tokens={tokens} />,
-            content: <ContentSlidePreview tokens={tokens} />,
-            divider: <DividerSlidePreview tokens={tokens} />,
-            summary: <SummarySlidePreview tokens={tokens} />,
-          };
-          return (
-            <div key={tab.id} className="rounded overflow-hidden border border-border opacity-60 hover:opacity-100 transition-opacity cursor-pointer">
-              {mini[tab.id]}
-            </div>
-          );
-        })}
+      {/* Page footer */}
+      <div
+        className="w-full flex items-center justify-between px-5 shrink-0"
+        style={{ backgroundColor: tokens.footerColor, minHeight: "22px" }}
+      >
+        <span style={{ color: tokens.footerTextColor, fontSize: "7px" }}>Confidential · {tokens.brandName}</span>
+        {tokens.showPageNumbers && <span style={{ color: tokens.footerTextColor, fontSize: "7px" }}>1</span>}
       </div>
     </div>
+  );
+}
+
+function CoverPagePreview({ tokens }: { tokens: ThemeTokens }) {
+  return (
+    <PageFrame tokens={tokens}>
+      <div className="flex-1 flex flex-col justify-center gap-4">
+        <div className="w-12 h-1" style={{ backgroundColor: tokens.secondaryColor }} />
+        <div>
+          <h1 style={{ fontFamily: tokens.headingFont, fontSize: `${tokens.headingXL * 0.45}px`, fontWeight: tokens.headingWeight, color: tokens.primaryColor, lineHeight: 1.2 }}>
+            Bi-Weekly SEO Report
+          </h1>
+          <p style={{ fontFamily: tokens.bodyFont, fontSize: `${tokens.bodyMD * 0.75}px`, color: "#64748B", marginTop: "6px" }}>
+            Anchored Tides Recovery · October 1–15, 2025
+          </p>
+        </div>
+        <div className="space-y-1.5" style={{ borderLeft: `3px solid ${tokens.primaryColor}`, paddingLeft: "10px" }}>
+          <p style={{ fontFamily: tokens.bodyFont, fontSize: `${tokens.bodySM * 0.75}px`, color: "#334155" }}>Prepared by: {tokens.brandName}</p>
+          <p style={{ fontFamily: tokens.bodyFont, fontSize: `${tokens.bodySM * 0.75}px`, color: "#334155" }}>Period: Oct 1–15, 2025</p>
+          <p style={{ fontFamily: tokens.bodyFont, fontSize: `${tokens.bodySM * 0.75}px`, color: "#334155" }}>Report Type: Bi-Weekly</p>
+        </div>
+      </div>
+    </PageFrame>
+  );
+}
+
+function ExecutiveSummaryPagePreview({ tokens }: { tokens: ThemeTokens }) {
+  const kpis = [
+    { label: "Organic Sessions", value: "4,821", delta: "+12%", up: true },
+    { label: "Organic Clicks", value: "2,103", delta: "+8%", up: true },
+    { label: "Avg. Position", value: "14.2", delta: "−1.3", up: true },
+    { label: "Total Calls", value: "38", delta: "−4%", up: false },
+  ];
+  return (
+    <PageFrame tokens={tokens}>
+      <h1 style={{ fontFamily: tokens.headingFont, fontSize: `${tokens.headingMD * 0.65}px`, fontWeight: tokens.headingWeight, color: tokens.primaryColor }}>
+        Executive Summary
+      </h1>
+      <div className="w-full h-px" style={{ backgroundColor: tokens.primaryColor, opacity: 0.2 }} />
+      <p style={{ fontFamily: tokens.bodyFont, fontSize: `${tokens.bodyMD * 0.7}px`, color: "#334155", lineHeight: 1.6 }}>
+        Organic performance continued its positive trend this period. Sessions grew 12% week-over-week driven by improved rankings on high-intent treatment keywords. Call volume from organic sources remains healthy at 38 contacts.
+      </p>
+      <div className="grid grid-cols-4 gap-2">
+        {kpis.map(k => (
+          <div key={k.label} className="p-2 rounded" style={{ backgroundColor: tokens.cardBg, border: `1px solid ${tokens.cardBorderColor}`, borderRadius: `${tokens.borderRadius / 3}px` }}>
+            <p style={{ fontSize: "6px", color: "#64748B", fontFamily: tokens.bodyFont }}>{k.label}</p>
+            <p style={{ fontFamily: tokens.headingFont, fontSize: `${tokens.headingMD * 0.6}px`, fontWeight: tokens.headingWeight, color: tokens.primaryColor }}>{k.value}</p>
+            <p style={{ fontSize: "6px", fontWeight: 600, color: k.up ? tokens.successColor : tokens.errorColor }}>{k.delta}</p>
+          </div>
+        ))}
+      </div>
+      <div className="rounded p-2.5" style={{ backgroundColor: tokens.calloutBg, border: `1px solid ${tokens.calloutBorderColor}`, borderRadius: `${tokens.borderRadius / 3}px` }}>
+        <p style={{ fontFamily: tokens.bodyFont, fontSize: `${tokens.bodySM * 0.7}px`, color: tokens.calloutText, lineHeight: 1.5 }}>
+          <strong>Key Insight:</strong> The "addiction treatment orange county" cluster gained 3 positions averaging 8.2 in Google Search Console — directly tied to the updated service pages published last month.
+        </p>
+      </div>
+      <h2 style={{ fontFamily: tokens.headingFont, fontSize: `${tokens.headingSM * 0.65}px`, fontWeight: tokens.headingWeight, color: tokens.primaryColor }}>Work Completed</h2>
+      {["Published 4 new service pages targeting high-intent keywords", "Fixed 12 broken internal links found in Screaming Frog audit", "Optimized meta titles + H1s across all 8 money pages"].map((item, i) => (
+        <div key={i} className="flex items-start gap-2">
+          <div className="w-1 h-1 rounded-full mt-1.5 shrink-0" style={{ backgroundColor: tokens.secondaryColor }} />
+          <span style={{ fontFamily: tokens.bodyFont, fontSize: `${tokens.bodySM * 0.7}px`, color: "#334155", lineHeight: 1.5 }}>{item}</span>
+        </div>
+      ))}
+    </PageFrame>
+  );
+}
+
+function DataTablePagePreview({ tokens }: { tokens: ThemeTokens }) {
+  const rows = [
+    ["addiction treatment orange county", "341", "8.2", "1.4%", "↑3"],
+    ["womens drug rehab california", "218", "12.5", "2.1%", "→0"],
+    ["outpatient rehab near me", "187", "15.3", "1.8%", "↑2"],
+    ["alcohol detox center", "156", "9.7", "2.4%", "↓1"],
+    ["dual diagnosis treatment", "134", "18.2", "0.9%", "↑5"],
+    ["inpatient rehab california", "121", "21.4", "0.7%", "↑4"],
+    ["medically assisted detox", "98", "24.1", "0.6%", "→0"],
+  ];
+  return (
+    <PageFrame tokens={tokens}>
+      <h1 style={{ fontFamily: tokens.headingFont, fontSize: `${tokens.headingMD * 0.65}px`, fontWeight: tokens.headingWeight, color: tokens.primaryColor }}>
+        Top Organic Queries by Clicks
+      </h1>
+      <p style={{ fontFamily: tokens.bodyFont, fontSize: `${tokens.bodySM * 0.7}px`, color: "#64748B" }}>
+        Source: Google Search Console · Period: Oct 1–15, 2025
+      </p>
+      <div className="overflow-hidden" style={{ borderRadius: `${tokens.borderRadius / 3}px`, border: `1px solid ${tokens.tableBorderColor}` }}>
+        <table className="w-full" style={{ fontFamily: tokens.bodyFont, fontSize: "7px", borderCollapse: "collapse" }}>
+          <thead>
+            <tr style={{ backgroundColor: tokens.tableHeaderBg }}>
+              {["Query", "Clicks", "Position", "CTR", "Δ Pos"].map(h => (
+                <td key={h} className="px-2.5 py-1.5" style={{ color: tokens.tableHeaderText, fontWeight: 600, fontSize: "6.5px" }}>{h}</td>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, i) => (
+              <tr key={i} style={{ backgroundColor: i % 2 === 1 ? tokens.tableAltRowBg : tokens.cardBg }}>
+                {row.map((cell, j) => (
+                  <td key={j} className="px-2.5 py-1" style={{ color: j === 4 ? (cell.startsWith("↑") ? tokens.successColor : cell.startsWith("↓") ? tokens.errorColor : "#94A3B8") : tokens.tableBodyText, borderTop: `1px solid ${tokens.tableBorderColor}`, fontSize: "6.5px", fontWeight: j === 4 ? 600 : 400 }}>{cell}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="rounded p-2" style={{ backgroundColor: tokens.calloutBg, border: `1px solid ${tokens.calloutBorderColor}`, borderRadius: `${tokens.borderRadius / 3}px` }}>
+        <p style={{ fontFamily: tokens.bodyFont, fontSize: `${tokens.bodySM * 0.65}px`, color: tokens.calloutText, lineHeight: 1.4 }}>
+          <strong>Note:</strong> Position improvements above reflect 2-week averages compared to the prior period. Click data sourced from GSC with brand terms filtered.
+        </p>
+      </div>
+    </PageFrame>
+  );
+}
+
+function DetailPagePreview({ tokens }: { tokens: ThemeTokens }) {
+  return (
+    <PageFrame tokens={tokens}>
+      <h1 style={{ fontFamily: tokens.headingFont, fontSize: `${tokens.headingMD * 0.65}px`, fontWeight: tokens.headingWeight, color: tokens.primaryColor }}>
+        SEO Health &amp; Technical Audit
+      </h1>
+      <div className="w-full h-px" style={{ backgroundColor: tokens.primaryColor, opacity: 0.2 }} />
+      <p style={{ fontFamily: tokens.bodyFont, fontSize: `${tokens.bodyMD * 0.7}px`, color: "#334155", lineHeight: 1.7 }}>
+        Our bi-weekly Screaming Frog crawl completed on October 14th. The site is in strong overall health with 312 indexable pages. Core Web Vitals remain in the green across all money pages. Three technical items are flagged for resolution before the next crawl.
+      </p>
+      <h2 style={{ fontFamily: tokens.headingFont, fontSize: `${tokens.headingSM * 0.65}px`, fontWeight: tokens.headingWeight, color: tokens.primaryColor }}>
+        Open Technical Issues
+      </h2>
+      {[
+        { label: "Warning", text: "4 pages with duplicate meta descriptions across service area variations" },
+        { label: "Error", text: "2 images missing alt text on the About and Contact pages" },
+        { label: "Info", text: "Schema markup missing from the FAQ page — add HowTo or FAQ schema" },
+      ].map((item, i) => (
+        <div key={i} className="flex items-start gap-2 p-2 rounded" style={{ backgroundColor: i === 0 ? `${tokens.warningColor}15` : i === 1 ? `${tokens.errorColor}12` : tokens.cardBg, border: `1px solid ${i === 0 ? tokens.warningColor : i === 1 ? tokens.errorColor : tokens.cardBorderColor}`, borderRadius: `${tokens.borderRadius / 3}px` }}>
+          <span style={{ fontFamily: tokens.bodyFont, fontSize: "6px", fontWeight: 700, color: i === 0 ? tokens.warningColor : i === 1 ? tokens.errorColor : "#64748B", whiteSpace: "nowrap", marginTop: "1px" }}>{item.label}</span>
+          <span style={{ fontFamily: tokens.bodyFont, fontSize: `${tokens.bodySM * 0.65}px`, color: "#334155", lineHeight: 1.5 }}>{item.text}</span>
+        </div>
+      ))}
+      <h2 style={{ fontFamily: tokens.headingFont, fontSize: `${tokens.headingSM * 0.65}px`, fontWeight: tokens.headingWeight, color: tokens.primaryColor }}>
+        Next Steps
+      </h2>
+      {["Resolve duplicate meta descriptions by end of week", "Add alt text to 2 flagged images", "Implement FAQ schema on the FAQ page before next GSC report"].map((item, i) => (
+        <div key={i} className="flex items-start gap-2">
+          <div className="w-1 h-1 rounded-full mt-1.5 shrink-0" style={{ backgroundColor: tokens.accentColor }} />
+          <span style={{ fontFamily: tokens.bodyFont, fontSize: `${tokens.bodySM * 0.65}px`, color: "#334155", lineHeight: 1.6 }}>{item}</span>
+        </div>
+      ))}
+    </PageFrame>
   );
 }
 
@@ -544,7 +689,9 @@ function LivePreview({ tokens, activeSlide }: { tokens: ThemeTokens; activeSlide
 export default function ThemePage() {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [previewMode, setPreviewMode] = useState<PreviewMode>("slides");
   const [activeSlide, setActiveSlide] = useState<PreviewSlide>("title");
+  const [activePage, setActivePage] = useState<PreviewPage>("cover");
   const [activeThemeId, setActiveThemeId] = useState<number | null>(null);
   const [draft, setDraft] = useState<ThemeTokens>(DEFAULT_THEME_TOKENS);
   const [isDirty, setIsDirty] = useState(false);
@@ -978,7 +1125,23 @@ export default function ThemePage() {
                     <Slider
                       value={[draft[k] as number]}
                       onValueChange={([v]) => update(k, v)}
-                      min={10} max={40} step={1}
+                      min={10} max={48} step={1}
+                      className="flex-1"
+                    />
+                    <span className="text-[10px] text-muted-foreground w-6 text-right">{draft[k]}</span>
+                  </div>
+                ))}
+              </div>
+              <Separator className="my-1" />
+              <div className="space-y-2">
+                <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Body Sizes (px)</p>
+                {(["bodyLG", "bodyMD", "bodySM"] as const).map((k, i) => (
+                  <div key={k} className="flex items-center justify-between gap-2">
+                    <Label className="text-[11px] text-muted-foreground min-w-[28px]">{["LG", "MD", "SM"][i]}</Label>
+                    <Slider
+                      value={[draft[k] as number]}
+                      onValueChange={([v]) => update(k, v)}
+                      min={8} max={24} step={1}
                       className="flex-1"
                     />
                     <span className="text-[10px] text-muted-foreground w-6 text-right">{draft[k]}</span>
@@ -991,6 +1154,7 @@ export default function ThemePage() {
           <Section title="Backgrounds" icon={Image} defaultOpen={false}>
             <div className="space-y-4">
               {([
+                ["global", "Page / Global Background"],
                 ["titleSlide", "Title Slide"],
                 ["sectionDivider", "Section Divider"],
                 ["kpiSlide", "KPI Summary"],
@@ -1071,38 +1235,88 @@ export default function ThemePage() {
 
         {/* Right panel: preview */}
         <div className="flex-1 min-w-0 bg-muted/30 flex flex-col overflow-hidden">
-          <div className="border-b px-4 py-2 flex items-center gap-3 bg-background shrink-0">
-            <Eye className="w-3.5 h-3.5 text-muted-foreground" />
-            <span className="text-xs font-medium text-muted-foreground">Live Preview</span>
-            <div className="flex items-center gap-1 flex-wrap">
-              {PREVIEW_TABS.map(tab => (
-                <button
-                  key={tab.id}
-                  className={`text-[10px] px-2 py-0.5 rounded transition-colors ${activeSlide === tab.id ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}
-                  onClick={() => setActiveSlide(tab.id)}
-                  data-testid={`tab-preview-${tab.id}`}
-                >
-                  {tab.label}
-                </button>
-              ))}
+
+          {/* Preview header: mode toggle + tabs */}
+          <div className="border-b px-4 py-2 flex items-center gap-3 bg-background shrink-0 flex-wrap">
+            <Eye className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            <span className="text-xs font-medium text-muted-foreground shrink-0">Live Preview</span>
+
+            {/* Mode toggle */}
+            <div className="flex items-center rounded border border-border overflow-hidden shrink-0">
+              <button
+                className={`flex items-center gap-1 text-[10px] px-2.5 py-1 transition-colors ${previewMode === "slides" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted"}`}
+                onClick={() => setPreviewMode("slides")}
+                data-testid="button-mode-slides"
+              >
+                <Presentation className="w-3 h-3" /> Slides
+              </button>
+              <button
+                className={`flex items-center gap-1 text-[10px] px-2.5 py-1 transition-colors ${previewMode === "pages" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted"}`}
+                onClick={() => setPreviewMode("pages")}
+                data-testid="button-mode-pages"
+              >
+                <BookOpen className="w-3 h-3" /> Pages
+              </button>
             </div>
+
+            <div className="h-4 w-px bg-border shrink-0" />
+
+            {/* Slide or page type tabs */}
+            {previewMode === "slides" ? (
+              <div className="flex items-center gap-1 flex-wrap">
+                {PREVIEW_TABS.map(tab => (
+                  <button
+                    key={tab.id}
+                    className={`text-[10px] px-2 py-0.5 rounded transition-colors ${activeSlide === tab.id ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}
+                    onClick={() => setActiveSlide(tab.id)}
+                    data-testid={`tab-slide-${tab.id}`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="flex items-center gap-1 flex-wrap">
+                {PAGE_TABS.map(tab => (
+                  <button
+                    key={tab.id}
+                    className={`text-[10px] px-2 py-0.5 rounded transition-colors ${activePage === tab.id ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}
+                    onClick={() => setActivePage(tab.id)}
+                    data-testid={`tab-page-${tab.id}`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
+
+          {/* Preview content */}
           <div className="flex-1 min-h-0 flex items-center justify-center p-6 overflow-auto">
-            <div className="w-full max-w-3xl shadow-xl rounded-lg overflow-hidden border border-border">
-              {activeSlide === "title" && <TitleSlidePreview tokens={draft} />}
-              {activeSlide === "kpi" && <KpiSlidePreview tokens={draft} />}
-              {activeSlide === "chart" && <ChartSlidePreview tokens={draft} />}
-              {activeSlide === "table" && <TableSlidePreview tokens={draft} />}
-              {activeSlide === "content" && <ContentSlidePreview tokens={draft} />}
-              {activeSlide === "divider" && <DividerSlidePreview tokens={draft} />}
-              {activeSlide === "summary" && <SummarySlidePreview tokens={draft} />}
-            </div>
+            {previewMode === "slides" ? (
+              <div className="w-full max-w-3xl shadow-xl rounded-lg overflow-hidden border border-border">
+                {activeSlide === "title" && <TitleSlidePreview tokens={draft} />}
+                {activeSlide === "kpi" && <KpiSlidePreview tokens={draft} />}
+                {activeSlide === "chart" && <ChartSlidePreview tokens={draft} />}
+                {activeSlide === "table" && <TableSlidePreview tokens={draft} />}
+                {activeSlide === "content" && <ContentSlidePreview tokens={draft} />}
+                {activeSlide === "divider" && <DividerSlidePreview tokens={draft} />}
+                {activeSlide === "summary" && <SummarySlidePreview tokens={draft} />}
+              </div>
+            ) : (
+              <div className="w-full max-w-2xl shadow-xl border border-border">
+                {activePage === "cover" && <CoverPagePreview tokens={draft} />}
+                {activePage === "executive" && <ExecutiveSummaryPagePreview tokens={draft} />}
+                {activePage === "data" && <DataTablePagePreview tokens={draft} />}
+                {activePage === "detail" && <DetailPagePreview tokens={draft} />}
+              </div>
+            )}
           </div>
 
           <div className="border-t bg-background px-4 py-2 shrink-0">
             <div className="flex items-center justify-between text-[10px] text-muted-foreground">
               <span>Preview updates instantly — no page refresh needed</span>
-              <span>{selectedTheme?.isActive ? "🟢 Active theme" : "⚪ Not active"} · Fonts: {draft.headingFont} / {draft.bodyFont}</span>
+              <span>{selectedTheme?.isActive ? "🟢 Active" : "⚪ Not active"} · {previewMode === "slides" ? "16:9 slide" : "8.5×11 page"} · {draft.headingFont} / {draft.bodyFont}</span>
             </div>
           </div>
         </div>

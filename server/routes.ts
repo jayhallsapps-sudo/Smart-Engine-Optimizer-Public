@@ -51,6 +51,7 @@ import { queryGsc, handlesGscCommand } from "./gscClient";
 import { queryGa4, handlesGa4Command } from "./ga4Client";
 import { queryCallRail, handlesCallRailCommand } from "./callrailClient";
 import { queryCtm, handlesCtmCommand } from "./ctmClient";
+import { queryAttention, handlesAttentionCommand } from "./attentionClient";
 import { querySemrush, handlesSemrushCommand } from "./semrushClient";
 import { queryAhrefs, handlesAhrefsCommand } from "./ahrefsClient";
 import { queryGbp } from "./gbpClient";
@@ -1142,6 +1143,15 @@ export async function registerRoutes(
       health.ctm = { status: "client_missing_id", detail: "No CTM account ID configured for this client. Client may not use CTM." };
     }
 
+    // Attention
+    if ((client as any).attentionAccountId || hasCred("attention")) {
+      health.attention = hasCred("attention")
+        ? { status: "ok", detail: (client as any).attentionAccountId ? `Account ID: ${(client as any).attentionAccountId}` : "API key connected — all conversations accessible" }
+        : { status: "credential_missing", detail: "No Attention API key stored — add it in Setup." };
+    } else {
+      health.attention = { status: "client_missing_id", detail: "No Attention integration configured for this client." };
+    }
+
     // Airtable
     if (client.airtableBaseId) {
       health.airtable = hasCred("airtable")
@@ -1278,6 +1288,10 @@ export async function registerRoutes(
       if (!result && handlesCtmCommand(intent.command)) {
         result = await queryCtm(intent.command, client, intent.dateRange);
         if (result) liveSource = "ctm";
+      }
+      if (!result && handlesAttentionCommand(intent.command)) {
+        result = await queryAttention(intent.command, client, intent.dateRange);
+        if (result) liveSource = "attention";
       }
       if (!result && handlesSemrushCommand(intent.command)) {
         result = await querySemrush(intent.command, client, intent.dateRange);
@@ -1937,6 +1951,7 @@ export async function registerRoutes(
       if (client.ahrefsProjectUrl) availableDataSources.push("ahrefs");
       if (client.semrushProjectId) availableDataSources.push("semrush");
       if (client.nimbataAccountId) availableDataSources.push("nimbata");
+      if ((client as any).attentionAccountId) availableDataSources.push("attention");
       if (client.airtableBaseId) availableDataSources.push("airtable");
       if (client.screamingFrogProfile) availableDataSources.push("screaming_frog");
 
@@ -2153,6 +2168,7 @@ export async function registerRoutes(
       if (!result && handlesSfCommand(command as any)) { result = await querySfReport(command as any, client, dateRange); if (result) liveSource = "screaming_frog"; }
       if (!result && handlesCallRailCommand(command as any)) { result = await queryCallRail(command as any, client, dateRange); if (result) liveSource = "callrail"; }
       if (!result && handlesCtmCommand(command as any)) { result = await queryCtm(command as any, client, dateRange); if (result) liveSource = "ctm"; }
+      if (!result && handlesAttentionCommand(command as any)) { result = await queryAttention(command as any, client, dateRange); if (result) liveSource = "attention"; }
       if (!result && handlesSemrushCommand(command as any)) { result = await querySemrush(command as any, client, dateRange); if (result) liveSource = "semrush"; }
       if (!result && handlesAhrefsCommand(command)) { result = await queryAhrefs(command, client, dateRange); if (result) liveSource = "ahrefs"; }
       if (!result && command === "gbp_local_summary") { result = await queryGbp(command as any, client, dateRange); if (result) liveSource = "gbp"; }
@@ -3217,6 +3233,9 @@ export async function registerRoutes(
         if (!result && handlesCtmCommand(command)) {
           result = await queryCtm(command, client, dateRange);
         }
+        if (!result && handlesAttentionCommand(command)) {
+          result = await queryAttention(command, client, dateRange);
+        }
         if (!result && handlesSemrushCommand(command)) {
           result = await querySemrush(command, client, dateRange);
         }
@@ -3275,6 +3294,8 @@ export async function registerRoutes(
     if (client.callrailCompanyId) connectedServices.push("callrail");
     if (client.ctmAccountId) connectedServices.push("ctm");
     if (client.nimbataAccountId) connectedServices.push("nimbata");
+    const attentionCreds = await storage.getApiCredentialsByService("attention").catch(() => []);
+    if (attentionCreds.length > 0) connectedServices.push("attention");
     const semrushCreds = await storage.getApiCredentialsByService("semrush").catch(() => []);
     if (semrushCreds.length > 0) connectedServices.push("semrush");
     if (client.ahrefsProjectUrl) connectedServices.push("ahrefs");
@@ -3306,6 +3327,7 @@ export async function registerRoutes(
         if (!result && handlesGa4Command(command)) result = await queryGa4(command, client, dateRange);
         if (!result && handlesCallRailCommand(command)) result = await queryCallRail(command, client, dateRange);
         if (!result && handlesCtmCommand(command)) result = await queryCtm(command, client, dateRange);
+        if (!result && handlesAttentionCommand(command)) result = await queryAttention(command, client, dateRange);
         if (!result && handlesSemrushCommand(command)) result = await querySemrush(command, client, dateRange);
       } catch (err: any) {
         console.warn(`[Dashboard:expanded] ${command} failed: ${err.message}`);
@@ -3381,6 +3403,8 @@ export async function registerRoutes(
     if (client.callrailCompanyId) connectedServices.push("callrail");
     if (client.ctmAccountId) connectedServices.push("ctm");
     if (client.nimbataAccountId) connectedServices.push("nimbata");
+    const hasAttention = (await storage.getApiCredentialsByService("attention").catch(() => [])).length > 0;
+    if (hasAttention) connectedServices.push("attention");
     if (hasSemrush) connectedServices.push("semrush");
     if (client.ahrefsProjectUrl) connectedServices.push("ahrefs");
     if (client.gbpLocationName) connectedServices.push("gbp");

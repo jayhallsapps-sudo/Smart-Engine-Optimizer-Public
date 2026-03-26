@@ -1,6 +1,7 @@
 import { ReplitConnectors } from "@replit/connectors-sdk";
 import { decrypt } from "./encryption";
 import { storage } from "./storage";
+import { testAttentionConnection } from "./attentionClient";
 
 export interface TestResult {
   success: boolean;
@@ -260,6 +261,8 @@ export async function testCredential(credentialId: number): Promise<TestResult> 
     if (cred.service === "nimbata") {
       return { success: false, message: "Nimbata does not provide an API test endpoint. Verify the account ID is correct in each client's settings." };
     }
+
+    if (cred.service === "attention") return testAttentionConnection(value);
 
     return { success: false, message: `No connectivity test available for ${cred.service.replace(/_/g, " ")}` };
   } catch (err: any) {

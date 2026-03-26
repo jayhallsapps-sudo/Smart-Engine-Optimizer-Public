@@ -54,6 +54,7 @@ SmartEO integrates with the following services:
 -   **Ahrefs** (API key, Bearer token)
 -   **Screaming Frog** (desktop CSV import)
 -   **Airtable** (PAT)
+-   **Attention** (API key — `server/attentionClient.ts`; commands: `attention_recent_conversations`, `attention_call_summary`; optional per-client `attentionAccountId` for scoping)
 -   **Asana** (via Replit connector)
 -   **Google Drive** (via Replit connector)
 -   **PostgreSQL** (Database)

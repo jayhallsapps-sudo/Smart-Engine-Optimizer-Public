@@ -16,6 +16,7 @@ export const clients = pgTable("clients", {
   semrushProjectId: text("semrush_project_id"),
   screamingFrogProfile: text("screaming_frog_profile"),
   nimbataAccountId: text("nimbata_account_id"),
+  attentionAccountId: text("attention_account_id"),
   airtableBaseId: text("airtable_base_id"),
   airtableTableName: text("airtable_table_name"),
   airtableProductionView: text("airtable_production_view"),
@@ -505,6 +506,7 @@ export const DATA_SERVICES = [
   "semrush",
   "screaming_frog",
   "nimbata",
+  "attention",
   "airtable",
 ] as const;
 
@@ -533,6 +535,8 @@ export const COMMANDS = [
   "ctm_qoq_organic_calls",
   "ctm_qoq_top_landing_pages",
   "ctm_qoq_sources",
+  "attention_recent_conversations",
+  "attention_call_summary",
   "ahrefs_backlink_overview",
   "ahrefs_keyword_rankings",
   "ahrefs_competitor_visibility",
@@ -674,6 +678,17 @@ export const SERVICE_CONFIGS: ServiceConfig[] = [
     supportsMultiple: true,
     credentialFields: [
       { key: "api_key", label: "API Key", placeholder: "Enter Nimbata API key", type: "password" },
+    ],
+  },
+  {
+    id: "attention",
+    name: "Attention",
+    description: "AI conversation intelligence: call recordings, transcripts, sentiment analysis, action items, and AI summaries of sales calls.",
+    authType: "api_key",
+    color: "bg-indigo-600",
+    supportsMultiple: false,
+    credentialFields: [
+      { key: "api_key", label: "API Key", placeholder: "Enter Attention API key", type: "password" },
     ],
   },
   {

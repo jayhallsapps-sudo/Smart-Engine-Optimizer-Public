@@ -75,6 +75,7 @@ function getServiceIcon(serviceId: string) {
     case "callrail": return Phone;
     case "call_tracking_metrics": return Phone;
     case "nimbata": return Phone;
+    case "attention": return Phone;
     case "ahrefs": return LinkIcon;
     case "semrush": return LineChart;
     case "screaming_frog": return Bug;
@@ -646,7 +647,7 @@ export default function SetupPage() {
           <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
             Call Tracking
           </h2>
-          {SERVICE_CONFIGS.filter(s => ["callrail", "call_tracking_metrics", "nimbata"].includes(s.id)).map(config => (
+          {SERVICE_CONFIGS.filter(s => ["callrail", "call_tracking_metrics", "nimbata", "attention"].includes(s.id)).map(config => (
             <ServiceSection key={config.id} config={config} {...sharedSectionProps} />
           ))}
         </div>

@@ -155,6 +155,7 @@ interface ClientFormData {
   semrushProjectId: string;
   screamingFrogProfile: string;
   nimbataAccountId: string;
+  attentionAccountId: string;
   airtableBaseId: string;
   airtableTableName: string;
   airtableProductionView: string;
@@ -180,6 +181,7 @@ const emptyForm: ClientFormData = {
   semrushProjectId: "",
   screamingFrogProfile: "",
   nimbataAccountId: "",
+  attentionAccountId: "",
   airtableBaseId: "",
   airtableTableName: "",
   airtableProductionView: "",
@@ -528,6 +530,10 @@ function ClientForm({ initial, onSubmit, isPending }: { initial: ClientFormData;
             <div className="space-y-2">
               <Label htmlFor="nimbata" className="flex items-center gap-1.5"><Phone className="w-3 h-3" /> Nimbata Account ID</Label>
               <Input id="nimbata" value={form.nimbataAccountId} onChange={e => update("nimbataAccountId", e.target.value)} placeholder="Nimbata account ID" data-testid="input-nimbata-id" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="attentionAccountId" className="flex items-center gap-1.5"><Phone className="w-3 h-3" /> Attention Account ID (optional)</Label>
+              <Input id="attentionAccountId" value={form.attentionAccountId} onChange={e => update("attentionAccountId", e.target.value)} placeholder="Leave blank to access all conversations" data-testid="input-attention-account-id" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="airtableBase" className="flex items-center gap-1.5"><Database className="w-3 h-3" /> Airtable Base ID</Label>
@@ -1469,6 +1475,7 @@ export default function ClientsPage() {
                 semrushProjectId: editingClient.semrushProjectId || "",
                 screamingFrogProfile: editingClient.screamingFrogProfile || "",
                 nimbataAccountId: (editingClient as any).nimbataAccountId || "",
+                attentionAccountId: (editingClient as any).attentionAccountId || "",
                 airtableBaseId: (editingClient as any).airtableBaseId || "",
                 airtableTableName: (editingClient as any).airtableTableName || "",
                 airtableProductionView: (editingClient as any).airtableProductionView || "",

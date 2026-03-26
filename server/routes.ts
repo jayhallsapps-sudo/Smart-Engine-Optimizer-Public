@@ -32,7 +32,7 @@ import { fetchAsanaOpenTasks } from "./asanaClient";
 import { seedDatabase } from "./seed";
 import { encrypt, decrypt, deriveInternalToken } from "./encryption";
 import { buildGoogleAuthUrl, exchangeCodeForToken, callbackHtml, isGoogleConfigured } from "./googleAuth";
-import { testCredential } from "./connectionTest";
+import { testCredential, testAsana } from "./connectionTest";
 import { insertSfReportSchema, insertCallTrackingReportSchema, amInputsSchema, migrateLegacyAmInputs, insertReportCommentSchema, updateReportCommentSchema } from "@shared/schema";
 import { generateBiweeklyDocx, generatePptx, generateMidStrategyPptx, generateQbrPrepDocx } from "./reportGenerators";
 import { generateQcrPptx } from "./qcrPptxGenerator";
@@ -1494,6 +1494,12 @@ export async function registerRoutes(
 
   app.post("/api/credentials/:id/test", async (req, res) => {
     const result = await testCredential(Number(req.params.id));
+    res.json(result);
+  });
+
+  // Test the Asana Replit connector (no stored credential needed)
+  app.get("/api/asana/test", async (_req, res) => {
+    const result = await testAsana();
     res.json(result);
   });
 

@@ -508,6 +508,7 @@ export const DATA_SERVICES = [
   "nimbata",
   "attention",
   "airtable",
+  "asana",
 ] as const;
 
 export type DataService = (typeof DATA_SERVICES)[number];
@@ -581,7 +582,7 @@ export interface ServiceConfig {
   id: DataService;
   name: string;
   description: string;
-  authType: "oauth" | "api_key" | "desktop";
+  authType: "oauth" | "api_key" | "desktop" | "replit_connector";
   color: string;
   supportsMultiple: boolean;
   credentialFields: { key: string; label: string; placeholder: string; type: "text" | "password" }[];
@@ -701,6 +702,15 @@ export const SERVICE_CONFIGS: ServiceConfig[] = [
     credentialFields: [
       { key: "personal_access_token", label: "Personal Access Token", placeholder: "patXXXXXXXXXXXXXX", type: "password" },
     ],
+  },
+  {
+    id: "asana",
+    name: "Asana",
+    description: "Project and task tracking. Pull completed work items from Asana into reports to document SEO activities.",
+    authType: "replit_connector",
+    color: "bg-rose-500",
+    supportsMultiple: false,
+    credentialFields: [],
   },
 ];
 

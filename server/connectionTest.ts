@@ -191,7 +191,7 @@ async function testAirtable(pat: string): Promise<TestResult> {
   }
 }
 
-async function testAsana(): Promise<TestResult> {
+export async function testAsana(): Promise<TestResult> {
   try {
     const connectors = new ReplitConnectors();
     const resp = await connectors.proxy("asana", "/api/1.0/users/me", { method: "GET" });

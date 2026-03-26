@@ -51,6 +51,7 @@ import {
   Link,
   CheckCircle,
   MapPin,
+  CheckSquare,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
@@ -80,6 +81,7 @@ function getServiceIcon(serviceId: string) {
     case "semrush": return LineChart;
     case "screaming_frog": return Bug;
     case "google_business_profile": return MapPin;
+    case "asana": return CheckSquare;
     default: return Key;
   }
 }
@@ -119,8 +121,23 @@ function ServiceSection({
   healthLoading?: boolean;
 }) {
   const Icon = getServiceIcon(config.id);
+  const isReplitConnector = (config.authType as string) === "replit_connector";
   const serviceCredentials = credentials.filter(c => c.service === config.id);
   const hasAccounts = serviceCredentials.length > 0;
+
+  // Local state for replit_connector test (no stored credentials)
+  const [connectorTest, setConnectorTest] = useState<{ testing: boolean; success?: boolean; message?: string }>({ testing: false });
+
+  const handleConnectorTest = async () => {
+    setConnectorTest({ testing: true });
+    try {
+      const res = await fetch(`/api/${config.id}/test`, { headers: { "Authorization": `Bearer ${localStorage.getItem("smarteo_token") ?? ""}` } });
+      const data = await res.json() as { success: boolean; message: string };
+      setConnectorTest({ testing: false, success: data.success, message: data.message });
+    } catch (err: any) {
+      setConnectorTest({ testing: false, success: false, message: err.message });
+    }
+  };
 
   // Determine per-credential effective status (manual test overrides health check)
   const getEffective = (id: number): { success: boolean; message: string } | undefined => {
@@ -137,6 +154,12 @@ function ServiceSection({
   const badgeContent = (() => {
     if ((config.authType as string) === "mcp_only") return <><XCircle className="w-3 h-3 mr-1" /> Not Connected</>;
     if (config.authType === "desktop") return <><Monitor className="w-3 h-3 mr-1" /> Manual Import</>;
+    if (isReplitConnector) {
+      if (connectorTest.testing) return <><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Checking…</>;
+      if (connectorTest.success === true) return <><CheckCircle2 className="w-3 h-3 mr-1" /> Connected</>;
+      if (connectorTest.success === false) return <><XCircle className="w-3 h-3 mr-1" /> Not Connected</>;
+      return <><Wifi className="w-3 h-3 mr-1" /> Via Replit</>;
+    }
     if (!hasAccounts) return <><XCircle className="w-3 h-3 mr-1" /> Not Connected</>;
     if (anyFailed) return <><AlertTriangle className="w-3 h-3 mr-1" /> Needs Attention</>;
     if (isChecking) return <><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Checking…</>;
@@ -144,15 +167,22 @@ function ServiceSection({
     return <><CheckCircle2 className="w-3 h-3 mr-1" /> {serviceCredentials.length} Account{serviceCredentials.length > 1 ? "s" : ""}</>;
   })();
 
-  const badgeVariant = anyFailed
-    ? "outline"
-    : (config.authType as string) === "mcp_only" || config.authType === "desktop" || !hasAccounts
-      ? "secondary"
-      : "default";
+  const badgeVariant = (() => {
+    if (anyFailed) return "outline" as const;
+    if (isReplitConnector) {
+      if (connectorTest.success === true) return "default" as const;
+      if (connectorTest.success === false) return "secondary" as const;
+      return "secondary" as const;
+    }
+    if ((config.authType as string) === "mcp_only" || config.authType === "desktop" || !hasAccounts) return "secondary" as const;
+    return "default" as const;
+  })();
 
   const badgeClass = anyFailed
     ? "text-[10px] border-amber-400 text-amber-700 dark:text-amber-400"
-    : "text-[10px]";
+    : isReplitConnector && connectorTest.success === false
+      ? "text-[10px] border-red-400 text-red-600 dark:text-red-400"
+      : "text-[10px]";
 
   return (
     <Card className={`p-5 ${anyFailed ? "border-amber-300 dark:border-amber-700" : ""}`}>
@@ -177,7 +207,36 @@ function ServiceSection({
               </p>
             </div>
           )}
-          {(config.authType as string) !== "mcp_only" && config.authType === "oauth" && (
+          {isReplitConnector && (
+            <div className="rounded-md border border-blue-200/60 dark:border-blue-800/60 bg-blue-500/5 p-3 mb-2">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-blue-700 dark:text-blue-400 mb-0.5">Managed via Replit Integration</p>
+                  <p className="text-[11px] text-muted-foreground leading-snug">
+                    {config.name} connects through Replit's built-in integration — no API key needed. Authorize the integration in Replit and test below to confirm it's active.
+                  </p>
+                  {connectorTest.message && (
+                    <p className={`text-[11px] mt-1.5 font-medium ${connectorTest.success ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
+                      {connectorTest.message}
+                    </p>
+                  )}
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="shrink-0 h-7 text-[11px]"
+                  onClick={handleConnectorTest}
+                  disabled={connectorTest.testing}
+                  data-testid={`button-test-connector-${config.id}`}
+                >
+                  {connectorTest.testing
+                    ? <><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Testing…</>
+                    : <><Wifi className="w-3 h-3 mr-1" /> Test</>}
+                </Button>
+              </div>
+            </div>
+          )}
+          {(config.authType as string) !== "mcp_only" && !isReplitConnector && config.authType === "oauth" && (
             <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mb-2">
               <Shield className="w-3 h-3" />
               Requires OAuth2 with offline access for refresh tokens
@@ -196,7 +255,7 @@ function ServiceSection({
             </div>
           )}
 
-          {(config.authType as string) !== "mcp_only" && serviceCredentials.length > 0 && (
+          {(config.authType as string) !== "mcp_only" && !isReplitConnector && serviceCredentials.length > 0 && (
             <div className="space-y-1.5 mb-3">
               {serviceCredentials.map((cred) => {
                 const ts = testStates?.[cred.id];
@@ -263,7 +322,7 @@ function ServiceSection({
             </div>
           )}
 
-          {(config.authType as string) !== "desktop" && (config.authType as string) !== "mcp_only" && (config.supportsMultiple || !hasAccounts) && (
+          {(config.authType as string) !== "desktop" && (config.authType as string) !== "mcp_only" && !isReplitConnector && (config.supportsMultiple || !hasAccounts) && (
             <Button
               size="sm"
               variant={hasAccounts ? "outline" : "default"}
@@ -556,7 +615,7 @@ export default function SetupPage() {
 
   const connectableServiceIds = new Set(
     SERVICE_CONFIGS
-      .filter(s => s.authType !== "desktop" && (s.authType as string) !== "mcp_only")
+      .filter(s => s.authType !== "desktop" && (s.authType as string) !== "mcp_only" && (s.authType as string) !== "replit_connector")
       .map(s => s.id)
   );
   const connectedCount = new Set(
@@ -674,7 +733,7 @@ export default function SetupPage() {
           <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
             Work Tracking
           </h2>
-          {SERVICE_CONFIGS.filter(s => ["airtable"].includes(s.id)).map(config => (
+          {SERVICE_CONFIGS.filter(s => ["airtable", "asana"].includes(s.id)).map(config => (
             <ServiceSection key={config.id} config={config} {...sharedSectionProps} />
           ))}
         </div>

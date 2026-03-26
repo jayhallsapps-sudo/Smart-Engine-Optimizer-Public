@@ -74,18 +74,23 @@ export async function fetchAsanaWorkLog(
         notes: t.notes?.trim() ?? "",
       };
 
-      if (t.completed && t.completed_at) {
-        const completedAt = new Date(t.completed_at);
-        if (completedAt >= start && completedAt <= end) {
+      if (t.completed) {
+        // Include if completed_at OR due_on falls within the reporting window
+        const completedInWindow = t.completed_at && (() => {
+          const completedAt = new Date(t.completed_at);
+          return completedAt >= start && completedAt <= end;
+        })();
+        const dueInWindow = t.due_on && (() => {
+          const due = new Date(t.due_on + "T00:00:00Z");
+          return due >= start && due <= end;
+        })();
+        if (completedInWindow || dueInWindow) {
           completed.push(task);
         }
-      } else if (!t.completed) {
-        if (t.due_on) {
-          const due = new Date(t.due_on + "T00:00:00Z");
-          if (due >= start && due <= end) {
-            upcoming.push(task);
-          }
-        }
+      } else {
+        // Upcoming: include all non-completed tasks — no upper date bound.
+        // "What's Next" tasks are inherently due after the window ends.
+        upcoming.push(task);
       }
     }
 

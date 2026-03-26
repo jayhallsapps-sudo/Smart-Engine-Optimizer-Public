@@ -208,7 +208,13 @@ export async function fetchAirtableWorkLog(
     .map((r: any) => {
       const f = r.fields ?? {};
       const rawCreditType = String(f["Credit Type"] ?? "Other").trim();
-      const creditType = CREDIT_TYPE_ORDER.includes(rawCreditType) ? rawCreditType : "Other";
+      const taskName = String(f["Name"] ?? f["Task"] ?? f["Description"] ?? "").trim();
+      let creditType = CREDIT_TYPE_ORDER.includes(rawCreditType) ? rawCreditType : "Other";
+      // Title-based override: "Optimization" or "CRO" anywhere in the task name → Optimization section
+      const taskLower = taskName.toLowerCase();
+      if (taskLower.includes("optimization") || taskLower.includes("cro")) {
+        creditType = "Optimization";
+      }
       const rawStatus = f["Status"] ? String(f["Status"]).trim() : undefined;
       const rawContentDocUrl =
         f["Written Content Doc URL"] ??
@@ -220,7 +226,7 @@ export async function fetchAirtableWorkLog(
       const rawPageType = f["Page Type"] ?? f["Type"] ?? f["Content Type"] ?? undefined;
       return {
         id: r.id,
-        task: String(f["Name"] ?? f["Task"] ?? f["Description"] ?? "Untitled").trim(),
+        task: taskName || "Untitled",
         creditType,
         date: String(f["Due"] ?? f["Date"] ?? "").trim(),
         url: f["Final URL"] ?? f["URL"] ?? f["Page URL"] ?? undefined,

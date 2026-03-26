@@ -311,7 +311,7 @@ function TitleSlidePreview({ tokens }: { tokens: ThemeTokens }) {
   return (
     <SlideFrame tokens={tokens} bgKey="titleSlide">
       <div className="flex-1 flex flex-col items-center justify-center px-8 text-center gap-2">
-        <div className="w-10 h-0.5 mb-1" style={{ backgroundColor: tokens.secondaryColor }} />
+        <div className="w-16 h-1.5 rounded-full mb-1" style={{ backgroundColor: tokens.secondaryColor }} />
         <h1 style={{ fontFamily: tokens.headingFont, fontSize: `${tokens.headingXL * 0.55}px`, fontWeight: tokens.headingWeight, color: "#FFFFFF", lineHeight: 1.1 }}>
           Monthly SEO Report
         </h1>
@@ -334,15 +334,18 @@ function KpiSlidePreview({ tokens }: { tokens: ThemeTokens }) {
   return (
     <SlideFrame tokens={tokens} bgKey="kpiSlide">
       <div className="flex-1 flex flex-col px-4 py-3 gap-2">
-        <h2 style={{ fontFamily: tokens.headingFont, fontSize: `${tokens.headingSM * 0.85}px`, fontWeight: tokens.headingWeight, color: tokens.primaryColor }}>
-          Performance Overview
-        </h2>
+        <div className="flex items-center gap-2">
+          <div className="w-1 h-4 rounded-full shrink-0" style={{ backgroundColor: tokens.secondaryColor }} />
+          <h2 style={{ fontFamily: tokens.headingFont, fontSize: `${tokens.headingSM * 0.85}px`, fontWeight: tokens.headingWeight, color: tokens.primaryColor }}>
+            Performance Overview
+          </h2>
+        </div>
         <div className="grid grid-cols-4 gap-2 flex-1">
           {metrics.map(m => (
             <div
               key={m.label}
               className="flex flex-col justify-between p-2 rounded"
-              style={{ backgroundColor: tokens.cardBg, border: `1px solid ${tokens.cardBorderColor}`, borderRadius: `${tokens.borderRadius / 2}px` }}
+              style={{ backgroundColor: tokens.cardBg, border: `1px solid ${tokens.cardBorderColor}`, borderTopWidth: "2px", borderTopColor: tokens.secondaryColor, borderRadius: `${tokens.borderRadius / 2}px` }}
             >
               <span style={{ fontFamily: tokens.bodyFont, fontSize: "7px", color: "#64748B" }}>{m.label}</span>
               <div>
@@ -362,9 +365,12 @@ function ChartSlidePreview({ tokens }: { tokens: ThemeTokens }) {
   return (
     <SlideFrame tokens={tokens} bgKey="chartSlide">
       <div className="flex-1 flex flex-col px-4 py-3 gap-2">
-        <h2 style={{ fontFamily: tokens.headingFont, fontSize: `${tokens.headingSM * 0.85}px`, fontWeight: tokens.headingWeight, color: tokens.primaryColor }}>
-          Organic Sessions Trend
-        </h2>
+        <div className="flex items-center gap-2">
+          <div className="w-1 h-4 rounded-full shrink-0" style={{ backgroundColor: tokens.secondaryColor }} />
+          <h2 style={{ fontFamily: tokens.headingFont, fontSize: `${tokens.headingSM * 0.85}px`, fontWeight: tokens.headingWeight, color: tokens.primaryColor }}>
+            Organic Sessions Trend
+          </h2>
+        </div>
         <div className="flex-1 flex items-end gap-1 pb-2">
           {bars.map((h, i) => (
             <div key={i} className="flex-1 flex flex-col items-center gap-0.5">
@@ -396,9 +402,12 @@ function TableSlidePreview({ tokens }: { tokens: ThemeTokens }) {
   return (
     <SlideFrame tokens={tokens} bgKey="tableSlide">
       <div className="flex-1 flex flex-col px-4 py-3 gap-2">
-        <h2 style={{ fontFamily: tokens.headingFont, fontSize: `${tokens.headingSM * 0.85}px`, fontWeight: tokens.headingWeight, color: tokens.primaryColor }}>
-          Top Queries by Clicks
-        </h2>
+        <div className="flex items-center gap-2">
+          <div className="w-1 h-4 rounded-full shrink-0" style={{ backgroundColor: tokens.secondaryColor }} />
+          <h2 style={{ fontFamily: tokens.headingFont, fontSize: `${tokens.headingSM * 0.85}px`, fontWeight: tokens.headingWeight, color: tokens.primaryColor }}>
+            Top Queries by Clicks
+          </h2>
+        </div>
         <div className="flex-1 overflow-hidden" style={{ borderRadius: `${tokens.borderRadius / 3}px`, border: `1px solid ${tokens.tableBorderColor}` }}>
           <table className="w-full" style={{ fontFamily: tokens.bodyFont, fontSize: "7px", borderCollapse: "collapse" }}>
             <thead>
@@ -434,13 +443,16 @@ function ContentSlidePreview({ tokens }: { tokens: ThemeTokens }) {
   return (
     <SlideFrame tokens={tokens} bgKey="contentSlide">
       <div className="flex-1 flex flex-col px-4 py-3 gap-2">
-        <h2 style={{ fontFamily: tokens.headingFont, fontSize: `${tokens.headingSM * 0.85}px`, fontWeight: tokens.headingWeight, color: tokens.primaryColor }}>
-          Work Completed This Month
-        </h2>
+        <div className="flex items-center gap-2">
+          <div className="w-1 h-4 rounded-full shrink-0" style={{ backgroundColor: tokens.secondaryColor }} />
+          <h2 style={{ fontFamily: tokens.headingFont, fontSize: `${tokens.headingSM * 0.85}px`, fontWeight: tokens.headingWeight, color: tokens.primaryColor }}>
+            Work Completed This Month
+          </h2>
+        </div>
         <div className="flex-1 space-y-2">
           {items.map((item, i) => (
             <div key={i} className="flex items-start gap-2">
-              <div className="w-1 h-1 rounded-full mt-1 shrink-0" style={{ backgroundColor: tokens.secondaryColor }} />
+              <div className="w-1.5 h-1.5 rounded-full mt-0.5 shrink-0" style={{ backgroundColor: tokens.secondaryColor }} />
               <span style={{ fontFamily: tokens.bodyFont, fontSize: "8px", color: "#334155", lineHeight: 1.4 }}>{item}</span>
             </div>
           ))}
@@ -461,14 +473,15 @@ function ContentSlidePreview({ tokens }: { tokens: ThemeTokens }) {
 function DividerSlidePreview({ tokens }: { tokens: ThemeTokens }) {
   return (
     <SlideFrame tokens={tokens} bgKey="sectionDivider">
-      <div className="flex-1 flex flex-col items-center justify-center gap-1.5">
-        <div className="w-8 h-0.5" style={{ backgroundColor: tokens.secondaryColor }} />
+      <div className="flex-1 flex flex-col items-center justify-center gap-2">
+        <div className="w-12 h-1.5 rounded-full" style={{ backgroundColor: tokens.secondaryColor }} />
         <h2 style={{ fontFamily: tokens.headingFont, fontSize: `${tokens.headingLG * 0.6}px`, fontWeight: tokens.headingWeight, color: "#FFFFFF", textAlign: "center" }}>
           Organic Performance
         </h2>
         <p style={{ fontFamily: tokens.bodyFont, fontSize: "8px", color: "#FFFFFF80", textAlign: "center" }}>
           Search Console · Google Analytics 4
         </p>
+        <div className="w-8 h-1 rounded-full" style={{ backgroundColor: tokens.secondaryColor, opacity: 0.6 }} />
       </div>
     </SlideFrame>
   );
@@ -478,19 +491,19 @@ function SummarySlidePreview({ tokens }: { tokens: ThemeTokens }) {
   return (
     <SlideFrame tokens={tokens} bgKey="summarySlide">
       <div className="flex-1 flex flex-col items-center justify-center px-6 text-center gap-3">
-        <div className="w-8 h-0.5" style={{ backgroundColor: "#FFFFFF60" }} />
+        <div className="w-12 h-1.5 rounded-full" style={{ backgroundColor: tokens.secondaryColor }} />
         <h2 style={{ fontFamily: tokens.headingFont, fontSize: `${tokens.headingLG * 0.6}px`, fontWeight: tokens.headingWeight, color: "#FFFFFF" }}>
           Key Takeaways
         </h2>
         <div className="w-full space-y-1.5 text-left max-w-xs">
           {["Organic sessions up 12% month-over-month", "New money pages indexed and ranking", "Q4 roadmap: Local + Technical sprint"].map((s, i) => (
             <div key={i} className="flex items-start gap-1.5">
-              <div className="w-1 h-1 rounded-full mt-1.5 shrink-0" style={{ backgroundColor: "#FFFFFF80" }} />
+              <div className="w-1.5 h-1.5 rounded-full mt-1 shrink-0" style={{ backgroundColor: tokens.secondaryColor }} />
               <span style={{ fontFamily: tokens.bodyFont, fontSize: "8px", color: "#FFFFFFDD" }}>{s}</span>
             </div>
           ))}
         </div>
-        <div className="w-8 h-0.5" style={{ backgroundColor: "#FFFFFF60" }} />
+        <div className="w-8 h-1 rounded-full" style={{ backgroundColor: tokens.secondaryColor, opacity: 0.6 }} />
         <p style={{ fontFamily: tokens.bodyFont, fontSize: "8px", color: "#FFFFFF80" }}>Thank you · {tokens.brandName}</p>
       </div>
     </SlideFrame>

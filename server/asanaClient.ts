@@ -87,10 +87,16 @@ export async function fetchAsanaWorkLog(
         if (completedInWindow || dueInWindow) {
           completed.push(task);
         }
-      } else {
-        // Upcoming: include all non-completed tasks — no upper date bound.
-        // "What's Next" tasks are inherently due after the window ends.
-        upcoming.push(task);
+      } else if (t.due_on) {
+        // Upcoming: not completed, due date falls within the next 2 weeks after the window ends.
+        // Lower bound: start of the reporting window (don't surface overdue ancient tasks).
+        // Upper bound: endDate + 14 days (the "next 2 weeks" forward look).
+        const due = new Date(t.due_on + "T00:00:00Z");
+        const nextTwoWeeks = new Date(end);
+        nextTwoWeeks.setDate(nextTwoWeeks.getDate() + 14);
+        if (due >= start && due <= nextTwoWeeks) {
+          upcoming.push(task);
+        }
       }
     }
 

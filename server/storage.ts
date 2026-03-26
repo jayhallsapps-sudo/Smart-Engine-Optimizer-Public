@@ -63,8 +63,17 @@ import {
   type InsertDiscoverabilityWorkspace,
   amaConversations,
   amaMessages,
+  themes,
+  templateStructures,
   type AmaConversation,
   type AmaMessage,
+  type Theme,
+  type InsertTheme,
+  type TemplateStructure,
+  type SlideEntry,
+  type ThemeTokens,
+  DEFAULT_THEME_TOKENS,
+  DEFAULT_TEMPLATE_SLIDES,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -192,6 +201,24 @@ export interface IStorage {
   deleteAmaConversation(id: number): Promise<boolean>;
   getAmaMessages(conversationId: number): Promise<AmaMessage[]>;
   addAmaMessage(data: { conversationId: number; role: string; content: string; toolCalls?: any; provider?: string }): Promise<AmaMessage>;
+
+  // Theme System
+  listThemes(): Promise<Theme[]>;
+  getTheme(id: number): Promise<Theme | undefined>;
+  getActiveTheme(): Promise<Theme | undefined>;
+  createTheme(data: { name: string; tokens: ThemeTokens; isDefault?: boolean }): Promise<Theme>;
+  updateThemeTokens(id: number, tokens: ThemeTokens): Promise<Theme | undefined>;
+  saveDraftTokens(id: number, draftTokens: ThemeTokens): Promise<Theme | undefined>;
+  publishTheme(id: number): Promise<Theme | undefined>;
+  discardDraft(id: number): Promise<Theme | undefined>;
+  duplicateTheme(id: number, newName: string): Promise<Theme>;
+  renameTheme(id: number, name: string): Promise<Theme | undefined>;
+  deleteTheme(id: number): Promise<boolean>;
+  setActiveTheme(id: number): Promise<void>;
+
+  // Template Structures
+  getTemplateStructure(templateId: string): Promise<TemplateStructure | undefined>;
+  saveTemplateStructure(templateId: string, slides: SlideEntry[]): Promise<TemplateStructure>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -850,6 +877,129 @@ export class DatabaseStorage implements IStorage {
       content: data.content,
       toolCalls: data.toolCalls ?? null,
       provider: data.provider ?? null,
+    }).returning();
+    return row;
+  }
+
+  // ─── Theme System ───────────────────────────────────────────────────────────
+
+  async listThemes(): Promise<Theme[]> {
+    return db.select().from(themes).orderBy(themes.createdAt);
+  }
+
+  async getTheme(id: number): Promise<Theme | undefined> {
+    const [row] = await db.select().from(themes).where(eq(themes.id, id));
+    return row;
+  }
+
+  async getActiveTheme(): Promise<Theme | undefined> {
+    const [row] = await db.select().from(themes).where(eq(themes.isActive, true));
+    if (row) return row;
+    // Seed default theme if none exists
+    return this._seedDefaultTheme();
+  }
+
+  private async _seedDefaultTheme(): Promise<Theme> {
+    const [existing] = await db.select().from(themes);
+    if (existing) {
+      await db.update(themes).set({ isActive: true }).where(eq(themes.id, existing.id));
+      return { ...existing, isActive: true };
+    }
+    const [row] = await db.insert(themes).values({
+      name: "SmartEO Default",
+      isDefault: true,
+      isActive: true,
+      tokens: DEFAULT_THEME_TOKENS,
+      draftTokens: null,
+      hasDraft: false,
+    }).returning();
+    return row;
+  }
+
+  async createTheme(data: { name: string; tokens: ThemeTokens; isDefault?: boolean }): Promise<Theme> {
+    const [row] = await db.insert(themes).values({
+      name: data.name,
+      isDefault: data.isDefault ?? false,
+      isActive: false,
+      tokens: data.tokens,
+      draftTokens: null,
+      hasDraft: false,
+    }).returning();
+    return row;
+  }
+
+  async updateThemeTokens(id: number, tokens: ThemeTokens): Promise<Theme | undefined> {
+    const [row] = await db.update(themes).set({ tokens, updatedAt: new Date() }).where(eq(themes.id, id)).returning();
+    return row;
+  }
+
+  async saveDraftTokens(id: number, draftTokens: ThemeTokens): Promise<Theme | undefined> {
+    const [row] = await db.update(themes).set({ draftTokens, hasDraft: true, updatedAt: new Date() }).where(eq(themes.id, id)).returning();
+    return row;
+  }
+
+  async publishTheme(id: number): Promise<Theme | undefined> {
+    // Get current theme to merge draft into tokens
+    const [current] = await db.select().from(themes).where(eq(themes.id, id));
+    if (!current) return undefined;
+    const newTokens = current.hasDraft && current.draftTokens ? current.draftTokens : current.tokens;
+    const [row] = await db.update(themes).set({ tokens: newTokens, draftTokens: null, hasDraft: false, updatedAt: new Date() }).where(eq(themes.id, id)).returning();
+    return row;
+  }
+
+  async discardDraft(id: number): Promise<Theme | undefined> {
+    const [row] = await db.update(themes).set({ draftTokens: null, hasDraft: false, updatedAt: new Date() }).where(eq(themes.id, id)).returning();
+    return row;
+  }
+
+  async duplicateTheme(id: number, newName: string): Promise<Theme> {
+    const [source] = await db.select().from(themes).where(eq(themes.id, id));
+    if (!source) throw new Error("Theme not found");
+    const [row] = await db.insert(themes).values({
+      name: newName,
+      isDefault: false,
+      isActive: false,
+      tokens: source.tokens,
+      draftTokens: null,
+      hasDraft: false,
+    }).returning();
+    return row;
+  }
+
+  async renameTheme(id: number, name: string): Promise<Theme | undefined> {
+    const [row] = await db.update(themes).set({ name, updatedAt: new Date() }).where(eq(themes.id, id)).returning();
+    return row;
+  }
+
+  async deleteTheme(id: number): Promise<boolean> {
+    const res = await db.delete(themes).where(and(eq(themes.id, id), eq(themes.isDefault, false)));
+    return (res.rowCount ?? 0) > 0;
+  }
+
+  async setActiveTheme(id: number): Promise<void> {
+    await db.update(themes).set({ isActive: false });
+    await db.update(themes).set({ isActive: true }).where(eq(themes.id, id));
+  }
+
+  // ─── Template Structures ────────────────────────────────────────────────────
+
+  async getTemplateStructure(templateId: string): Promise<TemplateStructure | undefined> {
+    const [row] = await db.select().from(templateStructures).where(eq(templateStructures.templateId, templateId));
+    return row;
+  }
+
+  async saveTemplateStructure(templateId: string, slides: SlideEntry[]): Promise<TemplateStructure> {
+    const existing = await this.getTemplateStructure(templateId);
+    if (existing) {
+      const [row] = await db.update(templateStructures)
+        .set({ slides, updatedAt: new Date() })
+        .where(eq(templateStructures.templateId, templateId))
+        .returning();
+      return row;
+    }
+    const [row] = await db.insert(templateStructures).values({
+      templateId,
+      slides,
     }).returning();
     return row;
   }

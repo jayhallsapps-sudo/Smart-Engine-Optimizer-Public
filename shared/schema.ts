@@ -965,3 +965,244 @@ export type AmaConversation = typeof amaConversations.$inferSelect;
 export type AmaMessage = typeof amaMessages.$inferSelect;
 export type InsertAmaConversation = z.infer<typeof insertAmaConversationSchema>;
 export type InsertAmaMessage = z.infer<typeof insertAmaMessageSchema>;
+
+// ─── Theme System ─────────────────────────────────────────────────────────────
+
+export interface BackgroundDef {
+  type: "solid" | "gradient" | "none";
+  solidColor: string;
+  gradientFrom: string;
+  gradientTo: string;
+  gradientDirection: string;
+  overlay: boolean;
+  overlayColor: string;
+  overlayOpacity: number;
+}
+
+export interface ThemeTokens {
+  brandName: string;
+  tagline: string;
+
+  primaryColor: string;
+  secondaryColor: string;
+  accentColor: string;
+  successColor: string;
+  warningColor: string;
+  errorColor: string;
+
+  headingFont: string;
+  bodyFont: string;
+  headingWeight: number;
+  headingXL: number;
+  headingLG: number;
+  headingMD: number;
+  headingSM: number;
+  bodyLG: number;
+  bodyMD: number;
+  bodySM: number;
+
+  borderRadius: number;
+
+  backgrounds: {
+    global: BackgroundDef;
+    titleSlide: BackgroundDef;
+    sectionDivider: BackgroundDef;
+    kpiSlide: BackgroundDef;
+    chartSlide: BackgroundDef;
+    tableSlide: BackgroundDef;
+    contentSlide: BackgroundDef;
+    summarySlide: BackgroundDef;
+  };
+
+  tableHeaderBg: string;
+  tableHeaderText: string;
+  tableAltRowBg: string;
+  tableBorderColor: string;
+  tableBodyText: string;
+
+  cardBg: string;
+  cardBorderColor: string;
+  calloutBg: string;
+  calloutBorderColor: string;
+  calloutText: string;
+
+  showHeader: boolean;
+  showFooter: boolean;
+  showPageNumbers: boolean;
+  headerColor: string;
+  footerColor: string;
+  headerTextColor: string;
+  footerTextColor: string;
+}
+
+const defaultBg = (type: "solid" | "gradient" | "none", solidColor: string, from?: string, to?: string): BackgroundDef => ({
+  type,
+  solidColor,
+  gradientFrom: from ?? solidColor,
+  gradientTo: to ?? solidColor,
+  gradientDirection: "135deg",
+  overlay: false,
+  overlayColor: "#000000",
+  overlayOpacity: 0.3,
+});
+
+export const DEFAULT_THEME_TOKENS: ThemeTokens = {
+  brandName: "Webserv",
+  tagline: "SEO Performance Report",
+
+  primaryColor: "#1B3A6B",
+  secondaryColor: "#C0392B",
+  accentColor: "#0891B2",
+  successColor: "#059669",
+  warningColor: "#D97706",
+  errorColor: "#DC2626",
+
+  headingFont: "Montserrat",
+  bodyFont: "Inter",
+  headingWeight: 700,
+  headingXL: 28,
+  headingLG: 22,
+  headingMD: 18,
+  headingSM: 14,
+  bodyLG: 14,
+  bodyMD: 12,
+  bodySM: 11,
+
+  borderRadius: 8,
+
+  backgrounds: {
+    global: defaultBg("solid", "#FFFFFF"),
+    titleSlide: defaultBg("gradient", "#1B3A6B", "#1B3A6B", "#2A5298"),
+    sectionDivider: defaultBg("solid", "#1B3A6B"),
+    kpiSlide: defaultBg("solid", "#FFFFFF"),
+    chartSlide: defaultBg("solid", "#FFFFFF"),
+    tableSlide: defaultBg("solid", "#FFFFFF"),
+    contentSlide: defaultBg("solid", "#FFFFFF"),
+    summarySlide: defaultBg("gradient", "#1B3A6B", "#1B3A6B", "#C0392B"),
+  },
+
+  tableHeaderBg: "#1B3A6B",
+  tableHeaderText: "#FFFFFF",
+  tableAltRowBg: "#F8FAFC",
+  tableBorderColor: "#E2E8F0",
+  tableBodyText: "#1E293B",
+
+  cardBg: "#FFFFFF",
+  cardBorderColor: "#E2E8F0",
+  calloutBg: "#EFF6FF",
+  calloutBorderColor: "#1B3A6B",
+  calloutText: "#1E293B",
+
+  showHeader: true,
+  showFooter: true,
+  showPageNumbers: true,
+  headerColor: "#1B3A6B",
+  footerColor: "#F8FAFC",
+  headerTextColor: "#FFFFFF",
+  footerTextColor: "#64748B",
+};
+
+export const themes = pgTable("themes", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  isDefault: boolean("is_default").notNull().default(false),
+  isActive: boolean("is_active").notNull().default(false),
+  tokens: jsonb("tokens").notNull().$type<ThemeTokens>(),
+  draftTokens: jsonb("draft_tokens").$type<ThemeTokens>(),
+  hasDraft: boolean("has_draft").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export type Theme = typeof themes.$inferSelect;
+export type InsertTheme = typeof themes.$inferInsert;
+
+// ─── Slide / Page Type Library ────────────────────────────────────────────────
+
+export interface SlideTypeDef {
+  id: string;
+  label: string;
+  description: string;
+  category: "structure" | "data" | "content" | "layout";
+  usedIn: string[];
+  icon: string;
+}
+
+export const SLIDE_TYPES: SlideTypeDef[] = [
+  { id: "title", label: "Title Slide", description: "Cover slide with report name, client, and period", category: "structure", usedIn: ["monthly-pptx", "qbr-pptx", "quarterly-content-roadmap"], icon: "🏛" },
+  { id: "section-divider", label: "Section Divider", description: "Visual separator between major report sections", category: "structure", usedIn: ["monthly-pptx", "qbr-pptx", "quarterly-content-roadmap"], icon: "🔷" },
+  { id: "kpi-summary", label: "KPI Summary", description: "Grid of performance metrics with values and deltas", category: "data", usedIn: ["monthly-pptx", "qbr-pptx"], icon: "📊" },
+  { id: "chart-bar", label: "Bar Chart", description: "Vertical or horizontal bar chart visualization", category: "data", usedIn: ["monthly-pptx", "qbr-pptx"], icon: "📉" },
+  { id: "chart-line", label: "Line Chart", description: "Trend line for performance over time", category: "data", usedIn: ["monthly-pptx", "qbr-pptx"], icon: "📈" },
+  { id: "table", label: "Data Table", description: "Structured table with headers, rows, and source badges", category: "data", usedIn: ["monthly-pptx", "qbr-pptx", "biweekly-docx"], icon: "📋" },
+  { id: "two-column", label: "Two-Column Layout", description: "Split layout: data on left, insights on right", category: "layout", usedIn: ["monthly-pptx", "qbr-pptx"], icon: "⬛" },
+  { id: "bullets", label: "Bullets / Strategy", description: "Numbered or bulleted list for strategy or work log", category: "content", usedIn: ["monthly-pptx", "qbr-pptx", "quarterly-content-roadmap", "biweekly-docx"], icon: "📝" },
+  { id: "roadmap", label: "Roadmap Slide", description: "Forward-looking plan with categorized initiatives", category: "content", usedIn: ["qbr-pptx", "monthly-pptx"], icon: "🗺" },
+  { id: "callout", label: "Callout / Insight", description: "Highlighted insight or analyst commentary box", category: "content", usedIn: ["monthly-pptx", "qbr-pptx", "biweekly-docx"], icon: "💡" },
+  { id: "scorecard", label: "Scorecard", description: "QTD or QoQ pacing table with performance targets", category: "data", usedIn: ["monthly-pptx", "qbr-pptx"], icon: "🎯" },
+  { id: "summary", label: "Closing Summary", description: "Executive closing slide with key takeaways", category: "content", usedIn: ["monthly-pptx", "qbr-pptx"], icon: "✅" },
+  { id: "production-table", label: "Production Table", description: "Content deliverable table by category/month", category: "data", usedIn: ["quarterly-content-roadmap"], icon: "🗂" },
+  { id: "work-log", label: "Work Log Section", description: "Two-column table: What We Did vs What's Next", category: "layout", usedIn: ["biweekly-docx"], icon: "✏️" },
+];
+
+// ─── Template Structures ──────────────────────────────────────────────────────
+
+export interface SlideEntry {
+  id: string;
+  typeId: string;
+  label: string;
+}
+
+export const templateStructures = pgTable("template_structures", {
+  id: serial("id").primaryKey(),
+  templateId: text("template_id").notNull().unique(),
+  slides: jsonb("slides").notNull().$type<SlideEntry[]>(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export type TemplateStructure = typeof templateStructures.$inferSelect;
+
+export const DEFAULT_TEMPLATE_SLIDES: Record<string, SlideEntry[]> = {
+  "monthly-pptx": [
+    { id: "s1", typeId: "title", label: "Title Slide" },
+    { id: "s2", typeId: "kpi-summary", label: "Performance Overview" },
+    { id: "s3", typeId: "bullets", label: "Strategy Focus" },
+    { id: "s4", typeId: "table", label: "Conversion Sources" },
+    { id: "s5", typeId: "table", label: "Top Queries" },
+    { id: "s6", typeId: "table", label: "Query Groups" },
+    { id: "s7", typeId: "scorecard", label: "QTD Scorecard" },
+    { id: "s8", typeId: "bullets", label: "Work Log" },
+    { id: "s9", typeId: "bullets", label: "Next Steps" },
+  ],
+  "qbr-pptx": [
+    { id: "s1", typeId: "title", label: "Title Slide" },
+    { id: "s2", typeId: "kpi-summary", label: "QoQ Performance" },
+    { id: "s3", typeId: "two-column", label: "Top Pages Analysis" },
+    { id: "s4", typeId: "two-column", label: "Top Queries Analysis" },
+    { id: "s5", typeId: "chart-bar", label: "Conversion Funnel" },
+    { id: "s6", typeId: "roadmap", label: "Next Quarter Roadmap" },
+    { id: "s7", typeId: "summary", label: "Closing Summary" },
+  ],
+  "quarterly-content-roadmap": [
+    { id: "s1", typeId: "title", label: "Title Slide" },
+    { id: "s2", typeId: "section-divider", label: "Month 1 Divider" },
+    { id: "s3", typeId: "bullets", label: "Month 1 Strategy" },
+    { id: "s4", typeId: "production-table", label: "Month 1 Production" },
+    { id: "s5", typeId: "section-divider", label: "Month 2 Divider" },
+    { id: "s6", typeId: "bullets", label: "Month 2 Strategy" },
+    { id: "s7", typeId: "production-table", label: "Month 2 Production" },
+    { id: "s8", typeId: "section-divider", label: "Month 3 Divider" },
+    { id: "s9", typeId: "bullets", label: "Month 3 Strategy" },
+    { id: "s10", typeId: "production-table", label: "Month 3 Production" },
+  ],
+  "biweekly-docx": [
+    { id: "s1", typeId: "title", label: "Document Header" },
+    { id: "s2", typeId: "kpi-summary", label: "Performance Pulse" },
+    { id: "s3", typeId: "work-log", label: "Content Work Log" },
+    { id: "s4", typeId: "work-log", label: "Optimization Work Log" },
+    { id: "s5", typeId: "work-log", label: "Technical Work Log" },
+    { id: "s6", typeId: "work-log", label: "Local SEO Work Log" },
+    { id: "s7", typeId: "callout", label: "Technical Priorities" },
+    { id: "s8", typeId: "bullets", label: "Partnership Notes" },
+  ],
+};

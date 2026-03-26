@@ -1,0 +1,419 @@
+Build two new core modules in Smart Engine Optimizer (SmartEO) called Theme and Templates. Place both at the end of the core modules list in the SmartEO Command Center. Theme must appear first. Templates must appear second. Remove Templates from the left sidebar entirely. Relocate it. Do not delete it. Do not leave duplicate navigation behind.
+
+Non-negotiable outcome:
+SmartEO must gain a real centralized design system and a real reusable slide/page template system. I do not want a shallow settings screen. I do not want disconnected controls. I do not want a half-working visual editor. I do not want styling spread across the app after this. I want one clear theme system that governs presentation across the system, and one clear template system that governs report/page/slide structure across the system.
+
+Core requirement 1: Theme module
+Build a true Theme module that becomes the single source of truth for presentation styling across SmartEO.
+
+The Theme module must control all shared design decisions used by reports, decks, documents, previews, and exports, including:
+
+global logo
+global header asset
+global footer asset
+theme name
+brand name
+global background defaults
+per-slide-type / per-page-type backgrounds
+solid backgrounds
+gradient backgrounds
+image backgrounds
+background overlays if needed
+primary color
+secondary color
+accent color
+neutral palette
+surface/card colors
+border colors
+text colors
+semantic colors for success, warning, error, info
+heading font
+body font
+data/mono font if used
+heading sizes
+body sizes
+caption sizes
+note sizes
+font weights
+line heights
+heading hierarchy
+border radius
+shadow rules
+spacing scale
+section padding
+margin defaults
+divider styles
+link styles
+button styles
+badge styles
+KPI card styles
+note/callout styles
+table styles
+report header/footer behavior
+standard container widths where relevant
+
+Do not expose controls that are not actually wired to real output components.
+
+Core requirement 2: Theme module UX
+The Theme module must be easy to use.
+
+Required layout:
+
+left panel = controls
+right panel = live preview
+
+Required behavior:
+
+preview updates instantly as changes are made
+no page refresh required
+no fake preview; use real shared presentation components where possible
+changes remain draft until explicitly saved/published
+published theme becomes the system-wide active theme
+unsaved changes detection required
+cancel/revert behavior required
+
+Left panel sections must include:
+
+Branding
+Assets
+Colors
+Typography
+Backgrounds
+Tables
+Components
+Reports & Slides
+Layout & Spacing
+Export Behavior
+
+Right preview panel must show realistic SmartEO output, not a generic design sandbox.
+
+Preview must include:
+
+title/cover slide
+section divider slide
+KPI/summary slide
+chart slide
+table slide
+body/content slide
+report/document header
+note/callout box
+footer
+buttons, links, and badges
+
+Core requirement 3: Background control
+Backgrounds are not optional. Build proper background management into Theme.
+
+Support:
+
+global default background
+per-slide-type background assignment
+per-page-type background assignment
+solid color background
+gradient background
+image background
+optional overlay settings if needed for readability
+
+Examples that must be supported:
+
+title slide background
+chart slide background
+table slide background
+content slide background
+summary/closing slide background
+
+All background changes must appear immediately in the live preview.
+
+Core requirement 4: Templates module
+Build a real Templates module that manages structure, not styling.
+
+Templates must become the place where report, deck, and document structures are assembled and maintained.
+
+Templates module must allow:
+
+viewing all available template types
+viewing all available slide/page types
+adding new slides/pages
+reordering slides/pages
+duplicating slides/pages
+removing slides/pages
+renaming/labelling slides/pages where appropriate
+saving template structures
+creating template variants
+assigning slide/page types into templates
+previewing slide/page types before insertion
+
+Critical UX requirement:
+Adding a new slide/page must be simple.
+
+Required flow:
+
+open Templates
+choose a report/template
+click New
+dropdown appears
+choose slide/page type
+insert into template
+reorder if needed
+save template
+
+That flow must exist. It must be obvious. It must not require any workaround or code editing.
+
+Core requirement 5: Slide/page type system
+Build a reusable slide/page type system. Do not hardcode around only the current report structures.
+
+The system must support reusable slide/page archetypes such as:
+
+title slide
+section divider slide
+KPI slide
+chart slide
+table slide
+text/content slide
+summary slide
+strategy slide
+roadmap slide
+comparison slide
+insight slide
+callout slide
+closing slide
+
+Do not stop there if the current system reveals more valid types.
+
+Each slide/page type should have:
+
+a reusable definition
+a preview or thumbnail
+a clear label
+compatibility with theme styling
+compatibility with template insertion flow
+
+Core requirement 6: Existing slide/page analysis
+Do not build the slide/page type library blindly.
+
+You must inspect the slide/page/report structures already present in SmartEO and use them to inform the builder.
+
+Required behavior:
+
+analyze current report/deck/page patterns already in the system
+identify recurring layouts
+map those layouts into reusable slide/page types
+surface likely missing slide/page types if gaps exist
+create a builder that reflects how SmartEO actually works, not how a generic slide app works
+
+I do not want a blank “template builder” disconnected from the actual system. I want the existing SmartEO slide/page reality turned into a reusable system.
+
+Core requirement 7: Theme inheritance
+When a theme is published, the active theme must apply across the entire presentation layer of SmartEO.
+
+Theme must apply to:
+
+Monthly deck previews
+QBS previews
+QBR previews
+Bi-weekly previews
+current and future report/deck/document previews
+slide/page previews inside Templates
+print views
+PDF export styling where supported
+DOCX/Google Docs token mapping where supported
+shared presentation components
+tables and structured output components where appropriate
+
+Rules:
+
+remove scattered hardcoded visual values where they should now inherit from Theme
+preserve structural/layout logic while migrating presentation styling to theme tokens
+use safe fallbacks if a token is missing
+do not break existing outputs
+
+Core requirement 8: Architecture
+Build this properly.
+
+Theme architecture must include:
+
+central theme schema / token system
+one active global theme
+support for multiple saved themes
+duplicate theme
+rename theme
+switch active theme
+reset theme to default
+import/export theme JSON
+validation for colors, fonts, sizes, and assets
+draft state vs published state
+app-wide theme provider or equivalent central injection layer
+
+Templates architecture must include:
+
+reusable slide/page type definitions
+reusable template definitions
+template structure manager
+add/remove/reorder capabilities
+compatibility with existing reports
+backward-compatible migration from any current template storage
+
+Do not create multiple competing sources of truth.
+
+Core requirement 9: Asset handling
+Allow uploads for:
+
+logo
+header image
+footer image
+background images
+
+Requirements:
+
+current asset preview
+replace/remove controls
+file type validation
+file size validation
+safe storage/reference handling
+correct rendering in preview/output
+no stretching/distortion
+support transparent assets where applicable
+
+Core requirement 10: Ease of use
+Bias hard toward ease and clarity.
+
+Requirements:
+
+clean labels
+minimal clutter
+obvious save/publish behavior
+strong defaults
+no dead settings
+no confusing nesting unless necessary
+no need to touch code to manage theme or templates
+if there is a tradeoff between extra flexibility and usability, prioritize usability unless it breaks a core requirement
+
+Core requirement 11: Migration
+You are not allowed to leave the old system half alive.
+
+Migration requirements:
+
+move Templates out of the left sidebar
+relocate Templates into the core modules area
+fold any existing design suite/style controls into Theme
+do not leave duplicate design-control systems active
+preserve existing Templates functionality during relocation
+keep existing reports functioning
+migrate existing slide/page structures into the new system as cleanly as possible
+eliminate duplicate sources of truth
+
+Core requirement 12: Defaults
+Create a strong default SmartEO theme and a sensible default slide/page type library so the system is immediately usable.
+
+Default theme direction:
+
+professional
+executive-report ready
+clean
+Webserv-friendly
+clear hierarchy
+polished, not flashy
+consistent table styling
+strong contrast
+
+Default slide/page type library must be informed by existing SmartEO patterns, not invented arbitrarily.
+
+Core requirement 13: Save/publish behavior
+Theme:
+
+editable in draft
+preview updates live during editing
+published theme applies system-wide
+unsaved changes warning required
+cancel/revert required
+
+Templates:
+
+editable safely
+changes explicitly saved
+new slides/pages should not silently affect live structures until saved where appropriate
+
+Acceptance criteria
+Do not mark this task complete unless every item below is true:
+
+Theme exists as a core module
+Templates exists as a core module
+both are at the end of the core modules list
+Theme appears before Templates
+Templates is removed from the left sidebar
+no broken routing/navigation remains
+Theme has left-side controls and right-side live preview
+Theme preview updates instantly as controls change
+Theme supports global backgrounds and per-slide/page-type backgrounds
+Theme supports solid, gradient, and image backgrounds
+Theme supports global asset uploads for logo, header, footer, and background images
+Theme supports centralized typography, color, spacing, table, and component styling
+Theme settings persist after reload
+draft vs published theme behavior works correctly
+active theme can be switched
+theme can be duplicated
+theme can be renamed
+theme can be reset
+theme JSON can be exported/imported
+Templates allows new slides/pages to be added easily
+Templates has a New flow with a dropdown for slide/page type selection
+slide/page types have previews or thumbnails
+slides/pages can be reordered
+slides/pages can be duplicated
+slides/pages can be removed
+templates can be saved
+existing report/deck/page patterns were analyzed and used to define reusable slide/page types
+reusable slide/page type library exists
+published theme flows into Monthly, QBS, QBR, and Bi-weekly previews
+tables inherit theme styling consistently
+notes/callouts inherit theme styling consistently
+print/export flows continue functioning
+no duplicate styling systems remain active
+no obvious visual regressions remain in existing report previews
+
+Mandatory QA before stopping
+After implementation, run a full QA pass and fix issues before calling the task done.
+
+QA must explicitly verify:
+
+Theme module works end to end
+Templates module works end to end
+Templates relocation did not break anything
+theme preview uses real shared presentation components where possible
+theme changes propagate correctly to all major report previews
+per-slide/page-type background behavior works
+logo/header/footer/background assets render correctly
+fonts, colors, spacing, tables, and callouts inherit theme correctly
+new slide/page addition flow works and is easy
+slide/page dropdown works
+preview/thumbnail selection works
+existing report/template data was preserved
+no stale hardcoded styling is incorrectly overriding theme tokens
+no duplicate settings systems remain active
+unsaved theme drafts do not leak into published outputs
+
+Hard guardrails
+Do not:
+
+build a fake settings screen
+build dead controls
+stop at just colors and fonts
+ignore backgrounds
+ignore slide/page types
+hardcode only the current slide types
+leave theme logic scattered across the app
+leave old template navigation active
+remove existing template functionality
+break report previews
+break print/export pipelines
+produce a “partial foundation” and defer the rest
+
+Required completion output
+When finished, provide:
+
+summary of what changed
+exact modules/components updated
+theme token/schema structure added
+slide/page type system added
+how existing slides/pages were analyzed and mapped
+migration notes
+any remaining fallback areas

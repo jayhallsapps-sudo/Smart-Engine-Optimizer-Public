@@ -13,6 +13,8 @@ import {
   ArrowRight,
   Lock,
   Sparkles,
+  Palette,
+  LayoutTemplate,
   Search,
 } from "lucide-react";
 
@@ -96,6 +98,26 @@ const MODULES: ModuleCard[] = [
     href: "/discoverability",
     status: "live",
     accentColor: "#EA580C",
+    group: "primary",
+  },
+  {
+    id: "templates",
+    icon: LayoutTemplate,
+    label: "Templates",
+    description: "Edit slide and section structures for each report type — Bi-Weekly, Monthly, QBR, and Content Roadmap.",
+    href: "/templates",
+    status: "live",
+    accentColor: "#1B3A6B",
+    group: "primary",
+  },
+  {
+    id: "theme",
+    icon: Palette,
+    label: "Theme",
+    description: "Centralized design system: brand colors, typography, slide backgrounds, and table styles for all SmartEO reports.",
+    href: "/theme",
+    status: "live",
+    accentColor: "#7C3AED",
     group: "primary",
   },
   {

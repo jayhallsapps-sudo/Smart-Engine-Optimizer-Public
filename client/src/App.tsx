@@ -39,6 +39,7 @@ import DiscoverabilityPage from "@/pages/discoverability";
 import QuarterlyContentRoadmapPage from "@/pages/quarterly-content-roadmap";
 import TemplatesPage from "@/pages/templates";
 import TemplateEditorPage from "@/pages/template-editor";
+import ThemePage from "@/pages/theme";
 
 function RootRedirect() {
   const [, setLocation] = useLocation();
@@ -106,6 +107,7 @@ function Router() {
       <Route path="/quarterly-content-roadmap" component={QuarterlyContentRoadmapPage} />
       <Route path="/templates" component={TemplatesPage} />
       <Route path="/templates/:templateId" component={TemplateEditorPage} />
+      <Route path="/theme" component={ThemePage} />
       <Route component={NotFound} />
     </Switch>
   );

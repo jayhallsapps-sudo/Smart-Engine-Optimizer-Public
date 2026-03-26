@@ -5644,6 +5644,95 @@ Return ONLY valid JSON:
     }
   });
 
+  // ─── Theme System Routes ───────────────────────────────────────────────────
+
+  app.get("/api/themes", async (_req, res) => {
+    const list = await storage.listThemes();
+    res.json(list);
+  });
+
+  app.get("/api/themes/active", async (_req, res) => {
+    const theme = await storage.getActiveTheme();
+    res.json(theme);
+  });
+
+  app.get("/api/themes/:id", async (req, res) => {
+    const theme = await storage.getTheme(Number(req.params.id));
+    if (!theme) return res.status(404).json({ error: "Theme not found" });
+    res.json(theme);
+  });
+
+  app.post("/api/themes", async (req, res) => {
+    const { name, tokens } = req.body;
+    if (!name) return res.status(400).json({ error: "name required" });
+    const theme = await storage.createTheme({ name, tokens: tokens ?? {} });
+    res.json(theme);
+  });
+
+  app.patch("/api/themes/:id/draft", async (req, res) => {
+    const { draftTokens } = req.body;
+    if (!draftTokens) return res.status(400).json({ error: "draftTokens required" });
+    const theme = await storage.saveDraftTokens(Number(req.params.id), draftTokens);
+    if (!theme) return res.status(404).json({ error: "Theme not found" });
+    res.json(theme);
+  });
+
+  app.post("/api/themes/:id/publish", async (req, res) => {
+    const theme = await storage.publishTheme(Number(req.params.id));
+    if (!theme) return res.status(404).json({ error: "Theme not found" });
+    res.json(theme);
+  });
+
+  app.post("/api/themes/:id/discard-draft", async (req, res) => {
+    const theme = await storage.discardDraft(Number(req.params.id));
+    if (!theme) return res.status(404).json({ error: "Theme not found" });
+    res.json(theme);
+  });
+
+  app.post("/api/themes/:id/duplicate", async (req, res) => {
+    const { name } = req.body;
+    if (!name) return res.status(400).json({ error: "name required" });
+    const theme = await storage.duplicateTheme(Number(req.params.id), name);
+    res.json(theme);
+  });
+
+  app.patch("/api/themes/:id/rename", async (req, res) => {
+    const { name } = req.body;
+    if (!name) return res.status(400).json({ error: "name required" });
+    const theme = await storage.renameTheme(Number(req.params.id), name);
+    if (!theme) return res.status(404).json({ error: "Theme not found" });
+    res.json(theme);
+  });
+
+  app.post("/api/themes/:id/activate", async (req, res) => {
+    await storage.setActiveTheme(Number(req.params.id));
+    res.json({ success: true });
+  });
+
+  app.delete("/api/themes/:id", async (req, res) => {
+    const ok = await storage.deleteTheme(Number(req.params.id));
+    if (!ok) return res.status(400).json({ error: "Cannot delete default theme or theme not found" });
+    res.json({ success: true });
+  });
+
+  // ─── Template Structures Routes ────────────────────────────────────────────
+
+  app.get("/api/template-structures/:templateId", async (req, res) => {
+    const { DEFAULT_TEMPLATE_SLIDES } = await import("@shared/schema");
+    const structure = await storage.getTemplateStructure(req.params.templateId);
+    if (structure) return res.json(structure);
+    const defaultSlides = DEFAULT_TEMPLATE_SLIDES[req.params.templateId];
+    if (defaultSlides) return res.json({ templateId: req.params.templateId, slides: defaultSlides, id: null, updatedAt: null });
+    res.status(404).json({ error: "Template not found" });
+  });
+
+  app.put("/api/template-structures/:templateId", async (req, res) => {
+    const { slides } = req.body;
+    if (!Array.isArray(slides)) return res.status(400).json({ error: "slides array required" });
+    const result = await storage.saveTemplateStructure(req.params.templateId, slides);
+    res.json(result);
+  });
+
   // PDF export for discoverability workspace
   app.get("/api/discoverability/workspaces/:id/export-pdf", async (req, res) => {
     try {

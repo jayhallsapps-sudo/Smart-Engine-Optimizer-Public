@@ -647,7 +647,16 @@ export default function SetupPage() {
           <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
             Call Tracking
           </h2>
-          {SERVICE_CONFIGS.filter(s => ["callrail", "call_tracking_metrics", "nimbata", "attention"].includes(s.id)).map(config => (
+          {SERVICE_CONFIGS.filter(s => ["callrail", "call_tracking_metrics", "nimbata"].includes(s.id)).map(config => (
+            <ServiceSection key={config.id} config={config} {...sharedSectionProps} />
+          ))}
+        </div>
+
+        <div className="space-y-3">
+          <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+            Conversation Intelligence
+          </h2>
+          {SERVICE_CONFIGS.filter(s => ["attention"].includes(s.id)).map(config => (
             <ServiceSection key={config.id} config={config} {...sharedSectionProps} />
           ))}
         </div>

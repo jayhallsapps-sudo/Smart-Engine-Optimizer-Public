@@ -532,10 +532,6 @@ function ClientForm({ initial, onSubmit, isPending }: { initial: ClientFormData;
               <Input id="nimbata" value={form.nimbataAccountId} onChange={e => update("nimbataAccountId", e.target.value)} placeholder="Nimbata account ID" data-testid="input-nimbata-id" />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="attentionAccountId" className="flex items-center gap-1.5"><Phone className="w-3 h-3" /> Attention Account ID (optional)</Label>
-              <Input id="attentionAccountId" value={form.attentionAccountId} onChange={e => update("attentionAccountId", e.target.value)} placeholder="Leave blank to access all conversations" data-testid="input-attention-account-id" />
-            </div>
-            <div className="space-y-2">
               <Label htmlFor="airtableBase" className="flex items-center gap-1.5"><Database className="w-3 h-3" /> Airtable Base ID</Label>
               <Input id="airtableBase" value={form.airtableBaseId} onChange={e => update("airtableBaseId", e.target.value)} placeholder="appXXXXXXXXXXXXXX" data-testid="input-airtable-base-id" />
             </div>
@@ -585,6 +581,16 @@ function ClientForm({ initial, onSubmit, isPending }: { initial: ClientFormData;
                   Paste the Google Maps link for this client's GBP listing so you can access it quickly.
                 </p>
               )}
+            </div>
+            <div className="md:col-span-2 pt-2">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">Conversation Intelligence</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="attentionAccountId" className="flex items-center gap-1.5 text-sm">Attention Account ID <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                  <Input id="attentionAccountId" value={form.attentionAccountId} onChange={e => update("attentionAccountId", e.target.value)} placeholder="Leave blank to access all conversations" data-testid="input-attention-account-id" />
+                  <p className="text-[11px] text-muted-foreground">Scope data to a specific Attention account, or leave blank to pull all conversations across the workspace.</p>
+                </div>
+              </div>
             </div>
           </div>
         </TabsContent>

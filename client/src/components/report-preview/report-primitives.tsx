@@ -364,7 +364,7 @@ function SlideCustomRowCell({
           if (e.key === "Enter") { onChange(draft); setEditing(false); }
           if (e.key === "Escape") setEditing(false);
         }}
-        style={{ width: "100%", fontSize: 7.5, fontFamily: "inherit", padding: "1px 3px", border: `1px solid ${RED}60`, borderRadius: 2, outline: "none" }}
+        style={{ width: "100%", fontSize: 7.5, fontFamily: "inherit", padding: "1px 3px", border: "1px solid #9CA3AF", borderRadius: 2, outline: "none" }}
       />
     );
   }

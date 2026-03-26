@@ -2,7 +2,7 @@ import { useState, useContext } from "react";
 import type { ReactNode } from "react";
 import { ReadModeContext } from "./editable-section";
 
-const ACCENT = "#C0392B";
+const ACCENT = "#111827";
 
 export const CR_PREFIX = "__cr__";
 export const DR_PREFIX = "__dr__";
@@ -123,7 +123,7 @@ function CustomRowCell({
           resize: "vertical",
           minHeight: 28,
           padding: "2px 4px",
-          border: "1px solid #C0392B60",
+          border: "1px solid #9CA3AF",
           borderRadius: 3,
           outline: "none",
           background: "white",
@@ -212,10 +212,10 @@ export function ReportTable({
             padding: "6px 10px",
             fontWeight: 700,
             fontSize: "9px",
-            backgroundColor: "#FEF6F1",
-            color: accent,
-            borderLeft: `4px solid ${accent}`,
-            borderBottom: "1px solid #F0DDD6",
+            backgroundColor: accent,
+            color: "#FFFFFF",
+            borderLeft: `4px solid #374151`,
+            borderBottom: "1px solid #374151",
           }}
         >
           {title}

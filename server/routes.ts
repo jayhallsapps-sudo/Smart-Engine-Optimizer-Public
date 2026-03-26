@@ -2380,7 +2380,13 @@ export async function registerRoutes(
     try {
       const sections: SectionData[] = (json.sections ?? []).map((s: any) => {
         const items: any[] = [];
-        if (s.metrics?.length) items.push({ summary: s.metrics.map((m: any) => ({ label: m.label, current: m.current, previous: m.previous ?? "—", deltaPercent: m.delta ?? "—", isPositive: m.isPositive ?? true })) });
+        if (s.metrics?.length) {
+          items.push({ summary: s.metrics.map((m: any) => ({ label: m.label, current: m.current, previous: m.previous ?? "—", deltaPercent: m.delta ?? "—", isPositive: m.isPositive ?? true })) });
+          const nsmNotes = edits?.["bw_nsm_notes"];
+          if (nsmNotes && nsmNotes.trim() && nsmNotes !== "Add notes on NSM progress...") {
+            items.push({ manualText: nsmNotes });
+          }
+        }
         if (s.bullets?.length) items.push({ manualText: (s.bullets as string[]).map((b, bi) => edits?.[`${s.id}_bullet_${bi}`] ?? b).filter(Boolean).join("\n") });
         if (s.workLog?.length) {
           const baseRows = (s.workLog as any[]).map((r: any, ri: number) => { const editedDid = edits?.[`${s.id}_worklog_${ri}_did`]; const editedNext = edits?.[`${s.id}_worklog_${ri}_next`]; return { area: r.area, whatWeDid: editedDid ?? r.whatWeDid, whatsNext: editedNext ?? r.whatsNext, items: editedDid !== undefined ? undefined : r.items, nextItems: editedNext !== undefined ? undefined : r.nextItems }; });
@@ -3559,10 +3565,29 @@ export async function registerRoutes(
         case "biweekly": {
           const sections: SectionData[] = (json.sections ?? []).map((s: any) => {
             const items: any[] = [];
-            if (s.metrics?.length) items.push({ summary: s.metrics.map((m: any) => ({ label: m.label, current: m.current, previous: m.previous ?? "—", deltaPercent: m.delta ?? "—", isPositive: m.isPositive ?? true })) });
+            if (s.metrics?.length) {
+              items.push({ summary: s.metrics.map((m: any) => ({ label: m.label, current: m.current, previous: m.previous ?? "—", deltaPercent: m.delta ?? "—", isPositive: m.isPositive ?? true })) });
+              // NSM notes live under the pulse section — include if the user added them
+              const nsmNotes = edits["bw_nsm_notes"];
+              if (nsmNotes && nsmNotes.trim() && nsmNotes !== "Add notes on NSM progress...") {
+                items.push({ manualText: nsmNotes });
+              }
+            }
             if (s.bullets?.length) items.push({ manualText: (s.bullets as string[]).map((b: string, bi: number) => edits[`${s.id}_bullet_${bi}`] ?? b).filter(Boolean).join("\n") });
             if (s.workLog?.length) {
-              const baseRows = (s.workLog as any[]).map((r: any, ri: number) => ({ area: r.area, whatWeDid: edits[`${s.id}_worklog_${ri}_did`] ?? r.whatWeDid, whatsNext: edits[`${s.id}_worklog_${ri}_next`] ?? r.whatsNext, items: r.items, nextItems: r.nextItems }));
+              // When a row has been manually edited, clear items/nextItems so the DOCX
+              // generator uses the edited string instead of the original AI bullets.
+              const baseRows = (s.workLog as any[]).map((r: any, ri: number) => {
+                const editedDid = edits[`${s.id}_worklog_${ri}_did`];
+                const editedNext = edits[`${s.id}_worklog_${ri}_next`];
+                return {
+                  area: r.area,
+                  whatWeDid: editedDid ?? r.whatWeDid,
+                  whatsNext: editedNext ?? r.whatsNext,
+                  items: editedDid !== undefined ? undefined : r.items,
+                  nextItems: editedNext !== undefined ? undefined : r.nextItems,
+                };
+              });
               const crProgress = parseCustomRowsFromEdits(edits, `${s.id}_progress`);
               const allRows = [...baseRows, ...crProgress.map((cr: string[]) => ({ area: cr[0] ?? "", whatWeDid: cr[1] ?? "", whatsNext: cr[2] ?? "" }))];
               items.push({ tableRows: allRows });

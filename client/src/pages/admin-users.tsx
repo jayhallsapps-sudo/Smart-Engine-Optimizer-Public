@@ -471,7 +471,11 @@ function ResetPasswordResult({ credentialBlock, onClose }: { credentialBlock: st
 // ─── View credentials panel ───────────────────────────────────────────────────
 
 function ViewCredentialsPanel({ userId, onClose }: { userId: number; onClose: () => void }) {
-  const { data, isLoading } = useQuery<{ available: boolean; credentialBlock: string | null }>({
+  const { data, isLoading } = useQuery<{
+    available: boolean;
+    accountState: string;
+    credentialBlock: string | null;
+  }>({
     queryKey: ["/api/admin/users", userId, "credentials"],
     queryFn: async () => {
       const res = await fetch(`/api/admin/users/${userId}/credentials`, { credentials: "include" });
@@ -479,6 +483,10 @@ function ViewCredentialsPanel({ userId, onClose }: { userId: number; onClose: ()
       return res.json();
     },
   });
+
+  const pendingFirstLogin =
+    data?.accountState === "first_login_required" ||
+    data?.accountState === "password_reset_required";
 
   return (
     <div className="space-y-4">
@@ -500,12 +508,24 @@ function ViewCredentialsPanel({ userId, onClose }: { userId: number; onClose: ()
         </>
       )}
 
-      {!isLoading && !data?.available && (
+      {!isLoading && !data?.available && pendingFirstLogin && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 px-4 py-5 space-y-2">
+          <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Credential block not on record</p>
+          <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
+            This account hasn't logged in yet, but the original credential block wasn't stored — this can happen if the account was created before credential storage was enabled.
+          </p>
+          <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
+            Use <strong>Actions → Reset Password</strong> to generate a new set of credentials you can copy and send.
+          </p>
+        </div>
+      )}
+
+      {!isLoading && !data?.available && !pendingFirstLogin && (
         <div className="rounded-lg border border-border bg-muted/30 px-4 py-6 text-center">
           <KeyRound className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
           <p className="text-sm font-medium text-foreground">Credentials no longer available</p>
           <p className="text-xs text-muted-foreground mt-1">
-            This user has already set their own password. Use "Reset Password" from Actions to generate new credentials.
+            This user has set their own password. Use "Reset Password" from Actions if they need new credentials.
           </p>
         </div>
       )}

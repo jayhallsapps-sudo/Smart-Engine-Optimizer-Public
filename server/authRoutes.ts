@@ -436,6 +436,7 @@ export function registerAuthRoutes(app: Express) {
 
     return res.json({
       available,
+      accountState: row.accountState,
       credentialBlock: available ? row.tempCredentialBlock : null,
     });
   });

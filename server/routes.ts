@@ -867,18 +867,27 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/report-schedules", requireAuth, requireAdminRole, async (req, res) => {
+  app.post("/api/report-schedules", requireAuth, async (req, res) => {
     try {
       const parsed = insertReportScheduleSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ message: parsed.error.issues.map(i => i.message).join("; ") });
       }
       const data = parsed.data;
-      const nextRun = computeFirstNextRun(
-        data.recurrenceDay ?? 1,
-        data.recurrenceHour ?? 8,
-        data.timezone ?? "America/New_York"
-      );
+      // Build a temporary schedule-like object for computeFirstNextRun
+      const tempSchedule = {
+        ...data,
+        id: 0, clientId: data.clientId, reportType: data.reportType ?? "biweekly",
+        frequency: data.frequency ?? "biweekly",
+        recurrenceDay: data.recurrenceDay ?? 1,
+        recurrenceHour: data.recurrenceHour ?? 8,
+        timezone: data.timezone ?? "America/New_York",
+        recurrenceWeekOfMonth: data.recurrenceWeekOfMonth ?? null,
+        recurrenceDayOfMonth: data.recurrenceDayOfMonth ?? null,
+        enabled: true, lastRunAt: null, nextRunAt: null,
+        createdAt: new Date(), updatedAt: new Date(),
+      } as any;
+      const nextRun = computeFirstNextRun(tempSchedule);
       const [created] = await db.insert(reportSchedules).values({
         ...data,
         nextRunAt: nextRun,
@@ -892,20 +901,21 @@ export async function registerRoutes(
   app.patch("/api/report-schedules/:id", requireAuth, requireAdminRole, async (req, res) => {
     try {
       const id = Number(req.params.id);
-      const { enabled, recurrenceDay, recurrenceHour, timezone } = req.body;
+      const { enabled, frequency, recurrenceDay, recurrenceHour, timezone, recurrenceWeekOfMonth, recurrenceDayOfMonth } = req.body;
       const updates: Record<string, any> = { updatedAt: new Date() };
       if (enabled !== undefined) updates.enabled = enabled;
+      if (frequency !== undefined) updates.frequency = frequency;
       if (recurrenceDay !== undefined) updates.recurrenceDay = recurrenceDay;
       if (recurrenceHour !== undefined) updates.recurrenceHour = recurrenceHour;
       if (timezone !== undefined) updates.timezone = timezone;
-      if (recurrenceDay !== undefined || recurrenceHour !== undefined || timezone !== undefined) {
+      if (recurrenceWeekOfMonth !== undefined) updates.recurrenceWeekOfMonth = recurrenceWeekOfMonth;
+      if (recurrenceDayOfMonth !== undefined) updates.recurrenceDayOfMonth = recurrenceDayOfMonth;
+      const scheduleChanged = frequency !== undefined || recurrenceDay !== undefined || recurrenceHour !== undefined || timezone !== undefined || recurrenceWeekOfMonth !== undefined || recurrenceDayOfMonth !== undefined;
+      if (scheduleChanged) {
         const [existing] = await db.select().from(reportSchedules).where(eq(reportSchedules.id, id));
         if (existing) {
-          updates.nextRunAt = computeFirstNextRun(
-            recurrenceDay ?? existing.recurrenceDay,
-            recurrenceHour ?? existing.recurrenceHour,
-            timezone ?? existing.timezone
-          );
+          const merged = { ...existing, ...updates } as any;
+          updates.nextRunAt = computeFirstNextRun(merged);
         }
       }
       const [updated] = await db.update(reportSchedules).set(updates).where(eq(reportSchedules.id, id)).returning();

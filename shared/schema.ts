@@ -240,9 +240,16 @@ export const reportSchedules = pgTable("report_schedules", {
   id: serial("id").primaryKey(),
   clientId: integer("client_id").notNull().references(() => clients.id, { onDelete: "cascade" }),
   reportType: text("report_type").notNull().default("biweekly"),
+  // frequency: weekly | biweekly | monthly | quarterly
+  frequency: text("frequency").notNull().default("biweekly"),
+  // recurrenceDay: 0=Sun…6=Sat (used for weekly/biweekly AND nth-weekday-of-month)
   recurrenceDay: integer("recurrence_day").notNull().default(1),
   recurrenceHour: integer("recurrence_hour").notNull().default(8),
   timezone: text("timezone").notNull().default("America/New_York"),
+  // For monthly/quarterly "Nth weekday of month": 1=first,2=second,3=third,4=fourth,5=last
+  recurrenceWeekOfMonth: integer("recurrence_week_of_month"),
+  // For monthly/quarterly "specific day of month": 1–31 (used when recurrenceWeekOfMonth is null)
+  recurrenceDayOfMonth: integer("recurrence_day_of_month"),
   enabled: boolean("enabled").notNull().default(true),
   lastRunAt: timestamp("last_run_at"),
   nextRunAt: timestamp("next_run_at"),

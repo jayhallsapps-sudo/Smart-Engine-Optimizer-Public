@@ -790,19 +790,45 @@ function InlineEditField({
   );
 }
 
-const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-const TIMEZONES = [
+const SCHED_DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const SCHED_WEEK_ORDINALS = [
+  { value: "1", label: "1st" }, { value: "2", label: "2nd" },
+  { value: "3", label: "3rd" }, { value: "4", label: "4th" }, { value: "5", label: "Last" },
+];
+const SCHED_FREQUENCIES = [
+  { value: "weekly", label: "Weekly" },
+  { value: "biweekly", label: "Bi-weekly" },
+  { value: "monthly", label: "Monthly" },
+  { value: "quarterly", label: "Quarterly" },
+];
+const SCHED_TIMEZONES = [
   "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles",
   "America/Phoenix", "America/Anchorage", "Pacific/Honolulu", "Europe/London",
   "Europe/Paris", "Australia/Sydney",
 ];
 
+const defaultSchedForm = {
+  frequency: "biweekly",
+  recurrenceType: "dayofweek", // dayofweek | nthweekday | dayofmonth
+  recurrenceDay: "1",
+  recurrenceWeekOfMonth: "1",
+  recurrenceDayOfMonth: "1",
+  recurrenceHour: "8",
+  timezone: "America/New_York",
+};
+
+function schedFormatHour(h: number): string {
+  if (h === 0) return "12:00 AM";
+  if (h < 12) return `${h}:00 AM`;
+  if (h === 12) return "12:00 PM";
+  return `${h - 12}:00 PM`;
+}
+
 function ClientDataTab({ client, clientId }: { client: Client; clientId: number }) {
   const { toast } = useToast();
   const [schedOpen, setSchedOpen] = useState(false);
-  const [schedDay, setSchedDay] = useState("1");
-  const [schedHour, setSchedHour] = useState("8");
-  const [schedTz, setSchedTz] = useState("America/New_York");
+  const [schedForm, setSchedForm] = useState({ ...defaultSchedForm });
+  const updateSched = (key: string, val: string) => setSchedForm(f => ({ ...f, [key]: val }));
 
   const { data: nsmData, isLoading } = useQuery<ClientNsmResponse>({
     queryKey: ["/api/dashboard/client", clientId, "nsm"],
@@ -826,16 +852,27 @@ function ClientDataTab({ client, clientId }: { client: Client; clientId: number 
   };
 
   const createScheduleMut = useMutation({
-    mutationFn: () => apiRequest("POST", "/api/report-schedules", {
-      clientId,
-      reportType: "biweekly",
-      recurrenceDay: parseInt(schedDay),
-      recurrenceHour: parseInt(schedHour),
-      timezone: schedTz,
-    }),
+    mutationFn: () => {
+      const needsMonthly = schedForm.frequency === "monthly" || schedForm.frequency === "quarterly";
+      return apiRequest("POST", "/api/report-schedules", {
+        clientId,
+        reportType: "biweekly",
+        frequency: schedForm.frequency,
+        recurrenceDay: parseInt(schedForm.recurrenceDay),
+        recurrenceHour: parseInt(schedForm.recurrenceHour),
+        timezone: schedForm.timezone,
+        recurrenceWeekOfMonth: needsMonthly && schedForm.recurrenceType === "nthweekday"
+          ? parseInt(schedForm.recurrenceWeekOfMonth) : null,
+        recurrenceDayOfMonth: needsMonthly && schedForm.recurrenceType === "dayofmonth"
+          ? parseInt(schedForm.recurrenceDayOfMonth) : null,
+        enabled: true,
+      });
+    },
     onSuccess: () => {
-      toast({ title: "Schedule created", description: `Bi-weekly reports will run every ${DAY_NAMES[parseInt(schedDay)]} at ${schedHour}:00.` });
+      const freqLabel = SCHED_FREQUENCIES.find(f => f.value === schedForm.frequency)?.label ?? schedForm.frequency;
+      toast({ title: "Schedule created", description: `${freqLabel} reports scheduled.` });
       setSchedOpen(false);
+      setSchedForm({ ...defaultSchedForm });
     },
     onError: (err: any) => toast({ title: "Failed to create schedule", description: err.message, variant: "destructive" }),
   });
@@ -929,51 +966,136 @@ function ClientDataTab({ client, clientId }: { client: Client; clientId: number 
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-sm">
               <CalendarClock className="w-4 h-4" />
-              Schedule Bi-Weekly Report
+              Schedule Report
             </DialogTitle>
           </DialogHeader>
           <p className="text-xs text-muted-foreground -mt-1">{client.name}</p>
           <div className="flex flex-col gap-3 pt-1">
+            {/* Frequency */}
             <div className="flex flex-col gap-1.5">
-              <Label className="text-xs">Day of week</Label>
-              <Select value={schedDay} onValueChange={setSchedDay}>
-                <SelectTrigger className="h-8 text-xs" data-testid="select-sched-day">
+              <Label className="text-xs">Frequency</Label>
+              <Select value={schedForm.frequency} onValueChange={v => updateSched("frequency", v)}>
+                <SelectTrigger className="h-8 text-xs" data-testid="select-sched-frequency">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {DAY_NAMES.map((d, i) => (
-                    <SelectItem key={i} value={String(i)} className="text-xs">{d}</SelectItem>
+                  {SCHED_FREQUENCIES.map(f => (
+                    <SelectItem key={f.value} value={f.value} className="text-xs">{f.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex flex-col gap-1.5">
-              <Label className="text-xs">Time (hour)</Label>
-              <Select value={schedHour} onValueChange={setSchedHour}>
-                <SelectTrigger className="h-8 text-xs" data-testid="select-sched-hour">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Array.from({ length: 24 }, (_, i) => (
-                    <SelectItem key={i} value={String(i)} className="text-xs">
-                      {i === 0 ? "12:00 AM" : i < 12 ? `${i}:00 AM` : i === 12 ? "12:00 PM" : `${i - 12}:00 PM`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label className="text-xs">Timezone</Label>
-              <Select value={schedTz} onValueChange={setSchedTz}>
-                <SelectTrigger className="h-8 text-xs" data-testid="select-sched-tz">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {TIMEZONES.map(tz => (
-                    <SelectItem key={tz} value={tz} className="text-xs">{tz}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+
+            {/* Monthly / Quarterly: recurrence type */}
+            {(schedForm.frequency === "monthly" || schedForm.frequency === "quarterly") && (
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs">Recurrence type</Label>
+                <Select value={schedForm.recurrenceType} onValueChange={v => updateSched("recurrenceType", v)}>
+                  <SelectTrigger className="h-8 text-xs" data-testid="select-sched-recurrence-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="nthweekday" className="text-xs">Nth weekday (e.g. 3rd Thursday)</SelectItem>
+                    <SelectItem value="dayofmonth" className="text-xs">Specific day of month (e.g. 15th)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* Nth weekday of month */}
+            {(schedForm.frequency === "monthly" || schedForm.frequency === "quarterly") && schedForm.recurrenceType === "nthweekday" && (
+              <div className="flex gap-2">
+                <div className="flex-1 flex flex-col gap-1.5">
+                  <Label className="text-xs">Which</Label>
+                  <Select value={schedForm.recurrenceWeekOfMonth} onValueChange={v => updateSched("recurrenceWeekOfMonth", v)}>
+                    <SelectTrigger className="h-8 text-xs" data-testid="select-sched-week-of-month">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SCHED_WEEK_ORDINALS.map(w => (
+                        <SelectItem key={w.value} value={w.value} className="text-xs">{w.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex-1 flex flex-col gap-1.5">
+                  <Label className="text-xs">Weekday</Label>
+                  <Select value={schedForm.recurrenceDay} onValueChange={v => updateSched("recurrenceDay", v)}>
+                    <SelectTrigger className="h-8 text-xs" data-testid="select-sched-day">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SCHED_DAY_NAMES.map((d, i) => (
+                        <SelectItem key={i} value={String(i)} className="text-xs">{d}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+
+            {/* Specific day of month */}
+            {(schedForm.frequency === "monthly" || schedForm.frequency === "quarterly") && schedForm.recurrenceType === "dayofmonth" && (
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs">Day of month (1–28)</Label>
+                <Select value={schedForm.recurrenceDayOfMonth} onValueChange={v => updateSched("recurrenceDayOfMonth", v)}>
+                  <SelectTrigger className="h-8 text-xs" data-testid="select-sched-day-of-month">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: 28 }, (_, i) => (
+                      <SelectItem key={i + 1} value={String(i + 1)} className="text-xs">{i + 1}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* Weekly / Biweekly: day of week */}
+            {(schedForm.frequency === "weekly" || schedForm.frequency === "biweekly") && (
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs">Day of week</Label>
+                <Select value={schedForm.recurrenceDay} onValueChange={v => updateSched("recurrenceDay", v)}>
+                  <SelectTrigger className="h-8 text-xs" data-testid="select-sched-day">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SCHED_DAY_NAMES.map((d, i) => (
+                      <SelectItem key={i} value={String(i)} className="text-xs">{d}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* Time + Timezone */}
+            <div className="flex gap-2">
+              <div className="flex-1 flex flex-col gap-1.5">
+                <Label className="text-xs">Time</Label>
+                <Select value={schedForm.recurrenceHour} onValueChange={v => updateSched("recurrenceHour", v)}>
+                  <SelectTrigger className="h-8 text-xs" data-testid="select-sched-hour">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: 24 }, (_, i) => (
+                      <SelectItem key={i} value={String(i)} className="text-xs">{schedFormatHour(i)}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex-1 flex flex-col gap-1.5">
+                <Label className="text-xs">Timezone</Label>
+                <Select value={schedForm.timezone} onValueChange={v => updateSched("timezone", v)}>
+                  <SelectTrigger className="h-8 text-xs" data-testid="select-sched-tz">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SCHED_TIMEZONES.map(tz => (
+                      <SelectItem key={tz} value={tz} className="text-xs">{tz.replace("America/", "").replace("_", " ")}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
           <DialogFooter className="pt-2">

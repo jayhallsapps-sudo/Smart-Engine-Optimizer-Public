@@ -13,94 +13,191 @@ function toDateString(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+// ─── Date math helpers ────────────────────────────────────────────────────────
+
 /**
- * Compute next bi-weekly run time from a given base date.
- * Finds the next occurrence of the specified day-of-week at the specified hour
- * in the target timezone, at least 14 days after the base date (bi-weekly cadence).
+ * Return the calendar day (1-31) for the Nth weekday of a given month.
+ * weekday: 0=Sun…6=Sat  |  n: 1=first…4=fourth, 5=last
  */
-function computeNextBiweeklyRun(
-  recurrenceDay: number,
-  recurrenceHour: number,
-  timezone: string,
-  after: Date
+function nthWeekdayOfMonth(year: number, month: number, weekday: number, n: number): number {
+  const firstDay = new Date(year, month, 1).getDay(); // 0=Sun…6=Sat
+  const diff = (weekday - firstDay + 7) % 7;
+  const firstOccurrence = 1 + diff;
+  if (n === 5) {
+    // "last" occurrence
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    let day = firstOccurrence;
+    while (day + 7 <= daysInMonth) day += 7;
+    return day;
+  }
+  return firstOccurrence + (n - 1) * 7;
+}
+
+/**
+ * Get the local hour in a given timezone for a UTC Date.
+ */
+function localHour(date: Date, timezone: string): number {
+  const raw = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    hour: "numeric",
+    hour12: false,
+  }).format(date);
+  return parseInt(raw.replace(/\D/g, ""), 10) % 24;
+}
+
+/**
+ * Get the local day-of-week (0=Sun…6=Sat) in a given timezone for a UTC Date.
+ */
+function localDayOfWeek(date: Date, timezone: string): number {
+  const SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const raw = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    weekday: "short",
+  }).format(date);
+  return SHORT.indexOf(raw);
+}
+
+/**
+ * Get local {year, month (0-based), day} in a given timezone for a UTC Date.
+ */
+function localYMD(date: Date, timezone: string): { year: number; month: number; day: number } {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const get = (t: string) => parseInt(parts.find(p => p.type === t)?.value ?? "0", 10);
+  return { year: get("year"), month: get("month") - 1, day: get("day") };
+}
+
+/**
+ * Build a UTC Date for year/month/day at recurrenceHour in the given timezone.
+ * Uses binary-search approach: start at local noon, walk backward/forward by
+ * hours until the local date/hour matches.
+ */
+function utcForLocalDateTime(
+  year: number,
+  month: number, // 0-based
+  day: number,
+  hour: number,
+  timezone: string
 ): Date {
-  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-  const candidate = new Date(after);
-  candidate.setMinutes(0, 0, 0);
-  candidate.setTime(candidate.getTime() + 60 * 60 * 1000);
-
-  const biweeklyMs = 14 * 24 * 60 * 60 * 1000;
-  const minTarget = new Date(after.getTime() + biweeklyMs);
-
-  for (let i = 0; i < 24 * 21; i++) {
-    const tzParts = new Intl.DateTimeFormat("en-US", {
-      timeZone: timezone,
-      weekday: "short",
-      hour: "numeric",
-      hour12: false,
-    }).formatToParts(candidate);
-
-    const tzDay = tzParts.find(p => p.type === "weekday")?.value ?? "";
-    const tzHourRaw = tzParts.find(p => p.type === "hour")?.value ?? "0";
-    const tzHour = parseInt(tzHourRaw.replace(/\D/g, ""), 10);
-
-    if (
-      dayNames[recurrenceDay] === tzDay &&
-      tzHour === recurrenceHour &&
-      candidate.getTime() >= minTarget.getTime()
-    ) {
+  // Approximate UTC offset (good enough for iterating ±2h)
+  const approx = new Date(Date.UTC(year, month, day, hour));
+  for (let delta = -14 * 60; delta <= 14 * 60; delta += 60) {
+    const candidate = new Date(approx.getTime() + delta * 60 * 1000);
+    const lh = localHour(candidate, timezone);
+    const { year: ly, month: lm, day: ld } = localYMD(candidate, timezone);
+    if (ly === year && lm === month && ld === day && lh === hour) {
       return candidate;
     }
+  }
+  // fallback
+  return approx;
+}
 
-    candidate.setTime(candidate.getTime() + 60 * 60 * 1000);
+// ─── Compute next run ─────────────────────────────────────────────────────────
+
+/**
+ * Compute the next run timestamp for a schedule, after `after`.
+ * Supports weekly, biweekly, monthly, quarterly with nth-weekday-of-month
+ * or specific-day-of-month options.
+ */
+export function computeNextRun(schedule: ReportSchedule, after: Date): Date {
+  const {
+    frequency,
+    recurrenceDay,
+    recurrenceHour,
+    timezone,
+    recurrenceWeekOfMonth,
+    recurrenceDayOfMonth,
+  } = schedule;
+
+  const freq = frequency ?? "biweekly";
+
+  // ── Weekly / Bi-weekly ────────────────────────────────────────────────────
+  if (freq === "weekly" || freq === "biweekly") {
+    const intervalDays = freq === "weekly" ? 7 : 14;
+    const minTarget = new Date(after.getTime() + intervalDays * 24 * 60 * 60 * 1000);
+
+    // Walk hourly from minTarget, find first matching day/hour in timezone
+    const candidate = new Date(minTarget);
+    candidate.setMinutes(0, 0, 0);
+    for (let i = 0; i < 24 * (intervalDays + 7); i++) {
+      if (localDayOfWeek(candidate, timezone) === recurrenceDay && localHour(candidate, timezone) === recurrenceHour) {
+        return candidate;
+      }
+      candidate.setTime(candidate.getTime() + 60 * 60 * 1000);
+    }
+    return minTarget;
   }
 
-  const fallback = new Date(minTarget);
-  fallback.setHours(recurrenceHour, 0, 0, 0);
-  return fallback;
+  // ── Monthly ───────────────────────────────────────────────────────────────
+  if (freq === "monthly") {
+    // Try current month first, then iterate up to 12 months forward
+    const start = localYMD(after, timezone);
+    for (let m = 0; m <= 12; m++) {
+      const month = (start.month + m) % 12;
+      const year = start.year + Math.floor((start.month + m) / 12);
+
+      const targetDay = recurrenceWeekOfMonth != null
+        ? nthWeekdayOfMonth(year, month, recurrenceDay, recurrenceWeekOfMonth)
+        : (recurrenceDayOfMonth ?? 1);
+
+      // Clamp to days in month
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const clampedDay = Math.min(targetDay, daysInMonth);
+
+      const candidate = utcForLocalDateTime(year, month, clampedDay, recurrenceHour, timezone);
+      if (candidate.getTime() > after.getTime()) {
+        return candidate;
+      }
+    }
+  }
+
+  // ── Quarterly ────────────────────────────────────────────────────────────
+  if (freq === "quarterly") {
+    // Quarter start months: 0 (Jan), 3 (Apr), 6 (Jul), 9 (Oct)
+    const quarterStarts = [0, 3, 6, 9];
+    const start = localYMD(after, timezone);
+
+    // Check up to 5 upcoming quarters
+    for (let q = 0; q < 5; q++) {
+      const currentQuarterIdx = Math.floor(start.month / 3);
+      const quarterIdx = (currentQuarterIdx + q) % 4;
+      const yearOffset = Math.floor((currentQuarterIdx + q) / 4);
+      const year = start.year + yearOffset;
+      const month = quarterStarts[quarterIdx];
+
+      const targetDay = recurrenceWeekOfMonth != null
+        ? nthWeekdayOfMonth(year, month, recurrenceDay, recurrenceWeekOfMonth)
+        : (recurrenceDayOfMonth ?? 1);
+
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const clampedDay = Math.min(targetDay, daysInMonth);
+
+      const candidate = utcForLocalDateTime(year, month, clampedDay, recurrenceHour, timezone);
+      if (candidate.getTime() > after.getTime()) {
+        return candidate;
+      }
+    }
+  }
+
+  // Fallback
+  return new Date(after.getTime() + 7 * 24 * 60 * 60 * 1000);
 }
 
 /**
  * Compute the FIRST next run (from now) — used when creating a new schedule.
- * Searches for the next matching day/hour that is at least 1 hour in the future.
+ * Searches for the next matching time at least 1 hour in the future.
  */
-export function computeFirstNextRun(
-  recurrenceDay: number,
-  recurrenceHour: number,
-  timezone: string
-): Date {
-  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  const now = new Date();
-
-  const candidate = new Date(now);
-  candidate.setMinutes(0, 0, 0);
-  candidate.setTime(candidate.getTime() + 60 * 60 * 1000);
-
-  for (let i = 0; i < 24 * 14; i++) {
-    const tzParts = new Intl.DateTimeFormat("en-US", {
-      timeZone: timezone,
-      weekday: "short",
-      hour: "numeric",
-      hour12: false,
-    }).formatToParts(candidate);
-
-    const tzDay = tzParts.find(p => p.type === "weekday")?.value ?? "";
-    const tzHourRaw = tzParts.find(p => p.type === "hour")?.value ?? "0";
-    const tzHour = parseInt(tzHourRaw.replace(/\D/g, ""), 10);
-
-    if (dayNames[recurrenceDay] === tzDay && tzHour === recurrenceHour) {
-      return candidate;
-    }
-
-    candidate.setTime(candidate.getTime() + 60 * 60 * 1000);
-  }
-
-  const fallback = new Date(now);
-  fallback.setDate(fallback.getDate() + 7);
-  fallback.setHours(recurrenceHour, 0, 0, 0);
-  return fallback;
+export function computeFirstNextRun(schedule: ReportSchedule): Date {
+  const oneHourLater = new Date(Date.now() + 60 * 60 * 1000);
+  return computeNextRun(schedule, oneHourLater);
 }
+
+// ─── Run a schedule ───────────────────────────────────────────────────────────
 
 async function runSchedule(schedule: ReportSchedule): Promise<void> {
   const [client] = await db.select().from(clients).where(eq(clients.id, schedule.clientId));
@@ -115,7 +212,8 @@ async function runSchedule(schedule: ReportSchedule): Promise<void> {
   startDay.setDate(startDay.getDate() - 14);
   const startDate = toDateString(startDay);
 
-  console.log(`[Scheduler] Generating bi-weekly report for client "${client.name}" (schedule ${schedule.id})`);
+  const freq = schedule.frequency ?? "biweekly";
+  console.log(`[Scheduler] Generating ${freq} report for client "${client.name}" (schedule ${schedule.id})`);
 
   let reportJson: any;
   try {
@@ -152,7 +250,7 @@ async function runSchedule(schedule: ReportSchedule): Promise<void> {
       ? `https://${process.env.REPLIT_DEV_DOMAIN}`
       : process.env.APP_URL ?? "";
     const reportLink = `${appUrl}/biweekly?client=${client.id}&load=${saved.id}`;
-    const message = `📋 Bi-weekly report for ${client.name} is ready for review. ${reportLink}`;
+    const message = `📋 ${freq.charAt(0).toUpperCase() + freq.slice(1)} report for ${client.name} is ready for review. ${reportLink}`;
     try {
       await postSlackMessage(client.slackChannelId, message);
       console.log(`[Scheduler] Slack notification sent to ${client.slackChannelId} for client "${client.name}"`);
@@ -163,12 +261,7 @@ async function runSchedule(schedule: ReportSchedule): Promise<void> {
     console.log(`[Scheduler] No Slack channel configured for client "${client.name}" — skipping notification`);
   }
 
-  const nextRun = computeNextBiweeklyRun(
-    schedule.recurrenceDay,
-    schedule.recurrenceHour,
-    schedule.timezone,
-    new Date()
-  );
+  const nextRun = computeNextRun(schedule, new Date());
 
   await db
     .update(reportSchedules)

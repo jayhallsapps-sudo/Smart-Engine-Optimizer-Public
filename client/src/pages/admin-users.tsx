@@ -5,7 +5,7 @@ import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import {
   Shield, Plus, RefreshCw, Ban, CheckCircle2, RotateCcw,
-  Copy, Check, MoreHorizontal, KeyRound, Pencil, UserX, UserCheck,
+  Copy, Check, MoreHorizontal, KeyRound, Pencil, UserX, UserCheck, Trash2,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -521,6 +521,80 @@ function ViewCredentialsPanel({ userId, onClose }: { userId: number; onClose: ()
   );
 }
 
+// ─── Delete confirm panel ─────────────────────────────────────────────────────
+
+function DeleteConfirmPanel({
+  user,
+  onDeleted,
+  onClose,
+}: {
+  user: UserRow;
+  onDeleted: () => void;
+  onClose: () => void;
+}) {
+  const qc = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+
+  const deleteMutation = useMutation({
+    mutationFn: () => apiRequest("DELETE", `/api/admin/users/${user.id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      onDeleted();
+    },
+    onError: (err: any) => {
+      const msg = err.message ?? "";
+      const m = msg.match(/\d+: (.*)/);
+      try { setError(m ? JSON.parse(m[1]).message : msg || "Failed to delete."); } catch { setError(msg || "Failed to delete."); }
+    },
+  });
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-start gap-3">
+        <div className="flex items-center justify-center w-9 h-9 rounded-full bg-destructive/10 shrink-0 mt-0.5">
+          <Trash2 className="w-4 h-4 text-destructive" />
+        </div>
+        <div>
+          <h3 className="text-base font-semibold text-foreground">Delete user</h3>
+          <p className="text-sm text-muted-foreground mt-0.5">This permanently removes the record and cannot be undone.</p>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-border bg-muted/30 px-4 py-3 space-y-1">
+        <p className="text-sm font-medium text-foreground">{user.fullName}</p>
+        <p className="text-xs text-muted-foreground">{user.email}</p>
+        <span className={`inline-flex mt-1 px-2 py-0.5 rounded-full text-xs font-medium border ${STATE_COLORS[user.accountState]}`}>
+          {STATE_LABELS[user.accountState]}
+        </span>
+      </div>
+
+      {error && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
+      <div className="flex gap-2">
+        <button
+          onClick={onClose}
+          className="px-4 py-2 rounded-lg border border-border text-sm hover:bg-muted transition-colors"
+          data-testid="button-cancel-delete"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={() => deleteMutation.mutate()}
+          disabled={deleteMutation.isPending}
+          data-testid="button-confirm-delete"
+          className="px-4 py-2 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 transition-colors disabled:opacity-60"
+        >
+          {deleteMutation.isPending ? "Deleting…" : "Delete user"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Actions dropdown ─────────────────────────────────────────────────────────
 
 type PanelState =
@@ -528,6 +602,7 @@ type PanelState =
   | { type: "edit"; userId: number }
   | { type: "reset"; credentialBlock: string }
   | { type: "credentials"; userId: number }
+  | { type: "delete"; user: UserRow }
   | null;
 
 function ActionsMenu({
@@ -537,6 +612,7 @@ function ActionsMenu({
   onResetPassword,
   onSuspend,
   onReactivate,
+  onDelete,
   resetPending,
   suspendPending,
   reactivatePending,
@@ -547,6 +623,7 @@ function ActionsMenu({
   onResetPassword: () => void;
   onSuspend: () => void;
   onReactivate: () => void;
+  onDelete: () => void;
   resetPending: boolean;
   suspendPending: boolean;
   reactivatePending: boolean;
@@ -619,6 +696,17 @@ function ActionsMenu({
             {suspendPending ? "Suspending…" : "Suspend"}
           </DropdownMenuItem>
         )}
+
+        <DropdownMenuSeparator />
+
+        <DropdownMenuItem
+          onClick={onDelete}
+          data-testid={`action-delete-${user.id}`}
+          className="text-destructive focus:text-destructive"
+        >
+          <Trash2 className="w-3.5 h-3.5 mr-2" />
+          Delete user
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -739,6 +827,7 @@ export default function AdminUsersPage() {
                             onResetPassword={() => resetPasswordMutation.mutate(u.id)}
                             onSuspend={() => suspendMutation.mutate(u.id)}
                             onReactivate={() => reactivateMutation.mutate(u.id)}
+                            onDelete={() => setPanel({ type: "delete", user: u })}
                             resetPending={resetPasswordMutation.isPending}
                             suspendPending={suspendMutation.isPending}
                             reactivatePending={reactivateMutation.isPending}
@@ -761,6 +850,13 @@ export default function AdminUsersPage() {
           {panel.type === "edit" && <EditUserPanel userId={panel.userId} onClose={closePanel} />}
           {panel.type === "reset" && <ResetPasswordResult credentialBlock={panel.credentialBlock} onClose={closePanel} />}
           {panel.type === "credentials" && <ViewCredentialsPanel userId={panel.userId} onClose={closePanel} />}
+          {panel.type === "delete" && (
+            <DeleteConfirmPanel
+              user={panel.user}
+              onDeleted={closePanel}
+              onClose={closePanel}
+            />
+          )}
         </div>
       )}
     </div>

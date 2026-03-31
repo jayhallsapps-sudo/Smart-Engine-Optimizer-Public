@@ -400,6 +400,23 @@ export function registerAuthRoutes(app: Express) {
     return res.json({ tempPassword, credentialBlock });
   });
 
+  // ── DELETE /api/admin/users/:id ─────────────────────────────────────────────
+  app.delete("/api/admin/users/:id", requireAuth, requireAdminRole, async (req: Request, res: Response) => {
+    const userId = parseInt(req.params.id, 10);
+    if (isNaN(userId)) return res.status(400).json({ message: "Invalid user ID." });
+
+    if (userId === req.currentUser!.id) {
+      return res.status(400).json({ message: "You cannot delete your own account." });
+    }
+
+    const user = await getUserById(userId);
+    if (!user) return res.status(404).json({ message: "User not found." });
+
+    await db.delete(users).where(eq(users.id, userId));
+
+    return res.json({ ok: true });
+  });
+
   // ── GET /api/admin/users/:id/credentials ────────────────────────────────────
   app.get("/api/admin/users/:id/credentials", requireAuth, requireAdminRole, async (req: Request, res: Response) => {
     const userId = parseInt(req.params.id, 10);

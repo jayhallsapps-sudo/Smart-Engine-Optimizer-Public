@@ -43,6 +43,7 @@ import QuarterlyContentRoadmapPage from "@/pages/quarterly-content-roadmap";
 import TemplatesPage from "@/pages/templates";
 import TemplateEditorPage from "@/pages/template-editor";
 import ThemePage from "@/pages/theme";
+import DesignSystemPage from "@/pages/design-system";
 import LoginPage from "@/pages/login";
 import ChangePasswordPage from "@/pages/change-password";
 
@@ -110,6 +111,7 @@ function Router() {
       <Route path="/templates" component={TemplatesPage} />
       <Route path="/templates/:templateId" component={TemplateEditorPage} />
       <Route path="/theme" component={ThemePage} />
+      <Route path="/design-system" component={DesignSystemPage} />
       <Route component={NotFound} />
     </Switch>
   );

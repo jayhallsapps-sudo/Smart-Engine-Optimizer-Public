@@ -1187,9 +1187,9 @@ export const DEFAULT_THEME_TOKENS: ThemeTokens = {
   brandName: "Webserv",
   tagline: "SEO Performance Report",
 
-  primaryColor: "#1B3A6B",
-  secondaryColor: "#C0392B",
-  accentColor: "#0891B2",
+  primaryColor: "#C0392B",
+  secondaryColor: "#1B3A6B",
+  accentColor: "#E67E22",
   successColor: "#059669",
   warningColor: "#D97706",
   errorColor: "#DC2626",
@@ -1209,16 +1209,16 @@ export const DEFAULT_THEME_TOKENS: ThemeTokens = {
 
   backgrounds: {
     global: defaultBg("solid", "#FFFFFF"),
-    titleSlide: defaultBg("gradient", "#1B3A6B", "#1B3A6B", "#2A5298"),
-    sectionDivider: defaultBg("solid", "#1B3A6B"),
+    titleSlide: defaultBg("gradient", "#C0392B", "#C0392B", "#922B21"),
+    sectionDivider: defaultBg("solid", "#C0392B"),
     kpiSlide: defaultBg("solid", "#FFFFFF"),
     chartSlide: defaultBg("solid", "#FFFFFF"),
     tableSlide: defaultBg("solid", "#FFFFFF"),
     contentSlide: defaultBg("solid", "#FFFFFF"),
-    summarySlide: defaultBg("gradient", "#1B3A6B", "#1B3A6B", "#C0392B"),
+    summarySlide: defaultBg("gradient", "#C0392B", "#C0392B", "#1B3A6B"),
   },
 
-  tableHeaderBg: "#1B3A6B",
+  tableHeaderBg: "#C0392B",
   tableHeaderText: "#FFFFFF",
   tableAltRowBg: "#F8FAFC",
   tableBorderColor: "#E2E8F0",
@@ -1226,14 +1226,14 @@ export const DEFAULT_THEME_TOKENS: ThemeTokens = {
 
   cardBg: "#FFFFFF",
   cardBorderColor: "#E2E8F0",
-  calloutBg: "#EFF6FF",
-  calloutBorderColor: "#1B3A6B",
+  calloutBg: "#FEF2F2",
+  calloutBorderColor: "#C0392B",
   calloutText: "#1E293B",
 
   showHeader: true,
   showFooter: true,
   showPageNumbers: true,
-  headerColor: "#1B3A6B",
+  headerColor: "#C0392B",
   footerColor: "#F8FAFC",
   headerTextColor: "#FFFFFF",
   footerTextColor: "#64748B",
@@ -1298,6 +1298,58 @@ export const templateStructures = pgTable("template_structures", {
 });
 
 export type TemplateStructure = typeof templateStructures.$inferSelect;
+
+// ─── Imported Slides (staging library) ───────────────────────────────────────
+
+export const IMPORTED_SLIDE_STATUSES = ["imported", "in_review", "converted_to_template", "converted_to_block", "archived"] as const;
+export type ImportedSlideStatus = typeof IMPORTED_SLIDE_STATUSES[number];
+
+export const importedSlides = pgTable("imported_slides", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull().default("Untitled Slide"),
+  sourceDeck: text("source_deck"),
+  sourceSlideNumber: integer("source_slide_number"),
+  reportTypeGuess: text("report_type_guess"),
+  status: text("status").notNull().$type<ImportedSlideStatus>().default("imported"),
+  structureJson: jsonb("structure_json"),
+  contentJson: jsonb("content_json"),
+  thumbnailData: text("thumbnail_data"),
+  notes: text("notes"),
+  importedAt: timestamp("imported_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertImportedSlideSchema = createInsertSchema(importedSlides).omit({
+  id: true, createdAt: true, updatedAt: true,
+});
+export type ImportedSlide = typeof importedSlides.$inferSelect;
+export type InsertImportedSlide = z.infer<typeof insertImportedSlideSchema>;
+
+// ─── Reusable Blocks (block library) ─────────────────────────────────────────
+
+export const REUSABLE_BLOCK_CATEGORIES = ["intro", "performance", "content", "strategy", "closing", "layout", "data"] as const;
+export type ReusableBlockCategory = typeof REUSABLE_BLOCK_CATEGORIES[number];
+
+export const reusableBlocks = pgTable("reusable_blocks", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  category: text("category").notNull().$type<ReusableBlockCategory>().default("layout"),
+  layoutJson: jsonb("layout_json"),
+  thumbnailData: text("thumbnail_data"),
+  isArchived: boolean("is_archived").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertReusableBlockSchema = createInsertSchema(reusableBlocks).omit({
+  id: true, createdAt: true, updatedAt: true,
+});
+export type ReusableBlock = typeof reusableBlocks.$inferSelect;
+export type InsertReusableBlock = z.infer<typeof insertReusableBlockSchema>;
+
+// ─── Template Default Slides ──────────────────────────────────────────────────
 
 export const DEFAULT_TEMPLATE_SLIDES: Record<string, SlideEntry[]> = {
   "monthly-pptx": [

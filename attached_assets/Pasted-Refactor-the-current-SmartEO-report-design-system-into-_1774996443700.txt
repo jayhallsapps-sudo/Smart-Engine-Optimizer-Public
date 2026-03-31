@@ -1,0 +1,538 @@
+Refactor the current SmartEO report design system into a single cohesive system that preserves existing work, fixes the current UX problems, and makes all report design decisions visual, predictable, and export-safe.
+
+IMPORTANT CONTEXT
+
+The current implementation already contains:
+
+* a Theme module
+* a Templates module
+* an existing report template library
+* an existing slide/section type library
+* previously created report structures
+* previously interpreted/imported slides from uploaded decks
+
+Do not wipe this work out unless absolutely necessary.
+Do not create a parallel system that leaves the old one behind.
+Refactor the current implementation into the new architecture and migrate all viable existing assets forward.
+
+CORE PROBLEM TO SOLVE
+
+The current system is clunky and too abstract.
+
+Current problems:
+
+* Theme and Templates feel fragmented instead of unified
+* Users cannot preview enough before making decisions
+* Template editing is still mostly structural, not true visual WYSIWYG editing
+* Many slide types are blind abstractions with no useful preview
+* Existing interpreted slides and report structures risk being lost or stranded
+* The system keeps defaulting visually toward blue, which is wrong for Webserv
+* The output needs to be designed around Google Drive fidelity, not PDF-first rendering
+
+PRIMARY OBJECTIVE
+
+Create one unified report design system with two core sections:
+
+1. Theme
+2. Templates
+
+The mental model must be obvious:
+
+* Theme = how everything looks
+* Templates = where everything goes
+
+Everything must be built around this hard rule:
+
+Anything the user can design in-app must be capable of being rendered with near-identical appearance in Google Docs or Google Slides. Do not expose design controls that cannot be translated reliably into Google Drive exports.
+
+WEBSERV BRAND REQUIREMENT
+
+The system must stop defaulting to blue.
+
+Webserv is red-first, not blue-first.
+
+Set the default SmartEO / Webserv visual baseline to a red-led theme system.
+Use Webserv-style defaults as the starting point for all new themes, previews, sample templates, and system demo states.
+
+Requirements:
+
+* default primary visual identity should be red-led
+* do not use blue as the default cover slide background, default header treatment, or default template accent unless the user explicitly changes it
+* existing blue defaults should be migrated to red-led defaults where those defaults are system-generated rather than intentionally user-selected
+* if there is legacy content already using blue because of previous system assumptions, preserve it until the user changes it, but stop generating new blue-first defaults
+
+SECTION 1: THEME
+
+The Theme section must be the centralized visual design system for all reports.
+
+Theme controls the recurring visual language across all report types.
+
+Build Theme so the user can define and preview:
+
+A. Brand / Identity
+
+* logo upload
+* brand name
+* report tagline
+* header style
+* footer style
+* brand colors
+* accent colors
+* page / slide background defaults
+* typography system
+* heading hierarchy
+* body text style
+* link style
+* divider style
+
+B. Table Design
+
+* table header background
+* table header font color
+* table body background
+* alternating row colors
+* border color
+* border thickness
+* corner radius
+* cell padding
+* font size
+* font weight
+* alignment defaults
+* outer spacing
+* table title styling
+* source badge styling if applicable
+
+C. Chart Design
+
+* chart title style
+* axis label style
+* legend style
+* data label style
+* chart frame or border
+* chart background
+* export-safe chart palette only
+* chart heading / caption treatment
+
+D. Component Defaults
+
+* KPI cards
+* callout boxes
+* insight boxes
+* summary cards
+* bullets / numbered list styling
+* quote blocks
+* content boxes
+* section headers
+* data badges
+* production tables
+* roadmap blocks
+
+E. Page / Slide Defaults
+
+* margins
+* page padding
+* content width
+* spacing between blocks
+* default title placement
+* footer spacing
+* visual grid defaults
+
+LIVE PREVIEW REQUIREMENT FOR THEME
+
+Theme must include a meaningful live preview area that updates immediately.
+Not a fake preview. A real one.
+
+The preview area must let the user toggle between:
+
+* slide preview
+* page preview
+* title slide preview
+* KPI preview
+* chart preview
+* table preview
+* callout / insight preview
+* content section preview
+* summary / closing preview
+
+The preview must update live as settings change.
+The user must never save blindly.
+
+SECTION 2: TEMPLATES
+
+Templates is the structural and visual layout builder for report types.
+
+This must become a true WYSIWYG editor, not just a structure/order editor.
+
+The current implementation appears to support structure editing and slide ordering. Keep that work, but evolve it into a real visual editor.
+
+TEMPLATE SYSTEM REQUIREMENTS
+
+A. Template Areas
+
+Inside Templates, create clearly separated areas:
+
+1. Report Templates
+2. Reusable Blocks
+3. Imported Slides
+
+B. Report Templates
+Production-ready templates used by SmartEO report generation.
+
+Users must be able to:
+
+* browse templates
+* preview templates visually before opening them
+* duplicate templates
+* rename templates
+* archive templates
+* set defaults per report type
+* edit templates visually
+* manage multi-slide and multi-page templates
+
+C. Reusable Blocks
+Reusable sections extracted from templates or imported slides.
+
+Examples:
+
+* KPI row
+* title section
+* strategy block
+* callout block
+* production table section
+* closing summary block
+* section divider block
+
+Users must be able to:
+
+* save block from template
+* edit block visually
+* preview block before inserting
+* insert block into templates
+* duplicate / archive blocks
+
+D. Imported Slides
+A staging library for previously interpreted or imported slides from uploaded decks.
+
+These are not automatically production-ready templates.
+They are legacy assets that should be preserved, reviewed, edited, and promoted.
+
+Each imported slide must support:
+
+* preview
+* open in editor
+* duplicate
+* convert to template
+* extract selected area as reusable block
+* archive
+
+Each imported slide must retain metadata where available:
+
+* title
+* source deck
+* source slide number
+* import date
+* created date
+* last edited date
+* report type guess
+* import status
+
+Use these statuses:
+
+* Imported
+* In Review
+* Converted to Template
+* Converted to Reusable Block
+* Archived
+
+Do not auto-promote imported slides into production templates.
+Keep them in staging until intentionally converted by the user.
+
+CURRENT SYSTEM PRESERVATION / MIGRATION REQUIREMENT
+
+The system already contains:
+
+* report templates
+* slide/section types
+* interpreted slides
+* report structures
+
+Do not discard them.
+Do not strand them in legacy UI.
+Migrate them forward into the new structure.
+
+Migration rules:
+
+1. Existing report templates
+
+* migrate into Templates > Report Templates
+* preserve names, structure, and report-type associations
+* preserve slide order and any existing structure logic
+* add visual previews for each template
+
+2. Existing slide / section types
+
+* keep them, but convert them from abstract library cards into visually previewable layout components
+* each type must show a mini-preview, not just a label and description
+
+3. Existing interpreted/imported slides
+
+* migrate into Templates > Imported Slides
+* preserve as much structure/content as possible
+* do not assume they are clean
+* keep them editable and promotable
+
+4. Existing theme settings
+
+* preserve user-created settings where possible
+* replace system-generated blue-first defaults with red-led Webserv defaults unless the user intentionally chose otherwise
+
+VISUAL TEMPLATE EDITOR REQUIREMENT
+
+Build the Templates editor more like a structured version of Elementor.
+
+Editor layout:
+
+* left sidebar = elements / reusable blocks / imported assets
+* center canvas = real editable page or slide canvas
+* right sidebar = selected element settings, spacing, bindings, visibility, layout controls
+
+The editor must work for both:
+
+* document-style templates
+* slide-style templates
+
+The canvas must show real page or slide boundaries.
+Users must be able to see what the layout actually looks like.
+
+SUPPORT THESE ELEMENTS / BLOCKS
+
+At minimum:
+
+* heading
+* text
+* rich text
+* logo
+* image
+* divider
+* spacer
+* KPI card
+* chart container
+* table
+* callout box
+* insight box
+* section label
+* bullet / strategy block
+* summary block
+* two-column layout
+* three-column layout
+* page header
+* page footer
+* slide title
+* page number
+* dynamic metric token
+* dynamic text token
+* repeating section where needed
+
+STRUCTURED LAYOUT RULE
+
+Do not make this a totally freeform design toy if that breaks export reliability.
+
+Prioritize:
+
+* drag-and-drop sections
+* drag-and-drop blocks
+* grid-based alignment
+* snap-to-grid
+* guides
+* consistent spacing
+
+Limited free placement is acceptable only if it remains export-safe.
+
+If full freeform layout would compromise Google Docs / Google Slides fidelity, do not implement it that way.
+
+PREVIEW REQUIREMENTS FOR TEMPLATES
+
+This is mandatory.
+
+Right now the template system is too blind.
+Fix that.
+
+Every template must show:
+
+* thumbnail preview
+* template type
+* page/slide count
+* last edited date
+* whether it is default
+* whether it contains imported legacy material
+
+Every slide / page in a template must show:
+
+* a visual mini-preview thumbnail
+* not just a title and type label
+
+Every reusable block must show:
+
+* a visual preview thumbnail
+
+Every imported slide must show:
+
+* the original interpreted layout preview
+* not just metadata
+
+Within the editor:
+
+* when selecting a slide/page from the template, the user must see the actual slide/page
+* when dragging in a new component, the user must have a visible ghost preview before placement
+* when editing a component, changes must appear live on canvas
+
+Do not leave the user flying blind.
+
+SLIDE / SECTION TYPE LIBRARY REQUIREMENT
+
+The existing slide / section type library has useful structure, but it is too abstract.
+
+Keep the content and categorization work already done if viable, but redesign the library so each item shows:
+
+* component name
+* component category
+* supported report types
+* a mini visual preview
+* whether it is data-bound, layout-only, or content-only
+* whether it is theme-aware
+
+A user should be able to understand what a component is by looking at it, not by guessing from a label.
+
+GOOGLE DRIVE EXPORT REQUIREMENT
+
+This system is Google Drive first.
+
+Support:
+
+* Google Docs export for doc-style reports
+* Google Slides export for slide-style reports
+
+The export renderer must preserve as closely as possible:
+
+* typography
+* header/footer treatment
+* table styles
+* chart styles
+* spacing
+* section order
+* page/slide structure
+* color system
+* component layout
+
+Do not offer visual controls that cannot survive export with reasonable fidelity.
+
+If a control is not export-safe:
+
+* remove it
+  or
+* explicitly mark it unsupported and disable it for production use
+
+ARCHITECTURE REQUIREMENT
+
+Refactor the current implementation into a clean architecture with clear separation between:
+
+* theme tokens
+* template layout definitions
+* reusable blocks
+* imported slides
+* export renderers
+* preview engine
+
+Recommended architecture:
+
+* Theme Manager
+* Template Manager
+* Reusable Block Manager
+* Imported Slide Manager
+* Template Canvas Editor
+* Preview Engine
+* Export Renderer
+* Google Docs Renderer
+* Google Slides Renderer
+* Design Token System
+
+Use a shared design token layer so Theme drives all report visuals consistently.
+
+TEMPLATE PERSISTENCE RULE
+
+Once a template is saved, it must remain stable until the user edits it.
+
+No silent mutation.
+No retroactive structural changes because the system reinterpreted something.
+
+If theme changes cascade, that must be intentional and understandable.
+If layout changes are made, they must only affect the template being edited unless the user explicitly updates others.
+
+USER EXPERIENCE REQUIREMENTS
+
+The rebuilt system must feel:
+
+* simpler
+* more visual
+* less fragmented
+* less abstract
+* harder to misuse
+* easier to preview
+* easier to understand
+
+The current experience causes confusion because users are making structure decisions without enough visual context.
+Fix that directly.
+
+ACCEPTANCE CRITERIA
+
+Do not mark this project complete unless all of the following are true:
+
+1. Theme and Templates are reworked into one cohesive design system with those two primary sections
+2. Existing useful work is preserved and migrated forward
+3. Existing templates are migrated into Report Templates
+4. Existing interpreted slides are migrated into Imported Slides
+5. Existing slide/section types are preserved where viable but upgraded with visual previews
+6. The default visual system is red-led for Webserv, not blue-led
+7. Theme controls global design for recurring report elements
+8. Templates become a real visual WYSIWYG layout editor, not just an order manager
+9. Template cards show real previews before opening
+10. Slides/pages inside templates show thumbnails, not just text labels
+11. Imported slides can be previewed, edited, promoted, and archived
+12. Reusable blocks exist and can be extracted from templates or imported slides
+13. Theme has real live preview modes for all major component types
+14. Template editing updates live on canvas
+15. Document-style and slide-style templates are both supported
+16. Google Docs and Google Slides export fidelity is treated as the primary rendering constraint
+17. No obviously non-export-safe design controls are exposed
+18. Saved templates remain stable unless intentionally edited
+19. The new system is materially more visual and less confusing than the current one
+20. The final implementation clearly documents:
+
+* architecture
+* migrated assets
+* data model
+* current limitations due to Google export constraints
+* any remaining follow-up gaps
+
+IMPLEMENTATION INSTRUCTION
+
+Do not give me a mockup, a fake editor, or a half-finished concept.
+Refactor the actual system.
+Preserve viable work already done.
+Upgrade the current system into a production-capable visual design system.
+
+If tradeoffs are needed, prioritize in this order:
+
+1. preserve existing useful work
+2. Google Drive export fidelity
+3. visual clarity and previews
+4. design consistency
+5. editing flexibility
+
+At the end, provide:
+
+* final architecture
+* migration summary of existing templates/slides/components
+* exact Webserv red-led defaults now in place
+* exact export limitations
+* exact remaining gaps

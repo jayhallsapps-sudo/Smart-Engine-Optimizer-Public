@@ -65,6 +65,8 @@ import {
   amaMessages,
   themes,
   templateStructures,
+  importedSlides,
+  reusableBlocks,
   type AmaConversation,
   type AmaMessage,
   type Theme,
@@ -72,6 +74,11 @@ import {
   type TemplateStructure,
   type SlideEntry,
   type ThemeTokens,
+  type ImportedSlide,
+  type InsertImportedSlide,
+  type ImportedSlideStatus,
+  type ReusableBlock,
+  type InsertReusableBlock,
   DEFAULT_THEME_TOKENS,
   DEFAULT_TEMPLATE_SLIDES,
 } from "@shared/schema";
@@ -219,6 +226,20 @@ export interface IStorage {
   // Template Structures
   getTemplateStructure(templateId: string): Promise<TemplateStructure | undefined>;
   saveTemplateStructure(templateId: string, slides: SlideEntry[]): Promise<TemplateStructure>;
+
+  // Imported Slides
+  listImportedSlides(): Promise<ImportedSlide[]>;
+  getImportedSlide(id: number): Promise<ImportedSlide | undefined>;
+  createImportedSlide(data: InsertImportedSlide): Promise<ImportedSlide>;
+  updateImportedSlide(id: number, data: Partial<InsertImportedSlide>): Promise<ImportedSlide | undefined>;
+  deleteImportedSlide(id: number): Promise<boolean>;
+
+  // Reusable Blocks
+  listReusableBlocks(includeArchived?: boolean): Promise<ReusableBlock[]>;
+  getReusableBlock(id: number): Promise<ReusableBlock | undefined>;
+  createReusableBlock(data: InsertReusableBlock): Promise<ReusableBlock>;
+  updateReusableBlock(id: number, data: Partial<InsertReusableBlock>): Promise<ReusableBlock | undefined>;
+  deleteReusableBlock(id: number): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1002,6 +1023,69 @@ export class DatabaseStorage implements IStorage {
       slides,
     }).returning();
     return row;
+  }
+
+  // ─── Imported Slides ────────────────────────────────────────────────────────
+
+  async listImportedSlides(): Promise<ImportedSlide[]> {
+    return db.select().from(importedSlides).orderBy(desc(importedSlides.importedAt));
+  }
+
+  async getImportedSlide(id: number): Promise<ImportedSlide | undefined> {
+    const [row] = await db.select().from(importedSlides).where(eq(importedSlides.id, id));
+    return row;
+  }
+
+  async createImportedSlide(data: InsertImportedSlide): Promise<ImportedSlide> {
+    const [row] = await db.insert(importedSlides).values(data).returning();
+    return row;
+  }
+
+  async updateImportedSlide(id: number, data: Partial<InsertImportedSlide>): Promise<ImportedSlide | undefined> {
+    const [row] = await db.update(importedSlides)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(importedSlides.id, id))
+      .returning();
+    return row;
+  }
+
+  async deleteImportedSlide(id: number): Promise<boolean> {
+    const res = await db.delete(importedSlides).where(eq(importedSlides.id, id));
+    return (res.rowCount ?? 0) > 0;
+  }
+
+  // ─── Reusable Blocks ────────────────────────────────────────────────────────
+
+  async listReusableBlocks(includeArchived = false): Promise<ReusableBlock[]> {
+    if (includeArchived) {
+      return db.select().from(reusableBlocks).orderBy(reusableBlocks.name);
+    }
+    return db.select().from(reusableBlocks)
+      .where(eq(reusableBlocks.isArchived, false))
+      .orderBy(reusableBlocks.name);
+  }
+
+  async getReusableBlock(id: number): Promise<ReusableBlock | undefined> {
+    const [row] = await db.select().from(reusableBlocks).where(eq(reusableBlocks.id, id));
+    return row;
+  }
+
+  async createReusableBlock(data: InsertReusableBlock): Promise<ReusableBlock> {
+    const [row] = await db.insert(reusableBlocks).values(data).returning();
+    return row;
+  }
+
+  async updateReusableBlock(id: number, data: Partial<InsertReusableBlock>): Promise<ReusableBlock | undefined> {
+    const [row] = await db.update(reusableBlocks)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(reusableBlocks.id, id))
+      .returning();
+    return row;
+  }
+
+  async deleteReusableBlock(id: number): Promise<boolean> {
+    const res = await db.delete(reusableBlocks).where(eq(reusableBlocks.id, id));
+    return (res.rowCount ?? 0) > 0;
   }
 }
 

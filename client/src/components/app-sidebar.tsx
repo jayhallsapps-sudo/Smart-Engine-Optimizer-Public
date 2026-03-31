@@ -2,7 +2,7 @@ import { useState } from "react";
 import smarteoIconPath from "@assets/SmartEO-Icon_1773606395230.png";
 import {
   Settings, LogOut, Shield, User, BookOpen, Layers,
-  LayoutTemplate, Users, CalendarClock,
+  LayoutTemplate, Users, CalendarClock, Palette,
 } from "lucide-react";
 import {
   Sidebar,
@@ -181,6 +181,7 @@ export function AppSidebar() {
               <NavLink href="/admin/schedules" icon={CalendarClock} label="Scheduled Reports" testId="link-admin-schedules" />
               <NavLink href="/admin" icon={Layers} label="Governance" testId="link-admin-governance" />
               <NavLink href="/admin/guidance" icon={BookOpen} label="Guidance Library" testId="link-admin-guidance" />
+              <NavLink href="/design-system" icon={Palette} label="Design System" testId="link-design-system" />
               <NavLink href="/admin/templates" icon={LayoutTemplate} label="Template Controls" testId="link-admin-templates" />
               <NavLink href="/clients" icon={Shield} label="Manage Clients" testId="link-admin-clients" />
               <NavLink href="/integrations" icon={Settings} label="Integrations" testId="link-admin-integrations" />

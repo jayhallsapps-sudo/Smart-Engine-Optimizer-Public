@@ -45,7 +45,7 @@ import {
 
 // ─── Template definitions ─────────────────────────────────────────────────────
 
-interface TemplateDef {
+export interface TemplateDef {
   id: string;
   name: string;
   description: string;
@@ -56,7 +56,7 @@ interface TemplateDef {
   format: "PPTX" | "DOCX";
 }
 
-const TEMPLATES: TemplateDef[] = [
+export const TEMPLATES: TemplateDef[] = [
   {
     id: "quarterly-content-roadmap",
     name: "Quarterly Content Roadmap",
@@ -110,7 +110,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 // ─── Slide type mini preview ──────────────────────────────────────────────────
 
-function SlideTypeCard({ type, compact = false, onAdd }: { type: SlideTypeDef; compact?: boolean; onAdd?: () => void }) {
+export function SlideTypeCard({ type, compact = false, onAdd }: { type: SlideTypeDef; compact?: boolean; onAdd?: () => void }) {
   return (
     <div
       className={`relative group flex flex-col rounded-lg border bg-card transition-all hover:border-primary/40 hover:shadow-sm ${compact ? "p-2.5" : "p-3"}`}
@@ -254,7 +254,7 @@ interface StructureData {
   updatedAt: string | null;
 }
 
-function TemplateEditor({ tpl, onClose }: { tpl: TemplateDef; onClose: () => void }) {
+export function TemplateEditor({ tpl, onClose }: { tpl: TemplateDef; onClose: () => void }) {
   const { toast } = useToast();
   const { data: structure, isLoading } = useQuery<StructureData>({
     queryKey: [`/api/template-structures/${tpl.id}`],
@@ -580,7 +580,7 @@ export default function TemplatesPage() {
 
 // ─── Slide count badge (reads from API or defaults) ───────────────────────────
 
-function DefaultSlideCount({ templateId }: { templateId: string }) {
+export function DefaultSlideCount({ templateId }: { templateId: string }) {
   const { data } = useQuery<{ slides: SlideEntry[] }>({
     queryKey: [`/api/template-structures/${templateId}`],
   });

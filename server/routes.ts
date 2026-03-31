@@ -5866,6 +5866,91 @@ Return ONLY valid JSON:
     res.json(result);
   });
 
+  // ─── Imported Slides Routes ────────────────────────────────────────────────
+
+  app.get("/api/imported-slides", requireAuth, async (_req, res) => {
+    const slides = await storage.listImportedSlides();
+    res.json(slides);
+  });
+
+  app.get("/api/imported-slides/:id", requireAuth, async (req, res) => {
+    const slide = await storage.getImportedSlide(Number(req.params.id));
+    if (!slide) return res.status(404).json({ error: "Slide not found" });
+    res.json(slide);
+  });
+
+  app.post("/api/imported-slides", requireAuth, async (req, res) => {
+    try {
+      const { insertImportedSlideSchema } = await import("@shared/schema");
+      const data = insertImportedSlideSchema.parse(req.body);
+      const slide = await storage.createImportedSlide(data);
+      res.status(201).json(slide);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/imported-slides/:id", requireAuth, async (req, res) => {
+    try {
+      const { insertImportedSlideSchema } = await import("@shared/schema");
+      const data = insertImportedSlideSchema.partial().parse(req.body);
+      const slide = await storage.updateImportedSlide(Number(req.params.id), data);
+      if (!slide) return res.status(404).json({ error: "Slide not found" });
+      res.json(slide);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/imported-slides/:id", requireAuth, async (req, res) => {
+    const ok = await storage.deleteImportedSlide(Number(req.params.id));
+    if (!ok) return res.status(404).json({ error: "Slide not found" });
+    res.json({ success: true });
+  });
+
+  // ─── Reusable Blocks Routes ────────────────────────────────────────────────
+
+  app.get("/api/reusable-blocks", requireAuth, async (req, res) => {
+    const includeArchived = req.query.includeArchived === "true";
+    const blocks = await storage.listReusableBlocks(includeArchived);
+    res.json(blocks);
+  });
+
+  app.get("/api/reusable-blocks/:id", requireAuth, async (req, res) => {
+    const block = await storage.getReusableBlock(Number(req.params.id));
+    if (!block) return res.status(404).json({ error: "Block not found" });
+    res.json(block);
+  });
+
+  app.post("/api/reusable-blocks", requireAuth, async (req, res) => {
+    try {
+      const { insertReusableBlockSchema } = await import("@shared/schema");
+      const data = insertReusableBlockSchema.parse(req.body);
+      const block = await storage.createReusableBlock(data);
+      res.status(201).json(block);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/reusable-blocks/:id", requireAuth, async (req, res) => {
+    try {
+      const { insertReusableBlockSchema } = await import("@shared/schema");
+      const data = insertReusableBlockSchema.partial().parse(req.body);
+      const block = await storage.updateReusableBlock(Number(req.params.id), data);
+      if (!block) return res.status(404).json({ error: "Block not found" });
+      res.json(block);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/reusable-blocks/:id", requireAuth, async (req, res) => {
+    const ok = await storage.deleteReusableBlock(Number(req.params.id));
+    if (!ok) return res.status(404).json({ error: "Block not found" });
+    res.json({ success: true });
+  });
+
   // PDF export for discoverability workspace
   app.get("/api/discoverability/workspaces/:id/export-pdf", async (req, res) => {
     try {

@@ -1,10 +1,8 @@
 import { useState } from "react";
 import smarteoIconPath from "@assets/SmartEO-Icon_1773606395230.png";
-import { useQuery } from "@tanstack/react-query";
 import {
-  ExternalLink, Settings, LogOut, Shield, User, BookOpen, Layers,
-  LayoutTemplate, BarChart3, Presentation, PanelsTopLeft, Home,
-  FileText, Clock, Search, Palette, MessageSquare, Users, Zap, CalendarClock,
+  Settings, LogOut, Shield, User, BookOpen, Layers,
+  LayoutTemplate, Users, CalendarClock,
 } from "lucide-react";
 import {
   Sidebar,
@@ -16,19 +14,8 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/contexts/auth-context";
-
-// ─── Client URL helper ────────────────────────────────────────────────────────
-
-function clientWebsiteUrl(gscSiteUrl: string | null | undefined): string | null {
-  if (!gscSiteUrl) return null;
-  if (gscSiteUrl.startsWith("sc-domain:")) {
-    return "https://" + gscSiteUrl.replace("sc-domain:", "");
-  }
-  return gscSiteUrl;
-}
 
 // ─── Sidebar nav link ─────────────────────────────────────────────────────────
 
@@ -72,64 +59,6 @@ function NavLink({
         <span className="text-xs">{label}</span>
       </div>
     </Link>
-  );
-}
-
-// ─── Client list ──────────────────────────────────────────────────────────────
-
-interface ClientItem {
-  id: number;
-  name: string;
-  gscSiteUrl?: string | null;
-}
-
-function ClientList() {
-  const { state } = useSidebar();
-  const collapsed = state === "collapsed";
-
-  const { data: clients = [] } = useQuery<ClientItem[]>({
-    queryKey: ["/api/clients"],
-  });
-
-  if (collapsed) return null;
-
-  if (clients.length === 0) {
-    return (
-      <div className="px-2 py-2">
-        <p className="text-[10px] text-muted-foreground">No clients configured.</p>
-      </div>
-    );
-  }
-
-  return (
-    <ScrollArea className="max-h-44">
-      <div className="flex flex-col gap-0.5 px-1 py-1">
-        {clients.map(client => {
-          const url = clientWebsiteUrl(client.gscSiteUrl);
-          return url ? (
-            <a
-              key={client.id}
-              href={url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition-colors group"
-              data-testid={`link-client-${client.id}`}
-            >
-              <span className="text-xs text-foreground truncate">{client.name}</span>
-              <ExternalLink className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
-            </a>
-          ) : (
-            <div
-              key={client.id}
-              className="flex items-center px-2 py-1.5"
-              data-testid={`item-client-${client.id}`}
-            >
-              <span className="text-xs text-muted-foreground truncate">{client.name}</span>
-            </div>
-          );
-        })}
-      </div>
-    </ScrollArea>
   );
 }
 
@@ -195,16 +124,6 @@ function UserProfileBlock() {
             >
               {isAdmin() ? "Admin" : "User"}
             </span>
-            {isAdmin() && (
-              <Link href="/admin/users">
-                <span
-                  className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-semibold tracking-wide uppercase cursor-pointer bg-muted hover:bg-muted/80 text-muted-foreground border border-border transition-colors"
-                  data-testid="link-admin-badge"
-                >
-                  Manage Users
-                </span>
-              </Link>
-            )}
           </div>
         </div>
         <button
@@ -225,7 +144,7 @@ function UserProfileBlock() {
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
-  const { user, hasModule, hasReportSubKey, isAdmin } = useAuth();
+  const { user, isAdmin } = useAuth();
 
   if (!user) return null;
 
@@ -252,56 +171,6 @@ export function AppSidebar() {
 
         <SidebarSectionLabel label="Account" />
         <UserProfileBlock />
-
-        <SidebarDivider />
-
-        <SidebarSectionLabel label="Navigation" />
-        <div className={collapsed ? "flex flex-col items-center gap-1 py-1" : "px-1 py-1 space-y-0.5"}>
-          <NavLink href="/command-center" icon={Home} label="Command Center" testId="link-command-center" />
-
-          {hasModule("prepare_report") && (
-            <NavLink href="/prepare" icon={FileText} label="Prepare a Report" testId="link-prepare-report" />
-          )}
-
-          {hasModule("past_reports") && (
-            <NavLink href="/saved-reports" icon={Clock} label="Past Reports" testId="link-past-reports" />
-          )}
-
-          {hasModule("ama") && (
-            <NavLink href="/aca" icon={MessageSquare} label="ACA (Ask Claude)" testId="link-aca" />
-          )}
-
-          {hasModule("discoverability_tool") && (
-            <NavLink href="/discoverability" icon={Search} label="Discoverability" testId="link-discoverability" />
-          )}
-
-          {hasModule("templates") && (
-            <NavLink href="/templates" icon={PanelsTopLeft} label="Templates" testId="link-templates" />
-          )}
-
-          {hasModule("theme") && (
-            <NavLink href="/theme" icon={Palette} label="Theme" testId="link-theme" />
-          )}
-
-          {hasModule("client_info") && (
-            <NavLink href="/clients" icon={Shield} label="Clients" testId="link-clients" />
-          )}
-
-          {hasModule("integrations") && (
-            <NavLink href="/integrations" icon={Zap} label="Integrations" testId="link-integrations" />
-          )}
-        </div>
-
-        <SidebarDivider />
-        <SidebarSectionLabel label="Mid-Strategy" />
-        <div className={collapsed ? "flex flex-col items-center gap-1 py-1" : "px-1 py-1 space-y-0.5"}>
-          <NavLink href="/eval-sheets" icon={BarChart3} label="Evaluation Sheets" testId="link-eval-sheets" />
-          <NavLink href="/mid-strategy-deck" icon={Presentation} label="Mid-Strategy Deck" testId="link-mid-strategy-deck" />
-        </div>
-
-        <SidebarDivider />
-        <SidebarSectionLabel label="My Clients" />
-        <ClientList />
 
         {isAdmin() && (
           <>

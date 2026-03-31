@@ -41,7 +41,18 @@ import {
   Check,
   Pencil,
   Download,
+  CalendarClock,
+  Hash,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { useToast } from "@/hooks/use-toast";
 import type { Client, ClientCompetitor } from "@shared/schema";
 
 interface NsmData {
@@ -779,7 +790,20 @@ function InlineEditField({
   );
 }
 
+const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const TIMEZONES = [
+  "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles",
+  "America/Phoenix", "America/Anchorage", "Pacific/Honolulu", "Europe/London",
+  "Europe/Paris", "Australia/Sydney",
+];
+
 function ClientDataTab({ client, clientId }: { client: Client; clientId: number }) {
+  const { toast } = useToast();
+  const [schedOpen, setSchedOpen] = useState(false);
+  const [schedDay, setSchedDay] = useState("1");
+  const [schedHour, setSchedHour] = useState("8");
+  const [schedTz, setSchedTz] = useState("America/New_York");
+
   const { data: nsmData, isLoading } = useQuery<ClientNsmResponse>({
     queryKey: ["/api/dashboard/client", clientId, "nsm"],
     queryFn: async () => {
@@ -800,6 +824,21 @@ function ClientDataTab({ client, clientId }: { client: Client; clientId: number 
     await apiRequest("PATCH", `/api/clients/${clientId}`, { [field]: val });
     queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
   };
+
+  const createScheduleMut = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/report-schedules", {
+      clientId,
+      reportType: "biweekly",
+      recurrenceDay: parseInt(schedDay),
+      recurrenceHour: parseInt(schedHour),
+      timezone: schedTz,
+    }),
+    onSuccess: () => {
+      toast({ title: "Schedule created", description: `Bi-weekly reports will run every ${DAY_NAMES[parseInt(schedDay)]} at ${schedHour}:00.` });
+      setSchedOpen(false);
+    },
+    onError: (err: any) => toast({ title: "Failed to create schedule", description: err.message, variant: "destructive" }),
+  });
 
   if (isLoading) {
     return (
@@ -861,12 +900,96 @@ function ClientDataTab({ client, clientId }: { client: Client; clientId: number 
             {nsmType !== "—" ? `NSM Type: ${nsmType}` : "NSM Type: —"}
           </span>
         </div>
+        <div className="flex items-center gap-2">
+          <InlineEditField
+            icon={<Hash className="w-3 h-3" />}
+            value={client.slackChannelId}
+            placeholder="Add Slack Channel ID"
+            onSave={val => saveClientField("slackChannelId", val)}
+            testIdPrefix={`slack-channel-${clientId}`}
+          />
+          <button
+            onClick={() => setSchedOpen(true)}
+            className="shrink-0 p-1 rounded hover:bg-white/10 transition-colors"
+            title="Create bi-weekly schedule"
+            data-testid={`button-create-schedule-${clientId}`}
+          >
+            <CalendarClock className="w-3.5 h-3.5" style={{ color: "rgba(255,255,255,0.4)" }} />
+          </button>
+        </div>
       </div>
 
       <div style={{ height: "1px", background: "rgba(255,255,255,0.07)" }} />
 
       <NsmQuarterSection label="Current Quarter" nsm={current} clientId={clientId} />
       <NsmQuarterSection label="Next Quarter" nsm={next} clientId={clientId} />
+
+      <Dialog open={schedOpen} onOpenChange={setSchedOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-sm">
+              <CalendarClock className="w-4 h-4" />
+              Schedule Bi-Weekly Report
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-muted-foreground -mt-1">{client.name}</p>
+          <div className="flex flex-col gap-3 pt-1">
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs">Day of week</Label>
+              <Select value={schedDay} onValueChange={setSchedDay}>
+                <SelectTrigger className="h-8 text-xs" data-testid="select-sched-day">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {DAY_NAMES.map((d, i) => (
+                    <SelectItem key={i} value={String(i)} className="text-xs">{d}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs">Time (hour)</Label>
+              <Select value={schedHour} onValueChange={setSchedHour}>
+                <SelectTrigger className="h-8 text-xs" data-testid="select-sched-hour">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Array.from({ length: 24 }, (_, i) => (
+                    <SelectItem key={i} value={String(i)} className="text-xs">
+                      {i === 0 ? "12:00 AM" : i < 12 ? `${i}:00 AM` : i === 12 ? "12:00 PM" : `${i - 12}:00 PM`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs">Timezone</Label>
+              <Select value={schedTz} onValueChange={setSchedTz}>
+                <SelectTrigger className="h-8 text-xs" data-testid="select-sched-tz">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {TIMEZONES.map(tz => (
+                    <SelectItem key={tz} value={tz} className="text-xs">{tz}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter className="pt-2">
+            <Button variant="outline" size="sm" onClick={() => setSchedOpen(false)} className="text-xs">Cancel</Button>
+            <Button
+              size="sm"
+              onClick={() => createScheduleMut.mutate()}
+              disabled={createScheduleMut.isPending}
+              className="text-xs"
+              data-testid={`button-confirm-schedule-${clientId}`}
+            >
+              {createScheduleMut.isPending ? "Creating…" : "Create Schedule"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

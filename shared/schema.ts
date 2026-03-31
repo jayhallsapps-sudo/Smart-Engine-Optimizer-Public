@@ -46,6 +46,7 @@ export const users = pgTable("users", {
   suspendedBy: integer("suspended_by"),
   createdBy: integer("created_by"),
   lastLoginAt: timestamp("last_login_at"),
+  tempCredentialBlock: text("temp_credential_block"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (t) => [

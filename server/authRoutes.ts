@@ -193,7 +193,7 @@ export function registerAuthRoutes(app: Express) {
     const newHash = await hashPassword(newPassword);
     await db
       .update(users)
-      .set({ passwordHash: newHash, accountState: "active", updatedAt: new Date() })
+      .set({ passwordHash: newHash, accountState: "active", tempCredentialBlock: null, updatedAt: new Date() })
       .where(eq(users.id, user.id));
 
     return res.json({ ok: true });
@@ -239,6 +239,8 @@ export function registerAuthRoutes(app: Express) {
 
     const tempPassword = generateTempPassword();
     const passwordHash = await hashPassword(tempPassword);
+    const loginUrl = buildLoginUrl(req);
+    const credentialBlock = `SmartEO Account Created\n\nName: ${fullName}\nEmail: ${email}\nAccess Level: ${role === "admin" ? "Admin" : "User"}\nTemporary Password: ${tempPassword}\nLogin URL: ${loginUrl}\n\nInstructions:\n• Log in using the email and temporary password above\n• You will be required to change your password on first login`;
 
     const [newUser] = await db
       .insert(users)
@@ -249,12 +251,11 @@ export function registerAuthRoutes(app: Express) {
         role,
         accountState: "first_login_required",
         createdBy: req.currentUser!.id,
+        tempCredentialBlock: credentialBlock,
       })
       .returning();
 
     await setUserPermissions(newUser.id, modules, reportSubKeys);
-
-    const loginUrl = buildLoginUrl(req);
 
     return res.status(201).json({
       user: {
@@ -266,7 +267,7 @@ export function registerAuthRoutes(app: Express) {
         createdAt: newUser.createdAt,
       },
       tempPassword,
-      credentialBlock: `SmartEO Account Created\n\nName: ${fullName}\nEmail: ${email}\nAccess Level: ${role === "admin" ? "Admin" : "User"}\nTemporary Password: ${tempPassword}\nLogin URL: ${loginUrl}\n\nInstructions:\n• Log in using the email and temporary password above\n• You will be required to change your password on first login`,
+      credentialBlock,
     });
   });
 
@@ -381,23 +382,44 @@ export function registerAuthRoutes(app: Express) {
 
     const tempPassword = generateTempPassword();
     const passwordHash = await hashPassword(tempPassword);
+    const loginUrl = buildLoginUrl(req);
+    const credentialBlock = `SmartEO Password Reset\n\nName: ${user.fullName}\nEmail: ${user.email}\nAccess Level: ${user.role === "admin" ? "Admin" : "User"}\nTemporary Password: ${tempPassword}\nLogin URL: ${loginUrl}\n\nInstructions:\n• Log in using the email and temporary password above\n• You will be required to change your password on first login`;
 
     await db
       .update(users)
       .set({
         passwordHash,
         accountState: "password_reset_required",
+        tempCredentialBlock: credentialBlock,
         updatedAt: new Date(),
       })
       .where(eq(users.id, userId));
 
     await invalidateAllUserSessions(userId);
 
-    const loginUrl = buildLoginUrl(req);
+    return res.json({ tempPassword, credentialBlock });
+  });
+
+  // ── GET /api/admin/users/:id/credentials ────────────────────────────────────
+  app.get("/api/admin/users/:id/credentials", requireAuth, requireAdminRole, async (req: Request, res: Response) => {
+    const userId = parseInt(req.params.id, 10);
+    if (isNaN(userId)) return res.status(400).json({ message: "Invalid user ID." });
+
+    const [row] = await db
+      .select({ accountState: users.accountState, tempCredentialBlock: users.tempCredentialBlock })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    if (!row) return res.status(404).json({ message: "User not found." });
+
+    const available =
+      (row.accountState === "first_login_required" || row.accountState === "password_reset_required") &&
+      !!row.tempCredentialBlock;
 
     return res.json({
-      tempPassword,
-      credentialBlock: `SmartEO Password Reset\n\nName: ${user.fullName}\nEmail: ${user.email}\nAccess Level: ${user.role === "admin" ? "Admin" : "User"}\nTemporary Password: ${tempPassword}\nLogin URL: ${loginUrl}\n\nInstructions:\n• Log in using the email and temporary password above\n• You will be required to change your password on first login`,
+      available,
+      credentialBlock: available ? row.tempCredentialBlock : null,
     });
   });
 }

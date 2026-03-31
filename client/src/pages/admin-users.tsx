@@ -3,7 +3,17 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth-context";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
-import { Shield, Plus, RefreshCw, Ban, CheckCircle2, RotateCcw, ChevronDown, ChevronUp, Copy, Check, Eye, EyeOff, X } from "lucide-react";
+import {
+  Shield, Plus, RefreshCw, Ban, CheckCircle2, RotateCcw,
+  Copy, Check, MoreHorizontal, KeyRound, Pencil, UserX, UserCheck,
+} from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { MODULE_KEYS, REPORT_SUB_KEYS, type ModuleKey, type ReportSubKey } from "@shared/schema";
 
 const MODULE_LABELS: Record<ModuleKey, string> = {
@@ -45,8 +55,8 @@ interface UserDetail extends UserRow {
 const STATE_LABELS: Record<string, string> = {
   active: "Active",
   suspended: "Suspended",
-  first_login_required: "First Login Required",
-  password_reset_required: "Password Reset Required",
+  first_login_required: "Awaiting First Login",
+  password_reset_required: "Password Reset Pending",
 };
 
 const STATE_COLORS: Record<string, string> = {
@@ -55,6 +65,8 @@ const STATE_COLORS: Record<string, string> = {
   first_login_required: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800",
   password_reset_required: "bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-400 dark:border-orange-800",
 };
+
+// ─── Copy block ───────────────────────────────────────────────────────────────
 
 function CopyBlock({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -80,6 +92,8 @@ function CopyBlock({ text }: { text: string }) {
     </div>
   );
 }
+
+// ─── Permission selector ──────────────────────────────────────────────────────
 
 interface PermissionSelectorProps {
   selectedModules: ModuleKey[];
@@ -153,6 +167,8 @@ function PermissionSelector({
   );
 }
 
+// ─── Create user panel ────────────────────────────────────────────────────────
+
 function CreateUserPanel({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient();
   const [fullName, setFullName] = useState("");
@@ -187,7 +203,7 @@ function CreateUserPanel({ onClose }: { onClose: () => void }) {
           <h3 className="text-base font-semibold text-foreground">User created successfully</h3>
         </div>
         <p className="text-sm text-muted-foreground">
-          Share the credentials below with the new user. The temporary password will not be shown again.
+          Share the credentials below with the new user. The temporary password is stored and accessible from the Actions menu until they log in.
         </p>
         <CopyBlock text={result.credentialBlock} />
         <div className="flex gap-2 pt-2">
@@ -299,6 +315,8 @@ function CreateUserPanel({ onClose }: { onClose: () => void }) {
     </form>
   );
 }
+
+// ─── Edit user panel ──────────────────────────────────────────────────────────
 
 function EditUserPanel({ userId, onClose }: { userId: number; onClose: () => void }) {
   const qc = useQueryClient();
@@ -428,6 +446,8 @@ function EditUserPanel({ userId, onClose }: { userId: number; onClose: () => voi
   );
 }
 
+// ─── Reset password result panel ──────────────────────────────────────────────
+
 function ResetPasswordResult({ credentialBlock, onClose }: { credentialBlock: string; onClose: () => void }) {
   return (
     <div className="space-y-4">
@@ -435,7 +455,7 @@ function ResetPasswordResult({ credentialBlock, onClose }: { credentialBlock: st
         <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
         <h3 className="text-base font-semibold text-foreground">Password reset</h3>
       </div>
-      <p className="text-sm text-muted-foreground">Share the new credentials with the user. The temporary password will not be shown again.</p>
+      <p className="text-sm text-muted-foreground">Share the new credentials with the user. Accessible again from Actions → View Login Info until they log in.</p>
       <CopyBlock text={credentialBlock} />
       <button
         onClick={onClose}
@@ -448,6 +468,164 @@ function ResetPasswordResult({ credentialBlock, onClose }: { credentialBlock: st
   );
 }
 
+// ─── View credentials panel ───────────────────────────────────────────────────
+
+function ViewCredentialsPanel({ userId, onClose }: { userId: number; onClose: () => void }) {
+  const { data, isLoading } = useQuery<{ available: boolean; credentialBlock: string | null }>({
+    queryKey: ["/api/admin/users", userId, "credentials"],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/users/${userId}/credentials`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to load credentials.");
+      return res.json();
+    },
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <KeyRound className="w-5 h-5 text-[#1B3A6B] dark:text-blue-300 shrink-0" />
+        <h3 className="text-base font-semibold text-foreground">Login Info</h3>
+      </div>
+
+      {isLoading && (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      )}
+
+      {!isLoading && data?.available && data.credentialBlock && (
+        <>
+          <p className="text-sm text-muted-foreground">
+            These credentials are available until the user completes their first login and sets a new password.
+          </p>
+          <CopyBlock text={data.credentialBlock} />
+        </>
+      )}
+
+      {!isLoading && !data?.available && (
+        <div className="rounded-lg border border-border bg-muted/30 px-4 py-6 text-center">
+          <KeyRound className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
+          <p className="text-sm font-medium text-foreground">Credentials no longer available</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            This user has already set their own password. Use "Reset Password" from Actions to generate new credentials.
+          </p>
+        </div>
+      )}
+
+      <button
+        onClick={onClose}
+        className="px-4 py-2 rounded-lg border border-border text-sm hover:bg-muted transition-colors"
+        data-testid="button-close-credentials"
+      >
+        Close
+      </button>
+    </div>
+  );
+}
+
+// ─── Actions dropdown ─────────────────────────────────────────────────────────
+
+type PanelState =
+  | { type: "create" }
+  | { type: "edit"; userId: number }
+  | { type: "reset"; credentialBlock: string }
+  | { type: "credentials"; userId: number }
+  | null;
+
+function ActionsMenu({
+  user,
+  onEdit,
+  onViewCreds,
+  onResetPassword,
+  onSuspend,
+  onReactivate,
+  resetPending,
+  suspendPending,
+  reactivatePending,
+}: {
+  user: UserRow;
+  onEdit: () => void;
+  onViewCreds: () => void;
+  onResetPassword: () => void;
+  onSuspend: () => void;
+  onReactivate: () => void;
+  resetPending: boolean;
+  suspendPending: boolean;
+  reactivatePending: boolean;
+}) {
+  const credAvailable =
+    user.accountState === "first_login_required" ||
+    user.accountState === "password_reset_required";
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          className="p-1.5 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+          title="Actions"
+          data-testid={`button-actions-${user.id}`}
+        >
+          <MoreHorizontal className="w-4 h-4" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-48">
+        <DropdownMenuItem onClick={onEdit} data-testid={`action-edit-${user.id}`}>
+          <Pencil className="w-3.5 h-3.5 mr-2" />
+          Edit user
+        </DropdownMenuItem>
+
+        <DropdownMenuSeparator />
+
+        <DropdownMenuItem
+          onClick={credAvailable ? onViewCreds : undefined}
+          disabled={!credAvailable}
+          data-testid={`action-view-creds-${user.id}`}
+          className={!credAvailable ? "opacity-40 cursor-not-allowed" : ""}
+        >
+          <KeyRound className="w-3.5 h-3.5 mr-2" />
+          View Login Info
+          {!credAvailable && (
+            <span className="ml-auto text-[10px] text-muted-foreground">Used</span>
+          )}
+        </DropdownMenuItem>
+
+        <DropdownMenuItem
+          onClick={onResetPassword}
+          disabled={resetPending}
+          data-testid={`action-reset-${user.id}`}
+        >
+          <RefreshCw className={`w-3.5 h-3.5 mr-2 ${resetPending ? "animate-spin" : ""}`} />
+          {resetPending ? "Resetting…" : "Reset Password"}
+        </DropdownMenuItem>
+
+        <DropdownMenuSeparator />
+
+        {user.accountState === "suspended" ? (
+          <DropdownMenuItem
+            onClick={onReactivate}
+            disabled={reactivatePending}
+            data-testid={`action-reactivate-${user.id}`}
+            className="text-emerald-600 dark:text-emerald-400 focus:text-emerald-600"
+          >
+            <UserCheck className="w-3.5 h-3.5 mr-2" />
+            {reactivatePending ? "Reactivating…" : "Reactivate"}
+          </DropdownMenuItem>
+        ) : (
+          <DropdownMenuItem
+            onClick={onSuspend}
+            disabled={suspendPending}
+            data-testid={`action-suspend-${user.id}`}
+            className="text-destructive focus:text-destructive"
+          >
+            <UserX className="w-3.5 h-3.5 mr-2" />
+            {suspendPending ? "Suspending…" : "Suspend"}
+          </DropdownMenuItem>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
 export default function AdminUsersPage() {
   const { isAdmin } = useAuth();
   const [, navigate] = useLocation();
@@ -457,9 +635,7 @@ export default function AdminUsersPage() {
     queryKey: ["/api/admin/users"],
   });
 
-  const [showCreate, setShowCreate] = useState(false);
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [resetResult, setResetResult] = useState<{ credentialBlock: string } | null>(null);
+  const [panel, setPanel] = useState<PanelState>(null);
 
   const suspendMutation = useMutation({
     mutationFn: (id: number) => apiRequest("POST", `/api/admin/users/${id}/suspend`),
@@ -477,7 +653,8 @@ export default function AdminUsersPage() {
       return res.json();
     },
     onSuccess: (data) => {
-      setResetResult({ credentialBlock: data.credentialBlock });
+      setPanel({ type: "reset", credentialBlock: data.credentialBlock });
+      qc.invalidateQueries({ queryKey: ["/api/admin/users"] });
     },
   });
 
@@ -489,10 +666,13 @@ export default function AdminUsersPage() {
     );
   }
 
-  const panelOpen = showCreate || editingId !== null || resetResult !== null;
+  const panelOpen = panel !== null;
+
+  const closePanel = () => setPanel(null);
 
   return (
     <div className="flex h-full">
+      {/* ── Main table ── */}
       <div className={`flex-1 min-w-0 overflow-auto ${panelOpen ? "border-r border-border" : ""}`}>
         <div className="border-b border-border bg-background px-8 py-6">
           <div className="flex items-center justify-between">
@@ -502,7 +682,7 @@ export default function AdminUsersPage() {
               <p className="mt-1 text-sm text-muted-foreground">Create and manage user accounts, roles, and module access.</p>
             </div>
             <button
-              onClick={() => { setShowCreate(true); setEditingId(null); setResetResult(null); }}
+              onClick={() => setPanel({ type: "create" })}
               data-testid="button-create-user"
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#1B3A6B] text-white text-sm font-medium hover:bg-[#1B3A6B]/90 transition-colors"
             >
@@ -552,44 +732,17 @@ export default function AdminUsersPage() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1 justify-end">
-                          <button
-                            onClick={() => { setEditingId(u.id); setShowCreate(false); setResetResult(null); }}
-                            className="p-1.5 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-                            title="Edit user"
-                            data-testid={`button-edit-user-${u.id}`}
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => { setResetResult(null); resetPasswordMutation.mutate(u.id); }}
-                            disabled={resetPasswordMutation.isPending}
-                            className="p-1.5 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-                            title="Reset password"
-                            data-testid={`button-reset-password-${u.id}`}
-                          >
-                            <RotateCcw className="w-3.5 h-3.5" />
-                          </button>
-                          {u.accountState === "suspended" ? (
-                            <button
-                              onClick={() => reactivateMutation.mutate(u.id)}
-                              disabled={reactivateMutation.isPending}
-                              className="p-1.5 rounded hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors text-muted-foreground hover:text-emerald-600"
-                              title="Reactivate user"
-                              data-testid={`button-reactivate-user-${u.id}`}
-                            >
-                              <CheckCircle2 className="w-3.5 h-3.5" />
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => suspendMutation.mutate(u.id)}
-                              disabled={suspendMutation.isPending}
-                              className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors text-muted-foreground hover:text-red-600"
-                              title="Suspend user"
-                              data-testid={`button-suspend-user-${u.id}`}
-                            >
-                              <Ban className="w-3.5 h-3.5" />
-                            </button>
-                          )}
+                          <ActionsMenu
+                            user={u}
+                            onEdit={() => setPanel({ type: "edit", userId: u.id })}
+                            onViewCreds={() => setPanel({ type: "credentials", userId: u.id })}
+                            onResetPassword={() => resetPasswordMutation.mutate(u.id)}
+                            onSuspend={() => suspendMutation.mutate(u.id)}
+                            onReactivate={() => reactivateMutation.mutate(u.id)}
+                            resetPending={resetPasswordMutation.isPending}
+                            suspendPending={suspendMutation.isPending}
+                            reactivatePending={reactivateMutation.isPending}
+                          />
                         </div>
                       </td>
                     </tr>
@@ -601,32 +754,13 @@ export default function AdminUsersPage() {
         </div>
       </div>
 
+      {/* ── Side panel ── */}
       {panelOpen && (
-        <div className="w-[480px] shrink-0 bg-background overflow-auto">
-          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-background px-6 py-4">
-            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-              {showCreate ? "Create User" : resetResult ? "Credentials" : "Edit User"}
-            </span>
-            <button
-              onClick={() => { setShowCreate(false); setEditingId(null); setResetResult(null); }}
-              className="p-1 rounded hover:bg-muted transition-colors"
-              data-testid="button-close-panel"
-            >
-              <X className="w-4 h-4 text-muted-foreground" />
-            </button>
-          </div>
-          <div className="p-6">
-            {showCreate && <CreateUserPanel onClose={() => setShowCreate(false)} />}
-            {editingId !== null && !showCreate && !resetResult && (
-              <EditUserPanel userId={editingId} onClose={() => setEditingId(null)} />
-            )}
-            {resetResult && !showCreate && (
-              <ResetPasswordResult
-                credentialBlock={resetResult.credentialBlock}
-                onClose={() => setResetResult(null)}
-              />
-            )}
-          </div>
+        <div className="w-[420px] shrink-0 overflow-y-auto border-l border-border bg-background p-6">
+          {panel.type === "create" && <CreateUserPanel onClose={closePanel} />}
+          {panel.type === "edit" && <EditUserPanel userId={panel.userId} onClose={closePanel} />}
+          {panel.type === "reset" && <ResetPasswordResult credentialBlock={panel.credentialBlock} onClose={closePanel} />}
+          {panel.type === "credentials" && <ViewCredentialsPanel userId={panel.userId} onClose={closePanel} />}
         </div>
       )}
     </div>

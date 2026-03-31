@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   ExternalLink, Settings, LogOut, Shield, User, BookOpen, Layers,
   LayoutTemplate, BarChart3, Presentation, PanelsTopLeft, Home,
-  FileText, Clock, Search, Palette, MessageSquare, Users, Zap,
+  FileText, Clock, Search, Palette, MessageSquare, Users, Zap, CalendarClock,
 } from "lucide-react";
 import {
   Sidebar,
@@ -309,6 +309,7 @@ export function AppSidebar() {
             <SidebarSectionLabel label="Admin" />
             <div className={collapsed ? "flex flex-col items-center gap-1 py-1" : "px-1 py-1 space-y-0.5"}>
               <NavLink href="/admin/users" icon={Users} label="User Management" testId="link-admin-users" />
+              <NavLink href="/admin/schedules" icon={CalendarClock} label="Scheduled Reports" testId="link-admin-schedules" />
               <NavLink href="/admin" icon={Layers} label="Governance" testId="link-admin-governance" />
               <NavLink href="/admin/guidance" icon={BookOpen} label="Guidance Library" testId="link-admin-guidance" />
               <NavLink href="/admin/templates" icon={LayoutTemplate} label="Template Controls" testId="link-admin-templates" />

@@ -1,8 +1,105 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, jsonb, integer, serial, index, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, jsonb, integer, serial, index, boolean, pgEnum, uniqueIndex } from "drizzle-orm/pg-core";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+
+// ─── Auth / User System ───────────────────────────────────────────────────────
+
+export const USER_ROLES = ["admin", "user"] as const;
+export type UserRole = (typeof USER_ROLES)[number];
+
+export const ACCOUNT_STATES = ["active", "suspended", "first_login_required", "password_reset_required"] as const;
+export type AccountState = (typeof ACCOUNT_STATES)[number];
+
+export const MODULE_KEYS = [
+  "ama",
+  "prepare_report",
+  "past_reports",
+  "client_info",
+  "client_integrations",
+  "integrations",
+  "discoverability_tool",
+  "templates",
+  "theme",
+] as const;
+export type ModuleKey = (typeof MODULE_KEYS)[number];
+
+export const REPORT_SUB_KEYS = [
+  "biweekly",
+  "monthly",
+  "qbr_prep",
+  "qbr_full",
+  "mid_strategy",
+  "quarterly_content_roadmap",
+] as const;
+export type ReportSubKey = (typeof REPORT_SUB_KEYS)[number];
+
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
+  fullName: text("full_name").notNull(),
+  email: text("email").notNull(),
+  passwordHash: text("password_hash").notNull(),
+  role: text("role").notNull().$type<UserRole>().default("user"),
+  accountState: text("account_state").notNull().$type<AccountState>().default("first_login_required"),
+  suspendedAt: timestamp("suspended_at"),
+  suspendedBy: integer("suspended_by"),
+  createdBy: integer("created_by"),
+  lastLoginAt: timestamp("last_login_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => [
+  uniqueIndex("users_email_idx").on(t.email),
+]);
+
+export const userSessions = pgTable("user_sessions", {
+  id: text("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  invalidatedAt: timestamp("invalidated_at"),
+});
+
+export const userPermissions = pgTable("user_permissions", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  module: text("module").notNull().$type<ModuleKey>(),
+}, (t) => [
+  uniqueIndex("user_permissions_unique_idx").on(t.userId, t.module),
+]);
+
+export const userReportPermissions = pgTable("user_report_permissions", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  reportSubKey: text("report_sub_key").notNull().$type<ReportSubKey>(),
+}, (t) => [
+  uniqueIndex("user_report_perms_unique_idx").on(t.userId, t.reportSubKey),
+]);
+
+export type User = typeof users.$inferSelect;
+export type InsertUser = typeof users.$inferInsert;
+
+export const insertUserSchema = createInsertSchema(users).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  lastLoginAt: true,
+  suspendedAt: true,
+});
+
+export type UserSession = typeof userSessions.$inferSelect;
+export type UserPermission = typeof userPermissions.$inferSelect;
+export type UserReportPermission = typeof userReportPermissions.$inferSelect;
+
+export interface UserWithPermissions extends User {
+  modules: ModuleKey[];
+  reportSubKeys: ReportSubKey[];
+}
+
+export type SafeUser = Omit<User, "passwordHash"> & {
+  modules: ModuleKey[];
+  reportSubKeys: ReportSubKey[];
+};
 
 export const clients = pgTable("clients", {
   id: serial("id").primaryKey(),

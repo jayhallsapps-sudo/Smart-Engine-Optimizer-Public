@@ -1,6 +1,6 @@
 import { Link } from "wouter";
 import { BookOpen, Layers, Shield, Zap, ChevronRight, LayoutTemplate } from "lucide-react";
-import { loadProfile } from "@/lib/userProfile";
+import { useAuth } from "@/contexts/auth-context";
 
 const CARDS = [
   {
@@ -51,7 +51,7 @@ const CARDS = [
 ];
 
 export default function AdminPage() {
-  const profile = loadProfile();
+  const { user } = useAuth();
 
   return (
     <div className="min-h-screen bg-background">
@@ -59,7 +59,7 @@ export default function AdminPage() {
       <div className="border-b border-border bg-background px-8 py-6">
         <div className="max-w-4xl">
           <p className="text-xs text-muted-foreground uppercase tracking-widest mb-1">
-            SmartEO · {profile.role}
+            SmartEO · {user?.role === "admin" ? "Admin" : "User"}
           </p>
           <h1 className="text-2xl font-bold text-foreground tracking-tight">
             Governance

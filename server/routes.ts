@@ -8,6 +8,8 @@ import { buildSectionCommandsAutoMap, getReportFamily } from "@shared/reportRegi
 import rateLimit from "express-rate-limit";
 import { storage } from "./storage";
 import { insertClientSchema } from "@shared/schema";
+import { registerAuthRoutes } from "./authRoutes";
+import { requireAuth, requireAdminRole } from "./auth";
 import {
   createSavedReport,
   updateSavedReport,
@@ -230,6 +232,8 @@ export async function registerRoutes(
 ): Promise<Server> {
   await seedDatabase();
 
+  registerAuthRoutes(app);
+
   const INTERNAL_TOKEN = deriveInternalToken();
 
   app.get("/api/auth/bootstrap", (req: Request, res: Response) => {
@@ -265,12 +269,29 @@ export async function registerRoutes(
   const AUTH_PUBLIC_PATHS = [
     "/auth/bootstrap",
     "/auth/admin-verify",
+    "/auth/login",
+    "/auth/me",
     "/auth/google/start",
     "/auth/google/callback",
     "/auth/google/configured",
+    "/ai/status",
     "/template/header",
     "/print-cache/",
   ];
+
+  const SESSION_EXEMPT_PATHS = [
+    "/auth/bootstrap",
+    "/auth/admin-verify",
+    "/auth/login",
+    "/auth/me",
+    "/auth/google/start",
+    "/auth/google/callback",
+    "/auth/google/configured",
+    "/ai/status",
+    "/template/header",
+    "/print-cache/",
+  ];
+
   app.use("/api", (req: Request, res: Response, next: NextFunction) => {
     if (AUTH_PUBLIC_PATHS.some(p => req.path === p || req.path.startsWith(p + "?") || (p.endsWith("/") && req.path.startsWith(p)))) return next();
     if (req.method === "GET" && /^\/saved-reports\/\d+\/download$/.test(req.path)) return next();
@@ -282,38 +303,43 @@ export async function registerRoutes(
     next();
   });
 
-  // ─── Admin auth ───────────────────────────────────────────────────────────────
-  // ADMIN_TOKEN lives only in the server environment.  The client calls
-  // POST /api/auth/admin-verify (public) to validate a code; on success the
-  // client stores the raw token in sessionStorage and sends it as X-Admin-Token
-  // on all subsequent admin write requests.
-
-  const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? "";
-  if (!ADMIN_TOKEN) {
-    console.warn("[SmartEO] ADMIN_TOKEN env var is not set — admin write endpoints are unprotected!");
-  }
-
-  app.post("/api/auth/admin-verify", (req: Request, res: Response) => {
-    const { token } = req.body as { token?: string };
-    if (!ADMIN_TOKEN) {
-      return res.status(503).json({ message: "Admin auth not configured (ADMIN_TOKEN missing)." });
+  app.use("/api", (req: Request, res: Response, next: NextFunction) => {
+    if (SESSION_EXEMPT_PATHS.some(p => req.path === p || req.path.startsWith(p + "?") || (p.endsWith("/") && req.path.startsWith(p)))) return next();
+    if (req.method === "GET" && /^\/saved-reports\/\d+\/download$/.test(req.path)) return next();
+    if (req.method === "GET" && /^\/saved-reports\/\d+\/pdf$/.test(req.path)) return next();
+    if (!req.currentUser) {
+      return res.status(401).json({ message: "Authentication required. Please log in." });
     }
-    if (!token || token.trim() !== ADMIN_TOKEN) {
-      return res.status(403).json({ ok: false, message: "Invalid admin code." });
-    }
-    return res.json({ ok: true });
-  });
-
-  /** Middleware: require a valid X-Admin-Token header for admin write routes. */
-  function requireAdmin(req: Request, res: Response, next: NextFunction) {
-    if (!ADMIN_TOKEN) {
-      return res.status(503).json({ message: "Admin auth not configured — ADMIN_TOKEN env var is missing." });
-    }
-    const provided = req.headers["x-admin-token"] as string | undefined;
-    if (!provided || provided !== ADMIN_TOKEN) {
-      return res.status(403).json({ message: "Admin access required. Please unlock admin features in the app." });
+    if (req.currentUser.accountState === "suspended") {
+      return res.status(403).json({ message: "Your account has been suspended. Contact your administrator." });
     }
     next();
+  });
+
+  // ─── Admin auth ───────────────────────────────────────────────────────────────
+  // Legacy admin-verify endpoint kept for backward compatibility.
+  // The new system uses session-based auth with role checks (requireAdminRole).
+  const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? "";
+
+  app.post("/api/auth/admin-verify", (req: Request, res: Response) => {
+    // Support legacy token-based check for backward compat
+    if (req.currentUser?.role === "admin") return res.json({ ok: true });
+    const { token } = req.body as { token?: string };
+    if (ADMIN_TOKEN && token && token.trim() === ADMIN_TOKEN) {
+      return res.json({ ok: true });
+    }
+    return res.status(403).json({ ok: false, message: "Invalid admin code." });
+  });
+
+  /** Middleware: require admin role. Uses new role-based auth. */
+  function requireAdmin(req: Request, res: Response, next: NextFunction) {
+    if (req.currentUser?.role === "admin") return next();
+    // Legacy fallback: check X-Admin-Token header
+    if (ADMIN_TOKEN) {
+      const provided = req.headers["x-admin-token"] as string | undefined;
+      if (provided && provided === ADMIN_TOKEN) return next();
+    }
+    return res.status(403).json({ message: "Admin access required." });
   }
 
   app.use("/api/reports", heavyLimiter);

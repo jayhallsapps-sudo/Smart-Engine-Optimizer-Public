@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { ThemeProvider } from "@/components/theme-provider";
+import { AuthProvider, useAuth } from "@/contexts/auth-context";
 import NotFound from "@/pages/not-found";
 import ReportsPage from "@/pages/reports";
 import ClientsPage from "@/pages/clients";
@@ -33,6 +34,7 @@ import AdminPage from "@/pages/admin";
 import AdminConfigPage from "@/pages/admin-config";
 import AdminGuidancePage from "@/pages/admin-guidance";
 import AdminTemplatesPage from "@/pages/admin-templates";
+import AdminUsersPage from "@/pages/admin-users";
 import AcaPage from "@/pages/aca";
 import SavedReportsPage from "@/pages/saved-reports";
 import DiscoverabilityPage from "@/pages/discoverability";
@@ -40,14 +42,11 @@ import QuarterlyContentRoadmapPage from "@/pages/quarterly-content-roadmap";
 import TemplatesPage from "@/pages/templates";
 import TemplateEditorPage from "@/pages/template-editor";
 import ThemePage from "@/pages/theme";
-
-function RootRedirect() {
-  const [, setLocation] = useLocation();
-  setLocation("/command-center");
-  return null;
-}
+import LoginPage from "@/pages/login";
+import ChangePasswordPage from "@/pages/change-password";
 
 const PRINT_ROUTES = ["/biweekly/print", "/monthly/print", "/biweekly/pdf-render", "/qbr-prep-print", "/mid-strategy/pdf-render"];
+const PUBLIC_ROUTES = ["/login", "/change-password"];
 
 function AiStatusIndicator() {
   const { data } = useQuery<{ provider: string | null; label: string }>({
@@ -78,7 +77,7 @@ function AiStatusIndicator() {
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={RootRedirect} />
+      <Route path="/">{() => <Redirect to="/command-center" />}</Route>
       <Route path="/command-center" component={CommandCenterPage} />
       <Route path="/prepare" component={PrepareReportPage} />
       <Route path="/workflow" component={WorkflowPage} />
@@ -99,6 +98,7 @@ function Router() {
       <Route path="/admin/config" component={AdminConfigPage} />
       <Route path="/admin/guidance" component={AdminGuidancePage} />
       <Route path="/admin/templates" component={AdminTemplatesPage} />
+      <Route path="/admin/users" component={AdminUsersPage} />
       <Route path="/aca" component={AcaPage} />
       <Route path="/saved-reports" component={SavedReportsPage} />
       <Route path="/discoverability" component={DiscoverabilityPage} />
@@ -118,54 +118,95 @@ const sidebarStyle = {
   "--sidebar-width-icon": "3rem",
 };
 
-export default function App() {
+function AuthGate({ children }: { children: React.ReactNode }) {
+  const { user, loading, requiresPasswordChange } = useAuth();
+  const [location] = useLocation();
+
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
+        <div className="text-sm text-muted-foreground">Loading…</div>
+      </div>
+    );
+  }
+
+  if (!user && location !== "/login") {
+    return <Redirect to="/login" />;
+  }
+
+  if (user && requiresPasswordChange && location !== "/change-password") {
+    return <Redirect to="/change-password" />;
+  }
+
+  return <>{children}</>;
+}
+
+function AppShell() {
   const [location] = useLocation();
   const isPrintPage = PRINT_ROUTES.includes(location);
+  const isPublicPage = PUBLIC_ROUTES.includes(location);
 
   if (isPrintPage) {
     return (
-      <QueryClientProvider client={queryClient}>
-        <Switch>
-          <Route path="/biweekly/print" component={BiweeklyPrintPage} />
-          <Route path="/biweekly/pdf-render" component={BiweeklyPdfPage} />
-          <Route path="/monthly/print" component={MonthlyPrintPage} />
-          <Route path="/qbr-prep-print" component={QbrPrepPrintPage} />
-          <Route path="/mid-strategy/pdf-render" component={MidStrategyPrintPage} />
-        </Switch>
-      </QueryClientProvider>
+      <Switch>
+        <Route path="/biweekly/print" component={BiweeklyPrintPage} />
+        <Route path="/biweekly/pdf-render" component={BiweeklyPdfPage} />
+        <Route path="/monthly/print" component={MonthlyPrintPage} />
+        <Route path="/qbr-prep-print" component={QbrPrepPrintPage} />
+        <Route path="/mid-strategy/pdf-render" component={MidStrategyPrintPage} />
+      </Switch>
+    );
+  }
+
+  if (isPublicPage) {
+    return (
+      <Switch>
+        <Route path="/login" component={LoginPage} />
+        <Route path="/change-password" component={ChangePasswordPage} />
+      </Switch>
     );
   }
 
   return (
+    <AuthGate>
+      <TooltipProvider>
+        <SidebarProvider defaultOpen={false} style={sidebarStyle as React.CSSProperties}>
+          <div className="flex h-screen w-full">
+            <AppSidebar />
+            <div className="flex flex-col flex-1 min-w-0">
+              <main className="flex-1 overflow-hidden flex flex-col">
+                <Router />
+              </main>
+              <footer className="shrink-0 border-t px-4 py-2 flex items-center justify-between text-[11px] text-muted-foreground">
+                <span>
+                  Designed by{" "}
+                  <a
+                    href="https://syncds.ca"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline underline-offset-2 hover:text-foreground transition-colors"
+                  >
+                    Sync Digital Solutions
+                  </a>
+                </span>
+                <AiStatusIndicator />
+              </footer>
+            </div>
+          </div>
+        </SidebarProvider>
+        <Toaster />
+      </TooltipProvider>
+    </AuthGate>
+  );
+}
+
+export default function App() {
+  return (
     <ThemeProvider>
       <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          <SidebarProvider defaultOpen={false} style={sidebarStyle as React.CSSProperties}>
-            <div className="flex h-screen w-full">
-              <AppSidebar />
-              <div className="flex flex-col flex-1 min-w-0">
-                <main className="flex-1 overflow-hidden flex flex-col">
-                  <Router />
-                </main>
-                <footer className="shrink-0 border-t px-4 py-2 flex items-center justify-between text-[11px] text-muted-foreground">
-                  <span>
-                    Designed by{" "}
-                    <a
-                      href="https://syncds.ca"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline underline-offset-2 hover:text-foreground transition-colors"
-                    >
-                      Sync Digital Solutions
-                    </a>
-                  </span>
-                  <AiStatusIndicator />
-                </footer>
-              </div>
-            </div>
-          </SidebarProvider>
-          <Toaster />
-        </TooltipProvider>
+        <AuthProvider>
+          <AppShell />
+        </AuthProvider>
       </QueryClientProvider>
     </ThemeProvider>
   );

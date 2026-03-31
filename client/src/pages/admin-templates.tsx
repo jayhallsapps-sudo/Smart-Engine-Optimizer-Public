@@ -20,7 +20,7 @@ import { useToast } from "@/hooks/use-toast";
 import { TEMPLATE_REPORT_TYPES, getSectionDefaults } from "@shared/templateDefaults";
 import type { SectionDef } from "@shared/templateDefaults";
 import type { ReportTemplateSection } from "@shared/schema";
-import { loadProfile } from "@/lib/userProfile";
+import { useAuth } from "@/contexts/auth-context";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -435,7 +435,7 @@ function SectionTable({ reportType }: { reportType: string }) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function AdminTemplatesPage() {
-  const profile = loadProfile();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<string>(TEMPLATE_REPORT_TYPES[0].value);
 
   const activeTabDef = TEMPLATE_REPORT_TYPES.find(t => t.value === activeTab);
@@ -459,7 +459,7 @@ export default function AdminTemplatesPage() {
               <h1 className="text-sm font-semibold text-foreground">Template Controls</h1>
             </div>
           </div>
-          <p className="text-[10px] text-muted-foreground hidden sm:block">{profile.role}</p>
+          <p className="text-[10px] text-muted-foreground hidden sm:block">{user?.role === "admin" ? "Admin" : "User"}</p>
         </div>
       </div>
 

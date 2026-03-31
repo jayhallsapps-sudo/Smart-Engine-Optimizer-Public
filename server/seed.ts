@@ -1,8 +1,54 @@
 import { db } from "./db";
-import { clients } from "@shared/schema";
+import { clients, users, userPermissions, userReportPermissions, MODULE_KEYS, REPORT_SUB_KEYS } from "@shared/schema";
 import { log } from "./index";
+import { hashPassword } from "./auth";
+import { eq } from "drizzle-orm";
+
+const CREATOR_ADMIN_EMAIL = "jayhallsapps@gmail.com";
+const CREATOR_ADMIN_PASSWORD = "SmartEO2740@";
+const CREATOR_ADMIN_NAME = "Jay Hall";
 
 export async function seedDatabase() {
+  await seedAdminUser();
+  await seedClients();
+}
+
+async function seedAdminUser() {
+  const existing = await db
+    .select()
+    .from(users)
+    .where(eq(users.email, CREATOR_ADMIN_EMAIL))
+    .limit(1);
+
+  if (existing.length > 0) return;
+
+  log("Seeding creator admin account...", "seed");
+
+  const passwordHash = await hashPassword(CREATOR_ADMIN_PASSWORD);
+
+  const [admin] = await db
+    .insert(users)
+    .values({
+      fullName: CREATOR_ADMIN_NAME,
+      email: CREATOR_ADMIN_EMAIL,
+      passwordHash,
+      role: "admin",
+      accountState: "active",
+    })
+    .returning();
+
+  await db.insert(userPermissions).values(
+    MODULE_KEYS.map(module => ({ userId: admin.id, module })),
+  );
+
+  await db.insert(userReportPermissions).values(
+    REPORT_SUB_KEYS.map(reportSubKey => ({ userId: admin.id, reportSubKey })),
+  );
+
+  log(`Creator admin seeded: ${CREATOR_ADMIN_EMAIL}`, "seed");
+}
+
+async function seedClients() {
   const existing = await db.select().from(clients);
   if (existing.length > 0) return;
 
@@ -116,5 +162,5 @@ export async function seedDatabase() {
     },
   ]);
 
-  log("Database seeded with 8 recovery & addiction centre clients", "seed");
+  log("Database seeded with 7 recovery & addiction centre clients", "seed");
 }

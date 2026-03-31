@@ -926,6 +926,17 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/report-schedules/:id/trigger", requireAuth, requireAdminRole, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const { triggerScheduleNow } = await import("./reportScheduler");
+      const result = await triggerScheduleNow(id);
+      res.json({ success: true, reportName: result.reportName });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   // ─── Slack channels list ──────────────────────────────────────────────────────
 
   app.get("/api/slack/channels", requireAuth, requireAdminRole, async (_req, res) => {

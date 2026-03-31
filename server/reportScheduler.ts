@@ -182,6 +182,15 @@ async function runSchedule(schedule: ReportSchedule): Promise<void> {
   console.log(`[Scheduler] Schedule ${schedule.id} next run: ${nextRun.toISOString()}`);
 }
 
+export async function triggerScheduleNow(scheduleId: number): Promise<{ reportName: string }> {
+  const [schedule] = await db.select().from(reportSchedules).where(eq(reportSchedules.id, scheduleId));
+  if (!schedule) throw new Error(`Schedule ${scheduleId} not found`);
+  await runSchedule(schedule);
+  const dateStr = toDateString(new Date());
+  const [client] = await db.select().from(clients).where(eq(clients.id, schedule.clientId));
+  return { reportName: `${client?.name ?? "Unknown"}-${dateStr}` };
+}
+
 export function startReportScheduler(): void {
   console.log("[Scheduler] Report scheduler started — checking every minute");
 

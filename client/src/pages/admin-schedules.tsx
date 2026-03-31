@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Calendar, Clock, Trash2, Plus, CalendarClock } from "lucide-react";
+import { Calendar, Clock, Trash2, Plus, CalendarClock, Play } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { Client } from "@shared/schema";
 
@@ -111,6 +111,21 @@ export default function AdminSchedulesPage() {
     onError: () => toast({ title: "Failed to delete schedule", variant: "destructive" }),
   });
 
+  const [triggeringId, setTriggeringId] = useState<number | null>(null);
+  const triggerMut = useMutation({
+    mutationFn: (id: number) => apiRequest("POST", `/api/report-schedules/${id}/trigger`),
+    onMutate: (id) => setTriggeringId(id),
+    onSuccess: (_data, id) => {
+      setTriggeringId(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/report-schedules"] });
+      toast({ title: "Report generated", description: "The report was generated and saved. Check Saved Reports and your Slack channel." });
+    },
+    onError: (err: any, id) => {
+      setTriggeringId(null);
+      toast({ title: "Run failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   const handleCreate = () => {
     if (!form.clientId) {
       toast({ title: "Please select a client", variant: "destructive" });
@@ -183,6 +198,22 @@ export default function AdminSchedulesPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 px-2 text-[11px] gap-1 text-muted-foreground"
+                    disabled={triggeringId === s.id}
+                    onClick={() => {
+                      if (confirm(`Run the bi-weekly report for ${clientName(s.clientId)} right now? This generates a real report and sends a Slack notification.`)) {
+                        triggerMut.mutate(s.id);
+                      }
+                    }}
+                    data-testid={`btn-run-now-${s.id}`}
+                    title="Run now (for testing)"
+                  >
+                    <Play className="w-3 h-3" />
+                    {triggeringId === s.id ? "Running…" : "Run Now"}
+                  </Button>
                   <Switch
                     checked={s.enabled}
                     onCheckedChange={(checked) => toggleMut.mutate({ id: s.id, enabled: checked })}

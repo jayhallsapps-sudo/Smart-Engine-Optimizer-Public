@@ -35,7 +35,9 @@ import { seedDatabase } from "./seed";
 import { encrypt, decrypt, deriveInternalToken } from "./encryption";
 import { buildGoogleAuthUrl, exchangeCodeForToken, callbackHtml, isGoogleConfigured } from "./googleAuth";
 import { testCredential, testAsana } from "./connectionTest";
-import { insertSfReportSchema, insertCallTrackingReportSchema, amInputsSchema, migrateLegacyAmInputs, insertReportCommentSchema, updateReportCommentSchema } from "@shared/schema";
+import { insertSfReportSchema, insertCallTrackingReportSchema, amInputsSchema, migrateLegacyAmInputs, insertReportCommentSchema, updateReportCommentSchema, reportSchedules, insertReportScheduleSchema } from "@shared/schema";
+import { db } from "./db";
+import { eq, and } from "drizzle-orm";
 import { generateBiweeklyDocx, generatePptx, generateMidStrategyPptx, generateQbrPrepDocx } from "./reportGenerators";
 import { generateQcrPptx } from "./qcrPptxGenerator";
 import { generateBiweeklyPdf, generateMonthlyPdf } from "./pdfGenerator";
@@ -65,7 +67,7 @@ import { analyzeReportGaps, loadSEOHQContext, type AccountContext } from "./gapA
 import { resolveClientMonthlyCredits, CLIENT_MONTHLY_CREDIT_MAP } from "./clientCreditMap";
 import { validateQbrPrepExportReadiness } from "./qbrPrepExportValidator";
 import { validateMonthly, validateQbr } from "./reportValidators";
-
+import { computeFirstNextRun } from "./reportScheduler";
 
 // Section → data-commands map is now derived from the report registry.
 // To add or change a report's data dependencies, update shared/reportRegistry.ts.
@@ -852,6 +854,90 @@ export async function registerRoutes(
     if (!Array.isArray(competitors)) return res.status(400).json({ message: "competitors must be an array" });
     const rows = await storage.replaceClientCompetitors(clientId, competitors);
     res.json(rows);
+  });
+
+  // ─── Report Schedules API ────────────────────────────────────────────────────
+
+  app.get("/api/report-schedules", requireAuth, requireAdminRole, async (_req, res) => {
+    try {
+      const rows = await db.select().from(reportSchedules);
+      res.json(rows);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/report-schedules", requireAuth, requireAdminRole, async (req, res) => {
+    try {
+      const parsed = insertReportScheduleSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.issues.map(i => i.message).join("; ") });
+      }
+      const data = parsed.data;
+      const nextRun = computeFirstNextRun(
+        data.recurrenceDay ?? 1,
+        data.recurrenceHour ?? 8,
+        data.timezone ?? "America/New_York"
+      );
+      const [created] = await db.insert(reportSchedules).values({
+        ...data,
+        nextRunAt: nextRun,
+      }).returning();
+      res.json(created);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.patch("/api/report-schedules/:id", requireAuth, requireAdminRole, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const { enabled, recurrenceDay, recurrenceHour, timezone } = req.body;
+      const updates: Record<string, any> = { updatedAt: new Date() };
+      if (enabled !== undefined) updates.enabled = enabled;
+      if (recurrenceDay !== undefined) updates.recurrenceDay = recurrenceDay;
+      if (recurrenceHour !== undefined) updates.recurrenceHour = recurrenceHour;
+      if (timezone !== undefined) updates.timezone = timezone;
+      if (recurrenceDay !== undefined || recurrenceHour !== undefined || timezone !== undefined) {
+        const [existing] = await db.select().from(reportSchedules).where(eq(reportSchedules.id, id));
+        if (existing) {
+          updates.nextRunAt = computeFirstNextRun(
+            recurrenceDay ?? existing.recurrenceDay,
+            recurrenceHour ?? existing.recurrenceHour,
+            timezone ?? existing.timezone
+          );
+        }
+      }
+      const [updated] = await db.update(reportSchedules).set(updates).where(eq(reportSchedules.id, id)).returning();
+      if (!updated) return res.status(404).json({ message: "Schedule not found" });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.delete("/api/report-schedules/:id", requireAuth, requireAdminRole, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      await db.delete(reportSchedules).where(eq(reportSchedules.id, id));
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ─── Slack channels list ──────────────────────────────────────────────────────
+
+  app.get("/api/slack/channels", requireAuth, requireAdminRole, async (_req, res) => {
+    try {
+      const { getUncachableSlackClient } = await import("./slack");
+      const client = await getUncachableSlackClient();
+      const result = await client.conversations.list({ types: "public_channel,private_channel", limit: 200 });
+      const channels = (result.channels ?? []).map((c: any) => ({ id: c.id, name: c.name }));
+      res.json({ channels });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
   });
 
   // Ahrefs competitor auto-fetch

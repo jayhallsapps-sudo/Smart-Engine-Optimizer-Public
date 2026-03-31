@@ -22,6 +22,8 @@ export interface CreateSavedReportInput {
   currentCrawlAssetId?: number;
   comparisonCrawlAssetId?: number;
   versionLabel?: string;
+  isScheduled?: boolean;
+  scheduleId?: number;
 }
 
 export interface UpdateSavedReportInput {
@@ -55,6 +57,8 @@ export async function createSavedReport(input: CreateSavedReportInput): Promise<
       currentCrawlAssetId: input.currentCrawlAssetId ?? null,
       comparisonCrawlAssetId: input.comparisonCrawlAssetId ?? null,
       versionLabel: input.versionLabel ?? null,
+      isScheduled: input.isScheduled ?? false,
+      scheduleId: input.scheduleId ?? null,
     })
     .returning();
   return created;

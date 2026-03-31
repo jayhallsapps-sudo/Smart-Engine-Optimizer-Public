@@ -4,6 +4,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { attachSession } from "./auth";
+import { startReportScheduler } from "./reportScheduler";
 
 const app = express();
 const httpServer = createServer(app);
@@ -67,6 +68,7 @@ app.use(attachSession);
 
 (async () => {
   await registerRoutes(httpServer, app);
+  startReportScheduler();
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

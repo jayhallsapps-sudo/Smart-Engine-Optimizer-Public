@@ -1,8 +1,17 @@
 import { Link } from "wouter";
-import { BookOpen, Layers, Shield, Zap, ChevronRight, LayoutTemplate } from "lucide-react";
+import { BookOpen, Layers, Shield, Zap, ChevronRight, LayoutTemplate, CalendarClock } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 
 const CARDS = [
+  {
+    href: "/admin/schedules",
+    icon: CalendarClock,
+    title: "Scheduled Reports",
+    description:
+      "Set up recurring bi-weekly report generation for clients. Reports auto-save and send a Slack notification to the client's designated channel when ready.",
+    badge: "Editable",
+    badgeColor: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800",
+  },
   {
     href: "/admin/templates",
     icon: LayoutTemplate,

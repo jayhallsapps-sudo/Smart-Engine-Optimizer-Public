@@ -40,7 +40,7 @@ args = "npm run dev"
 waitForPort = 5000
 
 [agent]
-integrations = ["google-drive:1.0.0", "asana:1.0.0", "google-docs:1.0.0", "notion:1.0.0"]
+integrations = ["google-drive:1.0.0", "asana:1.0.0", "google-docs:1.0.0", "notion:1.0.0", "slack:1.0.0"]
 
 [userenv]
 

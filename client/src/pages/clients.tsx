@@ -168,6 +168,7 @@ interface ClientFormData {
   moneyPages: string[];
   callrailOrganicSourceTerms: string[];
   ctmOrganicSourceTerms: string[];
+  slackChannelId: string;
 }
 
 const emptyForm: ClientFormData = {
@@ -194,6 +195,7 @@ const emptyForm: ClientFormData = {
   moneyPages: [],
   callrailOrganicSourceTerms: ["google / organic"],
   ctmOrganicSourceTerms: ["google / organic"],
+  slackChannelId: "",
 };
 
 
@@ -628,6 +630,21 @@ function ClientForm({ initial, onSubmit, isPending }: { initial: ClientFormData;
           <div className="space-y-2">
             <Label className="flex items-center gap-1.5"><Phone className="w-3 h-3" /> CTM Organic Source Terms</Label>
             <TagInput value={form.ctmOrganicSourceTerms} onChange={v => update("ctmOrganicSourceTerms", v)} placeholder="e.g., google / organic" />
+          </div>
+          <div className="space-y-2 pt-2 border-t">
+            <Label htmlFor="slackChannelId" className="flex items-center gap-1.5 text-sm font-medium">
+              Slack Channel ID
+            </Label>
+            <Input
+              id="slackChannelId"
+              value={form.slackChannelId}
+              onChange={e => update("slackChannelId", e.target.value)}
+              placeholder="e.g., C0123456789"
+              data-testid="input-slack-channel-id"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Paste the Slack channel ID (e.g. C0123456789) where bi-weekly report notifications should be posted. Find it in your Slack workspace channel settings.
+            </p>
           </div>
         </TabsContent>
       </Tabs>
@@ -1494,6 +1511,7 @@ export default function ClientsPage() {
                 moneyPages: editingClient.moneyPages || [],
                 callrailOrganicSourceTerms: editingClient.callrailOrganicSourceTerms || ["google / organic"],
                 ctmOrganicSourceTerms: editingClient.ctmOrganicSourceTerms || ["google / organic"],
+                slackChannelId: editingClient.slackChannelId || "",
               }}
               onSubmit={(data) => updateMutation.mutate(data)}
               isPending={updateMutation.isPending}

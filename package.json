@@ -44,6 +44,7 @@
     "@radix-ui/react-toggle-group": "^1.1.3",
     "@radix-ui/react-tooltip": "^1.2.0",
     "@replit/connectors-sdk": "^0.2.0",
+    "@slack/web-api": "^7.10.0",
     "@tanstack/react-query": "^5.60.5",
     "@types/bcryptjs": "^2.4.6",
     "@types/cookie-parser": "^1.4.10",

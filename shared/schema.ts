@@ -131,6 +131,7 @@ export const clients = pgTable("clients", {
   aboutPageUrl: text("about_page_url"),
   contactName: text("contact_name"),
   contactEmail: text("contact_email"),
+  slackChannelId: text("slack_channel_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -233,6 +234,35 @@ export const insertClientSchema = createInsertSchema(clients).omit({
   updatedAt: true,
 });
 
+// ─── Report Schedules ─────────────────────────────────────────────────────────
+
+export const reportSchedules = pgTable("report_schedules", {
+  id: serial("id").primaryKey(),
+  clientId: integer("client_id").notNull().references(() => clients.id, { onDelete: "cascade" }),
+  reportType: text("report_type").notNull().default("biweekly"),
+  recurrenceDay: integer("recurrence_day").notNull().default(1),
+  recurrenceHour: integer("recurrence_hour").notNull().default(8),
+  timezone: text("timezone").notNull().default("America/New_York"),
+  enabled: boolean("enabled").notNull().default(true),
+  lastRunAt: timestamp("last_run_at"),
+  nextRunAt: timestamp("next_run_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => [
+  index("report_schedules_client_idx").on(t.clientId),
+  index("report_schedules_next_run_idx").on(t.nextRunAt),
+]);
+
+export const insertReportScheduleSchema = createInsertSchema(reportSchedules).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  lastRunAt: true,
+});
+
+export type ReportSchedule = typeof reportSchedules.$inferSelect;
+export type InsertReportSchedule = z.infer<typeof insertReportScheduleSchema>;
+
 export const insertQueryLogSchema = createInsertSchema(queryLogs).omit({
   id: true,
   createdAt: true,
@@ -286,6 +316,8 @@ export const savedReports = pgTable("saved_reports", {
   htmlSnapshot: text("html_snapshot"),
   currentCrawlAssetId: integer("current_crawl_asset_id"),
   comparisonCrawlAssetId: integer("comparison_crawl_asset_id"),
+  isScheduled: boolean("is_scheduled").notNull().default(false),
+  scheduleId: integer("schedule_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   lastSavedAt: timestamp("last_saved_at").defaultNow().notNull(),

@@ -35,6 +35,7 @@ import AdminConfigPage from "@/pages/admin-config";
 import AdminGuidancePage from "@/pages/admin-guidance";
 import AdminTemplatesPage from "@/pages/admin-templates";
 import AdminUsersPage from "@/pages/admin-users";
+import AdminSchedulesPage from "@/pages/admin-schedules";
 import AcaPage from "@/pages/aca";
 import SavedReportsPage from "@/pages/saved-reports";
 import DiscoverabilityPage from "@/pages/discoverability";
@@ -99,6 +100,7 @@ function Router() {
       <Route path="/admin/guidance" component={AdminGuidancePage} />
       <Route path="/admin/templates" component={AdminTemplatesPage} />
       <Route path="/admin/users" component={AdminUsersPage} />
+      <Route path="/admin/schedules" component={AdminSchedulesPage} />
       <Route path="/aca" component={AcaPage} />
       <Route path="/saved-reports" component={SavedReportsPage} />
       <Route path="/discoverability" component={DiscoverabilityPage} />

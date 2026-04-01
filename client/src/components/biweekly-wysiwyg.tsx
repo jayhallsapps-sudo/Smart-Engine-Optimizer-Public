@@ -647,7 +647,7 @@ function CanvasBlock({
 }) {
   return (
     <div
-      className={`relative group rounded transition-all bg-white ${selected ? "ring-2 ring-offset-2 ring-offset-white" : "hover:ring-1 hover:ring-border"}`}
+      className={`relative group transition-all bg-white ${selected ? "ring-2 ring-offset-2 ring-offset-white rounded-sm" : "hover:ring-1 hover:ring-border/40 rounded-sm"}`}
       style={selected ? { "--tw-ring-color": "#C0392B" } as React.CSSProperties : {}}
       onClick={onSelect}
       data-testid={`canvas-block-${block.id}`}
@@ -1013,18 +1013,18 @@ function PageCanvas({
                 style={{ maxHeight: 28, maxWidth: 120 }}
               />
             ) : (
-              <span className="text-xs font-semibold" style={{ color: tokens.headerTextColor, fontFamily: tokens.headingFont }}>
+              <span style={{ color: tokens.headerTextColor, fontFamily: tokens.headingFont, fontSize: 13, fontWeight: tokens.headerFontWeight ?? 600 }}>
                 {tokens.brandName}
               </span>
             )}
-            <span className="text-[10px]" style={{ color: tokens.headerTextColor, opacity: 0.7, fontFamily: tokens.bodyFont }}>
-              Bi-Weekly SEO Report
+            <span style={{ color: tokens.headerTextColor, opacity: 0.75, fontFamily: tokens.bodyFont, fontSize: 11 }}>
+              {tokens.headerReportLabel ?? "Bi-Weekly SEO Report"}
             </span>
           </div>
         )}
 
         {/* Document body */}
-        <div className="px-12 pt-8 pb-12">
+        <div className="px-12 pt-8 pb-12 bg-white">
           <InsertionZone
             index={0}
             active={dropTarget === 0}

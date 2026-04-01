@@ -291,12 +291,12 @@ function SlideFrame({ tokens, children, bgKey }: {
           {tokens.logoUrl ? (
             <img src={tokens.logoUrl} alt={tokens.brandName} style={{ maxHeight: 14, maxWidth: 60, objectFit: "contain" }} />
           ) : (
-            <span style={{ color: tokens.headerTextColor, fontFamily: tokens.headingFont, fontSize: "9px", fontWeight: tokens.headingWeight }}>
+            <span style={{ color: tokens.headerTextColor, fontFamily: tokens.headingFont, fontSize: "9px", fontWeight: tokens.headerFontWeight ?? 600 }}>
               {tokens.brandName}
             </span>
           )}
           <div className="flex-1" />
-          <span style={{ color: `${tokens.headerTextColor}99`, fontSize: "8px" }}>{tokens.tagline}</span>
+          <span style={{ color: `${tokens.headerTextColor}99`, fontSize: "8px" }}>{tokens.headerReportLabel ?? tokens.tagline}</span>
         </div>
       )}
       <div className="flex-1 min-h-0 flex flex-col">{children}</div>
@@ -565,12 +565,12 @@ function PageFrame({ tokens, children, pageNum = 1 }: { tokens: ThemeTokens; chi
           {tokens.logoUrl ? (
             <img src={tokens.logoUrl} alt={tokens.brandName} style={{ maxHeight: 26, maxWidth: 110, objectFit: "contain" }} />
           ) : (
-            <span style={{ color: tokens.headerTextColor, fontFamily: tokens.headingFont, fontSize: "13px", fontWeight: tokens.headingWeight, letterSpacing: "0.02em" }}>
+            <span style={{ color: tokens.headerTextColor, fontFamily: tokens.headingFont, fontSize: "13px", fontWeight: tokens.headerFontWeight ?? 600, letterSpacing: "0.02em" }}>
               {tokens.brandName}
             </span>
           )}
           <span style={{ color: `${tokens.headerTextColor}B0`, fontSize: "11px", fontFamily: tokens.bodyFont }}>
-            {tokens.tagline}
+            {tokens.headerReportLabel ?? tokens.tagline}
           </span>
         </div>
         {/* Body */}
@@ -1429,6 +1429,33 @@ export default function ThemePage() {
               <Separator className="my-1" />
               <ColorField label="Header Color" value={draft.headerColor} onChange={c => update("headerColor", c)} />
               <ColorField label="Header Text Color" value={draft.headerTextColor} onChange={c => update("headerTextColor", c)} />
+              <div className="space-y-1">
+                <Label className="text-[11px] text-muted-foreground">Header Font Weight</Label>
+                <Select
+                  value={String(draft.headerFontWeight ?? 600)}
+                  onValueChange={v => update("headerFontWeight", Number(v))}
+                >
+                  <SelectTrigger className="h-7 text-xs" data-testid="select-header-font-weight">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[300, 400, 500, 600, 700, 800].map(w => (
+                      <SelectItem key={w} value={String(w)}>{w === 300 ? "300 — Thin" : w === 400 ? "400 — Regular" : w === 500 ? "500 — Medium" : w === 600 ? "600 — Semibold" : w === 700 ? "700 — Bold" : "800 — Extrabold"}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[11px] text-muted-foreground">Report Label</Label>
+                <Input
+                  value={draft.headerReportLabel ?? "Bi-Weekly SEO Report"}
+                  onChange={e => update("headerReportLabel", e.target.value)}
+                  className="h-7 text-xs"
+                  placeholder="Bi-Weekly SEO Report"
+                  data-testid="input-header-report-label"
+                />
+              </div>
+              <Separator className="my-1" />
               <ColorField label="Footer Color" value={draft.footerColor} onChange={c => update("footerColor", c)} />
               <ColorField label="Footer Text Color" value={draft.footerTextColor} onChange={c => update("footerTextColor", c)} />
             </div>

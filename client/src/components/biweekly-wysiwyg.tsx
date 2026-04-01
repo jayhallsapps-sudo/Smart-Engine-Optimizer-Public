@@ -302,7 +302,7 @@ function ParagraphBlock({ block, tokens }: { block: DocBlock; tokens: typeof DEF
   return (
     <div className={`${SPACING_PY[block.settings.spacing]} ${align}`}>
       {lines.map((line, i) => (
-        <p key={i} style={{ color: "#374151", fontFamily: tokens.bodyFont, fontSize: tokens.bodyMD, lineHeight: 1.7 }}>
+        <p key={i} style={{ color: tokens.tableBodyText, fontFamily: tokens.bodyFont, fontSize: tokens.bodyMD, lineHeight: 1.7 }}>
           {line}
         </p>
       ))}
@@ -431,7 +431,7 @@ function WorkLogBlock({ block, tokens }: { block: DocBlock; tokens: typeof DEFAU
         {items.map((item, i) => (
           <div key={i} className="flex items-start gap-2 px-3 py-2 rounded" style={{ backgroundColor: "#F9FAFB", border: `1px solid ${tokens.tableBorderColor}`, borderRadius: tokens.borderRadius }}>
             <div className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0" style={{ backgroundColor: tokens.primaryColor }} />
-            <span style={{ color: "#374151", fontFamily: tokens.bodyFont, fontSize: tokens.bodyMD }}>
+            <span style={{ color: tokens.tableBodyText, fontFamily: tokens.bodyFont, fontSize: tokens.bodyMD }}>
               {item}
             </span>
           </div>
@@ -454,7 +454,7 @@ function BulletListBlock({ block, tokens }: { block: DocBlock; tokens: typeof DE
         {items.map((item, i) => (
           <li key={i} className="flex items-start gap-2">
             <span className="mt-1.5 shrink-0" style={{ width: 5, height: 5, borderRadius: "50%", backgroundColor: tokens.primaryColor, display: "inline-block" }} />
-            <span style={{ color: "#374151", fontFamily: tokens.bodyFont, fontSize: tokens.bodyMD, lineHeight: 1.6 }}>{item}</span>
+            <span style={{ color: tokens.tableBodyText, fontFamily: tokens.bodyFont, fontSize: tokens.bodyMD, lineHeight: 1.6 }}>{item}</span>
           </li>
         ))}
       </ul>
@@ -475,7 +475,7 @@ function NumberedListBlock({ block, tokens }: { block: DocBlock; tokens: typeof 
         {items.map((item, i) => (
           <li key={i} className="flex items-start gap-2">
             <span className="font-bold text-xs shrink-0 mt-0.5 w-5 text-right" style={{ color: tokens.primaryColor, fontFamily: tokens.headingFont }}>{i + 1}.</span>
-            <span style={{ color: "#374151", fontFamily: tokens.bodyFont, fontSize: tokens.bodyMD, lineHeight: 1.6 }}>{item}</span>
+            <span style={{ color: tokens.tableBodyText, fontFamily: tokens.bodyFont, fontSize: tokens.bodyMD, lineHeight: 1.6 }}>{item}</span>
           </li>
         ))}
       </ol>
@@ -490,7 +490,7 @@ function ClosingSummaryBlock({ block, tokens }: { block: DocBlock; tokens: typeo
         <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: tokens.primaryColor, fontFamily: tokens.headingFont }}>
           Summary
         </p>
-        <p style={{ color: "#374151", fontFamily: tokens.bodyFont, fontSize: tokens.bodyMD, lineHeight: 1.7 }}>
+        <p style={{ color: tokens.tableBodyText, fontFamily: tokens.bodyFont, fontSize: tokens.bodyMD, lineHeight: 1.7 }}>
           {block.content || "Closing summary text..."}
         </p>
       </div>
@@ -503,7 +503,7 @@ function RichTextBlock({ block, tokens }: { block: DocBlock; tokens: typeof DEFA
     <div className={SPACING_PY[block.settings.spacing]}>
       <div className="rounded px-3 py-2" style={{ border: `1px solid ${tokens.tableBorderColor}`, borderRadius: tokens.borderRadius }}>
         <p className="text-[10px] uppercase tracking-wider mb-1" style={{ color: "#9CA3AF", fontFamily: tokens.bodyFont }}>Rich Text</p>
-        <p style={{ color: "#374151", fontFamily: tokens.bodyFont, fontSize: tokens.bodyMD, lineHeight: 1.7 }}>
+        <p style={{ color: tokens.tableBodyText, fontFamily: tokens.bodyFont, fontSize: tokens.bodyMD, lineHeight: 1.7 }}>
           {block.content || "Rich text section..."}
         </p>
       </div>
@@ -647,8 +647,8 @@ function CanvasBlock({
 }) {
   return (
     <div
-      className={`relative group rounded transition-all ${selected ? "ring-2 ring-offset-1" : "hover:ring-1 hover:ring-border"}`}
-      style={selected ? { ringColor: "#C0392B" } : {}}
+      className={`relative group rounded transition-all bg-white ${selected ? "ring-2 ring-offset-2 ring-offset-white" : "hover:ring-1 hover:ring-border"}`}
+      style={selected ? { "--tw-ring-color": "#C0392B" } as React.CSSProperties : {}}
       onClick={onSelect}
       data-testid={`canvas-block-${block.id}`}
     >

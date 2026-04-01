@@ -1,0 +1,332 @@
+You did not implement the requested system.
+
+You mostly preserved the old structure editor, moved pieces under a Design System area, and left the core problem unsolved.
+
+That is not acceptable.
+
+We are not doing another broad redesign pass.
+We are doing a focused replacement of the current report design workflow.
+
+READ THIS CAREFULLY:
+
+THE CORE PROBLEM
+
+The current Templates experience is unusable because it is still a structure manager, not a visual editor.
+
+I do not want to manage abstract blocks in a list.
+I do not want to guess what slides/pages look like from labels.
+I do not want template-level color palettes.
+I do not want styling controls duplicated between Theme and Templates.
+
+I want:
+
+1. A report-wide Theme system
+2. A per-report-type Template editor
+3. A true WYSIWYG editor for the Bi-Weekly SEO Report first
+4. Google Docs / Google Slides / Google Sheets compatibility constraints respected
+5. No redundant style systems inside templates
+
+SCOPE LOCK
+
+Do not try to fully solve every report type right now.
+
+For this implementation pass:
+
+* fully implement Theme
+* fully implement Templates UI shell for all report types
+* fully implement WYSIWYG editing ONLY for the Bi-Weekly SEO Report
+* all other report types should be listed but disabled / unclickable for editing for now
+
+The listed report types should include:
+
+* Kickoff Deck
+* Mid-Strategy Deck
+* Launch Deck
+* QBR
+* Quarterly Content Roadmap
+* Bi-Weekly SEO Report
+* Monthly SEO Report
+* QBS
+* Evaluation Sheets
+
+Only:
+
+* Bi-Weekly SEO Report
+
+should be editable right now.
+
+Everything else should visibly exist in Templates, but be disabled with a “Coming Next” / locked state.
+
+TOP-LEVEL ARCHITECTURE
+
+Create one Design System area with exactly two parts:
+
+1. Theme
+2. Templates
+
+Do not split styling into separate sub-systems that duplicate each other.
+
+MENTAL MODEL
+
+Theme = universal visual styling across reports
+Templates = page layout / structure for each report type
+
+That distinction must be enforced in the UI and the code.
+
+THEME REQUIREMENTS
+
+Theme must be report-wide and universal.
+Theme controls the look of all recurring design elements across report outputs.
+
+Theme must control:
+
+* brand colors
+* typography
+* text colors
+* title styles
+* heading styles
+* body styles
+* page background colors
+* special section background colors
+* table design
+* chart design
+* component design
+* border radiuses
+* borders
+* padding defaults
+* spacing defaults
+* header/footer treatment
+* divider styling
+* callout / insight box styling
+* KPI styling
+* summary styling
+
+IMPORTANT:
+Do not show per-template color palettes.
+That is wrong.
+Styling belongs in Theme, not in each template.
+
+WEBSERV BRAND DEFAULTS
+
+Set the default theme to red-led Webserv styling.
+
+Do not default to blue.
+Blue should not be the base visual identity unless explicitly chosen by the user.
+
+Default theme behavior:
+
+* red-led primary palette
+* red-compatible neutrals
+* red-accented title / header treatments
+* no blue cover-slide assumptions
+* no blue default page styling
+
+If legacy templates currently display blue because of old defaults, stop extending that system forward.
+Use red-led defaults for all newly rendered previews and all Theme defaults unless a user explicitly changes them.
+
+TEMPLATES REQUIREMENTS
+
+Templates must list all report types, but only Bi-Weekly SEO Report is editable for now.
+
+Templates screen should:
+
+* show all report types as cards or rows
+* clearly mark Bi-Weekly SEO Report as editable
+* clearly mark all others as disabled / coming next
+* remove any per-template style palette UI
+* show that templates are about layout, not styling
+
+When opening Bi-Weekly SEO Report, the user must enter a true WYSIWYG template editor.
+
+BIO-WEEKLY SEO REPORT: REQUIRED EDITOR
+
+This is the main thing you must build.
+
+The current version is not acceptable because it only shows structural blocks and ordering.
+
+Replace that with a real visual editor.
+
+EDITOR LAYOUT
+
+Use a 3-panel layout:
+
+LEFT PANEL
+
+* draggable elements / blocks
+* reusable building blocks supported for Google Docs-safe output
+* examples: title, heading, paragraph, table, KPI block, insight box, divider, spacer, image, summary box, two-column section if docs-safe, bullet list, numbered list
+
+CENTER / MAIN WORK AREA
+
+* actual editable document canvas
+* show a true page preview, not a structural list
+* show page boundaries
+* show content where it actually sits on the page
+* support drag-and-drop insertion between existing elements
+* support selecting existing elements directly on the page
+* support deleting elements directly from the page
+* support moving elements up/down by drag-and-drop on the actual page
+* support inserting a new block between two existing blocks visually
+
+RIGHT PANEL
+
+* selected element controls
+* spacing
+* alignment
+* width where applicable
+* padding / margin
+* content settings
+* visibility settings if relevant
+* bindings if relevant
+
+WYSIWYG BEHAVIOR REQUIREMENTS
+
+For the Bi-Weekly SEO Report editor, I need to be able to:
+
+* click directly on visible page elements
+* move them
+* remove them
+* insert new elements between existing elements
+* drag in a paragraph block between a heading and a table
+* drag in a divider or callout box between sections
+* see the result immediately on the page preview
+* work visually, not abstractly
+
+The layout must be snap-based and clean.
+Do not make it a chaotic freeform editor.
+Use structured drag-and-drop with snapping and insertion zones.
+
+Example:
+If there is a title, and below it a table, I should be able to drag a paragraph block between them and have it snap into place cleanly.
+
+That exact workflow must work.
+
+GOOGLE DOCS CONSTRAINT
+
+The Bi-Weekly SEO Report is a Google Doc-style output.
+
+Therefore the editor must be designed around what can actually be represented in Google Docs.
+
+Do not add layout freedom that will break export fidelity.
+Use structured blocks and document-safe layout rules.
+
+Priority:
+
+* Google Docs-safe layout
+* visual editing clarity
+* clean insertion / deletion / rearrangement
+* theme consistency
+
+Do not optimize this editor around PDF behavior.
+Do not optimize around browser-only fancy layout tricks that cannot survive Google Docs export.
+
+PREVIEW REQUIREMENTS
+
+Right now the system makes the user fly blind.
+Fix that.
+
+For Bi-Weekly SEO Report:
+
+* the editor must show the actual page preview live
+* inserted blocks must appear immediately
+* deleted blocks must disappear immediately
+* moved blocks must reposition immediately
+* theme changes must reflect on the live preview immediately
+
+For Templates list:
+
+* each report card should show a meaningful preview state where possible
+* but do not waste time building full preview support for all report types yet
+* priority is the live WYSIWYG page preview for Bi-Weekly SEO Report
+
+WHAT TO REMOVE OR CHANGE
+
+Remove or replace the following wrong behaviors:
+
+1. Per-template color palettes
+   These should not exist.
+   All color styling belongs in Theme.
+
+2. Abstract structure-only editing for Bi-Weekly
+   Do not keep this as the primary editor.
+   Replace it with WYSIWYG editing.
+
+3. Blue-first defaults
+   Replace with Webserv red-led defaults.
+
+4. Template editing without visible page rendering
+   Not acceptable.
+   Users must see the page they are editing.
+
+DATA / BLOCK MODEL
+
+For this implementation pass, support a document-safe block system for Bi-Weekly.
+
+Examples of supported blocks:
+
+* Title
+* Subtitle
+* Paragraph
+* Rich Text Section
+* Divider
+* Spacer
+* KPI Summary
+* Data Table
+* Work Log Section
+* Callout / Insight
+* Bullet List
+* Numbered List
+* Closing Summary
+
+Each block must be:
+
+* theme-aware
+* draggable
+* deletable
+* visually previewable on the page
+* editable in the right panel
+
+Do not make block styling editable independently from Theme except for layout-safe options like spacing/alignment/visibility.
+Theme owns styling.
+
+STRICT ACCEPTANCE CRITERIA
+
+Do not mark this complete unless all of the following are true:
+
+1. Theme and Templates exist under one Design System area
+2. Theme is universal and report-wide
+3. Per-template color palettes are removed
+4. Theme controls universal styling for colors, typography, tables, charts, and components
+5. Default theme is red-led, not blue-led
+6. Templates lists all report types named above
+7. Only Bi-Weekly SEO Report is editable right now
+8. All other report types are visibly disabled / locked
+9. Opening Bi-Weekly SEO Report launches a real WYSIWYG editor
+10. The Bi-Weekly editor shows a live page canvas, not a structure list
+11. Blocks can be dragged in from the left panel into the page
+12. Blocks can be inserted between existing visible elements
+13. Blocks can be deleted directly from the page
+14. Blocks can be reordered visually on the page
+15. Right panel controls edit the selected visible block
+16. Theme updates reflect in the Bi-Weekly preview live
+17. The editor respects Google Docs-safe structure constraints
+18. No major styling controls are duplicated inside templates
+19. Blue is no longer the default visual baseline
+20. The result is materially different from the current structure editor
+
+IMPLEMENTATION RULE
+
+Do not give me a superficial refactor.
+Do not rename the old system and call it done.
+Do not preserve the old structure editor as the main experience for Bi-Weekly.
+
+Replace the Bi-Weekly editing experience with the actual WYSIWYG editor described above.
+
+At the end, provide:
+
+* what you replaced
+* what you preserved
+* what theme controls now exist
+* what template controls now exist
+* what is intentionally locked for later report types
+* what Google Docs constraints shaped the editor

@@ -110,18 +110,23 @@ function bgStyle(bg: BackgroundDef): React.CSSProperties {
 
 // ─── Collapsible section ──────────────────────────────────────────────────────
 
-function Section({ title, icon: Icon, children, defaultOpen = true }: {
+function Section({ title, icon: Icon, children, defaultOpen = true, onOpen }: {
   title: string;
   icon: React.ElementType;
   children: React.ReactNode;
   defaultOpen?: boolean;
+  onOpen?: () => void;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div className="border-b last:border-b-0">
       <button
         className="flex items-center gap-2 w-full px-4 py-3 text-left hover:bg-muted/50 transition-colors"
-        onClick={() => setOpen(o => !o)}
+        onClick={() => {
+          const opening = !open;
+          setOpen(opening);
+          if (opening) onOpen?.();
+        }}
       >
         <Icon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
         <span className="text-xs font-semibold text-foreground flex-1">{title}</span>
@@ -833,6 +838,12 @@ export default function ThemePage() {
   const [dialogName, setDialogName] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
+  const focusPreview = useCallback((mode: PreviewMode, slide?: PreviewSlide, page?: PreviewPage) => {
+    setPreviewMode(mode);
+    if (slide) setActiveSlide(slide);
+    if (page) setActivePage(page);
+  }, []);
+
   const { data: themes, isLoading: themesLoading } = useQuery<Theme[]>({ queryKey: ["/api/themes"] });
   const { data: activeTheme } = useQuery<Theme>({
     queryKey: ["/api/themes/active"],
@@ -1175,7 +1186,7 @@ export default function ThemePage() {
         {/* Left panel: controls */}
         <div className="w-[300px] shrink-0 border-r overflow-y-auto bg-background">
 
-          <Section title="Branding" icon={Layers}>
+          <Section title="Branding" icon={Layers} onOpen={() => focusPreview("slides", "title")}>
             <div className="space-y-2">
               <div className="space-y-1">
                 <Label className="text-[11px] text-muted-foreground">Brand Name</Label>
@@ -1198,7 +1209,7 @@ export default function ThemePage() {
             </div>
           </Section>
 
-          <Section title="Colors" icon={Palette}>
+          <Section title="Colors" icon={Palette} onOpen={() => focusPreview("slides", "title")}>
             <div className="space-y-2">
               <p className="text-[10px] text-muted-foreground leading-snug bg-muted/40 rounded px-2 py-1.5">
                 Changing Primary or Secondary cascades to slide backgrounds, headers, and tables that use that color.
@@ -1213,7 +1224,7 @@ export default function ThemePage() {
             </div>
           </Section>
 
-          <Section title="Typography" icon={Type} defaultOpen={false}>
+          <Section title="Typography" icon={Type} defaultOpen={false} onOpen={() => focusPreview("slides", "content")}>
             <div className="space-y-3">
               <div className="space-y-1">
                 <Label className="text-[11px] text-muted-foreground">Heading Font</Label>
@@ -1283,7 +1294,7 @@ export default function ThemePage() {
             </div>
           </Section>
 
-          <Section title="Backgrounds" icon={Image} defaultOpen={false}>
+          <Section title="Backgrounds" icon={Image} defaultOpen={false} onOpen={() => focusPreview("slides", "title")}>
             <div className="space-y-4">
               {([
                 ["global", "Page / Global Background"],
@@ -1305,7 +1316,7 @@ export default function ThemePage() {
             </div>
           </Section>
 
-          <Section title="Tables" icon={Table2} defaultOpen={false}>
+          <Section title="Tables" icon={Table2} defaultOpen={false} onOpen={() => focusPreview("slides", "table")}>
             <div className="space-y-2">
               <ColorField label="Header Background" value={draft.tableHeaderBg} onChange={c => update("tableHeaderBg", c)} />
               <ColorField label="Header Text" value={draft.tableHeaderText} onChange={c => update("tableHeaderText", c)} />
@@ -1315,7 +1326,7 @@ export default function ThemePage() {
             </div>
           </Section>
 
-          <Section title="Components" icon={Layout} defaultOpen={false}>
+          <Section title="Components" icon={Layout} defaultOpen={false} onOpen={() => focusPreview("slides", "kpi")}>
             <div className="space-y-2">
               <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Cards</p>
               <ColorField label="Card Background" value={draft.cardBg} onChange={c => update("cardBg", c)} />
@@ -1341,7 +1352,7 @@ export default function ThemePage() {
             </div>
           </Section>
 
-          <Section title="Reports &amp; Slides" icon={FileText} defaultOpen={false}>
+          <Section title="Reports &amp; Slides" icon={FileText} defaultOpen={false} onOpen={() => focusPreview("pages", undefined, "cover")}>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <Label className="text-[11px] text-muted-foreground">Show Header Bar</Label>

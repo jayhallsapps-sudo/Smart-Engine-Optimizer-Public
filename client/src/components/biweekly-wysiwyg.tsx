@@ -35,6 +35,8 @@ export interface BlockSettings {
   visible: boolean;
   rows?: number;
   cols?: number;
+  colHeaders?: string[];
+  tableRows?: string[][];
   kpis?: KPIItem[];
   items?: string[];
   height?: number;
@@ -55,96 +57,122 @@ function uid() {
 }
 
 const DEFAULT_BIWEEKLY_BLOCKS: DocBlock[] = [
+  // ── Header ──────────────────────────────────────────────────────────────────
   {
     id: "blk-title",
     type: "title",
-    content: "Bi-Weekly SEO Performance Report",
-    settings: { spacing: "normal", alignment: "center", visible: true },
+    content: "SEO Bi-weekly Meeting: [Client Name]",
+    settings: { spacing: "compact", alignment: "left", visible: true },
   },
   {
-    id: "blk-subtitle",
-    type: "subtitle",
-    content: "Client Name  ·  Report Period",
-    settings: { spacing: "compact", alignment: "center", visible: true },
+    id: "blk-meta",
+    type: "paragraph",
+    content: "Reporting Period: [Start Date] – [End Date]\nPrepared by: [Your Name]\nReporting Date: [Date]",
+    settings: { spacing: "compact", alignment: "left", visible: true },
   },
   {
-    id: "blk-div1",
+    id: "blk-div0",
     type: "divider",
     content: "",
     settings: { spacing: "normal", alignment: "left", visible: true, dividerThickness: 2 },
   },
+  // ── Section 1: Purpose ───────────────────────────────────────────────────────
   {
-    id: "blk-kpi",
-    type: "kpiSummary",
-    content: "Performance Overview",
+    id: "blk-s1",
+    type: "subtitle",
+    content: "1. Purpose",
+    settings: { spacing: "compact", alignment: "left", visible: true },
+  },
+  {
+    id: "blk-purpose",
+    type: "bulletList",
+    content: "",
     settings: {
-      spacing: "normal",
+      spacing: "compact",
       alignment: "left",
       visible: true,
-      kpis: [
-        { label: "Organic Sessions", value: "12,847", trend: "up" },
-        { label: "Keyword Rankings", value: "234", trend: "up" },
-        { label: "Avg. Position", value: "14.2", trend: "down" },
-        { label: "Click-Through Rate", value: "3.8%", trend: "up" },
+      items: [
+        "To review recent SEO progress, share quick wins, and align on upcoming priorities that support your business goals.",
       ],
     },
   },
+  // ── Section 2: Performance Pulse ────────────────────────────────────────────
   {
-    id: "blk-exec",
-    type: "paragraph",
-    content:
-      "This report covers SEO performance for the period indicated above. Traffic continues to trend upward, driven by improved rankings for core service keywords and recent content optimizations.",
+    id: "blk-s2",
+    type: "subtitle",
+    content: "2. Performance Pulse",
     settings: { spacing: "normal", alignment: "left", visible: true },
   },
   {
-    id: "blk-table",
+    id: "blk-nsm",
     type: "dataTable",
-    content: "Top Keyword Rankings",
-    settings: { spacing: "normal", alignment: "left", visible: true, rows: 5, cols: 4 },
+    content: "NSM Goals — Q1 2026",
+    settings: {
+      spacing: "compact",
+      alignment: "left",
+      visible: true,
+      cols: 5,
+      rows: 2,
+      colHeaders: ["Metric", "Goal", "Actual", "%", "Status"],
+      tableRows: [
+        ["Organic Sessions", "7,178", "4,428", "61.7%", "Behind"],
+        ["Organic + GMB + AI/LLM Calls", "438", "634", "144.7%", "Ahead"],
+      ],
+    },
   },
   {
     id: "blk-insight",
     type: "callout",
     content:
-      "Key Insight: Three high-priority keywords entered the top 10 this period, representing a significant opportunity for continued organic growth.",
+      "Quality is currently outperforming quantity. The traffic number suggests there is still room to grow top-of-funnel visibility, but the call metric suggests the people finding the business are the right people and are converting at a strong rate. That gives you a good foundation: improve traffic while protecting what is already working in conversion and local intent capture.",
+    settings: { spacing: "normal", alignment: "left", visible: true },
+  },
+  // ── Section 3: Progress & Quick Wins ────────────────────────────────────────
+  {
+    id: "blk-s3",
+    type: "subtitle",
+    content: "3. Progress & Quick Wins",
     settings: { spacing: "normal", alignment: "left", visible: true },
   },
   {
-    id: "blk-worklog",
-    type: "workLog",
-    content: "Work Completed This Period",
+    id: "blk-progress",
+    type: "dataTable",
+    content: "Progress & Quick Wins",
     settings: {
-      spacing: "normal",
+      spacing: "compact",
       alignment: "left",
       visible: true,
-      items: [
-        "Technical audit and on-page optimizations",
-        "Content refresh for 4 service pages",
-        "Link building outreach (8 prospects contacted)",
+      cols: 3,
+      rows: 4,
+      colHeaders: ["Area", "What We Did / Learned", "What's Next"],
+      tableRows: [
+        ["Content", "Published service page and coverage updates targeting key search terms.", "No upcoming content scheduled yet."],
+        ["Optimization", "No optimization work completed this period.", "Will optimize high-priority pages for traffic and conversion."],
+        ["Technical SEO", "Sitemap Optimization Stage 1 complete.", "Final sitemap cleanup. Remove internal links to redirected URLs."],
+        ["Local SEO", "GBP Optimizations, updated description, added service areas, Post 1 GBP Update.", "Post 1 GBP Update. Get GBP Video completed and submitted."],
       ],
     },
   },
+  // ── Section 4: Partnership & Alignment ──────────────────────────────────────
   {
-    id: "blk-next",
+    id: "blk-s4",
+    type: "subtitle",
+    content: "4. Partnership & Alignment",
+    settings: { spacing: "normal", alignment: "left", visible: true },
+  },
+  {
+    id: "blk-closing",
     type: "bulletList",
-    content: "Priorities Next Period",
+    content: "",
     settings: {
-      spacing: "normal",
+      spacing: "compact",
       alignment: "left",
       visible: true,
       items: [
-        "Publish 2 new blog posts targeting informational queries",
-        "Resolve Core Web Vitals issues on 3 key landing pages",
-        "Review and update meta descriptions across service pages",
+        "Open discussion: feedback, lead quality, new initiatives, or observations.",
+        "Confirm next steps, responsibilities, and upcoming deliverables.",
       ],
     },
-  },
-  {
-    id: "blk-close",
-    type: "closingSummary",
-    content:
-      "Overall momentum remains positive. The implemented changes are showing measurable impact and positioning the site for continued organic growth in the next period.",
-    settings: { spacing: "normal", alignment: "left", visible: true },
   },
 ];
 
@@ -261,7 +289,7 @@ function SubtitleBlock({ block, tokens }: { block: DocBlock; tokens: typeof DEFA
   const align = block.settings.alignment === "center" ? "text-center" : block.settings.alignment === "right" ? "text-right" : "text-left";
   return (
     <div className={`${SPACING_PY[block.settings.spacing]} ${align}`}>
-      <p style={{ color: tokens.secondaryColor, fontFamily: tokens.bodyFont, fontSize: tokens.bodyLG, opacity: 0.8 }}>
+      <p style={{ color: tokens.primaryColor, fontFamily: tokens.headingFont, fontSize: tokens.headingMD, fontWeight: 700 }}>
         {block.content || "Subtitle"}
       </p>
     </div>
@@ -270,11 +298,14 @@ function SubtitleBlock({ block, tokens }: { block: DocBlock; tokens: typeof DEFA
 
 function ParagraphBlock({ block, tokens }: { block: DocBlock; tokens: typeof DEFAULT_THEME_TOKENS }) {
   const align = block.settings.alignment === "center" ? "text-center" : block.settings.alignment === "right" ? "text-right" : "text-left";
+  const lines = (block.content || "Enter text here...").split("\n");
   return (
     <div className={`${SPACING_PY[block.settings.spacing]} ${align}`}>
-      <p style={{ color: "#374151", fontFamily: tokens.bodyFont, fontSize: tokens.bodyMD, lineHeight: 1.7 }}>
-        {block.content || "Enter text here..."}
-      </p>
+      {lines.map((line, i) => (
+        <p key={i} style={{ color: "#374151", fontFamily: tokens.bodyFont, fontSize: tokens.bodyMD, lineHeight: 1.7 }}>
+          {line}
+        </p>
+      ))}
     </div>
   );
 }
@@ -327,10 +358,16 @@ function KPISummaryBlock({ block, tokens }: { block: DocBlock; tokens: typeof DE
 function DataTableBlock({ block, tokens }: { block: DocBlock; tokens: typeof DEFAULT_THEME_TOKENS }) {
   const rows = block.settings.rows ?? 4;
   const cols = block.settings.cols ?? 3;
-  const colLabels = ["Keyword", "Position", "Change", "Volume"].slice(0, cols);
-  const sampleRows = Array.from({ length: rows }, (_, i) => [
-    `keyword-${i + 1}`, `${Math.floor(Math.random() * 50) + 1}`, "+2", `${Math.floor(Math.random() * 5000) + 100}`,
-  ].slice(0, cols));
+  const customHeaders = block.settings.colHeaders;
+  const customRows = block.settings.tableRows;
+  const colLabels = customHeaders
+    ? customHeaders
+    : ["Keyword", "Position", "Change", "Volume"].slice(0, cols);
+  const sampleRows = customRows
+    ? customRows
+    : Array.from({ length: rows }, (_, i) => [
+        `keyword-${i + 1}`, `${10 + i * 7}`, "+2", `${1200 + i * 350}`,
+      ].slice(0, colLabels.length));
 
   return (
     <div className={SPACING_PY[block.settings.spacing]}>

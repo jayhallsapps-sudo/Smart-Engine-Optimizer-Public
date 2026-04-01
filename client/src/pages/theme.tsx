@@ -288,9 +288,13 @@ function SlideFrame({ tokens, children, bgKey }: {
           className="w-full flex items-center px-4 py-1.5 shrink-0"
           style={{ backgroundColor: tokens.headerColor, minHeight: "28px" }}
         >
-          <span style={{ color: tokens.headerTextColor, fontFamily: tokens.headingFont, fontSize: "9px", fontWeight: tokens.headingWeight }}>
-            {tokens.brandName}
-          </span>
+          {tokens.logoUrl ? (
+            <img src={tokens.logoUrl} alt={tokens.brandName} style={{ maxHeight: 14, maxWidth: 60, objectFit: "contain" }} />
+          ) : (
+            <span style={{ color: tokens.headerTextColor, fontFamily: tokens.headingFont, fontSize: "9px", fontWeight: tokens.headingWeight }}>
+              {tokens.brandName}
+            </span>
+          )}
           <div className="flex-1" />
           <span style={{ color: `${tokens.headerTextColor}99`, fontSize: "8px" }}>{tokens.tagline}</span>
         </div>
@@ -558,9 +562,13 @@ function PageFrame({ tokens, children, pageNum = 1 }: { tokens: ThemeTokens; chi
       }}>
         {/* Header */}
         <div style={{ backgroundColor: tokens.headerColor, height: "46px", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 36px", flexShrink: 0 }}>
-          <span style={{ color: tokens.headerTextColor, fontFamily: tokens.headingFont, fontSize: "13px", fontWeight: tokens.headingWeight, letterSpacing: "0.02em" }}>
-            {tokens.brandName}
-          </span>
+          {tokens.logoUrl ? (
+            <img src={tokens.logoUrl} alt={tokens.brandName} style={{ maxHeight: 26, maxWidth: 110, objectFit: "contain" }} />
+          ) : (
+            <span style={{ color: tokens.headerTextColor, fontFamily: tokens.headingFont, fontSize: "13px", fontWeight: tokens.headingWeight, letterSpacing: "0.02em" }}>
+              {tokens.brandName}
+            </span>
+          )}
           <span style={{ color: `${tokens.headerTextColor}B0`, fontSize: "11px", fontFamily: tokens.bodyFont }}>
             {tokens.tagline}
           </span>
@@ -1187,7 +1195,59 @@ export default function ThemePage() {
         <div className="w-[300px] shrink-0 border-r overflow-y-auto bg-background">
 
           <Section title="Branding" icon={Layers} onOpen={() => focusPreview("slides", "title")}>
-            <div className="space-y-2">
+            <div className="space-y-3">
+              {/* Logo upload */}
+              <div className="space-y-1.5">
+                <Label className="text-[11px] text-muted-foreground">Agency Logo</Label>
+                {draft.logoUrl ? (
+                  <div className="relative border rounded-md overflow-hidden bg-muted/30 flex items-center justify-center" style={{ height: 72 }}>
+                    <img
+                      src={draft.logoUrl}
+                      alt="Agency logo"
+                      className="max-h-14 max-w-full object-contain"
+                      data-testid="img-agency-logo"
+                    />
+                    <button
+                      onClick={() => update("logoUrl", "")}
+                      className="absolute top-1 right-1 rounded-full bg-background/80 hover:bg-background border p-0.5 text-muted-foreground hover:text-destructive transition-colors"
+                      data-testid="button-remove-logo"
+                      title="Remove logo"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                ) : (
+                  <label
+                    className="flex flex-col items-center justify-center gap-1 border-2 border-dashed rounded-md cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors"
+                    style={{ height: 72 }}
+                    data-testid="label-logo-upload"
+                  >
+                    <Upload className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-[10px] text-muted-foreground">Click to upload logo</span>
+                    <span className="text-[9px] text-muted-foreground/70">PNG, SVG, JPG</span>
+                    <input
+                      type="file"
+                      accept="image/png,image/svg+xml,image/jpeg,image/webp"
+                      className="sr-only"
+                      data-testid="input-logo-file"
+                      onChange={e => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = ev => {
+                          const result = ev.target?.result as string;
+                          if (result) update("logoUrl", result);
+                        };
+                        reader.readAsDataURL(file);
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                )}
+                <p className="text-[10px] text-muted-foreground/70 leading-snug">
+                  Replaces the brand name text in report headers.
+                </p>
+              </div>
               <div className="space-y-1">
                 <Label className="text-[11px] text-muted-foreground">Brand Name</Label>
                 <Input

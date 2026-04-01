@@ -1119,6 +1119,7 @@ export interface BackgroundDef {
 export interface ThemeTokens {
   brandName: string;
   tagline: string;
+  logoUrl?: string;
 
   primaryColor: string;
   secondaryColor: string;
@@ -1186,6 +1187,7 @@ const defaultBg = (type: "solid" | "gradient" | "none", solidColor: string, from
 export const DEFAULT_THEME_TOKENS: ThemeTokens = {
   brandName: "Webserv",
   tagline: "SEO Performance Report",
+  logoUrl: "",
 
   primaryColor: "#C0392B",
   secondaryColor: "#1B3A6B",

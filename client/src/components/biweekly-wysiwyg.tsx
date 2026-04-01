@@ -1005,9 +1005,18 @@ function PageCanvas({
         {/* Header bar */}
         {tokens.showHeader && (
           <div className="px-12 py-3 flex items-center justify-between" style={{ backgroundColor: tokens.headerColor }}>
-            <span className="text-xs font-semibold" style={{ color: tokens.headerTextColor, fontFamily: tokens.headingFont }}>
-              {tokens.brandName}
-            </span>
+            {tokens.logoUrl ? (
+              <img
+                src={tokens.logoUrl}
+                alt={tokens.brandName}
+                className="object-contain"
+                style={{ maxHeight: 28, maxWidth: 120 }}
+              />
+            ) : (
+              <span className="text-xs font-semibold" style={{ color: tokens.headerTextColor, fontFamily: tokens.headingFont }}>
+                {tokens.brandName}
+              </span>
+            )}
             <span className="text-[10px]" style={{ color: tokens.headerTextColor, opacity: 0.7, fontFamily: tokens.bodyFont }}>
               Bi-Weekly SEO Report
             </span>

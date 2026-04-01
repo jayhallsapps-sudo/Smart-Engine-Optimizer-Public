@@ -172,6 +172,12 @@ export function AppSidebar() {
         <SidebarSectionLabel label="Account" />
         <UserProfileBlock />
 
+        <SidebarDivider />
+        <SidebarSectionLabel label="Core Modules" />
+        <div className={collapsed ? "flex flex-col items-center gap-1 py-1" : "px-1 py-1 space-y-0.5"}>
+          <NavLink href="/design-system" icon={Palette} label="Design System" testId="link-design-system" />
+        </div>
+
         {isAdmin() && (
           <>
             <SidebarDivider />
@@ -181,7 +187,6 @@ export function AppSidebar() {
               <NavLink href="/admin/schedules" icon={CalendarClock} label="Scheduled Reports" testId="link-admin-schedules" />
               <NavLink href="/admin" icon={Layers} label="Governance" testId="link-admin-governance" />
               <NavLink href="/admin/guidance" icon={BookOpen} label="Guidance Library" testId="link-admin-guidance" />
-              <NavLink href="/design-system" icon={Palette} label="Design System" testId="link-design-system" />
               <NavLink href="/admin/templates" icon={LayoutTemplate} label="Template Controls" testId="link-admin-templates" />
               <NavLink href="/clients" icon={Shield} label="Manage Clients" testId="link-admin-clients" />
               <NavLink href="/integrations" icon={Settings} label="Integrations" testId="link-admin-integrations" />

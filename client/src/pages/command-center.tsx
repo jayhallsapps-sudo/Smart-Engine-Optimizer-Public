@@ -14,7 +14,6 @@ import {
   Lock,
   Sparkles,
   Palette,
-  LayoutTemplate,
   Search,
 } from "lucide-react";
 
@@ -101,23 +100,13 @@ const MODULES: ModuleCard[] = [
     group: "primary",
   },
   {
-    id: "templates",
-    icon: LayoutTemplate,
-    label: "Templates",
-    description: "Edit slide and section structures for each report type — Bi-Weekly, Monthly, QBR, and Content Roadmap.",
-    href: "/templates",
-    status: "live",
-    accentColor: "#1B3A6B",
-    group: "primary",
-  },
-  {
-    id: "theme",
+    id: "design-system",
     icon: Palette,
-    label: "Theme",
-    description: "Centralized design system: brand colors, typography, slide backgrounds, and table styles for all SmartEO reports.",
-    href: "/theme",
+    label: "Design System",
+    description: "Unified design controls: brand theme, report templates, reusable slide blocks, and imported slide staging.",
+    href: "/design-system",
     status: "live",
-    accentColor: "#7C3AED",
+    accentColor: "#C0392B",
     group: "primary",
   },
   {

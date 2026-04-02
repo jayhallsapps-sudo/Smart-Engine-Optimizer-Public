@@ -1,5 +1,6 @@
-import { useState, useRef, useCallback } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useRef, useCallback, useEffect } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -979,6 +980,13 @@ function PageCanvas({
   onDrop,
   onDragLeave,
   onBlockDragStart,
+  editingHeader,
+  headerDraft,
+  headerInputRef,
+  onStartEditHeader,
+  onHeaderDraftChange,
+  onSaveHeaderField,
+  onCancelEditHeader,
 }: {
   blocks: DocBlock[];
   tokens: typeof DEFAULT_THEME_TOKENS;
@@ -991,6 +999,13 @@ function PageCanvas({
   onDrop: (e: React.DragEvent, idx: number) => void;
   onDragLeave: () => void;
   onBlockDragStart: (id: string) => void;
+  editingHeader: "brandName" | "reportLabel" | null;
+  headerDraft: { brandName: string; reportLabel: string };
+  headerInputRef: React.RefObject<HTMLInputElement>;
+  onStartEditHeader: (field: "brandName" | "reportLabel") => void;
+  onHeaderDraftChange: (field: "brandName" | "reportLabel", value: string) => void;
+  onSaveHeaderField: (field: "brandName" | "reportLabel") => void;
+  onCancelEditHeader: () => void;
 }) {
   return (
     <div
@@ -1004,7 +1019,8 @@ function PageCanvas({
       >
         {/* Header bar */}
         {tokens.showHeader && (
-          <div className="px-12 py-3 flex items-center justify-between" style={{ backgroundColor: tokens.headerColor }}>
+          <div className="px-12 py-2.5 flex items-center justify-between group/header" style={{ backgroundColor: tokens.headerColor }}>
+            {/* Left: logo or editable brand name */}
             {tokens.logoUrl ? (
               <img
                 src={tokens.logoUrl}
@@ -1012,14 +1028,50 @@ function PageCanvas({
                 className="object-contain"
                 style={{ maxHeight: 28, maxWidth: 120 }}
               />
+            ) : editingHeader === "brandName" ? (
+              <input
+                ref={headerInputRef}
+                value={headerDraft.brandName}
+                onChange={e => onHeaderDraftChange("brandName", e.target.value)}
+                onBlur={() => onSaveHeaderField("brandName")}
+                onKeyDown={e => { if (e.key === "Enter") onSaveHeaderField("brandName"); if (e.key === "Escape") onCancelEditHeader(); }}
+                className="bg-transparent border-b border-white/50 outline-none text-white px-0 py-0"
+                style={{ color: tokens.headerTextColor, fontFamily: tokens.headingFont, fontSize: 13, fontWeight: tokens.headerFontWeight ?? 600, minWidth: 80 }}
+                data-testid="input-header-brand-name"
+              />
             ) : (
-              <span style={{ color: tokens.headerTextColor, fontFamily: tokens.headingFont, fontSize: 13, fontWeight: tokens.headerFontWeight ?? 600 }}>
+              <span
+                title="Click to edit"
+                onClick={() => onStartEditHeader("brandName")}
+                className="cursor-text rounded px-1 -ml-1 transition-colors hover:bg-white/10"
+                style={{ color: tokens.headerTextColor, fontFamily: tokens.headingFont, fontSize: 13, fontWeight: tokens.headerFontWeight ?? 600 }}
+              >
                 {tokens.brandName}
               </span>
             )}
-            <span style={{ color: tokens.headerTextColor, opacity: 0.75, fontFamily: tokens.bodyFont, fontSize: 11 }}>
-              {tokens.headerReportLabel ?? "Bi-Weekly SEO Report"}
-            </span>
+
+            {/* Right: editable report label */}
+            {editingHeader === "reportLabel" ? (
+              <input
+                ref={editingHeader === "reportLabel" ? headerInputRef : undefined}
+                value={headerDraft.reportLabel}
+                onChange={e => onHeaderDraftChange("reportLabel", e.target.value)}
+                onBlur={() => onSaveHeaderField("reportLabel")}
+                onKeyDown={e => { if (e.key === "Enter") onSaveHeaderField("reportLabel"); if (e.key === "Escape") onCancelEditHeader(); }}
+                className="bg-transparent border-b border-white/50 outline-none text-right px-0 py-0"
+                style={{ color: tokens.headerTextColor, opacity: 0.9, fontFamily: tokens.bodyFont, fontSize: 11, minWidth: 100 }}
+                data-testid="input-header-report-label"
+              />
+            ) : (
+              <span
+                title="Click to edit"
+                onClick={() => onStartEditHeader("reportLabel")}
+                className="cursor-text rounded px-1 -mr-1 transition-colors hover:bg-white/10"
+                style={{ color: tokens.headerTextColor, opacity: 0.75, fontFamily: tokens.bodyFont, fontSize: 11 }}
+              >
+                {tokens.headerReportLabel ?? "Bi-Weekly SEO Report"}
+              </span>
+            )}
           </div>
         )}
 
@@ -1086,10 +1138,44 @@ export default function BiweeklyWYSIWYG({ onBack }: { onBack: () => void }) {
 
   const dragRef = useRef<{ source: "palette" | "canvas"; blockType?: BlockType; blockId?: string } | null>(null);
 
-  const { data: activeTheme } = useQuery<{ tokens: typeof DEFAULT_THEME_TOKENS }>({
+  const { data: activeTheme } = useQuery<{ id: number; tokens: typeof DEFAULT_THEME_TOKENS }>({
     queryKey: ["/api/themes/active"],
   });
   const tokens = activeTheme?.tokens ?? DEFAULT_THEME_TOKENS;
+
+  // ── Header inline editing ──────────────────────────────────────────────────
+  const [editingHeader, setEditingHeader] = useState<"brandName" | "reportLabel" | null>(null);
+  const [headerDraft, setHeaderDraft] = useState({ brandName: "", reportLabel: "" });
+  const headerInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editingHeader) {
+      setHeaderDraft({
+        brandName: tokens.brandName,
+        reportLabel: tokens.headerReportLabel ?? "Bi-Weekly SEO Report",
+      });
+      setTimeout(() => headerInputRef.current?.select(), 20);
+    }
+  }, [editingHeader]);
+
+  const headerMutation = useMutation({
+    mutationFn: async (patch: Partial<typeof DEFAULT_THEME_TOKENS>) => {
+      if (!activeTheme?.id) return;
+      const merged = { ...tokens, ...patch };
+      await apiRequest("PATCH", `/api/themes/${activeTheme.id}/draft`, { draftTokens: merged });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/themes/active"] });
+    },
+  });
+
+  const saveHeaderField = (field: "brandName" | "reportLabel") => {
+    const patch = field === "brandName"
+      ? { brandName: headerDraft.brandName }
+      : { headerReportLabel: headerDraft.reportLabel };
+    headerMutation.mutate(patch);
+    setEditingHeader(null);
+  };
 
   const selectedBlock = blocks.find(b => b.id === selectedId) ?? null;
 
@@ -1213,6 +1299,13 @@ export default function BiweeklyWYSIWYG({ onBack }: { onBack: () => void }) {
           onDrop={handleDrop}
           onDragLeave={handleDragLeave}
           onBlockDragStart={handleBlockDragStart}
+          editingHeader={editingHeader}
+          headerDraft={headerDraft}
+          headerInputRef={headerInputRef}
+          onStartEditHeader={setEditingHeader}
+          onHeaderDraftChange={(field, value) => setHeaderDraft(prev => ({ ...prev, [field === "brandName" ? "brandName" : "reportLabel"]: value }))}
+          onSaveHeaderField={saveHeaderField}
+          onCancelEditHeader={() => setEditingHeader(null)}
         />
 
         {/* Right: properties (240px) */}

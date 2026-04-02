@@ -296,7 +296,7 @@ function SlideFrame({ tokens, children, bgKey }: {
             </span>
           )}
           <div className="flex-1" />
-          <span style={{ color: `${tokens.headerTextColor}99`, fontSize: "8px" }}>{tokens.headerReportLabel ?? tokens.tagline}</span>
+          <span style={{ color: `${tokens.headerTextColor}99`, fontSize: `${(tokens.reportLabelFontSize ?? 11) * 0.73}px`, fontFamily: tokens.reportLabelFontFamily ?? tokens.bodyFont, fontWeight: tokens.reportLabelFontWeight ?? 400 }}>{tokens.headerReportLabel ?? tokens.tagline}</span>
         </div>
       )}
       <div className="flex-1 min-h-0 flex flex-col">{children}</div>
@@ -569,7 +569,7 @@ function PageFrame({ tokens, children, pageNum = 1 }: { tokens: ThemeTokens; chi
               {tokens.brandName}
             </span>
           )}
-          <span style={{ color: `${tokens.headerTextColor}B0`, fontSize: "11px", fontFamily: tokens.bodyFont }}>
+          <span style={{ color: `${tokens.headerTextColor}B0`, fontSize: `${tokens.reportLabelFontSize ?? 11}px`, fontFamily: tokens.reportLabelFontFamily ?? tokens.bodyFont, fontWeight: tokens.reportLabelFontWeight ?? 400 }}>
             {tokens.headerReportLabel ?? tokens.tagline}
           </span>
         </div>
@@ -846,8 +846,13 @@ export default function ThemePage() {
   const [dialogName, setDialogName] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
-  const focusPreview = useCallback((mode: PreviewMode, slide?: PreviewSlide, page?: PreviewPage) => {
-    setPreviewMode(mode);
+  // Track whether user has manually toggled the preview mode so section opens don't override it
+  const userModeRef = useRef(false);
+
+  const focusPreview = useCallback((mode: PreviewMode, slide?: PreviewSlide, page?: PreviewPage, forceMode = false) => {
+    if (forceMode || !userModeRef.current) {
+      setPreviewMode(mode);
+    }
     if (slide) setActiveSlide(slide);
     if (page) setActivePage(page);
   }, []);
@@ -1412,7 +1417,7 @@ export default function ThemePage() {
             </div>
           </Section>
 
-          <Section title="Reports &amp; Slides" icon={FileText} defaultOpen={false} onOpen={() => focusPreview("pages", undefined, "cover")}>
+          <Section title="Reports &amp; Slides" icon={FileText} defaultOpen={false} onOpen={() => { userModeRef.current = false; focusPreview("pages", undefined, "cover"); }}>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <Label className="text-[11px] text-muted-foreground">Show Header Bar</Label>
@@ -1455,6 +1460,52 @@ export default function ThemePage() {
                   data-testid="input-header-report-label"
                 />
               </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-muted-foreground">Label Font</Label>
+                  <Select
+                    value={draft.reportLabelFontFamily ?? "Inter"}
+                    onValueChange={v => update("reportLabelFontFamily", v)}
+                  >
+                    <SelectTrigger className="h-7 text-xs" data-testid="select-report-label-font">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {BODY_FONTS.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-muted-foreground">Label Size (px)</Label>
+                  <div className="flex items-center gap-2">
+                    <Slider
+                      value={[draft.reportLabelFontSize ?? 11]}
+                      onValueChange={([v]) => update("reportLabelFontSize", v)}
+                      min={8} max={18} step={1}
+                      className="flex-1"
+                    />
+                    <span className="text-[10px] text-muted-foreground w-5">{draft.reportLabelFontSize ?? 11}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[11px] text-muted-foreground">Label Font Weight</Label>
+                <Select
+                  value={String(draft.reportLabelFontWeight ?? 400)}
+                  onValueChange={v => update("reportLabelFontWeight", Number(v))}
+                >
+                  <SelectTrigger className="h-7 text-xs" data-testid="select-report-label-weight">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[300, 400, 500, 600, 700].map(w => (
+                      <SelectItem key={w} value={String(w)}>
+                        {w === 300 ? "300 — Thin" : w === 400 ? "400 — Regular" : w === 500 ? "500 — Medium" : w === 600 ? "600 — Semibold" : "700 — Bold"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <Separator className="my-1" />
               <ColorField label="Footer Color" value={draft.footerColor} onChange={c => update("footerColor", c)} />
               <ColorField label="Footer Text Color" value={draft.footerTextColor} onChange={c => update("footerTextColor", c)} />
@@ -1475,14 +1526,14 @@ export default function ThemePage() {
             <div className="flex items-center rounded border border-border overflow-hidden shrink-0">
               <button
                 className={`flex items-center gap-1 text-[10px] px-2.5 py-1 transition-colors ${previewMode === "slides" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted"}`}
-                onClick={() => setPreviewMode("slides")}
+                onClick={() => { userModeRef.current = true; setPreviewMode("slides"); }}
                 data-testid="button-mode-slides"
               >
                 <Presentation className="w-3 h-3" /> Slides
               </button>
               <button
                 className={`flex items-center gap-1 text-[10px] px-2.5 py-1 transition-colors ${previewMode === "pages" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted"}`}
-                onClick={() => setPreviewMode("pages")}
+                onClick={() => { userModeRef.current = true; setPreviewMode("pages"); }}
                 data-testid="button-mode-pages"
               >
                 <BookOpen className="w-3 h-3" /> Pages

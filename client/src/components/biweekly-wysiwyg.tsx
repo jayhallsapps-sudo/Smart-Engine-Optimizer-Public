@@ -1059,7 +1059,7 @@ function PageCanvas({
                 onBlur={() => onSaveHeaderField("reportLabel")}
                 onKeyDown={e => { if (e.key === "Enter") onSaveHeaderField("reportLabel"); if (e.key === "Escape") onCancelEditHeader(); }}
                 className="bg-transparent border-b border-white/50 outline-none text-right px-0 py-0"
-                style={{ color: tokens.headerTextColor, opacity: 0.9, fontFamily: tokens.bodyFont, fontSize: 11, minWidth: 100 }}
+                style={{ color: tokens.headerTextColor, fontFamily: tokens.reportLabelFontFamily ?? tokens.bodyFont, fontSize: tokens.reportLabelFontSize ?? 11, fontWeight: tokens.reportLabelFontWeight ?? 400, minWidth: 100 }}
                 data-testid="input-header-report-label"
               />
             ) : (
@@ -1067,7 +1067,7 @@ function PageCanvas({
                 title="Click to edit"
                 onClick={() => onStartEditHeader("reportLabel")}
                 className="cursor-text rounded px-1 -mr-1 transition-colors hover:bg-white/10"
-                style={{ color: tokens.headerTextColor, opacity: 0.75, fontFamily: tokens.bodyFont, fontSize: 11 }}
+                style={{ color: tokens.headerTextColor, fontFamily: tokens.reportLabelFontFamily ?? tokens.bodyFont, fontSize: tokens.reportLabelFontSize ?? 11, fontWeight: tokens.reportLabelFontWeight ?? 400 }}
               >
                 {tokens.headerReportLabel ?? "Bi-Weekly SEO Report"}
               </span>

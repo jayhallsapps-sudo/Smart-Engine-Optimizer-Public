@@ -1173,6 +1173,9 @@ export interface ThemeTokens {
   footerTextColor: string;
   headerFontWeight: number;
   headerReportLabel: string;
+  reportLabelFontSize: number;
+  reportLabelFontWeight: number;
+  reportLabelFontFamily: string;
 }
 
 const defaultBg = (type: "solid" | "gradient" | "none", solidColor: string, from?: string, to?: string): BackgroundDef => ({
@@ -1243,6 +1246,9 @@ export const DEFAULT_THEME_TOKENS: ThemeTokens = {
   footerTextColor: "#64748B",
   headerFontWeight: 600,
   headerReportLabel: "Bi-Weekly SEO Report",
+  reportLabelFontSize: 11,
+  reportLabelFontWeight: 400,
+  reportLabelFontFamily: "Inter",
 };
 
 export const themes = pgTable("themes", {

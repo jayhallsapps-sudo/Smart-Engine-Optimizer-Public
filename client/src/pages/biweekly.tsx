@@ -1,6 +1,7 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { useTemplateConfig } from "@/hooks/useTemplateConfig";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -329,6 +330,13 @@ function syncUrlParams(params: Record<string, string | null>) {
   window.history.replaceState({}, "", url.toString());
 }
 
+const REPORT_TO_TEMPLATE: Record<string, string> = {
+  bw_purpose: "purpose",
+  bw_pulse: "performance_pulse",
+  bw_progress: "progress_quick_wins",
+  bw_partnership: "partnership_alignment",
+};
+
 export default function BiweeklyPage() {
   const { toast } = useToast();
 
@@ -346,6 +354,38 @@ export default function BiweeklyPage() {
 
   const { data: clients = [] } = useQuery<Client[]>({ queryKey: ["/api/clients"] });
   const clientName = clients.find(c => String(c.id) === clientId)?.name;
+
+  const { enabledSections } = useTemplateConfig("biweekly");
+
+  const templateSections = useMemo(() => {
+    if (!report?.sections) return [];
+    const raw: any[] = report.sections;
+
+    const filtered = raw.filter(s => {
+      const tKey = REPORT_TO_TEMPLATE[s.id] ?? s.id;
+      const tmpl = enabledSections.find(es => es.sectionKey === tKey);
+      return tmpl ? tmpl.enabled : true;
+    });
+
+    const labelled = filtered.map(s => {
+      const tKey = REPORT_TO_TEMPLATE[s.id] ?? s.id;
+      const tmpl = enabledSections.find(es => es.sectionKey === tKey);
+      if (tmpl && tmpl.label && tmpl.label !== s.title) {
+        return { ...s, title: tmpl.label };
+      }
+      return s;
+    });
+
+    if (enabledSections.length === 0) return labelled;
+
+    return labelled.sort((a, b) => {
+      const tKeyA = REPORT_TO_TEMPLATE[a.id] ?? a.id;
+      const tKeyB = REPORT_TO_TEMPLATE[b.id] ?? b.id;
+      const tmplA = enabledSections.find(es => es.sectionKey === tKeyA);
+      const tmplB = enabledSections.find(es => es.sectionKey === tKeyB);
+      return (tmplA?.order ?? 999) - (tmplB?.order ?? 999);
+    });
+  }, [report, enabledSections]);
 
   const { startDate, endDate } = getBiweeklyWindow();
   const windowLabel = fmtWindowLabel(startDate, endDate);
@@ -679,7 +719,7 @@ export default function BiweeklyPage() {
             date={edits["report_date"] ?? report.date}
             reportingWindow={report.reportingWindow}
             preparedBy={edits["preparedBy"] ?? report.preparedBy}
-            sections={report.sections ?? []}
+            sections={templateSections}
             edits={edits}
             onEdit={handleEdit}
             bwTheme

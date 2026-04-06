@@ -1132,6 +1132,13 @@ function PageCanvas({
 
 // ─── Main WYSIWYG component ───────────────────────────────────────────────────
 
+const SUBTITLE_SECTION_MAP: Record<string, string> = {
+  "blk-s1": "purpose",
+  "blk-s2": "performance_pulse",
+  "blk-s3": "progress_quick_wins",
+  "blk-s4": "partnership_alignment",
+};
+
 export default function BiweeklyWYSIWYG({ onBack }: { onBack: () => void }) {
   const { toast } = useToast();
   const [blocks, setBlocks] = useState<DocBlock[]>(DEFAULT_BIWEEKLY_BLOCKS);
@@ -1162,9 +1169,36 @@ export default function BiweeklyWYSIWYG({ onBack }: { onBack: () => void }) {
   const saveMutation = useMutation({
     mutationFn: async () => {
       await apiRequest("PUT", "/api/template-structures/biweekly-docx", { slides: blocks });
+
+      const subtitleBlocks = blocks.filter(
+        b => b.type === "subtitle" && SUBTITLE_SECTION_MAP[b.id]
+      );
+
+      for (const block of subtitleBlocks) {
+        const sectionKey = SUBTITLE_SECTION_MAP[block.id];
+        const displayOrder = blocks.indexOf(block);
+        const rawLabel = block.content;
+        const sectionLabel = rawLabel.replace(/^\d+\.\s+/, "").trim() || rawLabel;
+        const enabled = block.settings?.visible !== false;
+
+        if (sectionKey === "purpose" && !enabled) continue;
+
+        try {
+          await apiRequest("PUT", "/api/admin/template-sections", {
+            reportType: "biweekly",
+            sectionKey,
+            sectionLabel,
+            enabled,
+            displayOrder,
+          });
+        } catch {
+          // Ignore per-section errors silently
+        }
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/template-structures/biweekly-docx"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/template-sections", "biweekly"] });
       toast({ title: "Template saved", description: "Your bi-weekly template has been updated." });
     },
     onError: () => {

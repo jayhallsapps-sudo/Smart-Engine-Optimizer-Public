@@ -522,9 +522,10 @@ function hydrateBlocks(blocks: DocBlock[], report: any): DocBlock[] {
 
 interface BiweeklyReportRendererProps {
   report: any;
+  printMode?: boolean;
 }
 
-export function BiweeklyReportRenderer({ report }: BiweeklyReportRendererProps) {
+export function BiweeklyReportRenderer({ report, printMode }: BiweeklyReportRendererProps) {
   const { data: savedTemplate } = useQuery<{ slides: DocBlock[] } | null>({
     queryKey: ["/api/template-structures/biweekly-docx"],
     retry: false,
@@ -554,58 +555,76 @@ export function BiweeklyReportRenderer({ report }: BiweeklyReportRendererProps) 
     [templateBlocks, report]
   );
 
-  return (
-    <div className="flex-1 bg-zinc-100 dark:bg-zinc-900 flex flex-col items-center py-8 px-4 overflow-y-auto">
-      <div
-        className="w-full max-w-[760px] bg-white shadow-xl rounded-sm"
-        style={{ minHeight: "1100px" }}
-        data-testid="bw-report-renderer"
-      >
-        {/* Header bar — same as template editor */}
-        {tokens.showHeader && (
-          <div
-            className="px-12 py-2.5 flex items-center justify-between"
-            style={{ backgroundColor: tokens.headerColor }}
-          >
-            {tokens.logoUrl ? (
-              <img
-                src={tokens.logoUrl}
-                alt={tokens.brandName}
-                className="object-contain"
-                style={{ maxHeight: 28, maxWidth: 120 }}
-              />
-            ) : (
-              <span
-                style={{
-                  color: tokens.headerTextColor,
-                  fontFamily: tokens.headingFont,
-                  fontSize: 13,
-                  fontWeight: tokens.headerFontWeight ?? 600,
-                }}
-              >
-                {tokens.brandName}
-              </span>
-            )}
+  const docPage = (
+    <div
+      className="w-full max-w-[760px] bg-white shadow-xl rounded-sm"
+      style={{ minHeight: "1100px" }}
+      data-report-root
+      data-testid="bw-report-renderer"
+    >
+      {/* Header bar — same as template editor */}
+      {tokens.showHeader && (
+        <div
+          className="px-12 py-2.5 flex items-center justify-between"
+          style={{ backgroundColor: tokens.headerColor }}
+        >
+          {tokens.logoUrl ? (
+            <img
+              src={tokens.logoUrl}
+              alt={tokens.brandName}
+              className="object-contain"
+              style={{ maxHeight: 28, maxWidth: 120 }}
+            />
+          ) : (
             <span
               style={{
                 color: tokens.headerTextColor,
-                fontFamily: tokens.reportLabelFontFamily ?? tokens.bodyFont,
-                fontSize: tokens.reportLabelFontSize ?? 11,
-                fontWeight: tokens.reportLabelFontWeight ?? 400,
+                fontFamily: tokens.headingFont,
+                fontSize: 13,
+                fontWeight: tokens.headerFontWeight ?? 600,
               }}
             >
-              {tokens.headerReportLabel ?? "Bi-Weekly SEO Report"}
+              {tokens.brandName}
             </span>
-          </div>
-        )}
-
-        {/* Document body */}
-        <div className="px-12 pt-8 pb-12 bg-white">
-          {hydratedBlocks.map((block) => (
-            <BlockRenderer key={block.id} block={block} tokens={tokens} />
-          ))}
+          )}
+          <span
+            style={{
+              color: tokens.headerTextColor,
+              fontFamily: tokens.reportLabelFontFamily ?? tokens.bodyFont,
+              fontSize: tokens.reportLabelFontSize ?? 11,
+              fontWeight: tokens.reportLabelFontWeight ?? 400,
+            }}
+          >
+            {tokens.headerReportLabel ?? "Bi-Weekly SEO Report"}
+          </span>
         </div>
+      )}
+
+      {/* Document body */}
+      <div className="px-12 pt-8 pb-12 bg-white">
+        {hydratedBlocks.map((block) => (
+          <BlockRenderer key={block.id} block={block} tokens={tokens} />
+        ))}
       </div>
+    </div>
+  );
+
+  if (printMode) {
+    return (
+      <div style={{ background: "white", margin: 0, padding: 0 }}>
+        <style>{`
+          html, body { margin: 0; padding: 0; background: white; }
+          * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+          button { display: none !important; }
+        `}</style>
+        {docPage}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 bg-zinc-100 dark:bg-zinc-900 flex flex-col items-center py-8 px-4 overflow-y-auto">
+      {docPage}
     </div>
   );
 }

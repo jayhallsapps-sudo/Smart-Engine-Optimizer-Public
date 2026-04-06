@@ -437,7 +437,7 @@ export default function BiweeklyPage() {
   const downloadDocxMut = useMutation({
     mutationFn: async () => {
       if (!report) throw new Error("Generate report first");
-      const res = await apiRequest("POST", "/api/reports/biweekly/docx", { json: report, edits });
+      const res = await apiRequest("POST", "/api/reports/biweekly/docx", { report });
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -643,7 +643,7 @@ export default function BiweeklyPage() {
             </Button>
             <Button variant="outline" className="w-full text-xs" onClick={uploadToDrive} disabled={isUploading} data-testid="button-save-drive">
               {isUploading ? <Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> : <CloudUpload className="w-3 h-3 mr-1.5" />}
-              Save to Drive (PDF)
+              Save to Drive
             </Button>
           </div>
         )}

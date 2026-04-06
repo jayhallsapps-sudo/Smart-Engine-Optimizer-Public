@@ -39,6 +39,7 @@ import { insertSfReportSchema, insertCallTrackingReportSchema, amInputsSchema, m
 import { db } from "./db";
 import { eq, and } from "drizzle-orm";
 import { generateBiweeklyDocx, generatePptx, generateMidStrategyPptx, generateQbrPrepDocx } from "./reportGenerators";
+import { generateBiweeklyBlockDocx } from "./biweeklyBlockDocxGenerator";
 import { generateQcrPptx } from "./qcrPptxGenerator";
 import { generateBiweeklyPdf, generateMonthlyPdf } from "./pdfGenerator";
 import { generatePdfViaPuppeteer } from "./puppeteerPdfGenerator";
@@ -2530,42 +2531,17 @@ export async function registerRoutes(
   });
 
   app.post("/api/reports/biweekly/docx", async (req, res) => {
-    const { json, edits } = req.body as { json: any; edits?: Record<string, string> };
-    if (!json) return res.status(400).json({ message: "json is required" });
+    const { json, edits, report } = req.body as { json?: any; report?: any; edits?: Record<string, string> };
+    const reportData = report ?? json;
+    if (!reportData) return res.status(400).json({ message: "report or json is required" });
     try {
-      const sections: SectionData[] = (json.sections ?? []).map((s: any) => {
-        const items: any[] = [];
-        if (s.metrics?.length) {
-          items.push({ summary: s.metrics.map((m: any) => ({ label: m.label, current: m.current, previous: m.previous ?? "—", deltaPercent: m.delta ?? "—", isPositive: m.isPositive ?? true })) });
-          const nsmNotes = edits?.["bw_nsm_notes"];
-          if (nsmNotes && nsmNotes.trim() && nsmNotes !== "Add notes on NSM progress...") {
-            items.push({ manualText: nsmNotes });
-          }
-        }
-        if (s.bullets?.length) items.push({ manualText: (s.bullets as string[]).map((b, bi) => edits?.[`${s.id}_bullet_${bi}`] ?? b).filter(Boolean).join("\n") });
-        if (s.workLog?.length) {
-          const baseRows = (s.workLog as any[]).map((r: any, ri: number) => { const editedDid = edits?.[`${s.id}_worklog_${ri}_did`]; const editedNext = edits?.[`${s.id}_worklog_${ri}_next`]; return { area: r.area, whatWeDid: editedDid ?? r.whatWeDid, whatsNext: editedNext ?? r.whatsNext, items: editedDid !== undefined ? undefined : r.items, nextItems: editedNext !== undefined ? undefined : r.nextItems }; });
-          const crProgress = parseCustomRowsFromEdits(edits, `${s.id}_progress`);
-          const allRows = [...baseRows, ...crProgress.map(cr => ({ area: cr[0] ?? "", whatWeDid: cr[1] ?? "", whatsNext: cr[2] ?? "" }))];
-          items.push({ tableRows: allRows });
-        }
-        if (s.table) items.push({ tables: [{ title: s.title, headers: s.table.headers, rows: s.table.rows }] });
-        if (s.technicalTable) {
-          const tbl = s.technicalTable as { headers: string[]; rows: string[][] };
-          const resolvedRows = (tbl.rows ?? []).map((row: string[], ri: number) =>
-            row.map((cell: string, ci: number) => edits?.[`${s.id}_tech_${ri}_${ci}`] ?? cell)
-          );
-          const crTech = parseCustomRowsFromEdits(edits, `${s.id}_technical`);
-          items.push({ tables: [{ title: s.title ?? "", headers: tbl.headers, rows: [...resolvedRows, ...crTech] }] });
-        }
-        return { sectionId: s.id, title: s.title ?? "", items };
-      });
-      const clientName = edits?.["client_name"] ?? json.client_name;
-      const preparedBy = edits?.["preparedBy"] ?? json.preparedBy ?? edits?.["attendees"] ?? json.attendees ?? "";
-      const date = edits?.["report_date"] ?? json.date;
-      const buffer = await generateBiweeklyDocx(clientName, preparedBy, date, sections);
-      const slug = clientName.toLowerCase().replace(/\s+/g, "_");
-      const filename = `${slug}_biweekly_${date.replace(/[\s,]/g, "_")}.docx`;
+      const templateStructure = await storage.getTemplateStructure("biweekly-docx");
+      const savedBlocks: any[] | undefined = Array.isArray(templateStructure?.slides) && templateStructure.slides.length > 0 ? templateStructure.slides : undefined;
+
+      const buffer = await generateBiweeklyBlockDocx(reportData, savedBlocks);
+      const clientName = (reportData.client_name ?? "report").toLowerCase().replace(/\s+/g, "_");
+      const date = (reportData.date ?? "").replace(/[\s,]/g, "_");
+      const filename = `${clientName}_biweekly_${date}.docx`;
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
       res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
       res.send(buffer);
@@ -2580,28 +2556,38 @@ export async function registerRoutes(
     const reportData = report ?? json;
     if (!reportData) return res.status(400).json({ message: "report is required" });
     try {
-      const id = Math.random().toString(36).slice(2) + Date.now().toString(36);
-      printCache.set(id, { data: { report: reportData, edits: edits ?? {} }, ts: Date.now() });
-      const buffer = await generatePdfViaPuppeteer(id);
-      printCache.delete(id);
-      const clientName = edits?.["client_name"] ?? reportData.client_name ?? "report";
-      const date = edits?.["report_date"] ?? reportData.date ?? "";
+      const templateStructure = await storage.getTemplateStructure("biweekly-docx");
+      const savedBlocks: any[] | undefined = Array.isArray(templateStructure?.slides) && templateStructure.slides.length > 0 ? templateStructure.slides : undefined;
+
+      const buffer = await generateBiweeklyBlockDocx(reportData, savedBlocks);
+      const clientName = reportData.client_name ?? "report";
+      const date = reportData.date ?? "";
       const { ReplitConnectors } = await import("@replit/connectors-sdk");
       const connectors = new ReplitConnectors();
-      const filename = `${clientName} Biweekly SEO ${date}.pdf`;
-      const metadata = JSON.stringify({ name: filename });
-      const boundary = "-------smarteo_bw_boundary";
+      const filename = `${clientName} Biweekly SEO ${date}`;
+      // Upload DOCX and convert to Google Doc automatically
+      const metadata = JSON.stringify({
+        name: filename,
+        mimeType: "application/vnd.google-apps.document",
+      });
+      const boundary = "-------smarteo_bw_gdoc_boundary";
       const CRLF = "\r\n";
-      const metaBuf = Buffer.from(`--${boundary}${CRLF}Content-Type: application/json; charset=UTF-8${CRLF}${CRLF}${metadata}${CRLF}`, "utf8");
-      const filePrefixBuf = Buffer.from(`--${boundary}${CRLF}Content-Type: application/pdf${CRLF}${CRLF}`, "utf8");
-      const closeBuf = Buffer.from(`${CRLF}--${boundary}--`, "utf8");
-      const bodyBuffer = Buffer.concat([metaBuf, filePrefixBuf, buffer, closeBuf]);
-      const uploadRes = await connectors.proxy("google-drive", "/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink", { method: "POST", headers: { "Content-Type": `multipart/related; boundary=${boundary}` }, body: bodyBuffer });
-      if (!uploadRes.ok) { const e = await uploadRes.json().catch(() => ({}) as any); return res.status(uploadRes.status).json({ message: `Drive upload failed: ${(e as any)?.error?.message ?? uploadRes.statusText}` }); }
+      const metaBuf      = Buffer.from(`--${boundary}${CRLF}Content-Type: application/json; charset=UTF-8${CRLF}${CRLF}${metadata}${CRLF}`, "utf8");
+      const filePrefixBuf = Buffer.from(`--${boundary}${CRLF}Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document${CRLF}${CRLF}`, "utf8");
+      const closeBuf     = Buffer.from(`${CRLF}--${boundary}--`, "utf8");
+      const bodyBuffer   = Buffer.concat([metaBuf, filePrefixBuf, buffer, closeBuf]);
+      const uploadRes = await connectors.proxy(
+        "google-drive",
+        "/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink",
+        { method: "POST", headers: { "Content-Type": `multipart/related; boundary=${boundary}` }, body: bodyBuffer }
+      );
+      if (!uploadRes.ok) {
+        const e = await uploadRes.json().catch(() => ({}) as any);
+        return res.status(uploadRes.status).json({ message: `Drive upload failed: ${(e as any)?.error?.message ?? uploadRes.statusText}` });
+      }
       const driveFile = await uploadRes.json() as any;
       res.json({ success: true, fileId: driveFile.id, fileName: driveFile.name, webViewLink: driveFile.webViewLink });
     } catch (err: any) {
-      printCache.delete(err._cacheId);
       res.status(500).json({ message: "Upload failed: " + err.message });
     }
   });

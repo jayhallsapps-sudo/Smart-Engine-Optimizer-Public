@@ -58,7 +58,7 @@ function uid() {
   return `blk-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-const DEFAULT_BIWEEKLY_BLOCKS: DocBlock[] = [
+export const DEFAULT_BIWEEKLY_BLOCKS: DocBlock[] = [
   // ── Header ──────────────────────────────────────────────────────────────────
   {
     id: "blk-title",

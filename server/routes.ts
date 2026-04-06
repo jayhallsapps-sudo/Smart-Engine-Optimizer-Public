@@ -2535,10 +2535,15 @@ export async function registerRoutes(
     const reportData = report ?? json;
     if (!reportData) return res.status(400).json({ message: "report or json is required" });
     try {
-      const templateStructure = await storage.getTemplateStructure("biweekly-docx");
-      const savedBlocks: any[] | undefined = Array.isArray(templateStructure?.slides) && templateStructure.slides.length > 0 ? templateStructure.slides : undefined;
+      const [templateStructure, activeTheme] = await Promise.all([
+        storage.getTemplateStructure("biweekly-docx"),
+        storage.getActiveTheme(),
+      ]);
+      const savedBlocks = Array.isArray(templateStructure?.slides) && templateStructure.slides.length > 0
+        ? templateStructure.slides : undefined;
+      const themeTokens = activeTheme?.tokens ?? undefined;
 
-      const buffer = await generateBiweeklyBlockDocx(reportData, savedBlocks);
+      const buffer = await generateBiweeklyBlockDocx(reportData, savedBlocks, themeTokens as any);
       const clientName = (reportData.client_name ?? "report").toLowerCase().replace(/\s+/g, "_");
       const date = (reportData.date ?? "").replace(/[\s,]/g, "_");
       const filename = `${clientName}_biweekly_${date}.docx`;
@@ -2556,35 +2561,61 @@ export async function registerRoutes(
     const reportData = report ?? json;
     if (!reportData) return res.status(400).json({ message: "report is required" });
     try {
-      const templateStructure = await storage.getTemplateStructure("biweekly-docx");
-      const savedBlocks: any[] | undefined = Array.isArray(templateStructure?.slides) && templateStructure.slides.length > 0 ? templateStructure.slides : undefined;
+      const [templateStructure, activeTheme] = await Promise.all([
+        storage.getTemplateStructure("biweekly-docx"),
+        storage.getActiveTheme(),
+      ]);
+      const savedBlocks = Array.isArray(templateStructure?.slides) && templateStructure.slides.length > 0
+        ? templateStructure.slides : undefined;
+      const themeTokens = activeTheme?.tokens ?? undefined;
 
-      const buffer = await generateBiweeklyBlockDocx(reportData, savedBlocks);
+      const buffer = await generateBiweeklyBlockDocx(reportData, savedBlocks, themeTokens as any);
       const clientName = reportData.client_name ?? "report";
       const date = reportData.date ?? "";
+      const filename = `${clientName} Biweekly SEO ${date}`;
+
       const { ReplitConnectors } = await import("@replit/connectors-sdk");
       const connectors = new ReplitConnectors();
-      const filename = `${clientName} Biweekly SEO ${date}`;
-      // Upload DOCX and convert to Google Doc automatically
-      const metadata = JSON.stringify({
-        name: filename,
-        mimeType: "application/vnd.google-apps.document",
-      });
-      const boundary = "-------smarteo_bw_gdoc_boundary";
-      const CRLF = "\r\n";
-      const metaBuf      = Buffer.from(`--${boundary}${CRLF}Content-Type: application/json; charset=UTF-8${CRLF}${CRLF}${metadata}${CRLF}`, "utf8");
-      const filePrefixBuf = Buffer.from(`--${boundary}${CRLF}Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document${CRLF}${CRLF}`, "utf8");
-      const closeBuf     = Buffer.from(`${CRLF}--${boundary}--`, "utf8");
-      const bodyBuffer   = Buffer.concat([metaBuf, filePrefixBuf, buffer, closeBuf]);
-      const uploadRes = await connectors.proxy(
+      const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+      // Resumable upload — same approach as QBR Prep for reliability
+      const initRes = await connectors.proxy(
         "google-drive",
-        "/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink",
-        { method: "POST", headers: { "Content-Type": `multipart/related; boundary=${boundary}` }, body: bodyBuffer }
+        `/upload/drive/v3/files?uploadType=resumable&fields=id,name,webViewLink`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json; charset=UTF-8",
+            "X-Upload-Content-Type": DOCX_MIME,
+            "X-Upload-Content-Length": String(buffer.length),
+          },
+          // mimeType: google-apps.document triggers automatic DOCX→Google-Doc conversion
+          body: Buffer.from(JSON.stringify({ name: filename, mimeType: "application/vnd.google-apps.document" })),
+        }
       );
+
+      if (!initRes.ok) {
+        const e = await initRes.json().catch(() => ({}) as any);
+        return res.status(initRes.status).json({ message: `Drive upload init failed: ${(e as any)?.error?.message ?? initRes.statusText}` });
+      }
+
+      const sessionUri = initRes.headers.get("location") as string;
+      if (!sessionUri) {
+        return res.status(502).json({ message: "Google Drive did not return a resumable upload session URI" });
+      }
+
+      // Upload directly to the session URI (auth embedded in URI, no proxy needed)
+      const uploadRes = await fetch(sessionUri, {
+        method: "PUT",
+        headers: { "Content-Type": DOCX_MIME, "Content-Length": String(buffer.length) },
+        body: buffer,
+      });
+
       if (!uploadRes.ok) {
         const e = await uploadRes.json().catch(() => ({}) as any);
         return res.status(uploadRes.status).json({ message: `Drive upload failed: ${(e as any)?.error?.message ?? uploadRes.statusText}` });
       }
+
       const driveFile = await uploadRes.json() as any;
       res.json({ success: true, fileId: driveFile.id, fileName: driveFile.name, webViewLink: driveFile.webViewLink });
     } catch (err: any) {

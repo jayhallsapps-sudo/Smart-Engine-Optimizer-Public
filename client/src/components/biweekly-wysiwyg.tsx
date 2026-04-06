@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -1132,11 +1133,43 @@ function PageCanvas({
 // ─── Main WYSIWYG component ───────────────────────────────────────────────────
 
 export default function BiweeklyWYSIWYG({ onBack }: { onBack: () => void }) {
+  const { toast } = useToast();
   const [blocks, setBlocks] = useState<DocBlock[]>(DEFAULT_BIWEEKLY_BLOCKS);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<number | null>(null);
+  const [initialized, setInitialized] = useState(false);
 
   const dragRef = useRef<{ source: "palette" | "canvas"; blockType?: BlockType; blockId?: string } | null>(null);
+
+  const { data: savedTemplate, isError: templateNotFound } = useQuery<{ slides: DocBlock[] } | null>({
+    queryKey: ["/api/template-structures/biweekly-docx"],
+    retry: false,
+  });
+
+  useEffect(() => {
+    if (initialized) return;
+    if (savedTemplate) {
+      if (Array.isArray(savedTemplate.slides) && savedTemplate.slides.length > 0) {
+        setBlocks(savedTemplate.slides as DocBlock[]);
+      }
+      setInitialized(true);
+    } else if (templateNotFound) {
+      setInitialized(true);
+    }
+  }, [savedTemplate, templateNotFound, initialized]);
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("PUT", "/api/template-structures/biweekly-docx", { slides: blocks });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/template-structures/biweekly-docx"] });
+      toast({ title: "Template saved", description: "Your bi-weekly template has been updated." });
+    },
+    onError: () => {
+      toast({ title: "Save failed", description: "Could not save the template. Please try again.", variant: "destructive" });
+    },
+  });
 
   const { data: activeTheme } = useQuery<{ id: number; tokens: typeof DEFAULT_THEME_TOKENS }>({
     queryKey: ["/api/themes/active"],
@@ -1273,8 +1306,15 @@ export default function BiweeklyWYSIWYG({ onBack }: { onBack: () => void }) {
         </div>
         <div className="ml-auto flex items-center gap-2">
           <span className="text-[10px] text-muted-foreground">{blocks.length} blocks</span>
-          <Button size="sm" className="h-7 text-xs" style={{ backgroundColor: "#C0392B", color: "#fff" }}>
-            Save Template
+          <Button
+            size="sm"
+            className="h-7 text-xs"
+            style={{ backgroundColor: "#C0392B", color: "#fff" }}
+            onClick={() => saveMutation.mutate()}
+            disabled={saveMutation.isPending}
+            data-testid="button-save-template"
+          >
+            {saveMutation.isPending ? "Saving…" : "Save Template"}
           </Button>
         </div>
       </div>

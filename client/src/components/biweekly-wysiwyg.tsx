@@ -1149,8 +1149,9 @@ export default function BiweeklyWYSIWYG({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     if (initialized) return;
     if (savedTemplate) {
-      if (Array.isArray(savedTemplate.slides) && savedTemplate.slides.length > 0) {
-        setBlocks(savedTemplate.slides as DocBlock[]);
+      const slides = savedTemplate.slides;
+      if (Array.isArray(slides) && slides.length > 0 && slides[0] && typeof (slides[0] as any).settings === "object") {
+        setBlocks(slides as DocBlock[]);
       }
       setInitialized(true);
     } else if (templateNotFound) {

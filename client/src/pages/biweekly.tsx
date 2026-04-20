@@ -437,7 +437,7 @@ export default function BiweeklyPage() {
   const downloadDocxMut = useMutation({
     mutationFn: async () => {
       if (!report) throw new Error("Generate report first");
-      const res = await apiRequest("POST", "/api/reports/biweekly/docx", { report });
+      const res = await apiRequest("POST", "/api/reports/biweekly/docx", { report, edits });
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -673,7 +673,22 @@ export default function BiweeklyPage() {
         )}
 
         {report && !generateMut.isPending && (
-          <BiweeklyReportRenderer report={report} />
+          <BiweeklyReportRenderer
+            report={report}
+            edits={edits}
+            onEdit={(key, val) => {
+              const updated = { ...editsRef.current, [key]: val };
+              editsRef.current = updated;
+              setEdits(updated);
+              if (reportSave.pendingPayloadRef.current) {
+                reportSave.save(
+                  reportSave.pendingPayloadRef.current.reportData,
+                  updated,
+                  reportSave.pendingPayloadRef.current.meta,
+                );
+              }
+            }}
+          />
         )}
       </div>
 

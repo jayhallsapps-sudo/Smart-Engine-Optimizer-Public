@@ -123,6 +123,53 @@ function parseCustomRowsFromEdits(edits: Record<string, string> | undefined, tab
   } catch { return []; }
 }
 
+function applyBiweeklyEditsToReport(report: any, edits?: Record<string, string>): any {
+  if (!edits || Object.keys(edits).length === 0) return report;
+  const sections = (report?.sections ?? []).map((s: any) => {
+    const updated = { ...s };
+    if (s.bullets?.length) {
+      updated.bullets = (s.bullets as string[]).map((b: string, bi: number) => {
+        const key = `${s.id}_bullet_${bi}`;
+        return edits[key] !== undefined && edits[key] !== "__DELETED__" ? edits[key] : b;
+      }).filter((_: string, bi: number) => edits[`${s.id}_bullet_${bi}`] !== "__DELETED__");
+      const extraItems: string[] = [];
+      let ei = s.bullets.length;
+      while (edits[`${s.id}_bullet_${ei}`] !== undefined) {
+        const v = edits[`${s.id}_bullet_${ei}`];
+        if (v !== "__DELETED__") extraItems.push(v);
+        ei++;
+      }
+      updated.bullets = [...updated.bullets, ...extraItems];
+    }
+    if (s.workLog?.length) {
+      updated.workLog = (s.workLog as any[]).map((row: any, ri: number) => {
+        const didKey = `${s.id}_worklog_${ri}_did`;
+        const nextKey = `${s.id}_worklog_${ri}_next`;
+        return {
+          ...row,
+          whatWeDid: edits[didKey] !== undefined ? edits[didKey] : row.whatWeDid,
+          whatsNext: edits[nextKey] !== undefined ? edits[nextKey] : row.whatsNext,
+        };
+      });
+      const crProgress = parseCustomRowsFromEdits(edits, `${s.id}_progress`);
+      if (crProgress.length > 0) {
+        updated.workLog = [
+          ...updated.workLog,
+          ...crProgress.map((cr: string[]) => ({
+            area: cr[0] ?? "",
+            whatWeDid: cr[1] ?? "",
+            whatsNext: cr[2] ?? "",
+            items: [],
+            nextItemsRich: [],
+          })),
+        ];
+      }
+    }
+    return updated;
+  });
+  return { ...report, sections };
+}
+
 function logExport(label: string, startMs: number, ok: boolean, err?: string) {
   const dur = Date.now() - startMs;
   if (ok) console.log(`[Export] ${label} — OK (${dur}ms)`);
@@ -2543,7 +2590,8 @@ export async function registerRoutes(
         ? templateStructure.slides : undefined;
       const themeTokens = activeTheme?.tokens ?? undefined;
 
-      const buffer = await generateBiweeklyBlockDocx(reportData, savedBlocks, themeTokens as any);
+      const patchedReport = applyBiweeklyEditsToReport(reportData, edits);
+      const buffer = await generateBiweeklyBlockDocx(patchedReport, savedBlocks, themeTokens as any);
       const clientName = (reportData.client_name ?? "report").toLowerCase().replace(/\s+/g, "_");
       const date = (reportData.date ?? "").replace(/[\s,]/g, "_");
       const filename = `${clientName}_biweekly_${date}.docx`;
@@ -2569,7 +2617,8 @@ export async function registerRoutes(
         ? templateStructure.slides : undefined;
       const themeTokens = activeTheme?.tokens ?? undefined;
 
-      const buffer = await generateBiweeklyBlockDocx(reportData, savedBlocks, themeTokens as any);
+      const patchedReport = applyBiweeklyEditsToReport(reportData, edits);
+      const buffer = await generateBiweeklyBlockDocx(patchedReport, savedBlocks, themeTokens as any);
       const clientName = reportData.client_name ?? "report";
       const date = reportData.date ?? "";
       const filename = `${clientName} Biweekly SEO ${date}`;

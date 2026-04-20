@@ -17,13 +17,61 @@ export interface AsanaWorkLog {
 
 const SECTION_TO_CATEGORY: Record<string, string> = {
   "SEO Content": "New Content",
+  "Content": "New Content",
+  "Blog": "New Content",
   "Technical SEO": "Technical SEO",
+  "Technical": "Technical SEO",
+  "Core Web Vitals": "Technical SEO",
+  "Site Health": "Technical SEO",
   "Local SEO": "Local SEO",
+  "Local": "Local SEO",
+  "GBP": "Local SEO",
+  "Google Business Profile": "Local SEO",
+  "GMB": "Local SEO",
+  "Citations": "Local SEO",
+  "Map Pack": "Local SEO",
+  "Google Maps": "Local SEO",
+  "On-Page SEO": "Optimization",
+  "Optimization": "Optimization",
+  "On-Page": "Optimization",
 };
 
 export function asanaSectionToCategory(sectionName: string): { category: string; italicize: boolean } {
   const known = SECTION_TO_CATEGORY[sectionName];
   if (known) return { category: known, italicize: false };
+
+  const lower = sectionName.toLowerCase();
+
+  if (
+    lower.includes("gbp") ||
+    lower.includes("google business") ||
+    lower.includes("google my business") ||
+    lower.includes("gmb") ||
+    lower.includes("local seo") ||
+    lower.includes("citation") ||
+    lower.includes("map pack") ||
+    lower.includes("maps") ||
+    lower.includes("local listing") ||
+    lower.includes("service area")
+  ) {
+    return { category: "Local SEO", italicize: true };
+  }
+
+  if (lower.includes("content") || lower.includes("blog") || lower.includes("article") || lower.includes("copywriting")) {
+    return { category: "New Content", italicize: true };
+  }
+
+  if (
+    lower.includes("on-page") ||
+    lower.includes("on page") ||
+    lower.includes("optimization") ||
+    lower.includes("meta") ||
+    lower.includes("title tag") ||
+    lower.includes("cro")
+  ) {
+    return { category: "Optimization", italicize: true };
+  }
+
   return { category: "Technical SEO", italicize: true };
 }
 
@@ -75,7 +123,6 @@ export async function fetchAsanaWorkLog(
       };
 
       if (t.completed) {
-        // Include if completed_at OR due_on falls within the reporting window
         const completedInWindow = t.completed_at && (() => {
           const completedAt = new Date(t.completed_at);
           return completedAt >= start && completedAt <= end;
@@ -88,9 +135,6 @@ export async function fetchAsanaWorkLog(
           completed.push(task);
         }
       } else if (t.due_on) {
-        // Upcoming: not completed, due date falls within the next 2 weeks after the window ends.
-        // Lower bound: start of the reporting window (don't surface overdue ancient tasks).
-        // Upper bound: endDate + 14 days (the "next 2 weeks" forward look).
         const due = new Date(t.due_on + "T00:00:00Z");
         const nextTwoWeeks = new Date(end);
         nextTwoWeeks.setDate(nextTwoWeeks.getDate() + 14);

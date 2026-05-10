@@ -35,7 +35,7 @@ export function ProtectedRoute({ children, adminOnly = false }: ProtectedRoutePr
         <div className="max-w-md text-center">
           <h2 className="text-lg font-semibold">Admin access required</h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            You're signed in as {user.name}, but this page is restricted to admins.
+            You're signed in as {user.fullName}, but this page is restricted to admins.
           </p>
         </div>
       </div>

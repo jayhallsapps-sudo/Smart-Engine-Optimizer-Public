@@ -28,7 +28,22 @@ import { parseNaturalQuery, getCommandDescription, getDateRangeLabel } from "./n
 import { fetchAirtableWorkLog, fetchAirtableTaskItems } from "./airtable";
 import { fetchAsanaOpenTasks } from "./asanaClient";
 import { seedDatabase } from "./seed";
-import { encrypt, decrypt, deriveInternalToken } from "./encryption";
+import { encrypt, decrypt } from "./encryption";
+import {
+  requireAuth,
+  requireAdmin,
+  findUserByEmail,
+  findUserById,
+  verifyPassword,
+  touchLastLogin,
+  toSafeUser,
+  createUser,
+  updateUser,
+  deleteUser,
+  listUsers,
+} from "./auth";
+import { loginSchema, insertUserSchema, updateUserSchema } from "@shared/schema";
+import { z } from "zod";
 import { buildGoogleAuthUrl, exchangeCodeForToken, callbackHtml, isGoogleConfigured } from "./googleAuth";
 import { testCredential } from "./connectionTest";
 import { insertSfReportSchema, insertCallTrackingReportSchema, amInputsSchema, migrateLegacyAmInputs, insertReportCommentSchema, updateReportCommentSchema } from "@shared/schema";
@@ -225,83 +240,66 @@ export async function registerRoutes(
 ): Promise<Server> {
   await seedDatabase();
 
-  const INTERNAL_TOKEN = deriveInternalToken();
+  // ─── Auth endpoints ────────────────────────────────────────────────────────
+  // login / logout / me are public (no requireAuth gate). Everything else under
+  // /api requires a logged-in session via the requireAuth middleware below.
+  // Admin-only writes additionally use requireAdmin (imported from ./auth).
 
-  app.get("/api/auth/bootstrap", (req: Request, res: Response) => {
-    const isDev = process.env.NODE_ENV !== "production";
-    if (!isDev) {
-      const origin  = (req.headers["origin"]  as string | undefined) ?? "";
-      const referer = (req.headers["referer"] as string | undefined) ?? "";
-      const host    = (req.headers["host"]    as string | undefined) ?? "";
-      const source  = origin || referer;
-      if (!source) {
-        return res.status(403).json({ message: "Forbidden: bootstrap requires a same-origin browser request" });
-      }
-      let sourceHost: string;
-      try {
-        sourceHost = new URL(source).host;
-      } catch {
-        return res.status(403).json({ message: "Forbidden: invalid Origin/Referer header" });
-      }
-      if (sourceHost !== host) {
-        return res.status(403).json({
-          message: `Forbidden: cross-origin bootstrap rejected (expected ${host}, got ${sourceHost})`,
-        });
-      }
+  app.post("/api/auth/login", async (req: Request, res: Response) => {
+    const parsed = loginSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Invalid email or password" });
     }
-    res.json({ token: INTERNAL_TOKEN });
+    const user = await findUserByEmail(parsed.data.email);
+    if (!user) {
+      return res.status(401).json({ message: "Invalid email or password" });
+    }
+    const ok = await verifyPassword(parsed.data.password, user.passwordHash);
+    if (!ok) {
+      return res.status(401).json({ message: "Invalid email or password" });
+    }
+    req.session.userId = user.id;
+    await touchLastLogin(user.id);
+    res.json({ user: toSafeUser(user) });
   });
 
+  app.post("/api/auth/logout", (req: Request, res: Response) => {
+    if (!req.session) return res.json({ ok: true });
+    req.session.destroy((err) => {
+      if (err) {
+        console.error("[auth] failed to destroy session", err);
+        return res.status(500).json({ message: "Failed to log out" });
+      }
+      res.clearCookie("smarteo.sid");
+      res.json({ ok: true });
+    });
+  });
+
+  app.get("/api/auth/me", async (req: Request, res: Response) => {
+    const userId = req.session?.userId;
+    if (!userId) return res.status(401).json({ message: "Not logged in" });
+    const user = await findUserById(userId);
+    if (!user) {
+      req.session?.destroy(() => {});
+      return res.status(401).json({ message: "Not logged in" });
+    }
+    res.json({ user: toSafeUser(user) });
+  });
+
+  // Apply requireAuth to all /api routes EXCEPT public ones.
   const AUTH_PUBLIC_PATHS = [
-    "/auth/bootstrap",
-    "/auth/admin-verify",
+    "/auth/login",
+    "/auth/logout",
+    "/auth/me",
     "/auth/google/start",
     "/auth/google/callback",
     "/auth/google/configured",
     "/template/header",
   ];
-  app.use("/api", (req: Request, res: Response, next: NextFunction) => {
-    if (AUTH_PUBLIC_PATHS.some(p => req.path === p || req.path.startsWith(p + "?"))) return next();
-    const provided = req.headers["x-internal-token"];
-    if (provided !== INTERNAL_TOKEN) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-    next();
+  app.use("/api", async (req: Request, res: Response, next: NextFunction) => {
+    if (AUTH_PUBLIC_PATHS.some((p) => req.path === p || req.path.startsWith(p + "?"))) return next();
+    return requireAuth(req, res, next);
   });
-
-  // ─── Admin auth ───────────────────────────────────────────────────────────────
-  // ADMIN_TOKEN lives only in the server environment.  The client calls
-  // POST /api/auth/admin-verify (public) to validate a code; on success the
-  // client stores the raw token in sessionStorage and sends it as X-Admin-Token
-  // on all subsequent admin write requests.
-
-  const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? "";
-  if (!ADMIN_TOKEN) {
-    console.warn("[SmartEO] ADMIN_TOKEN env var is not set — admin write endpoints are unprotected!");
-  }
-
-  app.post("/api/auth/admin-verify", (req: Request, res: Response) => {
-    const { token } = req.body as { token?: string };
-    if (!ADMIN_TOKEN) {
-      return res.status(503).json({ message: "Admin auth not configured (ADMIN_TOKEN missing)." });
-    }
-    if (!token || token.trim() !== ADMIN_TOKEN) {
-      return res.status(403).json({ ok: false, message: "Invalid admin code." });
-    }
-    return res.json({ ok: true });
-  });
-
-  /** Middleware: require a valid X-Admin-Token header for admin write routes. */
-  function requireAdmin(req: Request, res: Response, next: NextFunction) {
-    if (!ADMIN_TOKEN) {
-      return res.status(503).json({ message: "Admin auth not configured — ADMIN_TOKEN env var is missing." });
-    }
-    const provided = req.headers["x-admin-token"] as string | undefined;
-    if (!provided || provided !== ADMIN_TOKEN) {
-      return res.status(403).json({ message: "Admin access required. Please unlock admin features in the app." });
-    }
-    next();
-  }
 
   app.use("/api/reports", heavyLimiter);
 
@@ -3234,6 +3232,82 @@ export async function registerRoutes(
     }
 
     return res.json({ reply, suggestedRevision });
+  });
+
+  // ─── Admin: User management ────────────────────────────────────────────────
+
+  app.get("/api/admin/users", requireAdmin, async (_req, res) => {
+    const items = await listUsers();
+    res.json(items);
+  });
+
+  app.post("/api/admin/users", requireAdmin, async (req, res) => {
+    const parsed = insertUserSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Invalid user data", errors: parsed.error.flatten() });
+    }
+    const existing = await findUserByEmail(parsed.data.email);
+    if (existing) {
+      return res.status(409).json({ message: "A user with that email already exists" });
+    }
+    const created = await createUser({
+      email: parsed.data.email,
+      name: parsed.data.name,
+      role: parsed.data.role,
+      title: parsed.data.title ?? null,
+      password: parsed.data.password,
+    });
+    res.status(201).json(created);
+  });
+
+  app.patch("/api/admin/users/:id", requireAdmin, async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid user id" });
+
+    const parsed = updateUserSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Invalid update", errors: parsed.error.flatten() });
+    }
+
+    // If email is being changed, ensure no other user has it.
+    if (parsed.data.email) {
+      const existing = await findUserByEmail(parsed.data.email);
+      if (existing && existing.id !== id) {
+        return res.status(409).json({ message: "A user with that email already exists" });
+      }
+    }
+
+    // Don't let the last remaining admin demote themselves.
+    if (parsed.data.role === "user") {
+      const all = await listUsers();
+      const admins = all.filter((u) => u.role === "admin");
+      if (admins.length === 1 && admins[0].id === id) {
+        return res.status(400).json({ message: "Cannot demote the last remaining admin" });
+      }
+    }
+
+    const updated = await updateUser(id, parsed.data);
+    if (!updated) return res.status(404).json({ message: "User not found" });
+    res.json(updated);
+  });
+
+  app.delete("/api/admin/users/:id", requireAdmin, async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid user id" });
+
+    if (req.user && req.user.id === id) {
+      return res.status(400).json({ message: "You cannot delete your own account" });
+    }
+    // Don't let the last remaining admin be deleted.
+    const all = await listUsers();
+    const admins = all.filter((u) => u.role === "admin");
+    if (admins.length === 1 && admins[0].id === id) {
+      return res.status(400).json({ message: "Cannot delete the last remaining admin" });
+    }
+
+    const ok = await deleteUser(id);
+    if (!ok) return res.status(404).json({ message: "User not found" });
+    res.json({ ok: true });
   });
 
   // ─── Admin Guidance ────────────────────────────────────────────────────────

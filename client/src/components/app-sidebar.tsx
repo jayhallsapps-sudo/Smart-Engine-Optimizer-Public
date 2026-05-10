@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Zap, ExternalLink, Settings, LogOut, Shield, User, ChevronDown, Check,
-  BookOpen, Layers, Lock, Unlock, KeyRound, Eye, EyeOff, LayoutTemplate,
+  BookOpen, Layers, LayoutTemplate, Users,
 } from "lucide-react";
 import {
   Sidebar,
@@ -14,7 +14,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { ALL_ROLES, isAdminRole, type UserRole } from "@/lib/reportFamilyUtils";
+import { ALL_ROLES, type UserRole } from "@/lib/reportFamilyUtils";
 import { loadProfile, saveProfile, type UserProfile } from "@/lib/userProfile";
 import {
   DropdownMenu,
@@ -25,11 +25,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Link } from "wouter";
-import {
-  isAdminUnlocked,
-  verifyAndStoreAdminToken,
-  clearAdminToken,
-} from "@/lib/adminAuth";
+import { useCurrentUser, useIsAdmin, useLogout } from "@/hooks/useAuth";
 
 // ─── Role badge color ─────────────────────────────────────────────────────────
 
@@ -51,76 +47,6 @@ function clientWebsiteUrl(gscSiteUrl: string | null | undefined): string | null 
     return "https://" + gscSiteUrl.replace("sc-domain:", "");
   }
   return gscSiteUrl;
-}
-
-// ─── Admin unlock panel ───────────────────────────────────────────────────────
-
-interface AdminUnlockPanelProps {
-  onUnlocked: () => void;
-}
-
-function AdminUnlockPanel({ onUnlocked }: AdminUnlockPanelProps) {
-  const [code, setCode] = useState("");
-  const [showCode, setShowCode] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleUnlock() {
-    if (!code.trim()) return;
-    setLoading(true);
-    setError(null);
-    const ok = await verifyAndStoreAdminToken(code);
-    setLoading(false);
-    if (ok) {
-      setCode("");
-      onUnlocked();
-    } else {
-      setError("Invalid admin code. Try again.");
-    }
-  }
-
-  return (
-    <div className="mx-2 my-1 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-3 py-2.5 space-y-2">
-      <div className="flex items-center gap-1.5">
-        <Lock className="w-3 h-3 text-amber-600 dark:text-amber-400 shrink-0" />
-        <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-400">Admin features locked</span>
-      </div>
-      <p className="text-[9px] text-amber-600/80 dark:text-amber-500 leading-relaxed">
-        Enter the admin code to unlock governance tools for this session.
-      </p>
-      <div className="relative">
-        <input
-          type={showCode ? "text" : "password"}
-          value={code}
-          onChange={e => { setCode(e.target.value); setError(null); }}
-          onKeyDown={e => e.key === "Enter" && handleUnlock()}
-          placeholder="Admin code…"
-          className="w-full text-[10px] rounded border border-amber-300 dark:border-amber-700 px-2 py-1 pr-7 bg-white dark:bg-background focus:outline-none focus:ring-1 focus:ring-amber-400/50"
-          data-testid="input-admin-code"
-        />
-        <button
-          type="button"
-          onClick={() => setShowCode(s => !s)}
-          className="absolute right-1.5 top-1/2 -translate-y-1/2 text-amber-400 hover:text-amber-600"
-          tabIndex={-1}
-        >
-          {showCode ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-        </button>
-      </div>
-      {error && (
-        <p className="text-[9px] text-red-600 dark:text-red-400">{error}</p>
-      )}
-      <button
-        onClick={handleUnlock}
-        disabled={loading || !code.trim()}
-        className="w-full flex items-center justify-center gap-1 text-[10px] py-1 rounded bg-amber-600 hover:bg-amber-700 text-white transition-colors disabled:opacity-50"
-        data-testid="button-admin-unlock"
-      >
-        <KeyRound className="w-2.5 h-2.5" />
-        {loading ? "Verifying…" : "Unlock"}
-      </button>
-    </div>
-  );
 }
 
 // ─── User profile area ────────────────────────────────────────────────────────
@@ -333,26 +259,26 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
 
+  const { user: authUser } = useCurrentUser();
+  const isAdmin = useIsAdmin();
+  const logoutMutation = useLogout();
+
   const [profile, setProfile] = useState<UserProfile>(loadProfile);
-  // Track admin unlock state — re-checks sessionStorage after unlock/clear
-  const [adminUnlocked, setAdminUnlocked] = useState<boolean>(isAdminUnlocked);
 
   const handleProfileUpdate = useCallback((updated: UserProfile) => {
-    // If switching away from an admin-eligible role, immediately end the admin session
-    if (isAdminRole(profile.role) && !isAdminRole(updated.role) && adminUnlocked) {
-      clearAdminToken();
-      setAdminUnlocked(false);
-    }
     setProfile(updated);
     saveProfile(updated);
-  }, [profile.role, adminUnlocked]);
+  }, []);
 
-  function handleClearAdmin() {
-    clearAdminToken();
-    setAdminUnlocked(false);
+  function handleSignOut() {
+    logoutMutation.mutate(undefined, {
+      onSettled: () => {
+        if (typeof window !== "undefined") {
+          window.location.assign("/login");
+        }
+      },
+    });
   }
-
-  const showAdmin = isAdminRole(profile.role);
 
   return (
     <Sidebar collapsible="icon">
@@ -385,123 +311,123 @@ export function AppSidebar() {
         <SidebarSectionLabel label="My Clients" />
         <ClientList />
 
-        {showAdmin && (
+        {isAdmin && (
           <>
             <SidebarDivider />
             {!collapsed ? (
               <>
-                {/* Admin section header with lock status */}
-                <div className="px-3 pt-3 pb-1 flex items-center justify-between">
+                <div className="px-3 pt-3 pb-1">
                   <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Admin</p>
-                  {adminUnlocked ? (
-                    <span className="flex items-center gap-0.5 text-[9px] text-emerald-600 dark:text-emerald-400 font-medium">
-                      <Unlock className="w-2.5 h-2.5" /> Unlocked
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-0.5 text-[9px] text-amber-600 dark:text-amber-400 font-medium">
-                      <Lock className="w-2.5 h-2.5" /> Locked
-                    </span>
-                  )}
                 </div>
-
-                {/* Unlock panel when locked */}
-                {!adminUnlocked && (
-                  <AdminUnlockPanel onUnlocked={() => setAdminUnlocked(true)} />
-                )}
-
-                {/* Admin links when unlocked */}
-                {adminUnlocked && (
-                  <div className="px-1 py-1">
-                    <Link
-                      href="/admin"
-                      className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition-colors"
-                      data-testid="link-admin-governance"
-                    >
-                      <Layers className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                      <span className="text-xs text-foreground">Governance</span>
-                    </Link>
-                    <Link
-                      href="/admin/guidance"
-                      className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition-colors"
-                      data-testid="link-admin-guidance"
-                    >
-                      <BookOpen className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                      <span className="text-xs text-foreground">Guidance Library</span>
-                    </Link>
-                    <Link
-                      href="/admin/templates"
-                      className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition-colors"
-                      data-testid="link-admin-templates"
-                    >
-                      <LayoutTemplate className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                      <span className="text-xs text-foreground">Template Controls</span>
-                    </Link>
-                    <Link
-                      href="/clients"
-                      className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition-colors"
-                      data-testid="link-admin-clients"
-                    >
-                      <Shield className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                      <span className="text-xs text-foreground">Manage Clients</span>
-                    </Link>
-                    <Link
-                      href="/integrations"
-                      className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition-colors"
-                      data-testid="link-admin-integrations"
-                    >
-                      <Settings className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                      <span className="text-xs text-foreground">Integrations</span>
-                    </Link>
-                    <button
-                      onClick={handleClearAdmin}
-                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition-colors text-left"
-                      data-testid="button-admin-clear"
-                    >
-                      <LogOut className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                      <span className="text-xs text-muted-foreground">End admin session</span>
-                    </button>
-                  </div>
-                )}
+                <div className="px-1 py-1">
+                  <Link
+                    href="/admin"
+                    className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition-colors"
+                    data-testid="link-admin-governance"
+                  >
+                    <Layers className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    <span className="text-xs text-foreground">Governance</span>
+                  </Link>
+                  <Link
+                    href="/admin/guidance"
+                    className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition-colors"
+                    data-testid="link-admin-guidance"
+                  >
+                    <BookOpen className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    <span className="text-xs text-foreground">Guidance Library</span>
+                  </Link>
+                  <Link
+                    href="/admin/templates"
+                    className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition-colors"
+                    data-testid="link-admin-templates"
+                  >
+                    <LayoutTemplate className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    <span className="text-xs text-foreground">Template Controls</span>
+                  </Link>
+                  <Link
+                    href="/admin/users"
+                    className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition-colors"
+                    data-testid="link-admin-users"
+                  >
+                    <Users className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    <span className="text-xs text-foreground">Team Users</span>
+                  </Link>
+                  <Link
+                    href="/clients"
+                    className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition-colors"
+                    data-testid="link-admin-clients"
+                  >
+                    <Shield className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    <span className="text-xs text-foreground">Manage Clients</span>
+                  </Link>
+                  <Link
+                    href="/integrations"
+                    className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition-colors"
+                    data-testid="link-admin-integrations"
+                  >
+                    <Settings className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    <span className="text-xs text-foreground">Integrations</span>
+                  </Link>
+                </div>
               </>
             ) : (
-              /* Collapsed: show lock state icon only */
               <div className="flex flex-col items-center gap-1 py-1">
-                {adminUnlocked ? (
-                  <>
-                    <Link href="/admin" title="Governance">
-                      <button className="p-1.5 rounded hover:bg-muted transition-colors" data-testid="link-admin-governance-collapsed">
-                        <Layers className="w-4 h-4 text-muted-foreground" />
-                      </button>
-                    </Link>
-                    <Link href="/admin/guidance" title="Guidance Library">
-                      <button className="p-1.5 rounded hover:bg-muted transition-colors" data-testid="link-admin-guidance-collapsed">
-                        <BookOpen className="w-4 h-4 text-muted-foreground" />
-                      </button>
-                    </Link>
-                    <Link href="/admin/templates" title="Template Controls">
-                      <button className="p-1.5 rounded hover:bg-muted transition-colors" data-testid="link-admin-templates-collapsed">
-                        <LayoutTemplate className="w-4 h-4 text-muted-foreground" />
-                      </button>
-                    </Link>
-                    <Link href="/clients" title="Manage Clients">
-                      <button className="p-1.5 rounded hover:bg-muted transition-colors" data-testid="link-admin-clients-collapsed">
-                        <Shield className="w-4 h-4 text-muted-foreground" />
-                      </button>
-                    </Link>
-                  </>
-                ) : (
-                  <button
-                    title="Admin locked — expand sidebar to unlock"
-                    className="p-1.5 rounded hover:bg-muted transition-colors opacity-50 cursor-default"
-                    data-testid="button-admin-locked-collapsed"
-                  >
-                    <Lock className="w-4 h-4 text-amber-500" />
+                <Link href="/admin" title="Governance">
+                  <button className="p-1.5 rounded hover:bg-muted transition-colors" data-testid="link-admin-governance-collapsed">
+                    <Layers className="w-4 h-4 text-muted-foreground" />
                   </button>
-                )}
+                </Link>
+                <Link href="/admin/guidance" title="Guidance Library">
+                  <button className="p-1.5 rounded hover:bg-muted transition-colors" data-testid="link-admin-guidance-collapsed">
+                    <BookOpen className="w-4 h-4 text-muted-foreground" />
+                  </button>
+                </Link>
+                <Link href="/admin/templates" title="Template Controls">
+                  <button className="p-1.5 rounded hover:bg-muted transition-colors" data-testid="link-admin-templates-collapsed">
+                    <LayoutTemplate className="w-4 h-4 text-muted-foreground" />
+                  </button>
+                </Link>
+                <Link href="/admin/users" title="Team Users">
+                  <button className="p-1.5 rounded hover:bg-muted transition-colors" data-testid="link-admin-users-collapsed">
+                    <Users className="w-4 h-4 text-muted-foreground" />
+                  </button>
+                </Link>
+                <Link href="/clients" title="Manage Clients">
+                  <button className="p-1.5 rounded hover:bg-muted transition-colors" data-testid="link-admin-clients-collapsed">
+                    <Shield className="w-4 h-4 text-muted-foreground" />
+                  </button>
+                </Link>
               </div>
             )}
           </>
         )}
+
+        <SidebarDivider />
+
+        {!collapsed && authUser && (
+          <div className="px-3 py-2">
+            <p className="truncate text-[11px] font-medium text-foreground" data-testid="text-current-user">
+              {authUser.name}
+            </p>
+            <p className="truncate text-[10px] text-muted-foreground">
+              {authUser.email}
+            </p>
+          </div>
+        )}
+        <button
+          onClick={handleSignOut}
+          disabled={logoutMutation.isPending}
+          className="mx-1 flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition-colors text-left disabled:opacity-50 group-data-[collapsible=icon]:justify-center"
+          data-testid="button-sign-out"
+          title="Sign out"
+        >
+          <LogOut className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+          {!collapsed && (
+            <span className="text-xs text-muted-foreground">
+              {logoutMutation.isPending ? "Signing out…" : "Sign out"}
+            </span>
+          )}
+        </button>
       </SidebarContent>
 
       <SidebarFooter className="p-2">

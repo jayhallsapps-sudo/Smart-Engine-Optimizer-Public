@@ -1,7 +1,11 @@
 import express, { type Request, Response, NextFunction } from "express";
+import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { pool } from "./db";
+import { bootstrapAdminIfNeeded } from "./auth";
 
 const app = express();
 const httpServer = createServer(app);
@@ -22,6 +26,42 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false, limit: "50mb" }));
+
+// ─── Sessions ────────────────────────────────────────────────────────────────
+// Sessions are stored in Postgres via connect-pg-simple. The store auto-creates
+// its `session` table on first run when `createTableIfMissing: true`.
+const isProd = process.env.NODE_ENV === "production";
+const SESSION_SECRET = process.env.SESSION_SECRET;
+if (!SESSION_SECRET) {
+  if (isProd) {
+    throw new Error(
+      "SESSION_SECRET env var is required in production. Set it in Replit Secrets (use a long random string).",
+    );
+  }
+  console.warn(
+    "[session] SESSION_SECRET is not set — using a random ephemeral secret. " +
+      "Sessions will be invalidated on every restart. Set SESSION_SECRET in Replit Secrets to fix.",
+  );
+}
+
+const PgSession = connectPgSimple(session);
+app.set("trust proxy", 1); // Replit terminates TLS upstream
+app.use(
+  session({
+    store: new PgSession({ pool, createTableIfMissing: true, tableName: "session" }),
+    secret: SESSION_SECRET || `dev-${Math.random().toString(36).slice(2)}-${Date.now()}`,
+    resave: false,
+    saveUninitialized: false,
+    rolling: true,
+    cookie: {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: "lax",
+      maxAge: 1000 * 60 * 60 * 24 * 14, // 14 days
+    },
+    name: "smarteo.sid",
+  }),
+);
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -61,6 +101,7 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  await bootstrapAdminIfNeeded();
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {

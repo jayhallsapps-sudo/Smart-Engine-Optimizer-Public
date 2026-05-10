@@ -6,7 +6,9 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { ThemeProvider } from "@/components/theme-provider";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
 import NotFound from "@/pages/not-found";
+import LoginPage from "@/pages/login";
 import ReportsPage from "@/pages/reports";
 import ClientsPage from "@/pages/clients";
 import SetupPage from "@/pages/setup";
@@ -31,6 +33,7 @@ import AdminPage from "@/pages/admin";
 import AdminConfigPage from "@/pages/admin-config";
 import AdminGuidancePage from "@/pages/admin-guidance";
 import AdminTemplatesPage from "@/pages/admin-templates";
+import AdminUsersPage from "@/pages/admin-users";
 
 function RootRedirect() {
   const [, setLocation] = useLocation();
@@ -39,6 +42,15 @@ function RootRedirect() {
 }
 
 const PRINT_ROUTES = ["/biweekly/print", "/monthly/print", "/biweekly/pdf-render", "/qbr-prep-print", "/mid-strategy/pdf-render"];
+const AUTH_ROUTES = ["/login"];
+
+function adminOnly(Component: React.ComponentType) {
+  return () => (
+    <ProtectedRoute adminOnly>
+      <Component />
+    </ProtectedRoute>
+  );
+}
 
 function Router() {
   return (
@@ -60,10 +72,11 @@ function Router() {
       <Route path="/security" component={SecurityPage} />
       <Route path="/sample-reports" component={SampleReportsPage} />
       <Route path="/template-builder" component={TemplateBuilderPage} />
-      <Route path="/admin" component={AdminPage} />
-      <Route path="/admin/config" component={AdminConfigPage} />
-      <Route path="/admin/guidance" component={AdminGuidancePage} />
-      <Route path="/admin/templates" component={AdminTemplatesPage} />
+      <Route path="/admin" component={adminOnly(AdminPage)} />
+      <Route path="/admin/config" component={adminOnly(AdminConfigPage)} />
+      <Route path="/admin/guidance" component={adminOnly(AdminGuidancePage)} />
+      <Route path="/admin/templates" component={adminOnly(AdminTemplatesPage)} />
+      <Route path="/admin/users" component={adminOnly(AdminUsersPage)} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -77,6 +90,7 @@ const sidebarStyle = {
 export default function App() {
   const [location] = useLocation();
   const isPrintPage = PRINT_ROUTES.includes(location);
+  const isAuthPage = AUTH_ROUTES.includes(location);
 
   if (isPrintPage) {
     return (
@@ -92,31 +106,46 @@ export default function App() {
     );
   }
 
+  if (isAuthPage) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <Switch>
+            <Route path="/login" component={LoginPage} />
+          </Switch>
+          <Toaster />
+        </ThemeProvider>
+      </QueryClientProvider>
+    );
+  }
+
   return (
     <ThemeProvider>
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
-          <SidebarProvider defaultOpen={false} style={sidebarStyle as React.CSSProperties}>
-            <div className="flex h-screen w-full">
-              <AppSidebar />
-              <div className="flex flex-col flex-1 min-w-0">
-                <main className="flex-1 overflow-hidden flex flex-col">
-                  <Router />
-                </main>
-                <footer className="shrink-0 border-t px-4 py-2 text-center text-[11px] text-muted-foreground">
-                  Designed by{" "}
-                  <a
-                    href="https://syncds.ca"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline underline-offset-2 hover:text-foreground transition-colors"
-                  >
-                    Sync Digital Solutions
-                  </a>
-                </footer>
+          <ProtectedRoute>
+            <SidebarProvider defaultOpen={false} style={sidebarStyle as React.CSSProperties}>
+              <div className="flex h-screen w-full">
+                <AppSidebar />
+                <div className="flex flex-col flex-1 min-w-0">
+                  <main className="flex-1 overflow-hidden flex flex-col">
+                    <Router />
+                  </main>
+                  <footer className="shrink-0 border-t px-4 py-2 text-center text-[11px] text-muted-foreground">
+                    Designed by{" "}
+                    <a
+                      href="https://syncds.ca"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline underline-offset-2 hover:text-foreground transition-colors"
+                    >
+                      Sync Digital Solutions
+                    </a>
+                  </footer>
+                </div>
               </div>
-            </div>
-          </SidebarProvider>
+            </SidebarProvider>
+          </ProtectedRoute>
           <Toaster />
         </TooltipProvider>
       </QueryClientProvider>

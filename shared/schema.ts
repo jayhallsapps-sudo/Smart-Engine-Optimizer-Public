@@ -4,6 +4,56 @@ import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+// ─── Users (auth) ────────────────────────────────────────────────────────────
+
+export const USER_ROLES = ["admin", "user"] as const;
+export type UserRole = (typeof USER_ROLES)[number];
+
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  name: text("name").notNull(),
+  role: varchar("role", { length: 16 }).notNull().default("user"),
+  title: text("title"),
+  lastLoginAt: timestamp("last_login_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertUserSchema = createInsertSchema(users).omit({
+  id: true,
+  passwordHash: true,
+  createdAt: true,
+  updatedAt: true,
+  lastLoginAt: true,
+}).extend({
+  email: z.string().email().transform((s) => s.trim().toLowerCase()),
+  name: z.string().min(1, "Name is required"),
+  role: z.enum(USER_ROLES),
+  title: z.string().trim().optional().nullable(),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+});
+
+export const updateUserSchema = z.object({
+  email: z.string().email().transform((s) => s.trim().toLowerCase()).optional(),
+  name: z.string().min(1).optional(),
+  role: z.enum(USER_ROLES).optional(),
+  title: z.string().trim().optional().nullable(),
+  password: z.string().min(8).optional(),
+});
+
+export const loginSchema = z.object({
+  email: z.string().email().transform((s) => s.trim().toLowerCase()),
+  password: z.string().min(1, "Password is required"),
+});
+
+export type User = typeof users.$inferSelect;
+export type SafeUser = Omit<User, "passwordHash">;
+export type InsertUser = z.infer<typeof insertUserSchema>;
+export type UpdateUser = z.infer<typeof updateUserSchema>;
+export type LoginInput = z.infer<typeof loginSchema>;
+
 export const clients = pgTable("clients", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),

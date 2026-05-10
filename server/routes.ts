@@ -32,21 +32,7 @@ import { parseNaturalQuery, getCommandDescription, getDateRangeLabel } from "./n
 import { fetchAirtableWorkLog, fetchAirtableTaskItems } from "./airtable";
 import { fetchAsanaOpenTasks } from "./asanaClient";
 import { seedDatabase } from "./seed";
-import { encrypt, decrypt } from "./encryption";
-import {
-  requireAuth,
-  requireAdmin,
-  findUserByEmail,
-  findUserById,
-  verifyPassword,
-  touchLastLogin,
-  toSafeUser,
-  createUser,
-  updateUser,
-  deleteUser,
-  listUsers,
-} from "./auth";
-import { loginSchema, insertUserSchema, updateUserSchema } from "@shared/schema";
+import { encrypt, decrypt, deriveInternalToken } from "./encryption";
 import { z } from "zod";
 import { buildGoogleAuthUrl, exchangeCodeForToken, callbackHtml, isGoogleConfigured } from "./googleAuth";
 import { testCredential, testAsana } from "./connectionTest";
@@ -300,24 +286,6 @@ export async function registerRoutes(
   registerAuthRoutes(app);
 
   const INTERNAL_TOKEN = deriveInternalToken();
-
-  app.post("/api/auth/login", async (req: Request, res: Response) => {
-    const parsed = loginSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ message: "Invalid email or password" });
-    }
-    const user = await findUserByEmail(parsed.data.email);
-    if (!user) {
-      return res.status(401).json({ message: "Invalid email or password" });
-    }
-    const ok = await verifyPassword(parsed.data.password, user.passwordHash);
-    if (!ok) {
-      return res.status(401).json({ message: "Invalid email or password" });
-    }
-    req.session.userId = user.id;
-    await touchLastLogin(user.id);
-    res.json({ user: toSafeUser(user) });
-  });
 
   // AI provider status — polled by the footer indicator
   app.get("/api/ai/status", (_req, res) => {
@@ -4402,82 +4370,6 @@ export async function registerRoutes(
     }
 
     return res.json({ reply, suggestedRevision });
-  });
-
-  // ─── Admin: User management ────────────────────────────────────────────────
-
-  app.get("/api/admin/users", requireAdmin, async (_req, res) => {
-    const items = await listUsers();
-    res.json(items);
-  });
-
-  app.post("/api/admin/users", requireAdmin, async (req, res) => {
-    const parsed = insertUserSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ message: "Invalid user data", errors: parsed.error.flatten() });
-    }
-    const existing = await findUserByEmail(parsed.data.email);
-    if (existing) {
-      return res.status(409).json({ message: "A user with that email already exists" });
-    }
-    const created = await createUser({
-      email: parsed.data.email,
-      name: parsed.data.name,
-      role: parsed.data.role,
-      title: parsed.data.title ?? null,
-      password: parsed.data.password,
-    });
-    res.status(201).json(created);
-  });
-
-  app.patch("/api/admin/users/:id", requireAdmin, async (req, res) => {
-    const id = Number(req.params.id);
-    if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid user id" });
-
-    const parsed = updateUserSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ message: "Invalid update", errors: parsed.error.flatten() });
-    }
-
-    // If email is being changed, ensure no other user has it.
-    if (parsed.data.email) {
-      const existing = await findUserByEmail(parsed.data.email);
-      if (existing && existing.id !== id) {
-        return res.status(409).json({ message: "A user with that email already exists" });
-      }
-    }
-
-    // Don't let the last remaining admin demote themselves.
-    if (parsed.data.role === "user") {
-      const all = await listUsers();
-      const admins = all.filter((u) => u.role === "admin");
-      if (admins.length === 1 && admins[0].id === id) {
-        return res.status(400).json({ message: "Cannot demote the last remaining admin" });
-      }
-    }
-
-    const updated = await updateUser(id, parsed.data);
-    if (!updated) return res.status(404).json({ message: "User not found" });
-    res.json(updated);
-  });
-
-  app.delete("/api/admin/users/:id", requireAdmin, async (req, res) => {
-    const id = Number(req.params.id);
-    if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid user id" });
-
-    if (req.user && req.user.id === id) {
-      return res.status(400).json({ message: "You cannot delete your own account" });
-    }
-    // Don't let the last remaining admin be deleted.
-    const all = await listUsers();
-    const admins = all.filter((u) => u.role === "admin");
-    if (admins.length === 1 && admins[0].id === id) {
-      return res.status(400).json({ message: "Cannot delete the last remaining admin" });
-    }
-
-    const ok = await deleteUser(id);
-    if (!ok) return res.status(404).json({ message: "User not found" });
-    res.json({ ok: true });
   });
 
   // ─── Admin Guidance ────────────────────────────────────────────────────────

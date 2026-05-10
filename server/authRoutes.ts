@@ -43,6 +43,7 @@ import {
   setSessionCookie,
   clearSessionCookie,
 } from "./auth";
+import { deriveInternalToken } from "./encryption";
 import { eq, desc, and, ne } from "drizzle-orm";
 import { z } from "zod";
 
@@ -104,6 +105,15 @@ function buildLoginUrl(req: Request): string {
 // ─── Route registration ───────────────────────────────────────────────────────
 
 export function registerAuthRoutes(app: Express) {
+
+  // ── GET /api/auth/bootstrap ─────────────────────────────────────────────────
+  // Returns the internal API token derived from SESSION_SECRET. Public endpoint
+  // (no session required) — used by print pages and other server-to-server calls
+  // to attach X-Internal-Token to their requests.
+  app.get("/api/auth/bootstrap", (_req: Request, res: Response) => {
+    const token = deriveInternalToken();
+    return res.json({ token });
+  });
 
   // ── POST /api/auth/login ────────────────────────────────────────────────────
   app.post("/api/auth/login", async (req: Request, res: Response) => {

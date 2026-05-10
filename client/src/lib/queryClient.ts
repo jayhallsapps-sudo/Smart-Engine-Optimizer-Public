@@ -8,6 +8,28 @@ async function throwIfResNotOk(res: Response) {
 }
 
 /**
+ * Fetch the X-Internal-Token from the server bootstrap endpoint.
+ * Used by pages that make direct fetch() calls (print pages, file downloads)
+ * that need the token in their headers alongside the session cookie.
+ */
+let _cachedToken: string | null = null;
+export async function getAuthHeaders(): Promise<Record<string, string>> {
+  if (!_cachedToken) {
+    try {
+      const res = await fetch("/api/auth/bootstrap", { credentials: "include" });
+      if (res.ok) {
+        const data = await res.json();
+        _cachedToken = data.token as string;
+      }
+    } catch {
+      // Return empty if bootstrap is unavailable — session cookie still works
+      return {};
+    }
+  }
+  return _cachedToken ? { "X-Internal-Token": _cachedToken } : {};
+}
+
+/**
  * Auth model: the server uses an HTTP-only session cookie (`smarteo.sid`).
  * As long as we send `credentials: "include"` the cookie rides along
  * automatically — no client-side token plumbing needed.

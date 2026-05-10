@@ -104,6 +104,10 @@ app.use((req, res, next) => {
   next();
 });
 
+// ─── Session resolution ───────────────────────────────────────────────────────
+// attachSession reads the smarteo_session HTTP-only cookie, looks up the session
+// in the userSessions table, and populates req.currentUser + req.currentUserPerms.
+// This is the single source of truth for authentication — no express-session needed.
 app.use(attachSession);
 
 (async () => {

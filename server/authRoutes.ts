@@ -43,6 +43,7 @@ import {
   setSessionCookie,
   clearSessionCookie,
 } from "./auth";
+import { deriveInternalToken } from "./encryption";
 import { eq, desc, and, ne } from "drizzle-orm";
 import { z } from "zod";
 
@@ -104,6 +105,34 @@ function buildLoginUrl(req: Request): string {
 // ─── Route registration ───────────────────────────────────────────────────────
 
 export function registerAuthRoutes(app: Express) {
+
+  // ── GET /api/auth/bootstrap ─────────────────────────────────────────────────
+  // Returns the internal API token derived from SESSION_SECRET.
+  // In production, enforces a same-origin check (Origin or Referer must match
+  // the server host) so the token cannot be retrieved by cross-origin callers.
+  app.get("/api/auth/bootstrap", (req: Request, res: Response) => {
+    if (process.env.NODE_ENV === "production") {
+      const host = req.headers["host"];
+      const origin = req.headers["origin"] as string | undefined;
+      const referer = req.headers["referer"] as string | undefined;
+
+      const allowed = (header: string | undefined): boolean => {
+        if (!header) return false;
+        try {
+          return new URL(header).host === host;
+        } catch {
+          return false;
+        }
+      };
+
+      if (!allowed(origin) && !allowed(referer)) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+    }
+
+    const token = deriveInternalToken();
+    return res.json({ token });
+  });
 
   // ── POST /api/auth/login ────────────────────────────────────────────────────
   app.post("/api/auth/login", async (req: Request, res: Response) => {

@@ -369,6 +369,7 @@ export async function registerRoutes(
     return res.status(403).json({ message: "Admin access required." });
   }
 
+
   app.use("/api/reports", heavyLimiter);
 
   const LARGE_BODY_ROUTES = [

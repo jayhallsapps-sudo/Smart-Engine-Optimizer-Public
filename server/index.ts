@@ -1,13 +1,10 @@
 import express, { type Request, Response, NextFunction } from "express";
 import cookieParser from "cookie-parser";
-import session from "express-session";
-import connectPgSimple from "connect-pg-simple";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { attachSession } from "./auth";
 import { bootstrapAdminIfNeeded } from "./auth";
-import { pool } from "./db";
 import { startReportScheduler } from "./reportScheduler";
 
 const app = express();
@@ -31,41 +28,10 @@ app.use(
 app.use(express.urlencoded({ extended: false, limit: "50mb" }));
 app.use(cookieParser());
 
-// ─── Sessions ────────────────────────────────────────────────────────────────
-// Sessions are stored in Postgres via connect-pg-simple. The store auto-creates
-// its `session` table on first run when `createTableIfMissing: true`.
-const isProd = process.env.NODE_ENV === "production";
-const SESSION_SECRET = process.env.SESSION_SECRET;
-if (!SESSION_SECRET) {
-  if (isProd) {
-    throw new Error(
-      "SESSION_SECRET env var is required in production. Set it in Replit Secrets (use a long random string).",
-    );
-  }
-  console.warn(
-    "[session] SESSION_SECRET is not set — using a random ephemeral secret. " +
-      "Sessions will be invalidated on every restart. Set SESSION_SECRET in Replit Secrets to fix.",
-  );
-}
-
-const PgSession = connectPgSimple(session);
-app.set("trust proxy", 1); // Replit terminates TLS upstream
-app.use(
-  session({
-    store: new PgSession({ pool, createTableIfMissing: true, tableName: "session" }),
-    secret: SESSION_SECRET || `dev-${Math.random().toString(36).slice(2)}-${Date.now()}`,
-    resave: false,
-    saveUninitialized: false,
-    rolling: true,
-    cookie: {
-      httpOnly: true,
-      secure: isProd,
-      sameSite: "lax",
-      maxAge: 1000 * 60 * 60 * 24 * 14, // 14 days
-    },
-    name: "smarteo.sid",
-  }),
-);
+// ─── Trust proxy ──────────────────────────────────────────────────────────────
+// Replit terminates TLS upstream; trust the first proxy so secure cookies and
+// IP detection work correctly in production.
+app.set("trust proxy", 1);
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -104,6 +70,10 @@ app.use((req, res, next) => {
   next();
 });
 
+// ─── Session resolution ───────────────────────────────────────────────────────
+// attachSession reads the smarteo_session HTTP-only cookie, looks up the session
+// in the userSessions table, and populates req.currentUser + req.currentUserPerms.
+// This is the single source of truth for authentication — no express-session needed.
 app.use(attachSession);
 
 (async () => {

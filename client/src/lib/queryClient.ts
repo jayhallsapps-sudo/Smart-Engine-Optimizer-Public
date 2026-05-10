@@ -8,40 +8,64 @@ async function throwIfResNotOk(res: Response) {
 }
 
 /**
- * Fetch the X-Internal-Token from the server bootstrap endpoint.
- * Used by pages that make direct fetch() calls (print pages, file downloads)
- * that need the token in their headers alongside the session cookie.
+ * Internal token cache.
+ * The server derives this token from SESSION_SECRET (HMAC-SHA256) and validates
+ * it on every /api route via X-Internal-Token. The client fetches it once from
+ * the public /api/auth/bootstrap endpoint and caches it for the page lifetime.
  */
 let _cachedToken: string | null = null;
-export async function getAuthHeaders(): Promise<Record<string, string>> {
-  if (!_cachedToken) {
-    try {
-      const res = await fetch("/api/auth/bootstrap", { credentials: "include" });
-      if (res.ok) {
-        const data = await res.json();
-        _cachedToken = data.token as string;
-      }
-    } catch {
-      // Return empty if bootstrap is unavailable — session cookie still works
-      return {};
+let _tokenFetchPromise: Promise<string | null> | null = null;
+
+async function fetchInternalToken(): Promise<string | null> {
+  try {
+    const res = await fetch("/api/auth/bootstrap", { credentials: "include" });
+    if (res.ok) {
+      const data = await res.json();
+      return (data.token as string) ?? null;
     }
+  } catch {
+    // Silently ignore — requests without the token will be rejected by the server
   }
-  return _cachedToken ? { "X-Internal-Token": _cachedToken } : {};
+  return null;
 }
 
 /**
- * Auth model: the server uses an HTTP-only session cookie (`smarteo.sid`).
- * As long as we send `credentials: "include"` the cookie rides along
- * automatically — no client-side token plumbing needed.
+ * Returns { "X-Internal-Token": <token> } headers after fetching from
+ * /api/auth/bootstrap on first call. Subsequent calls use the cached value.
+ * Exported for use in direct fetch() calls (print pages, file downloads, SSE).
+ */
+export async function getAuthHeaders(): Promise<Record<string, string>> {
+  if (_cachedToken) return { "X-Internal-Token": _cachedToken };
+
+  // Deduplicate concurrent requests
+  if (!_tokenFetchPromise) {
+    _tokenFetchPromise = fetchInternalToken().then(t => {
+      _cachedToken = t;
+      _tokenFetchPromise = null;
+      return t;
+    });
+  }
+  const token = await _tokenFetchPromise;
+  return token ? { "X-Internal-Token": token } : {};
+}
+
+/**
+ * All SmartEO API calls go through this function. It injects:
+ * - X-Internal-Token header (validated by the server's auth middleware)
+ * - credentials: "include" so the smarteo_session cookie rides along
  */
 export async function apiRequest(
   method: string,
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
+  const authHeaders = await getAuthHeaders();
   const res = await fetch(url, {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
+    headers: {
+      ...(data ? { "Content-Type": "application/json" } : {}),
+      ...authHeaders,
+    },
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
   });
@@ -56,14 +80,14 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
+    const authHeaders = await getAuthHeaders();
     const res = await fetch(queryKey.join("/") as string, {
       credentials: "include",
+      headers: authHeaders,
     });
 
     if (res.status === 401) {
       if (unauthorizedBehavior === "returnNull") return null;
-      // Soft-redirect to login on session expiry. ProtectedRoute will keep
-      // unauthenticated visitors out of protected pages on first load.
       if (
         typeof window !== "undefined" &&
         !window.location.pathname.startsWith("/login")

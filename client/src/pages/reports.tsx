@@ -1499,9 +1499,7 @@ export default function ReportsPage() {
   const { data: sfReports = [] } = useQuery<SfReport[]>({
     queryKey: ["/api/clients", selectedClientId, "sf-reports"],
     queryFn: async () => {
-      const { getAuthHeaders } = await import("@/lib/queryClient");
-      const authHeaders = await getAuthHeaders();
-      const res = await fetch(`/api/clients/${selectedClientId}/sf-reports`, { headers: authHeaders });
+      const res = await fetch(`/api/clients/${selectedClientId}/sf-reports`, { credentials: "include" });
       if (!res.ok) return [];
       return res.json();
     },
@@ -1535,9 +1533,7 @@ export default function ReportsPage() {
 
   const deleteSfReportMutation = useMutation({
     mutationFn: async (id: number) => {
-      const { getAuthHeaders } = await import("@/lib/queryClient");
-      const authHeaders = await getAuthHeaders();
-      const res = await fetch(`/api/sf-reports/${id}`, { method: "DELETE", headers: authHeaders });
+      const res = await fetch(`/api/sf-reports/${id}`, { method: "DELETE", credentials: "include" });
       if (!res.ok) throw new Error("Failed to delete");
     },
     onSuccess: () => {
@@ -1586,11 +1582,10 @@ export default function ReportsPage() {
         data: rows,
         fileType: detectedFileType,
       };
-      const { getAuthHeaders } = await import("@/lib/queryClient");
-      const authHeaders = await getAuthHeaders();
       const res = await fetch(`/api/clients/${selectedClientId}/sf-reports`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders },
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error("Upload failed");

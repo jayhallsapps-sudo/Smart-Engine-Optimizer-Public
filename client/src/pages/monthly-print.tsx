@@ -12,11 +12,7 @@ export default function MonthlyPrint() {
   useEffect(() => {
     const cacheToken = new URLSearchParams(window.location.search).get("token");
     if (!cacheToken) { setError("No token in URL."); return; }
-    fetch("/api/auth/bootstrap")
-      .then(r => r.json())
-      .then(({ token: authToken }) =>
-        fetch(`/api/print-cache/${cacheToken}`, { headers: { "X-Internal-Token": authToken } })
-      )
+    fetch(`/api/print-cache/${cacheToken}`)
       .then(r => {
         if (!r.ok) throw new Error(`Server returned ${r.status}`);
         return r.json();

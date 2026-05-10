@@ -193,6 +193,8 @@ export function AppSidebar() {
             </div>
           </>
         )}
+
+        <SidebarDivider />
       </SidebarContent>
 
       <SidebarFooter className="p-2">

@@ -1,7 +1,8 @@
 import { db } from "./db";
-import { eq, lte, and } from "drizzle-orm";
+import { eq, lte, and, isNull, or, lt } from "drizzle-orm";
 import { reportSchedules, clients, type ReportSchedule } from "@shared/schema";
 import { generateBiweekly } from "./biweeklyGenerator";
+import { generateMonthly } from "./monthlyGenerator";
 import { createSavedReport } from "./savedReportService";
 import { postSlackMessage } from "./slack";
 
@@ -200,79 +201,119 @@ export function computeFirstNextRun(schedule: ReportSchedule): Date {
 // ─── Run a schedule ───────────────────────────────────────────────────────────
 
 async function runSchedule(schedule: ReportSchedule): Promise<void> {
-  const [client] = await db.select().from(clients).where(eq(clients.id, schedule.clientId));
-  if (!client) {
-    console.error(`[Scheduler] Client ${schedule.clientId} not found for schedule ${schedule.id}`);
+  // ── Fix 4: DB-level concurrency lock ──────────────────────────────────────
+  // Claim the lock — skip if another process is already running this schedule.
+  const result = await db
+    .update(reportSchedules)
+    .set({ runningStartedAt: new Date() })
+    .where(
+      and(
+        eq(reportSchedules.id, schedule.id),
+        or(
+          isNull(reportSchedules.runningStartedAt),
+          lt(reportSchedules.runningStartedAt, new Date(Date.now() - 10 * 60 * 1000))
+        )
+      )
+    )
+    .returning({ id: reportSchedules.id });
+
+  if (result.length === 0) {
+    console.log(`[Scheduler] Schedule ${schedule.id} is already running — skipping`);
     return;
   }
 
-  const today = new Date();
-  const endDate = toDateString(today);
-  const startDay = new Date(today);
-  startDay.setDate(startDay.getDate() - 14);
-  const startDate = toDateString(startDay);
-
-  const freq = schedule.frequency ?? "biweekly";
-  console.log(`[Scheduler] Generating ${freq} report for client "${client.name}" (schedule ${schedule.id})`);
-
-  let reportJson: any;
   try {
-    reportJson = await generateBiweekly({
-      clientId: client.id,
-      startDate,
-      endDate,
-      preparedBy: "SmartEO Scheduler",
-    });
-  } catch (err: any) {
-    console.error(`[Scheduler] Report generation failed for schedule ${schedule.id}:`, err.message);
-    throw err;
-  }
-
-  const dateStr = toDateString(today);
-  const reportName = `${client.name}-${dateStr}`;
-
-  const saved = await createSavedReport({
-    clientId: client.id,
-    reportType: "biweekly",
-    reportName,
-    analysisWindowStart: startDate,
-    analysisWindowEnd: endDate,
-    generatedOn: dateStr,
-    generatedReportJson: reportJson,
-    isScheduled: true,
-    scheduleId: schedule.id,
-  });
-
-  console.log(`[Scheduler] Saved report ${saved.id} — "${reportName}"`);
-
-  if (client.slackChannelId) {
-    const appUrl = process.env.REPLIT_DEV_DOMAIN
-      ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-      : process.env.APP_URL ?? "";
-    const reportLink = `${appUrl}/biweekly?client=${client.id}&load=${saved.id}`;
-    const message = `📋 ${freq.charAt(0).toUpperCase() + freq.slice(1)} report for ${client.name} is ready for review. ${reportLink}`;
-    try {
-      await postSlackMessage(client.slackChannelId, message);
-      console.log(`[Scheduler] Slack notification sent to ${client.slackChannelId} for client "${client.name}"`);
-    } catch (err: any) {
-      console.error(`[Scheduler] Slack notification failed for schedule ${schedule.id}:`, err.message);
+    const [client] = await db.select().from(clients).where(eq(clients.id, schedule.clientId));
+    if (!client) {
+      console.error(`[Scheduler] Client ${schedule.clientId} not found for schedule ${schedule.id}`);
+      return;
     }
-  } else {
-    console.log(`[Scheduler] No Slack channel configured for client "${client.name}" — skipping notification`);
+
+    const today = new Date();
+    const reportType = schedule.reportType ?? "biweekly";
+    console.log(`[Scheduler] Generating ${reportType} report for client "${client.name}" (schedule ${schedule.id})`);
+
+    let reportJson: any;
+
+    if (reportType === "biweekly") {
+      const endDate = toDateString(today);
+      const startDay = new Date(today);
+      startDay.setDate(startDay.getDate() - 14);
+      const startDate = toDateString(startDay);
+      reportJson = await generateBiweekly({
+        clientId: client.id,
+        startDate,
+        endDate,
+        preparedBy: "SmartEO Scheduler",
+      });
+    } else if (reportType === "monthly") {
+      reportJson = await generateMonthly({
+        clientId: client.id,
+        month: today.getMonth() + 1,
+        year: today.getFullYear(),
+        timezone: schedule.timezone,
+      });
+    } else {
+      console.error(`[Scheduler] Unknown reportType "${reportType}" for schedule ${schedule.id} — skipping`);
+      return;
+    }
+
+    const dateStr = toDateString(today);
+    const reportName = `${client.name}-${dateStr}`;
+
+    const endDate = toDateString(today);
+    const startDay = new Date(today);
+    startDay.setDate(startDay.getDate() - (reportType === "monthly" ? 30 : 14));
+    const startDate = toDateString(startDay);
+
+    const saved = await createSavedReport({
+      clientId: client.id,
+      reportType,
+      reportName,
+      analysisWindowStart: startDate,
+      analysisWindowEnd: endDate,
+      generatedOn: dateStr,
+      generatedReportJson: reportJson,
+      isScheduled: true,
+      scheduleId: schedule.id,
+    });
+
+    console.log(`[Scheduler] Saved report ${saved.id} — "${reportName}"`);
+
+    if (client.slackChannelId) {
+      const appUrl = process.env.REPLIT_DEV_DOMAIN
+        ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+        : process.env.APP_URL ?? "";
+      const pageMap: Record<string, string> = { biweekly: "biweekly", monthly: "monthly" };
+      const page = pageMap[reportType] ?? "biweekly";
+      const reportLink = `${appUrl}/${page}?client=${client.id}&load=${saved.id}`;
+      const label = reportType.charAt(0).toUpperCase() + reportType.slice(1);
+      const message = `📋 ${label} report for ${client.name} is ready for review. ${reportLink}`;
+      try {
+        await postSlackMessage(client.slackChannelId, message);
+        console.log(`[Scheduler] Slack notification sent to ${client.slackChannelId} for client "${client.name}"`);
+      } catch (err: any) {
+        console.error(`[Scheduler] Slack notification failed for schedule ${schedule.id}:`, err.message);
+      }
+    } else {
+      console.log(`[Scheduler] No Slack channel configured for client "${client.name}" — skipping notification`);
+    }
+
+    const nextRun = computeNextRun(schedule, new Date());
+
+    await db
+      .update(reportSchedules)
+      .set({ lastRunAt: new Date(), nextRunAt: nextRun, updatedAt: new Date() })
+      .where(eq(reportSchedules.id, schedule.id));
+
+    console.log(`[Scheduler] Schedule ${schedule.id} next run: ${nextRun.toISOString()}`);
+  } finally {
+    // Release the lock regardless of success or failure.
+    await db
+      .update(reportSchedules)
+      .set({ runningStartedAt: null })
+      .where(eq(reportSchedules.id, schedule.id));
   }
-
-  const nextRun = computeNextRun(schedule, new Date());
-
-  await db
-    .update(reportSchedules)
-    .set({
-      lastRunAt: new Date(),
-      nextRunAt: nextRun,
-      updatedAt: new Date(),
-    })
-    .where(eq(reportSchedules.id, schedule.id));
-
-  console.log(`[Scheduler] Schedule ${schedule.id} next run: ${nextRun.toISOString()}`);
 }
 
 export async function triggerScheduleNow(scheduleId: number): Promise<{ reportName: string }> {
@@ -289,13 +330,18 @@ export function startReportScheduler(): void {
 
   setInterval(async () => {
     try {
+      const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
       const due = await db
         .select()
         .from(reportSchedules)
         .where(
           and(
             eq(reportSchedules.enabled, true),
-            lte(reportSchedules.nextRunAt, new Date())
+            lte(reportSchedules.nextRunAt, new Date()),
+            or(
+              isNull(reportSchedules.runningStartedAt),
+              lt(reportSchedules.runningStartedAt, tenMinutesAgo)
+            )
           )
         );
 

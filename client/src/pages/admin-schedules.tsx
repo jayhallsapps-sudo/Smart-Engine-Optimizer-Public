@@ -124,8 +124,14 @@ function freqBadgeLabel(freq: string): string {
 
 // ─── Schedule Form State ──────────────────────────────────────────────────────
 
+const REPORT_TYPES = [
+  { value: "biweekly", label: "Bi-Weekly" },
+  { value: "monthly", label: "Monthly" },
+];
+
 const defaultForm = {
   clientId: "",
+  reportType: "biweekly",
   frequency: "biweekly",
   recurrenceType: "dayofweek", // dayofweek | dayofmonth | nthweekday
   recurrenceDay: "1",           // 0-6 weekday (Sun-Sat)
@@ -169,6 +175,20 @@ function ScheduleForm({
           </Select>
         </div>
       )}
+
+      <div className="space-y-1.5">
+        <Label className="text-xs">Report Type</Label>
+        <Select value={form.reportType} onValueChange={v => update("reportType", v)}>
+          <SelectTrigger className="h-8 text-xs" data-testid="select-report-type">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {REPORT_TYPES.map(rt => (
+              <SelectItem key={rt.value} value={rt.value} className="text-xs">{rt.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
       <div className="space-y-1.5">
         <Label className="text-xs">Frequency</Label>
@@ -300,7 +320,7 @@ function buildPayload(form: typeof defaultForm, clientId?: number) {
   const needsMonthly = form.frequency === "monthly" || form.frequency === "quarterly";
   return {
     clientId: clientId ?? Number(form.clientId),
-    reportType: "biweekly",
+    reportType: form.reportType,
     frequency: form.frequency,
     recurrenceDay: Number(form.recurrenceDay),
     recurrenceHour: Number(form.recurrenceHour),

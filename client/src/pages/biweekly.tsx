@@ -456,11 +456,10 @@ export default function BiweeklyPage() {
   async function downloadPdf() {
     if (!report) return;
     try {
-      const { getAuthHeaders } = await import("@/lib/queryClient");
-      const authHeaders = await getAuthHeaders();
       const res = await fetch("/api/reports/biweekly/preview-pdf", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders },
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ report, edits }),
       });
       if (!res.ok) throw new Error(await res.text());

@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { getAuthHeaders } from "@/lib/queryClient";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
@@ -277,10 +276,10 @@ export function CrawlAssetSelector({
           headers.forEach((h, i) => { row[h] = cells[i] ?? ""; });
           return row;
         });
-        const authHeaders = await getAuthHeaders();
         const res = await fetch("/api/crawl-assets", {
           method: "POST",
-          headers: { "Content-Type": "application/json", ...authHeaders },
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
           body: JSON.stringify({
             clientId,
             clientName: clientName ?? "Unknown",

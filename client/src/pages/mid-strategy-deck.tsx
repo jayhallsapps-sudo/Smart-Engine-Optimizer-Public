@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest, getAuthHeaders } from "@/lib/queryClient";
+import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -53,8 +53,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { Client, MidStrategyDeck, EvalBatch } from "@shared/schema";
 
 async function authedGet(url: string) {
-  const headers = await getAuthHeaders();
-  const r = await fetch(url, { headers });
+  const r = await fetch(url, { credentials: "include" });
   if (!r.ok) throw new Error(`${r.status}: ${r.statusText}`);
   return r.json();
 }

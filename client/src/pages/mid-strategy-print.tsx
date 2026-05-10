@@ -893,13 +893,9 @@ export default function MidStrategyPrint() {
   useEffect(() => {
     const token = new URLSearchParams(window.location.search).get("token");
     if (!token) { setError("No token."); return; }
-    fetch("/api/auth/bootstrap")
-      .then(res => res.json())
-      .then(({ token: authToken }) =>
-        fetch(`/api/print-cache/${token}`, { headers: { "X-Internal-Token": authToken } })
-          .then(res => { if (!res.ok) throw new Error(`${res.status}`); return res.json(); })
-          .then(d => setData(d))
-      )
+    fetch(`/api/print-cache/${token}`)
+      .then(res => { if (!res.ok) throw new Error(`${res.status}`); return res.json(); })
+      .then(d => setData(d))
       .catch(e => setError(e.message));
   }, []);
 

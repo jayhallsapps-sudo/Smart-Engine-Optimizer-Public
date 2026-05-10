@@ -1,0 +1,43 @@
+Audit and verify the per-user auth, scheduler, and Slack delivery features you built. Don't fix anything in this run — just report findings. Then run one end-to-end test.
+
+Part 1: Code audit (no changes)
+
+Read server/auth.ts, server/reportScheduler.ts, server/slack.ts, client/src/pages/admin-schedules.tsx, and shared/schema.ts. Tell me:
+
+Does the scheduler support both biweekly and monthly cadences, or only biweekly?
+Does it support per-client meeting cadences (e.g. "every second Tuesday for one client, every second Thursday for another")?
+How often does the scheduler tick — every minute? hourly?
+What happens if Slack posting fails — does it retry, or does the row stay as if it succeeded? Does it surface the failure anywhere a human will see it?
+Are there any race conditions if the scheduler fires while a previous run is still in flight?
+Does the requireAdmin middleware actually deny non-admins, and does the attachSession middleware reject expired sessions correctly?
+Is admin-schedules.tsx complete, or are there obvious gaps (missing edit, delete, list view, or missing fields the schema has but the UI doesn't expose)?
+Part 2: Add the rest of the team
+
+Create these users with random 12-char temp passwords and requiresPasswordChange: true so they're forced to set their own on first login:
+
+Email	Role	Title	Name
+olivia@webserv.io	admin	SEO Director	Olivia
+brennan@webserv.io	user	AM	Brennan
+carmen@webserv.io	user	AM	Carmen
+cbannister@webserv.io	user	AM	Chris
+jay@webserv.io	user	AM	Jay
+Print each temp password so I can share with the team out-of-band.
+
+Part 3: End-to-end scheduler test
+
+Pick one real client (suggest Horseshoe Ridge if it exists, otherwise the first client). Confirm it has slackChannelId set. If not, ask me for a channel ID and set it.
+Create a reportSchedules row for that client with nextRunAt = 2 minutes from now, biweekly cadence. Use whatever cadence fields the schema actually defines.
+Wait for the scheduler to fire. Show me:
+Server logs from the scheduler tick
+The new savedReports row that got created
+Confirmation that the Slack message landed in the channel (or the exact error if it didn't)
+That nextRunAt advanced correctly to the next cadence date
+After confirming, delete the test schedule row so it doesn't fire again.
+Part 4: Final report
+
+Give me a punch list:
+
+✅ what works end-to-end
+⚠️ what works but is risky/incomplete
+❌ what's broken or missing
+No code changes in this task. We'll triage the punch list after I see it.

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { apiRequest, queryClient, getAuthHeaders } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -441,8 +441,7 @@ export default function SetupPage() {
   const testNotionPage = async (pageId: string) => {
     setNotionTestStates(s => ({ ...s, [pageId]: { loading: true } }));
     try {
-      const headers = await getAuthHeaders();
-      const res = await fetch(`/api/notion-pages/${pageId}/test`, { headers });
+        const res = await fetch(`/api/notion-pages/${pageId}/test`, { credentials: "include" });
       const data = await res.json();
       setNotionTestStates(s => ({ ...s, [pageId]: { loading: false, ...data } }));
       if (data.childPageList?.length > 0) {
@@ -456,8 +455,7 @@ export default function SetupPage() {
   const testQssbConnection = async () => {
     setQssbTesting(true);
     try {
-      const headers = await getAuthHeaders();
-      const res = await fetch("/api/qssb/test", { headers });
+      const res = await fetch("/api/qssb/test", { credentials: "include" });
       const data = await res.json();
       if (res.ok && data.success) {
         toast({ title: `QSSB connected: ${data.insights} insights, ${data.opportunities} opportunities` });
@@ -578,8 +576,7 @@ export default function SetupPage() {
   const handleTestAccount = async (id: number) => {
     setTestStates(prev => ({ ...prev, [id]: { testing: true } }));
     try {
-      const headers = await getAuthHeaders();
-      const res = await fetch(`/api/credentials/${id}/test`, { method: "POST", headers });
+      const res = await fetch(`/api/credentials/${id}/test`, { method: "POST", credentials: "include" });
       const data = await res.json() as { success: boolean; message: string };
       setTestStates(prev => ({ ...prev, [id]: { testing: false, success: data.success, message: data.message } }));
     } catch {

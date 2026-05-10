@@ -253,6 +253,7 @@ export const reportSchedules = pgTable("report_schedules", {
   enabled: boolean("enabled").notNull().default(true),
   lastRunAt: timestamp("last_run_at"),
   nextRunAt: timestamp("next_run_at"),
+  runningStartedAt: timestamp("running_started_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (t) => [
@@ -265,6 +266,7 @@ export const insertReportScheduleSchema = createInsertSchema(reportSchedules).om
   createdAt: true,
   updatedAt: true,
   lastRunAt: true,
+  runningStartedAt: true,
 });
 
 export type ReportSchedule = typeof reportSchedules.$inferSelect;

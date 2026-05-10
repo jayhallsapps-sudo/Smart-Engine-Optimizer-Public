@@ -187,3 +187,10 @@ export function setSessionCookie(res: Response, sessionId: string) {
 export function clearSessionCookie(res: Response) {
   res.clearCookie(SESSION_COOKIE, { path: "/" });
 }
+
+/** Bootstrap admin if users table is empty. Idempotent. */
+export async function bootstrapAdminIfNeeded(): Promise<void> {
+  const existing = await db.select({ id: users.id }).from(users).limit(1);
+  if (existing.length > 0) return;
+  console.log("[auth] Users table is empty. Use POST /api/admin/users to create the first admin.");
+}

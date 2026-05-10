@@ -8,6 +8,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider, useAuth } from "@/contexts/auth-context";
 import NotFound from "@/pages/not-found";
+import LoginPage from "@/pages/login";
 import ReportsPage from "@/pages/reports";
 import ClientsPage from "@/pages/clients";
 import SetupPage from "@/pages/setup";
@@ -44,7 +45,6 @@ import TemplatesPage from "@/pages/templates";
 import TemplateEditorPage from "@/pages/template-editor";
 import ThemePage from "@/pages/theme";
 import DesignSystemPage from "@/pages/design-system";
-import LoginPage from "@/pages/login";
 import ChangePasswordPage from "@/pages/change-password";
 
 const PRINT_ROUTES = ["/biweekly/print", "/monthly/print", "/biweekly/pdf-render", "/qbr-prep-print", "/mid-strategy/pdf-render"];

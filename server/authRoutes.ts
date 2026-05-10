@@ -107,10 +107,29 @@ function buildLoginUrl(req: Request): string {
 export function registerAuthRoutes(app: Express) {
 
   // ── GET /api/auth/bootstrap ─────────────────────────────────────────────────
-  // Returns the internal API token derived from SESSION_SECRET. Public endpoint
-  // (no session required) — used by print pages and other server-to-server calls
-  // to attach X-Internal-Token to their requests.
-  app.get("/api/auth/bootstrap", (_req: Request, res: Response) => {
+  // Returns the internal API token derived from SESSION_SECRET.
+  // In production, enforces a same-origin check (Origin or Referer must match
+  // the server host) so the token cannot be retrieved by cross-origin callers.
+  app.get("/api/auth/bootstrap", (req: Request, res: Response) => {
+    if (process.env.NODE_ENV === "production") {
+      const host = req.headers["host"];
+      const origin = req.headers["origin"] as string | undefined;
+      const referer = req.headers["referer"] as string | undefined;
+
+      const allowed = (header: string | undefined): boolean => {
+        if (!header) return false;
+        try {
+          return new URL(header).host === host;
+        } catch {
+          return false;
+        }
+      };
+
+      if (!allowed(origin) && !allowed(referer)) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+    }
+
     const token = deriveInternalToken();
     return res.json({ token });
   });

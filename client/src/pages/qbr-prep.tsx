@@ -420,11 +420,10 @@ export default function QbrPrepPage() {
     if (!reportData) return;
     setDocxDownloading(true);
     try {
-      const { getAuthHeaders } = await import("@/lib/queryClient");
-      const authHeaders = await getAuthHeaders();
       const res = await fetch("/api/reports/qbr-prep/docx-v2", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders },
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ reportData, edits, hiddenSections, hiddenTables }),
       });
       if (!res.ok) {
@@ -479,11 +478,10 @@ export default function QbrPrepPage() {
     if (!reportData) return;
     setPdfDownloading(true);
     try {
-      const { getAuthHeaders } = await import("@/lib/queryClient");
-      const authHeaders = await getAuthHeaders();
       const res = await fetch("/api/reports/qbr-prep/preview-pdf", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders },
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ reportData, edits, hiddenSections, hiddenTables }),
       });
       if (!res.ok) throw new Error("PDF generation failed");

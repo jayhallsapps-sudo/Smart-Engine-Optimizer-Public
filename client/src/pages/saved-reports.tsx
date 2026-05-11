@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -53,10 +54,13 @@ function loadHref(report: SavedReport): string {
   }
 }
 
+const USER_ALLOWED_TYPES = new Set(["biweekly", "monthly"]);
+
 export default function SavedReportsPage() {
   const [clientFilter, setClientFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const { toast } = useToast();
+  const { isAdmin } = useAuth();
 
   const { data: clients = [] } = useQuery<Client[]>({ queryKey: ["/api/clients"] });
 
@@ -80,8 +84,16 @@ export default function SavedReportsPage() {
     onError: () => toast({ title: "Could not delete report", variant: "destructive" }),
   });
 
+  const visibleTypeKeys = isAdmin()
+    ? Object.keys(TYPE_LABELS)
+    : Object.keys(TYPE_LABELS).filter(k => USER_ALLOWED_TYPES.has(k));
+
   const filtered = reports
-    .filter(r => typeFilter === "all" || normalizeType(r.reportType) === typeFilter)
+    .filter(r => {
+      const t = normalizeType(r.reportType);
+      if (!isAdmin() && !USER_ALLOWED_TYPES.has(t)) return false;
+      return typeFilter === "all" || t === typeFilter;
+    })
     .slice()
     .sort((a, b) => {
       const ta = new Date(a.lastSavedAt ?? a.createdAt ?? 0).getTime();
@@ -132,8 +144,8 @@ export default function SavedReportsPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All types</SelectItem>
-              {Object.entries(TYPE_LABELS).map(([k, v]) => (
-                <SelectItem key={k} value={k}>{v}</SelectItem>
+              {visibleTypeKeys.map(k => (
+                <SelectItem key={k} value={k}>{TYPE_LABELS[k]}</SelectItem>
               ))}
             </SelectContent>
           </Select>

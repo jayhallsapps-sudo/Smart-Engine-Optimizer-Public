@@ -56,6 +56,7 @@ import {
   familyColor,
   type ReportTypeDefinition,
 } from "@/lib/reportFamilyUtils";
+import { useAuth } from "@/contexts/auth-context";
 import {
   DEFAULT_STRATEGY_AREAS,
   getStrategyAreas,
@@ -392,7 +393,9 @@ function StepSelectType({
   selected: string | null;
   onSelect: (id: string) => void;
 }) {
-  const allTypes = listReportTypes();
+  const { isAdmin } = useAuth();
+  const allTypesRaw = listReportTypes();
+  const allTypes = isAdmin() ? allTypesRaw : allTypesRaw.filter(rt => rt.id === "biweekly" || rt.id === "monthly");
   const { getNote: getAdminNote, getValue: getConfigValue } = useConfigOverrides("reportType");
 
   return (

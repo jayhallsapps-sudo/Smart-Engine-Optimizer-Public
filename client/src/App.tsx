@@ -7,7 +7,10 @@ import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider, useAuth } from "@/contexts/auth-context";
+import { ReportAccessDenied } from "@/components/reports/ReportAccessDenied";
+import type { ReportSubKey } from "@shared/schema";
 import NotFound from "@/pages/not-found";
+import LoginPage from "@/pages/login";
 import ReportsPage from "@/pages/reports";
 import ClientsPage from "@/pages/clients";
 import SetupPage from "@/pages/setup";
@@ -44,11 +47,40 @@ import TemplatesPage from "@/pages/templates";
 import TemplateEditorPage from "@/pages/template-editor";
 import ThemePage from "@/pages/theme";
 import DesignSystemPage from "@/pages/design-system";
-import LoginPage from "@/pages/login";
 import ChangePasswordPage from "@/pages/change-password";
 
 const PRINT_ROUTES = ["/biweekly/print", "/monthly/print", "/biweekly/pdf-render", "/qbr-prep-print", "/mid-strategy/pdf-render"];
 const PUBLIC_ROUTES = ["/login", "/change-password"];
+
+// Wrap a report page in a sub-key access check. Renders ReportAccessDenied if the
+// signed-in user lacks the matching reportSubKey, otherwise renders the page.
+// Admins always pass (handled inside useAuth().hasReportSubKey).
+function withReportSubKey(
+  Component: React.ComponentType<any>,
+  subKey: ReportSubKey,
+  label: string,
+): React.ComponentType<any> {
+  const Gated = (props: any) => {
+    const { hasReportSubKey } = useAuth();
+    if (!hasReportSubKey(subKey)) {
+      return <ReportAccessDenied reportLabel={label} />;
+    }
+    return <Component {...props} />;
+  };
+  Gated.displayName = `Gated(${Component.displayName ?? Component.name ?? "Report"})`;
+  return Gated;
+}
+
+const GatedBiweeklyPage = withReportSubKey(BiweeklyPage, "biweekly", "Bi-Weekly Report");
+const GatedMonthlyPage = withReportSubKey(MonthlyPage, "monthly", "Monthly Report");
+const GatedQbrFullPage = withReportSubKey(QbrFullPage, "qbr_full", "QBR Full Report");
+const GatedQbrPrepPage = withReportSubKey(QbrPrepPage, "qbr_prep", "QBR Prep Report");
+const GatedMidStrategyPage = withReportSubKey(MidStrategyPage, "mid_strategy", "Mid-Strategy Report");
+const GatedQuarterlyContentRoadmapPage = withReportSubKey(
+  QuarterlyContentRoadmapPage,
+  "quarterly_content_roadmap",
+  "Quarterly Content Roadmap",
+);
 
 function AiStatusIndicator() {
   const { data } = useQuery<{ provider: string | null; label: string }>({
@@ -84,11 +116,11 @@ function Router() {
       <Route path="/prepare" component={PrepareReportPage} />
       <Route path="/workflow" component={WorkflowPage} />
       <Route path="/dashboard" component={DashboardPage} />
-      <Route path="/biweekly" component={BiweeklyPage} />
-      <Route path="/monthly" component={MonthlyPage} />
-      <Route path="/qbr" component={QbrFullPage} />
-      <Route path="/mid-strategy" component={MidStrategyPage} />
-      <Route path="/qbr-prep" component={QbrPrepPage} />
+      <Route path="/biweekly" component={GatedBiweeklyPage} />
+      <Route path="/monthly" component={GatedMonthlyPage} />
+      <Route path="/qbr" component={GatedQbrFullPage} />
+      <Route path="/mid-strategy" component={GatedMidStrategyPage} />
+      <Route path="/qbr-prep" component={GatedQbrPrepPage} />
       <Route path="/reports" component={ReportsPage} />
       <Route path="/clients" component={ClientsPage} />
       <Route path="/integrations" component={SetupPage} />
@@ -107,7 +139,7 @@ function Router() {
       <Route path="/discoverability" component={DiscoverabilityPage} />
       <Route path="/eval-sheets" component={EvalSheetsPage} />
       <Route path="/mid-strategy-deck" component={MidStrategyDeckPage} />
-      <Route path="/quarterly-content-roadmap" component={QuarterlyContentRoadmapPage} />
+      <Route path="/quarterly-content-roadmap" component={GatedQuarterlyContentRoadmapPage} />
       <Route path="/templates" component={TemplatesPage} />
       <Route path="/templates/:templateId" component={TemplateEditorPage} />
       <Route path="/theme" component={ThemePage} />

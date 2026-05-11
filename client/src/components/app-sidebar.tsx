@@ -3,6 +3,7 @@ import smarteoIconPath from "@assets/SmartEO-Icon_1773606395230.png";
 import {
   Settings, LogOut, Shield, User, BookOpen, Layers,
   LayoutTemplate, Users, CalendarClock, Palette,
+  FileText, History, BarChart2, Plug,
 } from "lucide-react";
 import {
   Sidebar,
@@ -173,6 +174,15 @@ export function AppSidebar() {
         <UserProfileBlock />
 
         <SidebarDivider />
+        <SidebarSectionLabel label="My Work" />
+        <div className={collapsed ? "flex flex-col items-center gap-1 py-1" : "px-1 py-1 space-y-0.5"}>
+          <NavLink href="/workflow" icon={FileText} label="Prepare a Report" testId="link-prepare-report" />
+          <NavLink href="/saved-reports" icon={History} label="Past Reports" testId="link-past-reports" />
+          <NavLink href="/dashboard" icon={BarChart2} label="Client Info" testId="link-client-info" />
+          <NavLink href="/integrations" icon={Plug} label="Client Integrations" testId="link-client-integrations" />
+        </div>
+
+        <SidebarDivider />
         <SidebarSectionLabel label="Core Modules" />
         <div className={collapsed ? "flex flex-col items-center gap-1 py-1" : "px-1 py-1 space-y-0.5"}>
           <NavLink href="/design-system" icon={Palette} label="Design System" testId="link-design-system" />
@@ -193,6 +203,8 @@ export function AppSidebar() {
             </div>
           </>
         )}
+
+        <SidebarDivider />
       </SidebarContent>
 
       <SidebarFooter className="p-2">

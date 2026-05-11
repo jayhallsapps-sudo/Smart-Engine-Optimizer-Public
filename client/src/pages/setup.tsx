@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { apiRequest, queryClient, getAuthHeaders } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,15 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useAuth } from "@/contexts/auth-context";
+import type { Client, SavedReport } from "@shared/schema";
 import {
   Dialog,
   DialogContent,
@@ -339,6 +348,14 @@ function ServiceSection({
   );
 }
 
+function validateSlackChannelId(val: string): string | null {
+  if (!val) return null;
+  if (!/^C[A-Z0-9]{9,11}$/.test(val)) {
+    return "Must start with C followed by 9–11 uppercase letters/digits (e.g. C07QM5N6248)";
+  }
+  return null;
+}
+
 export default function SetupPage() {
   const [connectDialogOpen, setConnectDialogOpen] = useState(false);
   const [activeService, setActiveService] = useState<ServiceConfig | null>(null);
@@ -356,11 +373,58 @@ export default function SetupPage() {
   const [notionExpandedPages, setNotionExpandedPages] = useState<Record<string, boolean>>({});
   const [notionRenamingId, setNotionRenamingId] = useState<string | null>(null);
   const [notionRenameValue, setNotionRenameValue] = useState("");
+  const [selectedClientId, setSelectedClientId] = useState<string>("");
+  const [slackInput, setSlackInput] = useState("");
+  const [slackError, setSlackError] = useState<string | null>(null);
   const { toast } = useToast();
 
   const { data: googleStatus } = useQuery<{ configured: boolean }>({
     queryKey: ["/api/auth/google/configured"],
   });
+
+  const { data: clients = [] } = useQuery<Client[]>({ queryKey: ["/api/clients"] });
+
+  const selectedClient = clients.find(c => String(c.id) === selectedClientId) ?? null;
+
+  const { data: recentScheduled = [] } = useQuery<SavedReport[]>({
+    queryKey: ["/api/saved-reports", selectedClientId, "scheduled"],
+    queryFn: async () => {
+      if (!selectedClientId) return [];
+      const res = await fetch(`/api/saved-reports?clientId=${selectedClientId}`, { credentials: "include" });
+      if (!res.ok) return [];
+      const all: SavedReport[] = await res.json();
+      const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+      return all.filter(r => r.isScheduled && new Date(r.lastSavedAt ?? r.createdAt ?? 0).getTime() > cutoff);
+    },
+    enabled: !!selectedClientId,
+    staleTime: 60_000,
+  });
+
+  useEffect(() => {
+    if (selectedClient) {
+      setSlackInput(selectedClient.slackChannelId ?? "");
+      setSlackError(null);
+    }
+  }, [selectedClientId, selectedClient?.slackChannelId]);
+
+  const updateClientMut = useMutation({
+    mutationFn: async ({ id, slackChannelId }: { id: number; slackChannelId: string }) => {
+      await apiRequest("PATCH", `/api/clients/${id}`, { slackChannelId });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
+      toast({ title: "Slack Channel ID saved" });
+    },
+    onError: () => toast({ title: "Failed to save Slack Channel ID", variant: "destructive" }),
+  });
+
+  function handleSlackSave() {
+    const err = validateSlackChannelId(slackInput);
+    if (err) { setSlackError(err); return; }
+    if (!selectedClientId) return;
+    setSlackError(null);
+    updateClientMut.mutate({ id: Number(selectedClientId), slackChannelId: slackInput.trim() });
+  }
 
   const { data: appSettings = {} } = useQuery<Record<string, string>>({
     queryKey: ["/api/settings"],
@@ -441,8 +505,7 @@ export default function SetupPage() {
   const testNotionPage = async (pageId: string) => {
     setNotionTestStates(s => ({ ...s, [pageId]: { loading: true } }));
     try {
-      const headers = await getAuthHeaders();
-      const res = await fetch(`/api/notion-pages/${pageId}/test`, { headers });
+        const res = await fetch(`/api/notion-pages/${pageId}/test`, { credentials: "include" });
       const data = await res.json();
       setNotionTestStates(s => ({ ...s, [pageId]: { loading: false, ...data } }));
       if (data.childPageList?.length > 0) {
@@ -456,8 +519,7 @@ export default function SetupPage() {
   const testQssbConnection = async () => {
     setQssbTesting(true);
     try {
-      const headers = await getAuthHeaders();
-      const res = await fetch("/api/qssb/test", { headers });
+      const res = await fetch("/api/qssb/test", { credentials: "include" });
       const data = await res.json();
       if (res.ok && data.success) {
         toast({ title: `QSSB connected: ${data.insights} insights, ${data.opportunities} opportunities` });
@@ -578,8 +640,7 @@ export default function SetupPage() {
   const handleTestAccount = async (id: number) => {
     setTestStates(prev => ({ ...prev, [id]: { testing: true } }));
     try {
-      const headers = await getAuthHeaders();
-      const res = await fetch(`/api/credentials/${id}/test`, { method: "POST", headers });
+      const res = await fetch(`/api/credentials/${id}/test`, { method: "POST", credentials: "include" });
       const data = await res.json() as { success: boolean; message: string };
       setTestStates(prev => ({ ...prev, [id]: { testing: false, success: data.success, message: data.message } }));
     } catch {
@@ -660,6 +721,67 @@ export default function SetupPage() {
         animate={{ opacity: 1, y: 0 }}
         className="space-y-4"
       >
+        {/* ── Client Slack Channel ID ─────────────────────────────────── */}
+        <Card className="p-5">
+          <div className="mb-3 flex items-center gap-2">
+            <h2 className="text-sm font-semibold">Client Slack Channel</h2>
+          </div>
+          <div className="space-y-3">
+            <div>
+              <Label className="text-xs mb-1 block">Select client</Label>
+              <Select value={selectedClientId} onValueChange={setSelectedClientId}>
+                <SelectTrigger className="h-8 text-sm" data-testid="select-slack-client">
+                  <SelectValue placeholder="Choose a client…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {clients.map(c => (
+                    <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {selectedClientId && (
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <Label className="text-xs">Slack channel ID</Label>
+                  {recentScheduled.length > 0 && (
+                    <span className="flex items-center gap-1 text-[11px] text-green-600 dark:text-green-400 font-medium" title="A scheduled report was posted to this channel in the last 30 days">
+                      <CheckCircle className="w-3 h-3" /> Delivered recently
+                    </span>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <Input
+                      value={slackInput}
+                      onChange={e => { setSlackInput(e.target.value.toUpperCase()); setSlackError(null); }}
+                      placeholder="C0123456789"
+                      className={`h-8 text-sm font-mono ${slackError ? "border-destructive" : ""}`}
+                      data-testid="input-slack-channel-id"
+                    />
+                    {slackError && (
+                      <p className="text-[11px] text-destructive mt-1">{slackError}</p>
+                    )}
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      The channel where automated reports will be posted for this client
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    className="h-8 shrink-0"
+                    onClick={handleSlackSave}
+                    disabled={updateClientMut.isPending || !slackInput}
+                    data-testid="button-save-slack-channel"
+                  >
+                    {updateClientMut.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Save"}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </Card>
+        <Separator />
+
         {attentionServices.length > 0 && (
           <Card className="p-4 border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30">
             <div className="flex items-start gap-3">

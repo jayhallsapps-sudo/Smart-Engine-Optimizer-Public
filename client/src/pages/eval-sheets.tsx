@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest, getAuthHeaders } from "@/lib/queryClient";
+import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -62,8 +62,7 @@ import type { Client, EvalBatch } from "@shared/schema";
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 async function authedGet(url: string) {
-  const headers = await getAuthHeaders();
-  const r = await fetch(url, { headers });
+  const r = await fetch(url, { credentials: "include" });
   if (!r.ok) throw new Error(`${r.status}: ${r.statusText}`);
   return r.json();
 }
@@ -755,8 +754,7 @@ function KeywordGapTab({ batch }: { batch: EvalBatch }) {
     setLoading(true);
     setError(null);
     try {
-      const headers = await getAuthHeaders();
-      const r = await fetch(`/api/eval-batches/${batch.id}/keyword-gap`, { headers });
+      const r = await fetch(`/api/eval-batches/${batch.id}/keyword-gap`, { credentials: "include" });
       if (!r.ok) throw new Error(`${r.status}: ${r.statusText}`);
       const data = await r.json();
       setGaps(data);

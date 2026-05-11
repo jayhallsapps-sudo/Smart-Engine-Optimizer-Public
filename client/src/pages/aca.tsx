@@ -330,14 +330,6 @@ export default function AcaPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
-  const [authToken, setAuthToken] = useState<string>("");
-
-  // Bootstrap token
-  useEffect(() => {
-    fetch("/api/auth/bootstrap")
-      .then((r) => r.json())
-      .then((d) => setAuthToken(d.token || ""));
-  }, []);
 
   // Data queries
   const { data: clients = [] } = useQuery<Client[]>({ queryKey: ["/api/clients"] });
@@ -367,7 +359,7 @@ export default function AcaPage() {
     setActiveConversationId(id);
     try {
       const resp = await fetch(`/api/ama/conversations/${id}`, {
-        headers: { "x-internal-token": authToken },
+        credentials: "include",
       });
       const data = await resp.json();
       if (data.messages) {
@@ -463,8 +455,8 @@ export default function AcaPage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-internal-token": authToken,
         },
+        credentials: "include",
         body: JSON.stringify({
           messages: historyMessages,
           clientId: selectedClientId,
@@ -557,7 +549,7 @@ export default function AcaPage() {
       abortRef.current = null;
       setIsStreaming(false);
     }
-  }, [input, isStreaming, messages, selectedClientId, integrations, activeConversationId, authToken, queryClient, toast]);
+  }, [input, isStreaming, messages, selectedClientId, integrations, activeConversationId, queryClient, toast]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {

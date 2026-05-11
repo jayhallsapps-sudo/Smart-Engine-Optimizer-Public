@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { IntegrationsPanel } from "@/components/IntegrationsPanel";
@@ -66,6 +67,7 @@ import {
   Check,
   Sparkles,
   AlertTriangle,
+  MessageSquare,
 } from "lucide-react";
 import {
   Select,
@@ -1171,6 +1173,30 @@ function ClientCard({
           )}
         </div>
       )}
+
+      <div className="flex items-center gap-1.5 pt-1 border-t">
+        {client.slackChannelId ? (
+          <Badge
+            variant="outline"
+            className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
+            data-testid={`badge-slack-configured-${client.id}`}
+          >
+            <MessageSquare className="w-2.5 h-2.5 mr-1" />
+            Slack configured
+          </Badge>
+        ) : (
+          <Link href={`/integrations?clientId=${client.id}`}>
+            <Badge
+              variant="outline"
+              className="text-[10px] bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-950/60"
+              data-testid={`badge-slack-missing-${client.id}`}
+            >
+              <MessageSquare className="w-2.5 h-2.5 mr-1" />
+              Slack: not set
+            </Badge>
+          </Link>
+        )}
+      </div>
     </Card>
   );
 }

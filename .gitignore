@@ -13,3 +13,9 @@ vite.config.ts.*
 
 # Replit Agent pasted-prompt artifacts — keep out of repo
 attached_assets/Pasted-*.txt
+
+# attached_assets is Replit Agent's pasted-files cache — keep out of repo.
+# Exception: HEADER_IMAGE is referenced at runtime by qbrPrepDocxGenerator.ts.
+attached_assets/*
+!attached_assets/.gitkeep
+!attached_assets/HEADER_IMAGE_1773063127856.png

@@ -34,6 +34,7 @@ const SECTION_TO_CATEGORY: Record<string, string> = {
   "On-Page SEO": "Optimization",
   "Optimization": "Optimization",
   "On-Page": "Optimization",
+  "SEO Strategy": "SEO Strategy",
 };
 
 export function asanaSectionToCategory(sectionName: string): { category: string; italicize: boolean } {
@@ -92,7 +93,7 @@ function taskSection(task: any): string {
   return "";
 }
 
-const IGNORED_SECTIONS = new Set(["Meetings", "Onboarding", "Setup", "Reporting", "SEO Strategy"]);
+const IGNORED_SECTIONS = new Set(["Meetings", "Onboarding", "Setup", "Reporting"]);
 
 export async function fetchAsanaWorkLog(
   projectGid: string,

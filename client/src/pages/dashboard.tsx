@@ -48,6 +48,7 @@ import {
   AlertCircle,
   Briefcase,
   Database,
+  Plug,
 } from "lucide-react";
 import {
   Dialog,
@@ -1736,11 +1737,40 @@ function ClientCard({
                 </div>
               ))
             ) : (
-              <p className="text-sm text-center py-2" style={{ color: "rgba(255,255,255,0.3)" }}>
-                No metrics available
-              </p>
+              <div className="flex flex-col items-center justify-center py-8 gap-3">
+                <p className="text-sm text-center" style={{ color: "rgba(255,255,255,0.3)" }}>
+                  No metrics available yet
+                </p>
+                <Link href="/client-connections">
+                  <button
+                    className="flex items-center gap-2 px-4 py-2 rounded-md text-xs font-medium transition-all hover:bg-white/10"
+                    style={{
+                      background: "rgba(255,255,255,0.07)",
+                      color: "rgba(255,255,255,0.85)",
+                      border: "1px solid rgba(255,255,255,0.15)",
+                    }}
+                    data-testid={`button-connect-integrations-${client.id}`}
+                  >
+                    <Plug className="w-3.5 h-3.5" />
+                    Connect Integrations
+                  </button>
+                </Link>
+              </div>
             )}
           </div>
+          {grouped.length > 0 && (
+            <div className="px-4 pb-4 -mt-3">
+              <Link href="/client-connections">
+                <button
+                  className="text-[10px] underline transition-colors"
+                  style={{ color: "rgba(255,255,255,0.35)" }}
+                  data-testid={`link-connect-integrations-${client.id}`}
+                >
+                  Connect more integrations →
+                </button>
+              </Link>
+            </div>
+          )}
         </>
       ) : activeTab === "client-data" ? (
         <ClientDataTab client={client} clientId={client.id} />

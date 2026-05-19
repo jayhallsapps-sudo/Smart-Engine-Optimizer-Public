@@ -10,3 +10,6 @@ vite.config.ts.*
 /*.pptx
 /*.docx
 *.zip
+
+# Replit Agent pasted-prompt artifacts — keep out of repo
+attached_assets/Pasted-*.txt

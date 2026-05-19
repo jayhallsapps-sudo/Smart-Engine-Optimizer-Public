@@ -1575,10 +1575,18 @@ function ClientCard({
 
   return (
     <div
-      className="rounded-xl overflow-hidden border shadow-sm flex flex-col relative"
+      className="rounded-xl overflow-hidden border shadow-sm flex flex-col relative group"
       style={{ background: "#111827", borderColor: "rgba(255,255,255,0.08)" }}
       data-testid={`card-client-${client.id}`}
     >
+      <button
+        onClick={() => setDeleteDialogOpen(true)}
+        className="absolute top-2 right-2 z-10 p-1.5 rounded opacity-0 group-hover:opacity-100 hover:bg-red-500/15 transition-opacity"
+        title="Delete client"
+        data-testid={`button-delete-client-${client.id}`}
+      >
+        <Trash2 className="w-3.5 h-3.5" style={{ color: "rgba(252,165,165,0.7)" }} />
+      </button>
       <div className="h-1 shrink-0" style={{ background: color }} />
 
       <div
@@ -1614,14 +1622,6 @@ function ClientCard({
             })}
           </div>
         </div>
-        <button
-          onClick={() => setDeleteDialogOpen(true)}
-          className="shrink-0 p-1.5 rounded hover:bg-red-500/10 transition-colors"
-          title="Delete client"
-          data-testid={`button-delete-client-${client.id}`}
-        >
-          <Trash2 className="w-3.5 h-3.5" style={{ color: "rgba(252,165,165,0.5)" }} />
-        </button>
         <Button
           variant="ghost"
           size="icon"

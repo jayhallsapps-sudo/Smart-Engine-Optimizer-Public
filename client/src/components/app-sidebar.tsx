@@ -3,7 +3,7 @@ import smarteoIconPath from "@assets/SmartEO-Icon_1773606395230.png";
 import {
   Settings, LogOut, Shield, User, BookOpen, Layers,
   LayoutTemplate, Users, CalendarClock, Palette,
-  FileText, History, BarChart2, Plug,
+  FileText, History, BarChart2, Plug, Home,
   MessageSquare, Search, ClipboardList, Presentation, CalendarRange,
 } from "lucide-react";
 import {
@@ -169,19 +169,14 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent className="overflow-hidden">
+        <div className={collapsed ? "flex flex-col items-center gap-1 py-1" : "px-1 py-1 space-y-0.5"}>
+          <NavLink href="/command-center" icon={Home} label="Back to Command Center" testId="link-back-to-command-center" />
+        </div>
+
         <SidebarDivider />
 
         <SidebarSectionLabel label="Account" />
         <UserProfileBlock />
-
-        <SidebarDivider />
-        <SidebarSectionLabel label="My Work" />
-        <div className={collapsed ? "flex flex-col items-center gap-1 py-1" : "px-1 py-1 space-y-0.5"}>
-          <NavLink href="/workflow" icon={FileText} label="Prepare a Report" testId="link-prepare-report" />
-          <NavLink href="/saved-reports" icon={History} label="Past Reports" testId="link-past-reports" />
-          <NavLink href="/dashboard" icon={BarChart2} label="Client Info" testId="link-client-info" />
-          <NavLink href="/integrations" icon={Plug} label="Client Integrations" testId="link-client-integrations" />
-        </div>
 
         {isAdmin() && (
           <>
@@ -193,7 +188,6 @@ export function AppSidebar() {
               <NavLink href="/admin" icon={Layers} label="Governance" testId="link-admin-governance" />
               <NavLink href="/admin/guidance" icon={BookOpen} label="Guidance Library" testId="link-admin-guidance" />
               <NavLink href="/admin/templates" icon={LayoutTemplate} label="Template Controls" testId="link-admin-templates" />
-              <NavLink href="/clients" icon={Shield} label="Manage Clients" testId="link-admin-clients" />
               <NavLink href="/integrations" icon={Settings} label="Integrations" testId="link-admin-integrations" />
             </div>
 

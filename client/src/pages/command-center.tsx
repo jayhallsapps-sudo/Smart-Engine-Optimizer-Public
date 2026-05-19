@@ -1,5 +1,6 @@
 import { Link } from "wouter";
 import smarteoIconPath from "@assets/SmartEO-Icon_1773606395230.png";
+import { useAuth } from "@/contexts/auth-context";
 import {
   FileText,
   History,
@@ -26,6 +27,7 @@ interface ModuleCard {
   status: "live" | "placeholder";
   accentColor: string;
   group: "primary" | "secondary";
+  adminOnly?: boolean;
 }
 
 const MODULES: ModuleCard[] = [
@@ -38,13 +40,14 @@ const MODULES: ModuleCard[] = [
     status: "live",
     accentColor: "#D97706",
     group: "primary",
+    adminOnly: true,
   },
   {
     id: "prepare",
     icon: FileText,
     label: "Prepare a Report",
     description: "Generate any report type for a client — Bi-Weekly, Monthly, QBR, QBS, or Mid-Strategy.",
-    href: "/prepare",
+    href: "/workflow",
     status: "live",
     accentColor: "#C0392B",
     group: "primary",
@@ -72,9 +75,9 @@ const MODULES: ModuleCard[] = [
   {
     id: "clients",
     icon: Zap,
-    label: "Client Integrations",
+    label: "Client Connections",
     description: "Manage client configurations, connected data sources, and account details.",
-    href: "/clients",
+    href: "/client-connections",
     status: "live",
     accentColor: "#0369A1",
     group: "primary",
@@ -88,6 +91,7 @@ const MODULES: ModuleCard[] = [
     status: "live",
     accentColor: "#0891B2",
     group: "primary",
+    adminOnly: true,
   },
   {
     id: "discoverability",
@@ -98,6 +102,7 @@ const MODULES: ModuleCard[] = [
     status: "live",
     accentColor: "#EA580C",
     group: "primary",
+    adminOnly: true,
   },
   {
     id: "design-system",
@@ -108,6 +113,7 @@ const MODULES: ModuleCard[] = [
     status: "live",
     accentColor: "#C0392B",
     group: "primary",
+    adminOnly: true,
   },
   {
     id: "tasks",
@@ -220,8 +226,10 @@ function ModuleCardItem({ mod }: { mod: ModuleCard }) {
 }
 
 export default function CommandCenterPage() {
-  const primaryModules = MODULES.filter(m => m.group === "primary");
-  const secondaryModules = MODULES.filter(m => m.group === "secondary");
+  const { isAdmin } = useAuth();
+  const visibleModules = MODULES.filter(m => !m.adminOnly || isAdmin());
+  const primaryModules = visibleModules.filter(m => m.group === "primary");
+  const secondaryModules = visibleModules.filter(m => m.group === "secondary");
 
   return (
     <div className="flex flex-col h-full overflow-y-auto bg-background" data-testid="page-command-center">

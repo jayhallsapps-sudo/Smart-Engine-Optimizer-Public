@@ -109,7 +109,6 @@ const AdminOnlyTemplateBuilderPage = withAdminOnly(TemplateBuilderPage, "Templat
 const AdminOnlyThemePage = withAdminOnly(ThemePage, "Theme Designer");
 const AdminOnlySampleReportsPage = withAdminOnly(SampleReportsPage, "Sample Reports");
 const AdminOnlyDesignSystemPage = withAdminOnly(DesignSystemPage, "Design System");
-const AdminOnlyClientsPage = withAdminOnly(ClientsPage, "Manage Clients");
 
 function AiStatusIndicator() {
   const { data } = useQuery<{ provider: string | null; label: string }>({
@@ -165,7 +164,8 @@ function Router() {
       <Route path="/admin/templates" component={AdminTemplatesPage} />
       <Route path="/admin/users" component={AdminUsersPage} />
       <Route path="/admin/schedules" component={AdminSchedulesPage} />
-      <Route path="/clients" component={AdminOnlyClientsPage} />
+      <Route path="/client-connections" component={ClientsPage} />
+      <Route path="/clients">{() => <Redirect to="/client-connections" />}</Route>
       <Route path="/security" component={SecurityPage} />
 
       {/* Beta / WIP — admin-only at route level */}

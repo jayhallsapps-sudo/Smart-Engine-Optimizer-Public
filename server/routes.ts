@@ -858,7 +858,7 @@ export async function registerRoutes(
       const connectors = new ReplitConnectors();
       const resp = await connectors.proxy(
         "asana",
-        `https://app.asana.com/api/1.0/projects/${projectId}`,
+        `/api/1.0/projects/${projectId}`,
         { method: "GET" }
       );
       if (!resp.ok) {

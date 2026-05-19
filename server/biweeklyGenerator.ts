@@ -61,19 +61,55 @@ function hasContentDoc(item: WorkLogItem): boolean {
   return !!(item.contentDocUrl && GOOGLE_DOC_URL_RE.test(item.contentDocUrl));
 }
 
-function isNewContentItem(item: WorkLogItem): boolean {
-  // Primary signal: Written Content Doc URL present with a Google Docs/Drive link
-  // → it is new content that was written and given a doc.
-  if (item.contentDocUrl !== undefined) {
-    return hasContentDoc(item);
-  }
-  // Fallback for older records or integrations that don't supply the field:
-  // use creditType, but explicitly exclude known optimization types.
-  return item.creditType !== "Optimization" && item.creditType !== "CRO Update";
+// Bi-Weekly v2 classification — driven by Airtable Credit type field.
+// Content: Scale, Half Scale, Service
+// Optimization: Optimization, CRO Update
+// Signature: explicitly ignored
+const CONTENT_CREDIT_TYPES = new Set(["Scale", "Half Scale", "Service"]);
+const OPTIMIZATION_CREDIT_TYPES = new Set(["Optimization", "CRO Update"]);
+
+function isContentItem(item: WorkLogItem): boolean {
+  return CONTENT_CREDIT_TYPES.has(item.creditType);
 }
 
 function isOptimizationItem(item: WorkLogItem): boolean {
-  return !isNewContentItem(item);
+  return OPTIMIZATION_CREDIT_TYPES.has(item.creditType);
+}
+
+// Slug rendering — 4-step fallback chain per Bi-Weekly v2 spec.
+// 1. URL Slug populated -> use it (ensure leading and trailing slash)
+// 2. Else extract path from Final URL; if empty/just-slashes -> "Homepage"
+// 3. Else if task name contains "homepage" -> "Homepage"
+// 4. Else use task name as last-resort fallback
+function renderSlug(item: WorkLogItem): string {
+  const slug = item.urlSlug?.trim();
+  if (slug && slug.length > 0) {
+    // Normalize: ensure leading slash, ensure trailing slash
+    let normalized = slug.startsWith("/") ? slug : `/${slug}`;
+    if (!normalized.endsWith("/")) normalized = `${normalized}/`;
+    return normalized;
+  }
+
+  const finalUrl = item.url?.trim();
+  if (finalUrl && finalUrl.length > 0) {
+    try {
+      const u = new URL(finalUrl);
+      let path = u.pathname;
+      // Collapse multiple slashes (e.g. "//" -> "/")
+      path = path.replace(/\/+/g, "/");
+      if (path === "" || path === "/") return "Homepage";
+      // Ensure trailing slash
+      if (!path.endsWith("/")) path = `${path}/`;
+      return path;
+    } catch {
+      // URL constructor failed — fall through
+    }
+  }
+
+  const taskName = item.task?.trim() ?? "";
+  if (taskName.toLowerCase().includes("homepage")) return "Homepage";
+
+  return taskName || "Untitled";
 }
 
 function parseSfCanonicalIssues(headers: string[], data: Record<string, any>[]): number {
@@ -225,8 +261,15 @@ export async function generateBiweekly(input: {
   startDate: string;
   endDate: string;
   preparedBy: string;
+  // Optional date-window overrides (AM can adjust coverage dates in the report editor).
+  // If not provided, startDate/endDate are used as the "Did" window.
+  // The "Next" window is always the 14 days immediately following the "Did" window's endDate.
+  windowStart?: string;
+  windowEnd?: string;
 }): Promise<BiweeklyReportJson> {
-  const { clientId, startDate, endDate, preparedBy } = input;
+  const { clientId, preparedBy } = input;
+  const startDate = input.windowStart ?? input.startDate;
+  const endDate = input.windowEnd ?? input.endDate;
   const client = await storage.getClient(clientId);
   if (!client) throw new Error("Client not found: " + clientId);
 
@@ -239,13 +282,13 @@ export async function generateBiweekly(input: {
   const nextEndDate = new Date(parseDateStr(endDate).getTime() + 14 * 24 * 60 * 60 * 1000);
   const nextEnd = `${nextEndDate.getFullYear()}-${String(nextEndDate.getMonth() + 1).padStart(2, "0")}-${String(nextEndDate.getDate()).padStart(2, "0")}`;
 
-  const [publishedResult, productionResult, sfReportsResult, nsmResult, asanaResult] =
+  const [didAirtableResult, nextAirtableResult, sfReportsResult, nsmResult, asanaResult] =
     await Promise.allSettled([
-      fetchAirtableWorkLog(clientId, startDate, endDate, "published"),
-      fetchAirtableWorkLog(clientId, nextStart, nextEnd, "production"),
+      fetchAirtableWorkLog(clientId, startDate, endDate, "biweekly"),
+      fetchAirtableWorkLog(clientId, nextStart, nextEnd, "biweekly"),
       storage.getSfReports(clientId),
       fetchNsmGoals(client.name),
-      asanaProjectId ? fetchAsanaWorkLog(asanaProjectId, startDate, endDate) : Promise.resolve(null),
+      asanaProjectId ? fetchAsanaWorkLog(asanaProjectId, startDate, nextEnd) : Promise.resolve(null),
     ]);
 
   const sections: DocxSection[] = [];
@@ -276,17 +319,31 @@ export async function generateBiweekly(input: {
 
   if (nsmGoals && nsmHasData) {
     const mvpType = nsmGoals.mvpType && nsmGoals.mvpType !== "—" ? nsmGoals.mvpType : "MVP";
+    // Two rows: Organic Sessions, and Organic + GMB + AI/LLM Calls (MVP).
+    // Each "current" field encodes "Goal | Actual | % | Status" so the renderer can split it.
+    const sessionsPct = parseFloat(String(nsmGoals.sessionsPercent ?? "").replace(/[^0-9.]/g, "")) || 0;
+    const callsPct = parseFloat(String(nsmGoals.mvpPercent ?? "").replace(/[^0-9.]/g, "")) || 0;
     pulseMetrics.push(
-      { label: "NSM Quarter",                     current: nsmGoals.quarter,         source: "NSM Sheet" },
-      { label: "NSM Sessions Goal",               current: nsmGoals.sessionsGoal,    source: "NSM Sheet" },
-      { label: "NSM Sessions Actual",             current: nsmGoals.sessionsActual,  source: "NSM Sheet" },
-      { label: "NSM Sessions %",                  current: nsmGoals.sessionsPercent, source: "NSM Sheet" },
-      { label: "NSM Sessions On Track",           current: nsmGoals.sessionsOnTrack, source: "NSM Sheet" },
-      { label: `NSM MVP ${mvpType} Goal`,         current: nsmGoals.mvpGoal,         source: "NSM Sheet" },
-      { label: `NSM MVP ${mvpType} Actual`,       current: nsmGoals.mvpActual,       source: "NSM Sheet" },
-      { label: `NSM MVP ${mvpType} %`,            current: nsmGoals.mvpPercent,      source: "NSM Sheet" },
-      { label: `NSM MVP ${mvpType} On Track`,     current: nsmGoals.mvpOnTrack,      source: "NSM Sheet" },
+      {
+        label: "Organic Sessions",
+        current: `${nsmGoals.sessionsGoal} | ${nsmGoals.sessionsActual} | ${nsmGoals.sessionsPercent} | ${sessionsPct >= 100 ? "Ahead" : "Behind"}`,
+        isPositive: sessionsPct >= 100,
+        source: "NSM Sheet",
+      },
+      {
+        label: `Organic + GMB + AI/LLM ${mvpType}`,
+        current: `${nsmGoals.mvpGoal} | ${nsmGoals.mvpActual} | ${nsmGoals.mvpPercent} | ${callsPct >= 100 ? "Ahead" : "Behind"}`,
+        isPositive: callsPct >= 100,
+        source: "NSM Sheet",
+      },
     );
+  } else {
+    // NSM missing: emit a single warning row. The renderer should display this loudly (red banner).
+    pulseMetrics.push({
+      label: "⚠ NSM data missing",
+      current: `NSM data could not be loaded for ${client.name}. Verify the NSM Sheet is connected for this client.`,
+      source: "NSM Sheet",
+    });
   }
 
   sections.push({
@@ -296,22 +353,22 @@ export async function generateBiweekly(input: {
     metrics: pulseMetrics,
   });
 
-  const publishedItems = allAirtableItems(publishedResult);
-  const productionItems = allAirtableItems(productionResult);
+  const didItems = allAirtableItems(didAirtableResult);
+  const nextItems = allAirtableItems(nextAirtableResult);
   const airtableNotConfigured =
-    (publishedResult.status === "fulfilled" && (publishedResult.value as any)?.setupRequired === true) ||
-    publishedResult.status === "rejected";
+    (didAirtableResult.status === "fulfilled" && (didAirtableResult.value as any)?.setupRequired === true) ||
+    didAirtableResult.status === "rejected";
   const noAirtable = airtableNotConfigured;
 
-  const publishedContent = publishedItems.filter(i => isNewContentItem(i));
-  const publishedOptimization = publishedItems.filter(i => isOptimizationItem(i));
-  const productionContent = productionItems.filter(i => isNewContentItem(i));
-  const productionOptimization = productionItems.filter(i => isOptimizationItem(i));
+  const publishedContent = didItems.filter(i => isContentItem(i));
+  const publishedOptimization = didItems.filter(i => isOptimizationItem(i));
+  const productionContent = nextItems.filter(i => isContentItem(i));
+  const productionOptimization = nextItems.filter(i => isOptimizationItem(i));
 
   console.log(
     `[Biweekly] Content/Opt split — published: ${publishedContent.length} content, ${publishedOptimization.length} opt` +
     ` | production: ${productionContent.length} content, ${productionOptimization.length} opt` +
-    ` | contentDocUrl signal used: ${[...publishedItems, ...productionItems].filter(i => i.contentDocUrl !== undefined).length}/${publishedItems.length + productionItems.length} records`
+    ` | urlSlug signal used: ${[...didItems, ...nextItems].filter(i => !!i.urlSlug).length}/${didItems.length + nextItems.length} records`
   );
 
   const asanaData = asanaResult.status === "fulfilled" && asanaResult.value && (asanaResult.value as any).success
@@ -389,10 +446,11 @@ export async function generateBiweekly(input: {
   const asanaTechDid: BulletItem[] = (asanaCompletedByCategory["Technical SEO"] ?? []).map(t => ({ text: t.name, source: "Asana" }));
   const asanaTechNext: BulletItem[] = (asanaUpcomingByCategory["Technical SEO"] ?? []).map(t => ({ text: t.name, source: "Asana" }));
 
-  const newContentDid: BulletItem[] = noAirtable ? [] : publishedContent.map(i => ({ text: i.task, url: i.url ?? undefined, source: "Airtable" }));
-  const newContentNext: BulletItem[] = noAirtable ? [] : productionContent.map(i => ({ text: i.task, source: "Airtable" }));
-  const optDid: BulletItem[] = noAirtable ? [] : publishedOptimization.map(i => ({ text: i.task, url: i.url ?? undefined, source: "Airtable" }));
-  const optNext: BulletItem[] = noAirtable ? [] : productionOptimization.map(i => ({ text: i.task, source: "Airtable" }));
+  // Bi-Weekly v2: render Airtable items as slugs only, with action-verb prefix in the "Did" column.
+  const newContentDid: BulletItem[] = noAirtable ? [] : publishedContent.map(i => ({ text: `Published ${renderSlug(i)}`, url: i.url ?? undefined, source: "Airtable" }));
+  const newContentNext: BulletItem[] = noAirtable ? [] : productionContent.map(i => ({ text: renderSlug(i), source: "Airtable" }));
+  const optDid: BulletItem[] = noAirtable ? [] : publishedOptimization.map(i => ({ text: `Optimized ${renderSlug(i)}`, url: i.url ?? undefined, source: "Airtable" }));
+  const optNext: BulletItem[] = noAirtable ? [] : productionOptimization.map(i => ({ text: renderSlug(i), source: "Airtable" }));
 
   const techDid: BulletItem[] = [...asanaTechDid];
   const techNext: BulletItem[] = [...asanaTechNext];

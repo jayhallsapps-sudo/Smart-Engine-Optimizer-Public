@@ -4,6 +4,7 @@ import {
   Settings, LogOut, Shield, User, BookOpen, Layers,
   LayoutTemplate, Users, CalendarClock, Palette,
   FileText, History, BarChart2, Plug,
+  MessageSquare, Search, ClipboardList, Presentation, CalendarRange,
 } from "lucide-react";
 import {
   Sidebar,
@@ -182,12 +183,6 @@ export function AppSidebar() {
           <NavLink href="/integrations" icon={Plug} label="Client Integrations" testId="link-client-integrations" />
         </div>
 
-        <SidebarDivider />
-        <SidebarSectionLabel label="Core Modules" />
-        <div className={collapsed ? "flex flex-col items-center gap-1 py-1" : "px-1 py-1 space-y-0.5"}>
-          <NavLink href="/design-system" icon={Palette} label="Design System" testId="link-design-system" />
-        </div>
-
         {isAdmin() && (
           <>
             <SidebarDivider />
@@ -200,6 +195,20 @@ export function AppSidebar() {
               <NavLink href="/admin/templates" icon={LayoutTemplate} label="Template Controls" testId="link-admin-templates" />
               <NavLink href="/clients" icon={Shield} label="Manage Clients" testId="link-admin-clients" />
               <NavLink href="/integrations" icon={Settings} label="Integrations" testId="link-admin-integrations" />
+            </div>
+
+            <SidebarDivider />
+            <SidebarSectionLabel label="Beta / WIP" />
+            <div className={collapsed ? "flex flex-col items-center gap-1 py-1" : "px-1 py-1 space-y-0.5"}>
+              <NavLink href="/aca" icon={MessageSquare} label="AMA Chat" testId="link-beta-aca" />
+              <NavLink href="/discoverability" icon={Search} label="Discoverability" testId="link-beta-discoverability" />
+              <NavLink href="/eval-sheets" icon={ClipboardList} label="Eval Sheets" testId="link-beta-eval-sheets" />
+              <NavLink href="/mid-strategy-deck" icon={Presentation} label="Mid-Strategy Deck" testId="link-beta-mid-strategy-deck" />
+              <NavLink href="/quarterly-content-roadmap" icon={CalendarRange} label="Quarterly Content Roadmap" testId="link-beta-qcr" />
+              <NavLink href="/templates" icon={LayoutTemplate} label="Templates" testId="link-beta-templates" />
+              <NavLink href="/theme" icon={Palette} label="Theme Designer" testId="link-beta-theme" />
+              <NavLink href="/sample-reports" icon={FileText} label="Sample Reports" testId="link-beta-sample-reports" />
+              <NavLink href="/design-system" icon={Palette} label="Design System" testId="link-beta-design-system" />
             </div>
           </>
         )}

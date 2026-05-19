@@ -69,6 +69,24 @@ function withReportSubKey(
   return Gated;
 }
 
+// Wrap a page so only admins can render it. Non-admins get ReportAccessDenied.
+// Used for beta / WIP modules that aren't part of MVP 1 (AMA, Discoverability,
+// Templates, Theme, Eval Sheets, Mid-Strategy Deck, QCR, Sample Reports, etc.).
+function withAdminOnly(
+  Component: React.ComponentType<any>,
+  label: string,
+): React.ComponentType<any> {
+  const Gated = (props: any) => {
+    const { isAdmin } = useAuth();
+    if (!isAdmin()) {
+      return <ReportAccessDenied reportLabel={label} />;
+    }
+    return <Component {...props} />;
+  };
+  Gated.displayName = `AdminOnly(${Component.displayName ?? Component.name ?? "Page"})`;
+  return Gated;
+}
+
 const GatedBiweeklyPage = withReportSubKey(BiweeklyPage, "biweekly", "Bi-Weekly Report");
 const GatedMonthlyPage = withReportSubKey(MonthlyPage, "monthly", "Monthly Report");
 const GatedQbrFullPage = withReportSubKey(QbrFullPage, "qbr_full", "QBR Full Report");
@@ -79,6 +97,19 @@ const GatedQuarterlyContentRoadmapPage = withReportSubKey(
   "quarterly_content_roadmap",
   "Quarterly Content Roadmap",
 );
+
+// Admin-only beta / WIP pages — hidden from AM sidebar, gated at route level.
+const AdminOnlyAcaPage = withAdminOnly(AcaPage, "AMA Chat");
+const AdminOnlyDiscoverabilityPage = withAdminOnly(DiscoverabilityPage, "Discoverability Tool");
+const AdminOnlyEvalSheetsPage = withAdminOnly(EvalSheetsPage, "Evaluation Sheets");
+const AdminOnlyMidStrategyDeckPage = withAdminOnly(MidStrategyDeckPage, "Mid-Strategy Deck");
+const AdminOnlyTemplatesPage = withAdminOnly(TemplatesPage, "Templates");
+const AdminOnlyTemplateEditorPage = withAdminOnly(TemplateEditorPage, "Template Editor");
+const AdminOnlyTemplateBuilderPage = withAdminOnly(TemplateBuilderPage, "Template Builder");
+const AdminOnlyThemePage = withAdminOnly(ThemePage, "Theme Designer");
+const AdminOnlySampleReportsPage = withAdminOnly(SampleReportsPage, "Sample Reports");
+const AdminOnlyDesignSystemPage = withAdminOnly(DesignSystemPage, "Design System");
+const AdminOnlyClientsPage = withAdminOnly(ClientsPage, "Manage Clients");
 
 function AiStatusIndicator() {
   const { data } = useQuery<{ provider: string | null; label: string }>({
@@ -111,35 +142,44 @@ function Router() {
     <Switch>
       <Route path="/">{() => <Redirect to="/command-center" />}</Route>
       <Route path="/command-center" component={CommandCenterPage} />
+
+      {/* MVP 1 — AM-visible routes */}
       <Route path="/workflow" component={WorkflowPage} />
       <Route path="/dashboard" component={DashboardPage} />
+      <Route path="/saved-reports" component={SavedReportsPage} />
+      <Route path="/integrations" component={SetupPage} />
+      <Route path="/setup">{() => <Redirect to="/integrations" />}</Route>
+
+      {/* Report pages — gated by reportSubKey permission */}
       <Route path="/biweekly" component={GatedBiweeklyPage} />
       <Route path="/monthly" component={GatedMonthlyPage} />
       <Route path="/qbr" component={GatedQbrFullPage} />
-      <Route path="/mid-strategy" component={GatedMidStrategyPage} />
       <Route path="/qbr-prep" component={GatedQbrPrepPage} />
-      <Route path="/clients" component={ClientsPage} />
-      <Route path="/integrations" component={SetupPage} />
-      <Route path="/setup">{() => <Redirect to="/integrations" />}</Route>
-      <Route path="/security" component={SecurityPage} />
-      <Route path="/sample-reports" component={SampleReportsPage} />
-      <Route path="/template-builder" component={TemplateBuilderPage} />
+      <Route path="/mid-strategy" component={GatedMidStrategyPage} />
+      <Route path="/quarterly-content-roadmap" component={GatedQuarterlyContentRoadmapPage} />
+
+      {/* Admin routes */}
       <Route path="/admin" component={AdminPage} />
       <Route path="/admin/config" component={AdminConfigPage} />
       <Route path="/admin/guidance" component={AdminGuidancePage} />
       <Route path="/admin/templates" component={AdminTemplatesPage} />
       <Route path="/admin/users" component={AdminUsersPage} />
       <Route path="/admin/schedules" component={AdminSchedulesPage} />
-      <Route path="/aca" component={AcaPage} />
-      <Route path="/saved-reports" component={SavedReportsPage} />
-      <Route path="/discoverability" component={DiscoverabilityPage} />
-      <Route path="/eval-sheets" component={EvalSheetsPage} />
-      <Route path="/mid-strategy-deck" component={MidStrategyDeckPage} />
-      <Route path="/quarterly-content-roadmap" component={GatedQuarterlyContentRoadmapPage} />
-      <Route path="/templates" component={TemplatesPage} />
-      <Route path="/templates/:templateId" component={TemplateEditorPage} />
-      <Route path="/theme" component={ThemePage} />
-      <Route path="/design-system" component={DesignSystemPage} />
+      <Route path="/clients" component={AdminOnlyClientsPage} />
+      <Route path="/security" component={SecurityPage} />
+
+      {/* Beta / WIP — admin-only at route level */}
+      <Route path="/aca" component={AdminOnlyAcaPage} />
+      <Route path="/discoverability" component={AdminOnlyDiscoverabilityPage} />
+      <Route path="/eval-sheets" component={AdminOnlyEvalSheetsPage} />
+      <Route path="/mid-strategy-deck" component={AdminOnlyMidStrategyDeckPage} />
+      <Route path="/templates" component={AdminOnlyTemplatesPage} />
+      <Route path="/templates/:templateId" component={AdminOnlyTemplateEditorPage} />
+      <Route path="/template-builder" component={AdminOnlyTemplateBuilderPage} />
+      <Route path="/theme" component={AdminOnlyThemePage} />
+      <Route path="/sample-reports" component={AdminOnlySampleReportsPage} />
+      <Route path="/design-system" component={AdminOnlyDesignSystemPage} />
+
       <Route component={NotFound} />
     </Switch>
   );

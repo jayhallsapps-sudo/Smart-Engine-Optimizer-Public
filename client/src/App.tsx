@@ -11,7 +11,6 @@ import { ReportAccessDenied } from "@/components/reports/ReportAccessDenied";
 import type { ReportSubKey } from "@shared/schema";
 import NotFound from "@/pages/not-found";
 import LoginPage from "@/pages/login";
-import ReportsPage from "@/pages/reports";
 import ClientsPage from "@/pages/clients";
 import SetupPage from "@/pages/setup";
 import QbrPrepPage from "@/pages/qbr-prep";
@@ -31,7 +30,6 @@ import SampleReportsPage from "@/pages/sample-reports";
 import TemplateBuilderPage from "@/pages/template-builder";
 import SecurityPage from "@/pages/security";
 import CommandCenterPage from "@/pages/command-center";
-import PrepareReportPage from "@/pages/prepare-report";
 import WorkflowPage from "@/pages/workflow";
 import AdminPage from "@/pages/admin";
 import AdminConfigPage from "@/pages/admin-config";
@@ -113,7 +111,6 @@ function Router() {
     <Switch>
       <Route path="/">{() => <Redirect to="/command-center" />}</Route>
       <Route path="/command-center" component={CommandCenterPage} />
-      <Route path="/prepare" component={PrepareReportPage} />
       <Route path="/workflow" component={WorkflowPage} />
       <Route path="/dashboard" component={DashboardPage} />
       <Route path="/biweekly" component={GatedBiweeklyPage} />
@@ -121,7 +118,6 @@ function Router() {
       <Route path="/qbr" component={GatedQbrFullPage} />
       <Route path="/mid-strategy" component={GatedMidStrategyPage} />
       <Route path="/qbr-prep" component={GatedQbrPrepPage} />
-      <Route path="/reports" component={ReportsPage} />
       <Route path="/clients" component={ClientsPage} />
       <Route path="/integrations" component={SetupPage} />
       <Route path="/setup">{() => <Redirect to="/integrations" />}</Route>

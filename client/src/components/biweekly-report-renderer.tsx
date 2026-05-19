@@ -30,24 +30,15 @@ function RenderLines({ text }: { text: string }) {
   );
 }
 
-// ─── Source label badge ───────────────────────────────────────────────────────
-
-const SOURCE_COLORS: Record<string, { bg: string; text: string }> = {
-  Asana:          { bg: "#F3E8FF", text: "#7C3AED" },
-  Airtable:       { bg: "#DCFCE7", text: "#15803D" },
-  "Screaming Frog": { bg: "#DBEAFE", text: "#1D4ED8" },
-  GSC:            { bg: "#FEF3C7", text: "#B45309" },
-  "Google Analytics": { bg: "#FEF3C7", text: "#B45309" },
-};
+// ─── Source label (Bi-Weekly v2: subtle gray, not colored pill) ──────────────
 
 function SourceChip({ source }: { source: string }) {
-  const style = SOURCE_COLORS[source] ?? { bg: "#F1F5F9", text: "#64748B" };
   return (
     <span
-      className="inline-block px-1.5 py-0.5 rounded text-[9px] font-semibold mr-1 mt-1"
-      style={{ backgroundColor: style.bg, color: style.text }}
+      className="inline-block text-[9px] text-muted-foreground mr-2 mt-1"
+      style={{ fontStyle: "italic" }}
     >
-      {source}
+      Source: {source}
     </span>
   );
 }
@@ -801,29 +792,35 @@ function hydrateBlocks(blocks: DocBlock[], report: any): DocBlock[] {
 
       case "blk-nsm": {
         const metrics: any[] = pulseSection?.metrics ?? [];
-        const get = (label: string) =>
-          metrics.find((m: any) => m.label === label)?.current ?? "—";
 
-        const nsmQuarter = get("NSM Quarter");
-        const sessGoal   = get("NSM Sessions Goal");
-        const sessActual = get("NSM Sessions Actual");
-        const sessPct    = get("NSM Sessions %");
-        const sessTrack  = get("NSM Sessions On Track");
-        const mvpMetric  = metrics.find((m: any) => /NSM MVP .* Goal/.test(m.label));
-        const mvpFullLabel = mvpMetric?.label ?? "";
-        const mvpRowLabel = mvpFullLabel.replace(/\s*Goal$/, "").replace(/^NSM MVP\s*/, "").trim();
-        const mvpGoal    = mvpMetric?.current ?? "—";
-        const mvpActual  = get(`${mvpFullLabel.replace(" Goal", "")} Actual`);
-        const mvpPct     = get(`${mvpFullLabel.replace(" Goal", "")} %`);
-        const mvpTrack   = get(`${mvpFullLabel.replace(" Goal", "")} On Track`);
-
-        if (sessGoal !== "—" || mvpGoal !== "—") {
-          const tableRows: string[][] = [];
-          if (sessGoal !== "—") tableRows.push(["Organic Sessions", sessGoal, sessActual, sessPct, sessTrack]);
-          if (mvpGoal !== "—")  tableRows.push([mvpRowLabel || "MVP Metric", mvpGoal, mvpActual, mvpPct, mvpTrack]);
+        // Detect Bi-Weekly v2 NSM-missing warning case.
+        const warningMetric = metrics.find((m: any) => typeof m.label === "string" && m.label.startsWith("⚠"));
+        if (warningMetric) {
           return {
             ...block,
-            content: `NSM Goals — ${nsmQuarter}`,
+            content: warningMetric.label,
+            settings: {
+              ...block.settings,
+              colHeaders: ["Warning"],
+              tableRows: [[warningMetric.current ?? "NSM data could not be loaded."]],
+              cols: 1,
+              rows: 1,
+            },
+          };
+        }
+
+        // Bi-Weekly v2 normal case: 2 rows, each metric.current is "Goal | Actual | % | Status".
+        const parseRow = (m: any): string[] => {
+          const parts = String(m.current ?? "").split("|").map(s => s.trim());
+          const [goal = "—", actual = "—", pct = "—", status = "—"] = parts;
+          return [m.label, goal, actual, pct, status];
+        };
+
+        if (metrics.length > 0) {
+          const tableRows = metrics.map(parseRow);
+          return {
+            ...block,
+            content: "NSM Goals",
             settings: {
               ...block.settings,
               colHeaders: ["Metric", "Goal", "Actual", "%", "Status"],
@@ -833,6 +830,7 @@ function hydrateBlocks(blocks: DocBlock[], report: any): DocBlock[] {
             },
           };
         }
+
         return block;
       }
 

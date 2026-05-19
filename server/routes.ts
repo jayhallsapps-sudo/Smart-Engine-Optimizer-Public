@@ -29,8 +29,10 @@ import {
   deleteCrawlAsset,
 } from "./crawlAssetService";
 import { parseNaturalQuery, getCommandDescription, getDateRangeLabel } from "./nlRouter";
-import { fetchAirtableWorkLog, fetchAirtableTaskItems } from "./airtable";
+import { fetchAirtableWorkLog, fetchAirtableTaskItems, resolveViewId } from "./airtable";
 import { fetchAsanaOpenTasks } from "./asanaClient";
+import { getUncachableSlackClient } from "./slack";
+import { ReplitConnectors } from "@replit/connectors-sdk";
 import { seedDatabase } from "./seed";
 import { encrypt, decrypt, deriveInternalToken } from "./encryption";
 import { z } from "zod";
@@ -842,6 +844,103 @@ export async function registerRoutes(
     const deleted = await storage.deleteClient(Number(req.params.id));
     if (!deleted) return res.status(404).json({ message: "Client not found" });
     res.json({ success: true });
+  });
+
+  // ─── Client Setup Validation Endpoints ──────────────────────────────────────
+  // Used by the Add Client modal to verify integration credentials before save.
+
+  app.post("/api/validate/asana", async (req, res) => {
+    const { projectId } = req.body as { projectId?: string };
+    if (!projectId || typeof projectId !== "string") {
+      return res.status(400).json({ ok: false, error: "projectId is required" });
+    }
+    try {
+      const connectors = new ReplitConnectors();
+      const resp = await connectors.proxy(
+        "asana",
+        `https://app.asana.com/api/1.0/projects/${projectId}`,
+        { method: "GET" }
+      );
+      if (!resp.ok) {
+        return res.json({ ok: false, error: `Asana project not found (${resp.status})` });
+      }
+      const data = await resp.json() as any;
+      const projectName = data?.data?.name;
+      if (!projectName) {
+        return res.json({ ok: false, error: "Asana project response was malformed" });
+      }
+      return res.json({ ok: true, projectName });
+    } catch (err: any) {
+      return res.json({ ok: false, error: err?.message ?? "Asana validation failed" });
+    }
+  });
+
+  app.post("/api/validate/airtable", async (req, res) => {
+    const { baseId, tableName, productionView, everythingView } = req.body as {
+      baseId?: string;
+      tableName?: string;
+      productionView?: string;
+      everythingView?: string;
+    };
+    const errors: Record<string, string> = {};
+    if (!baseId) errors.baseId = "Base ID is required";
+    if (!tableName) errors.tableName = "Table name is required";
+    if (!productionView) errors.productionView = "Production view is required";
+    if (!everythingView) errors.everythingView = "Everything view is required";
+    if (Object.keys(errors).length > 0) {
+      return res.status(400).json({ ok: false, errors });
+    }
+    const pat = process.env.AIRTABLE_PAT;
+    if (!pat) {
+      return res.status(500).json({ ok: false, error: "Airtable PAT not configured on the server" });
+    }
+    try {
+      const prodId = await resolveViewId(baseId!, tableName!, productionView!, pat);
+      const everyId = await resolveViewId(baseId!, tableName!, everythingView!, pat);
+      const fieldErrors: Record<string, string> = {};
+      if (prodId === null) {
+        fieldErrors.productionView = `View "${productionView}" not found in table "${tableName}" of base "${baseId}"`;
+      }
+      if (everyId === null) {
+        fieldErrors.everythingView = `View "${everythingView}" not found in table "${tableName}" of base "${baseId}"`;
+      }
+      if (Object.keys(fieldErrors).length > 0) {
+        return res.json({ ok: false, errors: fieldErrors });
+      }
+      return res.json({ ok: true });
+    } catch (err: any) {
+      return res.json({ ok: false, error: err?.message ?? "Airtable validation failed" });
+    }
+  });
+
+  app.post("/api/validate/slack", async (req, res) => {
+    const { channelId, userId } = req.body as { channelId?: string; userId?: string };
+    const errors: Record<string, string> = {};
+    if (!channelId) errors.channelId = "Channel ID is required";
+    if (!userId) errors.userId = "User ID is required";
+    if (Object.keys(errors).length > 0) {
+      return res.status(400).json({ ok: false, errors });
+    }
+    try {
+      const slack = await getUncachableSlackClient();
+      const fieldErrors: Record<string, string> = {};
+      try {
+        await slack.conversations.info({ channel: channelId! });
+      } catch (err: any) {
+        fieldErrors.channelId = err?.data?.error ?? err?.message ?? "Channel not found";
+      }
+      try {
+        await slack.users.info({ user: userId! });
+      } catch (err: any) {
+        fieldErrors.userId = err?.data?.error ?? err?.message ?? "User not found";
+      }
+      if (Object.keys(fieldErrors).length > 0) {
+        return res.json({ ok: false, errors: fieldErrors });
+      }
+      return res.json({ ok: true });
+    } catch (err: any) {
+      return res.json({ ok: false, error: err?.message ?? "Slack validation failed" });
+    }
   });
 
   // ─── Client Competitors ──────────────────────────────────────────────────────

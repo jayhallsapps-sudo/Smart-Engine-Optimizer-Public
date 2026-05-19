@@ -78,7 +78,7 @@ export function isIgnoredStatus(raw: string): boolean {
 
 const viewIdCache = new Map<string, string>();
 
-async function resolveViewId(
+export async function resolveViewId(
   baseId: string,
   tableName: string,
   viewName: string,

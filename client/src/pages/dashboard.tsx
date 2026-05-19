@@ -43,6 +43,7 @@ import {
   Download,
   CalendarClock,
   Hash,
+  UserPlus,
 } from "lucide-react";
 import {
   Dialog,
@@ -53,6 +54,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { AddClientModal } from "@/components/AddClientModal";
 import type { Client, ClientCompetitor } from "@shared/schema";
 
 interface NsmData {
@@ -1610,6 +1612,8 @@ export default function DashboardPage() {
     setRefreshKey(k => k + 1);
   }, []);
 
+  const [addClientOpen, setAddClientOpen] = useState(false);
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <div className="shrink-0 border-b px-6 py-3 flex items-center justify-between gap-4">
@@ -1620,6 +1624,15 @@ export default function DashboardPage() {
           </h1>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            onClick={() => setAddClientOpen(true)}
+            size="sm"
+            className="gap-2 h-8"
+            data-testid="button-add-client"
+          >
+            <UserPlus className="w-3.5 h-3.5" />
+            Add Client
+          </Button>
           <Select value={period} onValueChange={handlePeriodChange}>
             <SelectTrigger className="h-8 w-[150px] text-xs" data-testid="select-period">
               <SelectValue />
@@ -1706,6 +1719,12 @@ export default function DashboardPage() {
           onClose={() => setExpandedClientId(null)}
         />
       )}
+
+      <AddClientModal
+        open={addClientOpen}
+        onOpenChange={setAddClientOpen}
+        onCreated={() => setRefreshKey(k => k + 1)}
+      />
     </div>
   );
 }

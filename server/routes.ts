@@ -7,7 +7,7 @@ import { randomUUID } from "crypto";
 import { buildSectionCommandsAutoMap, getReportFamily } from "@shared/reportRegistry";
 import rateLimit from "express-rate-limit";
 import { storage } from "./storage";
-import { insertClientSchema } from "@shared/schema";
+import { insertClientSchema, users } from "@shared/schema";
 import { registerAuthRoutes } from "./authRoutes";
 import { requireAuth, requireAdminRole } from "./auth";
 import {
@@ -40,7 +40,7 @@ import { buildGoogleAuthUrl, exchangeCodeForToken, callbackHtml, isGoogleConfigu
 import { testCredential, testAsana } from "./connectionTest";
 import { insertSfReportSchema, insertCallTrackingReportSchema, amInputsSchema, migrateLegacyAmInputs, insertReportCommentSchema, updateReportCommentSchema, reportSchedules, insertReportScheduleSchema } from "@shared/schema";
 import { db } from "./db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import { generateBiweeklyDocx, generatePptx, generateMidStrategyPptx, generateQbrPrepDocx } from "./reportGenerators";
 import { generateBiweeklyBlockDocx } from "./biweeklyBlockDocxGenerator";
 import { generateQcrPptx } from "./qcrPptxGenerator";
@@ -940,6 +940,22 @@ export async function registerRoutes(
       return res.json({ ok: true });
     } catch (err: any) {
       return res.json({ ok: false, error: err?.message ?? "Slack validation failed" });
+    }
+  });
+
+  app.get("/api/users", async (req, res) => {
+    try {
+      const role = req.query.role as string | undefined;
+      const allUsers = await db.select().from(users).orderBy(desc(users.createdAt));
+      const filtered = role ? allUsers.filter((u: any) => u.role === role) : allUsers;
+      // Strip passwordHash from every user before responding
+      const safe = filtered.map((u: any) => {
+        const { passwordHash, ...rest } = u;
+        return rest;
+      });
+      res.json(safe);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "Failed to list users" });
     }
   });
 

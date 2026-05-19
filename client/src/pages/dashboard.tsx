@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useAuth } from "@/contexts/auth-context";
 import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -811,6 +812,96 @@ function IntegrationValidationGroup({
   );
 }
 
+function AssignedAmRow({
+  client,
+  clientId,
+  onSave,
+}: {
+  client: Client;
+  clientId: number;
+  onSave: (userId: number | null) => Promise<void>;
+}) {
+  const { isAdmin } = useAuth();
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const adminMode = isAdmin();
+
+  const { data: amUsers = [] } = useQuery<Array<{ id: number; username: string; firstName?: string; lastName?: string }>>({
+    queryKey: ["/api/users", "am"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/users?role=am");
+      return res.json();
+    },
+    enabled: editing && adminMode,
+  });
+
+  const { data: allUsers = [] } = useQuery<Array<{ id: number; username: string; firstName?: string; lastName?: string; role: string }>>({
+    queryKey: ["/api/users"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/users");
+      return res.json();
+    },
+  });
+
+  const assignedUser = allUsers.find(u => u.id === client.assignedAmUserId);
+  const displayName = assignedUser
+    ? (assignedUser.firstName || assignedUser.lastName
+        ? `${assignedUser.firstName ?? ""} ${assignedUser.lastName ?? ""}`.trim()
+        : assignedUser.username)
+    : null;
+
+  const handleSelect = async (val: string) => {
+    setSaving(true);
+    try {
+      await onSave(val === "none" ? null : Number(val));
+    } finally {
+      setSaving(false);
+      setEditing(false);
+    }
+  };
+
+  if (editing && adminMode) {
+    return (
+      <div className="flex items-center gap-2">
+        <Users className="w-3 h-3 shrink-0" style={{ color: "rgba(255,255,255,0.35)" }} />
+        <Select value={String(client.assignedAmUserId ?? "none")} onValueChange={handleSelect} disabled={saving}>
+          <SelectTrigger className="h-7 text-[11px] flex-1 bg-white/10 border border-white/20 text-white/90" data-testid={`select-assigned-am-${clientId}`}>
+            <SelectValue placeholder="Pick an AM" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none" className="text-xs">Unassigned</SelectItem>
+            {amUsers.map(u => (
+              <SelectItem key={u.id} value={String(u.id)} className="text-xs" data-testid={`option-assigned-am-${u.id}`}>
+                {u.firstName || u.lastName ? `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() : u.username}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {saving && <RefreshCw className="w-3 h-3 animate-spin shrink-0" style={{ color: "rgba(255,255,255,0.4)" }} />}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`flex items-center gap-2 ${adminMode ? "group cursor-pointer" : ""}`}
+      onClick={adminMode ? () => setEditing(true) : undefined}
+      data-testid={`field-assigned-am-${clientId}`}
+    >
+      <Users className="w-3 h-3 shrink-0" style={{ color: "rgba(255,255,255,0.35)" }} />
+      <span
+        className="text-[11px] truncate flex-1"
+        style={{ color: displayName ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.28)" }}
+      >
+        {displayName ? `Assigned to: ${displayName}` : "Unassigned"}
+      </span>
+      {adminMode && (
+        <Pencil className="w-2.5 h-2.5 shrink-0 opacity-0 group-hover:opacity-60 transition-opacity" style={{ color: "rgba(255,255,255,0.5)" }} />
+      )}
+    </div>
+  );
+}
+
 function InlineEditField({
   icon,
   value,
@@ -1010,6 +1101,13 @@ function ClientDataTab({ client, clientId }: { client: Client; clientId: number 
           onSave={val => saveClientField("contactEmail", val)}
           testIdPrefix={`contact-email-${clientId}`}
           type="email"
+        />
+        <AssignedAmRow
+          client={client}
+          clientId={clientId}
+          onSave={async (userId) => {
+            await saveClientField("assignedAmUserId", userId as any);
+          }}
         />
         <div style={{ height: "1px", background: "rgba(255,255,255,0.07)", margin: "2px 0" }} />
         <InlineEditField

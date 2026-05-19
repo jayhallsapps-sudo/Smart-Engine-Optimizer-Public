@@ -119,6 +119,7 @@ export const clients = pgTable("clients", {
   airtableTableName: text("airtable_table_name"),
   airtableProductionView: text("airtable_production_view"),
   airtablePublishedView: text("airtable_published_view"),
+  airtableEverythingView: text("airtable_everything_view"),
   brandTerms: text("brand_terms").array().default(sql`'{}'::text[]`),
   leadEvents: text("lead_events").array().default(sql`'{}'::text[]`),
   moneyPages: text("money_pages").array().default(sql`'{}'::text[]`),

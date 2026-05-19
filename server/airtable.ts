@@ -7,6 +7,7 @@ export interface WorkLogItem {
   creditType: string;
   date: string;
   url?: string;
+  urlSlug?: string;
   contentDocUrl?: string;
   status?: string;
   statusLabel?: string;
@@ -107,7 +108,7 @@ export async function fetchAirtableWorkLog(
   clientId: number,
   startDate: string,
   endDate: string,
-  viewIntent?: "published" | "production"
+  viewIntent?: "published" | "production" | "biweekly"
 ): Promise<{ success: true; data: WorkLogResult } | { success: false; error: string; setupRequired?: boolean }> {
   const client = await storage.getClient(clientId);
   if (!client) {
@@ -118,7 +119,9 @@ export async function fetchAirtableWorkLog(
   const airtableTableName = (client as any).airtableTableName as string | null;
 
   const configuredViewName: string | null =
-    viewIntent === "production"
+    viewIntent === "biweekly"
+      ? ((client as any).airtableProductionView as string | null)
+      : viewIntent === "production"
       ? ((client as any).airtableProductionView as string | null)
       : viewIntent === "published"
       ? ((client as any).airtablePublishedView as string | null)
@@ -158,7 +161,10 @@ export async function fetchAirtableWorkLog(
 
   if (startDate && endDate) {
     let formula: string;
-    if (viewIntent === "production") {
+    if (viewIntent === "biweekly") {
+      // Bi-Weekly v2: filter on "Last Published / Updated" date field, inclusive on both ends
+      formula = `AND(NOT(IS_BEFORE({Last Published / Updated}, '${startDate}')), IS_BEFORE({Last Published / Updated}, DATEADD('${endDate}', 1, 'days')))`;
+    } else if (viewIntent === "production") {
       // Inclusive date range on Due field (try Due first, then Published Date as fallback)
       formula = `AND(IS_BEFORE({Due}, DATEADD('${endDate}', 1, 'days')), NOT(IS_BEFORE({Due}, '${startDate}')))`;
     } else {
@@ -207,7 +213,7 @@ export async function fetchAirtableWorkLog(
   const items: WorkLogItem[] = records
     .map((r: any) => {
       const f = r.fields ?? {};
-      const rawCreditType = String(f["Credit Type"] ?? "Other").trim();
+      const rawCreditType = String(f["Credit type"] ?? f["Credit Type"] ?? "Other").trim();
       const taskName = String(f["Name"] ?? f["Task"] ?? f["Description"] ?? "").trim();
       let creditType = CREDIT_TYPE_ORDER.includes(rawCreditType) ? rawCreditType : "Other";
       // Title-based override: "Optimization" or "CRO" anywhere in the task name → Optimization section
@@ -224,12 +230,15 @@ export async function fetchAirtableWorkLog(
       const contentDocUrl = rawContentDocUrl ? String(rawContentDocUrl).trim() : undefined;
       const rawKeyword = f["Target Keyword"] ?? f["Keyword"] ?? f["Primary Keyword"] ?? undefined;
       const rawPageType = f["Page Type"] ?? f["Type"] ?? f["Content Type"] ?? undefined;
+      const rawUrlSlug = f["URL Slug"] ? String(f["URL Slug"]).trim() : undefined;
+      const rawDate = String(f["Last Published / Updated"] ?? f["Due"] ?? f["Date"] ?? "").trim();
       return {
         id: r.id,
         task: taskName || "Untitled",
         creditType,
-        date: String(f["Due"] ?? f["Date"] ?? "").trim(),
+        date: rawDate,
         url: f["Final URL"] ?? f["URL"] ?? f["Page URL"] ?? undefined,
+        urlSlug: rawUrlSlug || undefined,
         contentDocUrl: contentDocUrl || undefined,
         status: rawStatus,
         statusLabel: rawStatus ? getStatusLabel(rawStatus) : undefined,
@@ -238,6 +247,7 @@ export async function fetchAirtableWorkLog(
       };
     })
     .filter(item => {
+      if (viewIntent === "biweekly") return true;
       if (!item.status) return true;
       if (viewIntent === "production") {
         return item.status !== "4. Live";
@@ -246,6 +256,57 @@ export async function fetchAirtableWorkLog(
         item.status === ig || item.status!.startsWith(ig.replace("...", "").trim())
       );
     });
+
+  // Bi-Weekly view fallback: if Production view returned 0 records, retry with Everything view
+  if (viewIntent === "biweekly" && items.length === 0) {
+    const everythingViewName = (client as any).airtableEverythingView as string | null;
+    if (everythingViewName && everythingViewName !== configuredViewName) {
+      let everythingViewParam: string | null = everythingViewName;
+      const everythingViewId = await resolveViewId(airtableBaseId, airtableTableName, everythingViewName, pat);
+      if (everythingViewId) {
+        everythingViewParam = everythingViewId;
+      }
+      const fallbackParams = new URLSearchParams({ maxRecords: "200" });
+      fallbackParams.set("view", everythingViewParam);
+      if (startDate && endDate) {
+        const fallbackFormula = `AND(NOT(IS_BEFORE({Last Published / Updated}, '${startDate}')), IS_BEFORE({Last Published / Updated}, DATEADD('${endDate}', 1, 'days')))`;
+        fallbackParams.set("filterByFormula", fallbackFormula);
+      }
+      const fallbackUrl = `https://api.airtable.com/v0/${airtableBaseId}/${encodeURIComponent(airtableTableName)}?${fallbackParams}`;
+      try {
+        const fallbackResp = await fetch(fallbackUrl, {
+          headers: { Authorization: `Bearer ${pat}`, "Content-Type": "application/json" },
+        });
+        if (fallbackResp.ok) {
+          const fallbackData = await fallbackResp.json() as any;
+          const fallbackRecords: any[] = fallbackData.records ?? [];
+          for (const r of fallbackRecords) {
+            const f = r.fields ?? {};
+            const rawCreditType = String(f["Credit type"] ?? f["Credit Type"] ?? "Other").trim();
+            const taskName = String(f["Name"] ?? f["Task"] ?? f["Description"] ?? "").trim();
+            let creditType = CREDIT_TYPE_ORDER.includes(rawCreditType) ? rawCreditType : "Other";
+            const taskLower = taskName.toLowerCase();
+            if (taskLower.includes("optimization") || taskLower.includes("cro")) {
+              creditType = "Optimization";
+            }
+            const rawUrlSlug = f["URL Slug"] ? String(f["URL Slug"]).trim() : undefined;
+            const rawDate = String(f["Last Published / Updated"] ?? f["Due"] ?? f["Date"] ?? "").trim();
+            items.push({
+              id: r.id,
+              task: taskName || "Untitled",
+              creditType,
+              date: rawDate,
+              url: f["Final URL"] ?? f["URL"] ?? f["Page URL"] ?? undefined,
+              urlSlug: rawUrlSlug || undefined,
+            });
+          }
+          console.log(`[Airtable] Biweekly fallback: pulled ${fallbackRecords.length} records from Everything view`);
+        }
+      } catch (err: any) {
+        console.warn(`[Airtable] Biweekly fallback failed:`, err?.message);
+      }
+    }
+  }
 
   const byCreditType: Record<string, WorkLogItem[]> = {};
   for (const item of items) {

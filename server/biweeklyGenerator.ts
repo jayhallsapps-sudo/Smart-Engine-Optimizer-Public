@@ -27,6 +27,8 @@ export interface BiweeklySourceFacts {
   techNext: string[];
   localDid: string[];
   localNext: string[];
+  strategyDid?: string[];
+  strategyNext?: string[];
   hasSf: boolean;
   noAirtable: boolean;
   sfIssueCounts: SfIssueCounts | null;
@@ -457,6 +459,8 @@ export async function generateBiweekly(input: {
 
   const asanaLocalDid: BulletItem[] = (asanaCompletedByCategory["Local SEO"] ?? []).map(t => ({ text: t.name, source: "Asana" }));
   const asanaLocalNext: BulletItem[] = (asanaUpcomingByCategory["Local SEO"] ?? []).map(t => ({ text: t.name, source: "Asana" }));
+  const asanaStrategyDid: BulletItem[] = (asanaCompletedByCategory["SEO Strategy"] ?? []).map(t => ({ text: t.name, source: "Asana" }));
+  const asanaStrategyNext: BulletItem[] = (asanaUpcomingByCategory["SEO Strategy"] ?? []).map(t => ({ text: t.name, source: "Asana" }));
 
   // No AI narration in Bi-Weekly v2 — raw items pass through to the renderer.
   // B3b will replace the per-item rendering with slug-based formatting.
@@ -469,36 +473,21 @@ export async function generateBiweekly(input: {
   const finalLocalDid       = asanaLocalDid;
   const finalLocalNext      = asanaLocalNext;
 
+  const EMPTY_CELL = "No updates for this section at this time.";
+
   const workLog: NonNullable<DocxSection["workLog"]> = [
-    makeRow(
-      "Content",
-      finalNewContentDid,
-      finalNewContentNext,
-      "No content published this period.",
-      "No upcoming content scheduled yet."
-    ),
-    makeRow(
-      "Optimization",
-      finalOptDid,
-      finalOptNext,
-      "No optimization work completed this period.",
-      "No upcoming optimization work scheduled yet."
-    ),
-    makeRow(
-      "Technical SEO",
-      finalTechDid,
-      finalTechNext,
-      "No completed technical SEO work was logged for this reporting window.",
-      techNext[0]?.text ?? "Review Core Web Vitals scores and address any open technical issues in the queue."
-    ),
-    makeRow(
-      "Local SEO",
-      finalLocalDid,
-      finalLocalNext,
-      "No local SEO or Google Business Profile updates were completed this period.",
-      "No upcoming local SEO work has been scheduled yet."
-    ),
+    makeRow("Content", finalNewContentDid, finalNewContentNext, EMPTY_CELL, EMPTY_CELL),
+    makeRow("Optimization", finalOptDid, finalOptNext, EMPTY_CELL, EMPTY_CELL),
+    makeRow("Technical SEO", finalTechDid, finalTechNext, EMPTY_CELL, EMPTY_CELL),
+    makeRow("Local SEO", finalLocalDid, finalLocalNext, EMPTY_CELL, EMPTY_CELL),
   ];
+
+  // Bi-Weekly v2: SEO Strategy row only appears when it has at least one task in either column.
+  if (asanaStrategyDid.length > 0 || asanaStrategyNext.length > 0) {
+    workLog.push(
+      makeRow("SEO Strategy", asanaStrategyDid, asanaStrategyNext, EMPTY_CELL, EMPTY_CELL)
+    );
+  }
 
   sections.push({
     id: "bw_progress",
@@ -545,6 +534,8 @@ export async function generateBiweekly(input: {
     techNext: techNext.map(i => i.text),
     localDid: asanaLocalDid.map(i => i.text),
     localNext: asanaLocalNext.map(i => i.text),
+    strategyDid: asanaStrategyDid.map(i => i.text),
+    strategyNext: asanaStrategyNext.map(i => i.text),
     hasSf,
     noAirtable,
     sfIssueCounts: sfCounts,

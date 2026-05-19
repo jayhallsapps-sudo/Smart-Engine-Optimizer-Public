@@ -133,6 +133,10 @@ export const clients = pgTable("clients", {
   contactName: text("contact_name"),
   contactEmail: text("contact_email"),
   slackChannelId: text("slack_channel_id"),
+  slackUserId: text("slack_user_id"),
+  website: text("website"),
+  creditsTotal: integer("credits_total"),
+  assignedAmUserId: integer("assigned_am_user_id").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

@@ -4,3 +4,9 @@ dist
 server/public
 vite.config.ts.*
 *.tar.gz
+# Root-level generator proof screenshots and exports — keep out of repo
+/*.png
+/*.pdf
+/*.pptx
+/*.docx
+*.zip

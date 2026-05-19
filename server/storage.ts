@@ -88,6 +88,7 @@ export interface IStorage {
   getClient(id: number): Promise<Client | undefined>;
   createClient(client: InsertClient): Promise<Client>;
   updateClient(id: number, client: Partial<InsertClient>): Promise<Client | undefined>;
+  deleteClientWithCleanup(id: number): Promise<boolean>;
   deleteClient(id: number): Promise<boolean>;
 
   getClientCompetitors(clientId: number): Promise<ClientCompetitor[]>;
@@ -264,6 +265,30 @@ export class DatabaseStorage implements IStorage {
       .where(eq(clients.id, id))
       .returning();
     return updated;
+  }
+
+  async deleteClientWithCleanup(id: number): Promise<boolean> {
+    // Tables referencing client_id WITHOUT FK cascade — manually delete to avoid orphans.
+    // If a new table referencing clientId is added in the future, add it here.
+    // Tables WITH FK cascade (client_competitors, report_schedules, report_comments,
+    // eval_batches, mid_strategy_decks, discoverability_workspaces) clean up
+    // automatically when the client row is deleted.
+
+    return await db.transaction(async (tx) => {
+      // FK-less tables — manual cleanup
+      await tx.execute(sql`DELETE FROM query_logs WHERE client_id = ${id}`);
+      await tx.execute(sql`DELETE FROM sf_reports WHERE client_id = ${id}`);
+      await tx.execute(sql`DELETE FROM call_tracking_reports WHERE client_id = ${id}`);
+      await tx.execute(sql`DELETE FROM qbr_prep_reports WHERE client_id = ${id}`);
+      await tx.execute(sql`DELETE FROM saved_reports WHERE client_id = ${id}`);
+      await tx.execute(sql`DELETE FROM gap_analysis_sessions WHERE client_id = ${id}`);
+      await tx.execute(sql`DELETE FROM finding_history WHERE client_id = ${id}`);
+      await tx.execute(sql`DELETE FROM ama_conversations WHERE client_id = ${id}`);
+
+      // Finally, delete the client. FK-cascade tables clean themselves up.
+      const result = await tx.delete(clients).where(eq(clients.id, id)).returning();
+      return result.length > 0;
+    });
   }
 
   async deleteClient(id: number): Promise<boolean> {

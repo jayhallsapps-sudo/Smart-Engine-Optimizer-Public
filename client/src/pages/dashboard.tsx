@@ -60,6 +60,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { AddClientModal } from "@/components/AddClientModal";
+import { DeleteClientDialog } from "@/components/DeleteClientDialog";
 import type { Client, ClientCompetitor } from "@shared/schema";
 
 interface NsmData {
@@ -1536,6 +1537,7 @@ function ClientCard({
   const [data, setData] = useState<ClientDashboardData | null>(null);
   const [selectedMetricLabel, setSelectedMetricLabel] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"stats" | "client-data" | "competitors">("stats");
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const mutation = useMutation<ClientDashboardData, Error, void>({
     mutationFn: async () => {
@@ -1612,6 +1614,14 @@ function ClientCard({
             })}
           </div>
         </div>
+        <button
+          onClick={() => setDeleteDialogOpen(true)}
+          className="shrink-0 p-1.5 rounded hover:bg-red-500/10 transition-colors"
+          title="Delete client"
+          data-testid={`button-delete-client-${client.id}`}
+        >
+          <Trash2 className="w-3.5 h-3.5" style={{ color: "rgba(252,165,165,0.5)" }} />
+        </button>
         <Button
           variant="ghost"
           size="icon"
@@ -1788,6 +1798,13 @@ function ClientCard({
         <Maximize2 className="w-3 h-3" />
         Expand
       </button>
+
+      <DeleteClientDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        clientId={client.id}
+        clientName={client.name}
+      />
     </div>
   );
 }

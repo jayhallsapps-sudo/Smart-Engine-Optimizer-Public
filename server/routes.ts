@@ -841,9 +841,14 @@ export async function registerRoutes(
   });
 
   app.delete("/api/clients/:id", async (req, res) => {
-    const deleted = await storage.deleteClient(Number(req.params.id));
-    if (!deleted) return res.status(404).json({ message: "Client not found" });
-    res.json({ success: true });
+    try {
+      const deleted = await storage.deleteClientWithCleanup(Number(req.params.id));
+      if (!deleted) return res.status(404).json({ message: "Client not found" });
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error("Failed to delete client:", err);
+      res.status(500).json({ message: err?.message ?? "Failed to delete client" });
+    }
   });
 
   // ─── Client Setup Validation Endpoints ──────────────────────────────────────

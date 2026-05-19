@@ -3462,20 +3462,22 @@ export async function registerRoutes(
         fetchNsmGoals(client.name, true).catch(() => null),
       ]);
 
-      // Website priority: 1) client.gscSiteUrl, 2) NSM sheet fallback, 3) "—"
-      // client.gscSiteUrl is the canonical website URL stored on every client record.
-      const websiteFromClient = (client.gscSiteUrl ?? "").trim() || null;
+      // Website priority: 1) client.website (new column from C1), 2) client.gscSiteUrl (legacy),
+      // 3) NSM sheet fallback, 4) "—"
+      const websiteFromNewColumn = (client.website ?? "").trim() || null;
+      const websiteFromGscUrl = (client.gscSiteUrl ?? "").trim() || null;
       const websiteFromSheet = (current?.website ?? "").trim().replace(/^—$/, "") || null;
-      const websiteResolved = websiteFromClient ?? websiteFromSheet ?? null;
+      const websiteResolved = websiteFromNewColumn ?? websiteFromGscUrl ?? websiteFromSheet ?? null;
       const website = websiteResolved ?? "—";
       const websiteSource: "client_record" | "nsm_sheet" | "none" =
-        websiteFromClient ? "client_record" : websiteFromSheet ? "nsm_sheet" : "none";
+        (websiteFromNewColumn || websiteFromGscUrl) ? "client_record" : websiteFromSheet ? "nsm_sheet" : "none";
 
-      // Credits: sourced from the shared CLIENT_MONTHLY_CREDIT_MAP (clientCreditMap.ts)
-      // which is the single canonical source per data-handling-rules skill.
-      const rawCredits = Object.entries(CLIENT_MONTHLY_CREDIT_MAP).find(([key]) =>
+      // Credits priority: 1) client.creditsTotal (new column from C1),
+      // 2) hardcoded CLIENT_MONTHLY_CREDIT_MAP (legacy), 3) "—"
+      const creditsFromColumn = typeof client.creditsTotal === "number" ? client.creditsTotal : null;
+      const rawCredits = creditsFromColumn ?? (Object.entries(CLIENT_MONTHLY_CREDIT_MAP).find(([key]) =>
         client.name.toLowerCase().includes(key)
-      )?.[1] ?? null;
+      )?.[1] ?? null);
       const credits = rawCredits !== null ? String(rawCredits) : "—";
       const creditsSource: "nsm_sheet" | "none" = rawCredits !== null ? "nsm_sheet" : "none";
 

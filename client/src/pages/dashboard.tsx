@@ -44,6 +44,10 @@ import {
   CalendarClock,
   Hash,
   UserPlus,
+  Settings,
+  AlertCircle,
+  Briefcase,
+  Database,
 } from "lucide-react";
 import {
   Dialog,
@@ -709,6 +713,102 @@ function NsmQuarterSection({ label, nsm, clientId }: { label: string; nsm: NsmDa
   );
 }
 
+function IntegrationValidationGroup({
+  title,
+  icon,
+  validateUrl,
+  validateBody,
+  triggerKey,
+  children,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  validateUrl: string;
+  validateBody: () => Record<string, any>;
+  triggerKey: string;
+  children: React.ReactNode;
+}) {
+  const [validating, setValidating] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [genericError, setGenericError] = useState<string | null>(null);
+  const [validated, setValidated] = useState(false);
+  const lastTriggerKey = useRef<string>("");
+
+  useEffect(() => {
+    if (!triggerKey || triggerKey === lastTriggerKey.current) return;
+    lastTriggerKey.current = triggerKey;
+    let cancelled = false;
+    (async () => {
+      setValidating(true);
+      setErrors({});
+      setGenericError(null);
+      try {
+        const body = validateBody();
+        const hasAllFields = Object.values(body).every(v => typeof v === "string" ? v.trim().length > 0 : v != null);
+        if (!hasAllFields) {
+          if (!cancelled) {
+            setValidating(false);
+            setValidated(false);
+          }
+          return;
+        }
+        const res = await apiRequest("POST", validateUrl, body);
+        const data = await res.json();
+        if (cancelled) return;
+        if (data.ok) {
+          setValidated(true);
+          setErrors({});
+          setGenericError(null);
+        } else {
+          setValidated(false);
+          if (data.errors) setErrors(data.errors);
+          else if (data.error) setGenericError(data.error);
+        }
+      } catch (err: any) {
+        if (!cancelled) {
+          setValidated(false);
+          setGenericError(err?.message ?? "Validation failed");
+        }
+      } finally {
+        if (!cancelled) setValidating(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [triggerKey]);
+
+  return (
+    <div className="flex flex-col gap-1.5 mt-2">
+      <div className="flex items-center gap-2">
+        <span className="shrink-0" style={{ color: "rgba(255,255,255,0.45)" }}>{icon}</span>
+        <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.45)" }}>
+          {title}
+        </span>
+        {validating && <RefreshCw className="w-2.5 h-2.5 animate-spin" style={{ color: "rgba(255,255,255,0.4)" }} />}
+        {!validating && validated && lastTriggerKey.current && (
+          <span className="text-[9px]" style={{ color: "rgba(134,239,172,0.7)" }} data-testid={`status-validated-${title.toLowerCase().replace(/\s+/g, "-")}`}>
+            ✓ Connected
+          </span>
+        )}
+      </div>
+      <div className="flex flex-col gap-1 pl-5">
+        {children}
+        {Object.entries(errors).map(([field, msg]) => (
+          <div key={field} className="text-[9px] flex items-center gap-1" style={{ color: "rgba(252,165,165,0.85)" }} data-testid={`warning-${title.toLowerCase().replace(/\s+/g, "-")}-${field}`}>
+            <AlertCircle className="w-2.5 h-2.5 shrink-0" />
+            <span><span className="font-medium">{field}:</span> {msg}</span>
+          </div>
+        ))}
+        {genericError && (
+          <div className="text-[9px] flex items-center gap-1" style={{ color: "rgba(252,165,165,0.85)" }} data-testid={`warning-${title.toLowerCase().replace(/\s+/g, "-")}-generic`}>
+            <AlertCircle className="w-2.5 h-2.5 shrink-0" />
+            <span>{genericError}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function InlineEditField({
   icon,
   value,
@@ -910,40 +1010,114 @@ function ClientDataTab({ client, clientId }: { client: Client; clientId: number 
           type="email"
         />
         <div style={{ height: "1px", background: "rgba(255,255,255,0.07)", margin: "2px 0" }} />
-        <div className="flex items-center gap-2">
-          <Globe className="w-3 h-3 shrink-0" style={{ color: "rgba(255,255,255,0.35)" }} />
-          {website !== "—" ? (
-            <a
-              href={website.startsWith("http") ? website : `https://${website}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-[11px] truncate hover:underline"
-              style={{ color: "rgba(255,255,255,0.7)" }}
-              data-testid={`link-website-${clientId}`}
-            >
-              {website}
-            </a>
-          ) : (
-            <span className="text-[11px]" style={{ color: "rgba(255,255,255,0.35)" }} data-testid={`link-website-${clientId}`}>—</span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <CreditCard className="w-3 h-3 shrink-0" style={{ color: "rgba(255,255,255,0.35)" }} />
-          <span className="text-[11px]" style={{ color: credits !== "—" ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.35)" }} data-testid={`text-credits-${clientId}`}>
-            {credits !== "—" ? `${credits} credits total` : "—"}
-          </span>
-        </div>
+        <InlineEditField
+          icon={<Globe className="w-3 h-3" />}
+          value={client.website ?? website}
+          placeholder="Add website"
+          onSave={val => saveClientField("website", val)}
+          testIdPrefix={`website-${clientId}`}
+        />
+        <InlineEditField
+          icon={<CreditCard className="w-3 h-3" />}
+          value={client.creditsTotal != null ? String(client.creditsTotal) : (credits !== "—" ? credits : "")}
+          placeholder="Add credits total"
+          onSave={val => saveClientField("creditsTotal", (val ? Number(val) : null) as any)}
+          testIdPrefix={`credits-${clientId}`}
+          type="number"
+        />
         <div className="flex items-center gap-2">
           <Target className="w-3 h-3 shrink-0" style={{ color: "rgba(255,255,255,0.35)" }} />
           <span className="text-[11px]" style={{ color: nsmType !== "—" ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.35)" }} data-testid={`text-nsm-type-${clientId}`}>
             {nsmType !== "—" ? `NSM Type: ${nsmType}` : "NSM Type: —"}
           </span>
         </div>
+        <InlineEditField
+          icon={<Hash className="w-3 h-3" />}
+          value={(client.brandTerms ?? []).join(", ")}
+          placeholder="Add brand terms (comma-separated)"
+          onSave={val => saveClientField("brandTerms", val.split(",").map((s: string) => s.trim()).filter(Boolean) as any)}
+          testIdPrefix={`brand-terms-${clientId}`}
+        />
+      </div>
+
+      <IntegrationValidationGroup
+        title="Asana"
+        icon={<Briefcase className="w-3 h-3" />}
+        validateUrl="/api/validate/asana"
+        validateBody={() => ({ projectId: (client.asanaProjectId ?? "").trim() })}
+        triggerKey={client.asanaProjectId ?? ""}
+      >
+        <InlineEditField
+          icon={<Hash className="w-3 h-3" />}
+          value={client.asanaProjectId}
+          placeholder="Asana project ID"
+          onSave={val => saveClientField("asanaProjectId", val)}
+          testIdPrefix={`asana-project-id-${clientId}`}
+        />
+      </IntegrationValidationGroup>
+
+      <IntegrationValidationGroup
+        title="Airtable"
+        icon={<Database className="w-3 h-3" />}
+        validateUrl="/api/validate/airtable"
+        validateBody={() => ({
+          baseId: (client.airtableBaseId ?? "").trim(),
+          tableName: (client.airtableTableName ?? "").trim(),
+          productionView: (client.airtableProductionView ?? "").trim(),
+          everythingView: (client.airtableEverythingView ?? "").trim(),
+        })}
+        triggerKey={[
+          client.airtableBaseId ?? "",
+          client.airtableTableName ?? "",
+          client.airtableProductionView ?? "",
+          client.airtableEverythingView ?? "",
+        ].join("|")}
+      >
+        <InlineEditField
+          icon={<Hash className="w-3 h-3" />}
+          value={client.airtableBaseId}
+          placeholder="Airtable base ID"
+          onSave={val => saveClientField("airtableBaseId", val)}
+          testIdPrefix={`airtable-base-${clientId}`}
+        />
+        <InlineEditField
+          icon={<Hash className="w-3 h-3" />}
+          value={client.airtableTableName}
+          placeholder="Airtable table name"
+          onSave={val => saveClientField("airtableTableName", val)}
+          testIdPrefix={`airtable-table-${clientId}`}
+        />
+        <InlineEditField
+          icon={<Hash className="w-3 h-3" />}
+          value={client.airtableProductionView}
+          placeholder="Airtable production view name"
+          onSave={val => saveClientField("airtableProductionView", val)}
+          testIdPrefix={`airtable-production-view-${clientId}`}
+        />
+        <InlineEditField
+          icon={<Hash className="w-3 h-3" />}
+          value={client.airtableEverythingView}
+          placeholder="Airtable everything view name"
+          onSave={val => saveClientField("airtableEverythingView", val)}
+          testIdPrefix={`airtable-everything-view-${clientId}`}
+        />
+      </IntegrationValidationGroup>
+
+      <IntegrationValidationGroup
+        title="Slack"
+        icon={<Hash className="w-3 h-3" />}
+        validateUrl="/api/validate/slack"
+        validateBody={() => ({
+          channelId: (client.slackChannelId ?? "").trim(),
+          userId: (client.slackUserId ?? "").trim(),
+        })}
+        triggerKey={[client.slackChannelId ?? "", client.slackUserId ?? ""].join("|")}
+      >
         <div className="flex items-center gap-2">
           <InlineEditField
             icon={<Hash className="w-3 h-3" />}
             value={client.slackChannelId}
-            placeholder="Add Slack Channel ID"
+            placeholder="Slack channel ID"
             onSave={val => saveClientField("slackChannelId", val)}
             testIdPrefix={`slack-channel-${clientId}`}
           />
@@ -956,7 +1130,14 @@ function ClientDataTab({ client, clientId }: { client: Client; clientId: number 
             <CalendarClock className="w-3.5 h-3.5" style={{ color: "rgba(255,255,255,0.4)" }} />
           </button>
         </div>
-      </div>
+        <InlineEditField
+          icon={<Hash className="w-3 h-3" />}
+          value={client.slackUserId}
+          placeholder="Slack user ID (for @-mentions)"
+          onSave={val => saveClientField("slackUserId", val)}
+          testIdPrefix={`slack-user-${clientId}`}
+        />
+      </IntegrationValidationGroup>
 
       <div style={{ height: "1px", background: "rgba(255,255,255,0.07)" }} />
 

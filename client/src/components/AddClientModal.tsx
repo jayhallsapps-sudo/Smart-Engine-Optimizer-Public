@@ -8,7 +8,25 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuth } from "@/contexts/auth-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Loader2, Plus, Trash2, AlertCircle } from "lucide-react";
+import { Loader2, Plus, Trash2, AlertCircle, HelpCircle } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+
+function FieldHelp({ text }: { text: string }) {
+  return (
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button type="button" className="inline-flex" tabIndex={-1}>
+            <HelpCircle className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground transition-colors" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="right" className="max-w-xs text-xs">
+          {text}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
 
 interface Competitor {
   name: string;
@@ -256,13 +274,19 @@ export function AddClientModal({ open, onOpenChange, onCreated }: AddClientModal
           </div>
 
           <div className="space-y-1">
-            <Label>Credits Total *</Label>
+            <Label className="flex items-center gap-1.5">
+              Credits Total *
+              <FieldHelp text="The Webserv credit budget for this client per billing period. Used to size content quotas. Find this in the client's contract or NSM tracker." />
+            </Label>
             <Input type="number" value={form.creditsTotal} onChange={e => update("creditsTotal", e.target.value)} placeholder="e.g., 12" data-testid="input-credits" />
             {fieldError("creditsTotal")}
           </div>
 
           <div className="space-y-1">
-            <Label>Brand Terms * <span className="text-xs text-muted-foreground">(comma-separated)</span></Label>
+            <Label className="flex items-center gap-1.5">
+              Brand Terms * <span className="text-xs text-muted-foreground">(comma-separated)</span>
+              <FieldHelp text="Comma-separated list of branded search terms. Used by GSC to split branded vs non-branded queries. Include common variations: company name, abbreviations, common misspellings." />
+            </Label>
             <Input value={form.brandTerms} onChange={e => update("brandTerms", e.target.value)} placeholder="e.g., Sol Womens, Sol Womens Treatment, sol-womens.com" data-testid="input-brand-terms" />
             {fieldError("brandTerms")}
           </div>
@@ -271,7 +295,10 @@ export function AddClientModal({ open, onOpenChange, onCreated }: AddClientModal
           <div className="pt-2 border-t">
             <h3 className="text-sm font-semibold mb-2">Asana</h3>
             <div className="space-y-1">
-              <Label>Project ID *</Label>
+              <Label className="flex items-center gap-1.5">
+                Asana Project ID *
+                <FieldHelp text="Open the Asana project. The URL looks like /1/{workspace}/project/{ID}. The number after 'project/' is the Project ID." />
+              </Label>
               <Input value={form.asanaProjectId} onChange={e => update("asanaProjectId", e.target.value)} placeholder="e.g., 1234567890123456" data-testid="input-asana-project-id" />
               {fieldError("asanaProjectId")}
             </div>
@@ -281,22 +308,34 @@ export function AddClientModal({ open, onOpenChange, onCreated }: AddClientModal
           <div className="pt-2 border-t">
             <h3 className="text-sm font-semibold mb-2">Airtable</h3>
             <div className="space-y-1">
-              <Label>Base ID *</Label>
+              <Label className="flex items-center gap-1.5">
+                Airtable Base ID *
+                <FieldHelp text="Open the Airtable base. The URL starts with airtable.com/{baseID}. The base ID starts with 'app' and is 17 characters." />
+              </Label>
               <Input value={form.airtableBaseId} onChange={e => update("airtableBaseId", e.target.value)} placeholder="e.g., appXXXXXXXXXXXXXX" data-testid="input-airtable-base-id" />
               {fieldError("airtableBaseId")}
             </div>
             <div className="space-y-1 mt-2">
-              <Label>Table Name *</Label>
+              <Label className="flex items-center gap-1.5">
+                Airtable Table Name *
+                <FieldHelp text="The name of the table within the base. Usually 'Content' for Webserv clients. Case-sensitive — type it exactly as it appears in Airtable." />
+              </Label>
               <Input value={form.airtableTableName} onChange={e => update("airtableTableName", e.target.value)} data-testid="input-airtable-table" />
               {fieldError("airtableTableName")}
             </div>
             <div className="space-y-1 mt-2">
-              <Label>Production View *</Label>
+              <Label className="flex items-center gap-1.5">
+                Airtable Production View *
+                <FieldHelp text="The name of the production view in the table. Open the table, click the views dropdown in the top-left. Use the EXACT name. Example: 'Sol Womens Treatment Production View'." />
+              </Label>
               <Input value={form.airtableProductionView} onChange={e => update("airtableProductionView", e.target.value)} placeholder="e.g., Client Production View" data-testid="input-airtable-production-view" />
               {fieldError("airtableProductionView")}
             </div>
             <div className="space-y-1 mt-2">
-              <Label>Everything View *</Label>
+              <Label className="flex items-center gap-1.5">
+                Airtable Everything View *
+                <FieldHelp text="The 'Everything' view — typically named '{Client Name} Everything'. Make sure this view exists in Airtable and contains all records, not filtered." />
+              </Label>
               <Input value={form.airtableEverythingView} onChange={e => update("airtableEverythingView", e.target.value)} placeholder="e.g., Client Everything" data-testid="input-airtable-everything-view" />
               {fieldError("airtableEverythingView")}
             </div>
@@ -306,12 +345,18 @@ export function AddClientModal({ open, onOpenChange, onCreated }: AddClientModal
           <div className="pt-2 border-t">
             <h3 className="text-sm font-semibold mb-2">Slack</h3>
             <div className="space-y-1">
-              <Label>Channel ID *</Label>
+              <Label className="flex items-center gap-1.5">
+                Slack Channel ID *
+                <FieldHelp text="Right-click the channel in Slack → Copy link. The ID is the last segment of the URL, starts with 'C', 11 characters total. Example: C012ABCDEF." />
+              </Label>
               <Input value={form.slackChannelId} onChange={e => update("slackChannelId", e.target.value)} placeholder="e.g., C012ABCDEF" data-testid="input-slack-channel-id" />
               {fieldError("slackChannelId")}
             </div>
             <div className="space-y-1 mt-2">
-              <Label>AM User ID (for @-mentions) *</Label>
+              <Label className="flex items-center gap-1.5">
+                AM User ID (for @-mentions) *
+                <FieldHelp text="In Slack, open the AM's profile (click their name). Click the 'More' menu (three dots) → 'Copy member ID'. Starts with 'U', 11 characters total. Example: U012ABCDEF. Do NOT enter their display name." />
+              </Label>
               <Input value={form.slackUserId} onChange={e => update("slackUserId", e.target.value)} placeholder="e.g., U012ABCDEF" data-testid="input-slack-user-id" />
               {fieldError("slackUserId")}
             </div>

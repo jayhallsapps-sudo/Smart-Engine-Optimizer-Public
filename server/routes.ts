@@ -876,7 +876,7 @@ export async function registerRoutes(
       }
       return res.json({ ok: true, projectName });
     } catch (err: any) {
-      return res.json({ ok: false, error: err?.message ?? "Asana validation failed" });
+      return res.json({ ok: false, errors: { projectId: err?.message ?? "Asana validation failed" } });
     }
   });
 
@@ -914,7 +914,7 @@ export async function registerRoutes(
       }
       return res.json({ ok: true });
     } catch (err: any) {
-      return res.json({ ok: false, error: err?.message ?? "Airtable validation failed" });
+      return res.json({ ok: false, errors: { baseId: err?.message ?? "Airtable validation failed" } });
     }
   });
 
@@ -932,19 +932,26 @@ export async function registerRoutes(
       try {
         await slack.conversations.info({ channel: channelId! });
       } catch (err: any) {
-        fieldErrors.channelId = err?.data?.error ?? err?.message ?? "Channel not found";
+        const slackErr = err?.data?.error ?? err?.message ?? "Channel not found";
+        if (slackErr === "channel_not_found") fieldErrors.channelId = "Channel not found. Channel IDs start with 'C' and are 11 characters.";
+        else if (slackErr === "invalid_auth" || slackErr === "not_authed") fieldErrors.channelId = "Slack integration is not authorized. Check Slack connection in Integrations.";
+        else fieldErrors.channelId = slackErr;
       }
       try {
         await slack.users.info({ user: userId! });
       } catch (err: any) {
-        fieldErrors.userId = err?.data?.error ?? err?.message ?? "User not found";
+        const slackErr = err?.data?.error ?? err?.message ?? "User not found";
+        if (slackErr === "user_not_found") fieldErrors.userId = "User not found. Slack user IDs start with 'U' and are 11 characters. Use the AM's Slack ID, not their display name.";
+        else if (slackErr === "invalid_auth" || slackErr === "not_authed") fieldErrors.userId = "Slack integration is not authorized. Check Slack connection in Integrations.";
+        else fieldErrors.userId = slackErr;
       }
       if (Object.keys(fieldErrors).length > 0) {
         return res.json({ ok: false, errors: fieldErrors });
       }
       return res.json({ ok: true });
     } catch (err: any) {
-      return res.json({ ok: false, error: err?.message ?? "Slack validation failed" });
+      const msg = err?.message ?? "Slack validation failed";
+      return res.json({ ok: false, errors: { channelId: msg, userId: msg } });
     }
   });
 

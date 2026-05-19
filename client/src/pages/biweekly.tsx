@@ -347,7 +347,9 @@ export default function BiweeklyPage() {
   const { data: clients = [] } = useQuery<Client[]>({ queryKey: ["/api/clients"] });
   const clientName = clients.find(c => String(c.id) === clientId)?.name;
 
-  const { startDate, endDate } = getBiweeklyWindow();
+  const [windowDates, setWindowDates] = useState(() => getBiweeklyWindow());
+  const startDate = windowDates.startDate;
+  const endDate = windowDates.endDate;
   const windowLabel = fmtWindowLabel(startDate, endDate);
 
   const reportSave = useReportSave({
@@ -365,6 +367,8 @@ export default function BiweeklyPage() {
         clientId: Number(clientId),
         startDate,
         endDate,
+        windowStart: startDate,
+        windowEnd: endDate,
         preparedBy: preparedBy || "JAY HALL",
       });
       return res.json();
@@ -558,10 +562,34 @@ export default function BiweeklyPage() {
             />
           </div>
 
-          {/* Reporting period */}
-          <div className="rounded-md bg-muted/60 px-3 py-2 space-y-0.5">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Reporting Period</p>
-            <p className="text-xs font-mono text-foreground">{windowLabel}</p>
+          {/* Reporting period — editable */}
+          <div className="space-y-1.5">
+            <Label className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">3 · Reporting Period</Label>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label className="text-[9px] text-muted-foreground">Start</Label>
+                <Input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setWindowDates(prev => ({ ...prev, startDate: e.target.value }))}
+                  className="text-xs h-8"
+                  data-testid="input-window-start"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[9px] text-muted-foreground">End</Label>
+                <Input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setWindowDates(prev => ({ ...prev, endDate: e.target.value }))}
+                  className="text-xs h-8"
+                  data-testid="input-window-end"
+                />
+              </div>
+            </div>
+            <p className="text-[10px] text-muted-foreground">
+              {windowLabel} — change dates and click Regenerate to refresh data.
+            </p>
           </div>
 
           {/* Optional crawl */}

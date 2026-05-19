@@ -1614,27 +1614,29 @@ function ClientCard({
             })}
           </div>
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="shrink-0 h-7 w-7 text-white/30 hover:text-red-400 hover:bg-red-500/10"
-          onClick={() => setDeleteDialogOpen(true)}
-          data-testid={`button-delete-client-${client.id}`}
-          title="Delete client"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="shrink-0 h-7 w-7 text-white/40 hover:text-white"
-          onClick={load}
-          disabled={mutation.isPending}
-          data-testid={`button-refresh-client-${client.id}`}
-          title="Refresh this client"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${mutation.isPending ? "animate-spin" : ""}`} />
-        </Button>
+        <div className="flex items-center gap-1 shrink-0">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="shrink-0 h-7 w-7 text-white/30 hover:text-red-400 hover:bg-red-500/10"
+            onClick={() => setDeleteDialogOpen(true)}
+            data-testid={`button-delete-client-${client.id}`}
+            title="Delete client"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="shrink-0 h-7 w-7 text-white/40 hover:text-white"
+            onClick={load}
+            disabled={mutation.isPending}
+            data-testid={`button-refresh-client-${client.id}`}
+            title="Refresh this client"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${mutation.isPending ? "animate-spin" : ""}`} />
+          </Button>
+        </div>
       </div>
 
       {mutation.isPending && !data ? (

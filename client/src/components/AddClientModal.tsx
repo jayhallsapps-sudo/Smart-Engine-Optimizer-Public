@@ -73,7 +73,7 @@ export function AddClientModal({ open, onOpenChange, onCreated }: AddClientModal
   const adminMode = isAdmin();
 
   // Load AM users when admin is creating
-  const { data: amUsers = [] } = useQuery<Array<{ id: number; username: string; firstName?: string; lastName?: string }>>({
+  const { data: amUsers = [] } = useQuery<Array<{ id: number; fullName: string; email: string }>>({
     queryKey: ["/api/users", "am"],
     queryFn: async () => {
       const res = await apiRequest("GET", "/api/users?role=am");
@@ -330,7 +330,7 @@ export function AddClientModal({ open, onOpenChange, onCreated }: AddClientModal
                   <SelectContent>
                     {amUsers.map(u => (
                       <SelectItem key={u.id} value={String(u.id)} data-testid={`option-am-${u.id}`}>
-                        {u.firstName || u.lastName ? `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() : u.username}
+                        {u.fullName || u.email}
                       </SelectItem>
                     ))}
                   </SelectContent>

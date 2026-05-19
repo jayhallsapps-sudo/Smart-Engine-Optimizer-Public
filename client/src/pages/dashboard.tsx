@@ -826,7 +826,7 @@ function AssignedAmRow({
   const [saving, setSaving] = useState(false);
   const adminMode = isAdmin();
 
-  const { data: amUsers = [] } = useQuery<Array<{ id: number; username: string; firstName?: string; lastName?: string }>>({
+  const { data: amUsers = [] } = useQuery<Array<{ id: number; fullName: string; email: string }>>({
     queryKey: ["/api/users", "am"],
     queryFn: async () => {
       const res = await apiRequest("GET", "/api/users?role=am");
@@ -835,7 +835,7 @@ function AssignedAmRow({
     enabled: editing && adminMode,
   });
 
-  const { data: allUsers = [] } = useQuery<Array<{ id: number; username: string; firstName?: string; lastName?: string; role: string }>>({
+  const { data: allUsers = [] } = useQuery<Array<{ id: number; fullName: string; email: string; role: string }>>({
     queryKey: ["/api/users"],
     queryFn: async () => {
       const res = await apiRequest("GET", "/api/users");
@@ -844,11 +844,7 @@ function AssignedAmRow({
   });
 
   const assignedUser = allUsers.find(u => u.id === client.assignedAmUserId);
-  const displayName = assignedUser
-    ? (assignedUser.firstName || assignedUser.lastName
-        ? `${assignedUser.firstName ?? ""} ${assignedUser.lastName ?? ""}`.trim()
-        : assignedUser.username)
-    : null;
+  const displayName = assignedUser ? (assignedUser.fullName || assignedUser.email) : null;
 
   const handleSelect = async (val: string) => {
     setSaving(true);
@@ -872,7 +868,7 @@ function AssignedAmRow({
             <SelectItem value="none" className="text-xs">Unassigned</SelectItem>
             {amUsers.map(u => (
               <SelectItem key={u.id} value={String(u.id)} className="text-xs" data-testid={`option-assigned-am-${u.id}`}>
-                {u.firstName || u.lastName ? `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() : u.username}
+                {u.fullName || u.email}
               </SelectItem>
             ))}
           </SelectContent>

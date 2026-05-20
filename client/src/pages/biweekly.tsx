@@ -24,6 +24,8 @@ import {
   CloudUpload,
   Loader2,
   RefreshCw,
+  History,
+  Sparkles,
   Send,
   Bot,
   User,
@@ -337,6 +339,7 @@ export default function BiweeklyPage() {
   const [report, setReport] = useState<any>(null);
   const [edits, setEdits] = useState<Record<string, string>>({});
   const editsRef = useRef<Record<string, string>>({});
+  const [loadMode, setLoadMode] = useState<"latest" | "fresh">("latest");
   const [isUploading, setIsUploading] = useState(false);
   const [currentCrawlId, setCurrentCrawlId] = useState<number | null>(null);
   const [comparisonCrawlId, setComparisonCrawlId] = useState<number | null>(null);
@@ -357,6 +360,40 @@ export default function BiweeklyPage() {
       syncUrlParams({ client: clientId, load: String(id) });
     },
   });
+
+  const loadLatestSaved = async () => {
+    if (!clientId) return;
+    try {
+      const { apiRequest } = await import("@/lib/queryClient");
+      const listRes = await apiRequest("GET", `/api/saved-reports?clientId=${clientId}&reportType=biweekly`);
+      const reports = await listRes.json();
+      if (!reports || reports.length === 0) {
+        toast({ title: "No saved reports yet", description: "Generating a fresh report instead.", variant: "default" });
+        generateMut.mutate();
+        return;
+      }
+      const fullRes = await apiRequest("GET", `/api/saved-reports/${reports[0].id}`);
+      const saved = await fullRes.json();
+      const savedEdits = (saved.editsJson as Record<string, string>) ?? {};
+      setReport(saved.generatedReportJson);
+      setEdits(savedEdits);
+      editsRef.current = savedEdits;
+      reportSave.setSavedReportId(saved.id);
+      reportSave.pendingPayloadRef.current = {
+        reportData: saved.generatedReportJson,
+        edits: savedEdits,
+        meta: {
+          reportPeriodLabel: saved.reportPeriodLabel ?? windowLabel,
+          analysisWindowStart: saved.analysisWindowStart ?? startDate,
+          analysisWindowEnd: saved.analysisWindowEnd ?? endDate,
+        },
+      };
+      syncUrlParams({ client: clientId, load: String(saved.id) });
+      toast({ title: "Latest auto-generated report loaded" });
+    } catch (err: any) {
+      toast({ title: "Could not load latest", description: err?.message ?? "Unknown error", variant: "destructive" });
+    }
+  };
 
   const generateMut = useMutation({
     mutationFn: async () => {
@@ -405,10 +442,8 @@ export default function BiweeklyPage() {
 
     syncUrlParams({ client: clientId });
 
-    const savedId = loadIdRef.current;
-    if (savedId) {
-      loadIdRef.current = null;
-      import("@/lib/queryClient").then(({ apiRequest }) =>
+    const loadSpecificSavedReport = (savedId: string) => {
+      return import("@/lib/queryClient").then(({ apiRequest }) =>
         apiRequest("GET", `/api/saved-reports/${savedId}`)
           .then(r => r.json())
           .then(saved => {
@@ -428,12 +463,36 @@ export default function BiweeklyPage() {
             };
             syncUrlParams({ client: clientId, load: String(saved.id) });
             toast({ title: "Report loaded" });
+            return saved;
           })
-          .catch(() => generateMut.mutate())
       );
-    } else {
-      generateMut.mutate();
+    };
+
+    const explicitLoadId = loadIdRef.current;
+    if (explicitLoadId) {
+      loadIdRef.current = null;
+      loadSpecificSavedReport(explicitLoadId).catch(() => generateMut.mutate());
+      return;
     }
+
+    if (loadMode === "fresh") {
+      generateMut.mutate();
+      return;
+    }
+
+    // loadMode === "latest" — fetch the most recent saved report; if none, fall back to fresh
+    import("@/lib/queryClient").then(({ apiRequest }) =>
+      apiRequest("GET", `/api/saved-reports?clientId=${clientId}&reportType=biweekly`)
+        .then(r => r.json())
+        .then((reports: any[]) => {
+          if (reports && reports.length > 0) {
+            return loadSpecificSavedReport(String(reports[0].id));
+          }
+          // No saved reports exist — fall back to fresh generation
+          generateMut.mutate();
+        })
+        .catch(() => generateMut.mutate())
+    );
   }, [clientId]);
 
   const downloadDocxMut = useMutation({
@@ -599,6 +658,46 @@ export default function BiweeklyPage() {
             ) : null;
           })()}
 
+          {/* Mode toggle */}
+          {clientId && (
+            <div className="space-y-1.5">
+              <Label className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Report Source</Label>
+              <div className="grid grid-cols-2 gap-1.5">
+                <Button
+                  size="sm"
+                  variant={loadMode === "latest" ? "default" : "outline"}
+                  className="h-8 text-[11px] gap-1.5 justify-center"
+                  onClick={() => {
+                    setLoadMode("latest");
+                    loadLatestSaved();
+                  }}
+                  data-testid="button-mode-latest"
+                >
+                  <History className="w-3 h-3" />
+                  Latest auto
+                </Button>
+                <Button
+                  size="sm"
+                  variant={loadMode === "fresh" ? "default" : "outline"}
+                  className="h-8 text-[11px] gap-1.5 justify-center"
+                  onClick={() => {
+                    setLoadMode("fresh");
+                    generateMut.mutate();
+                  }}
+                  data-testid="button-mode-fresh"
+                >
+                  <Sparkles className="w-3 h-3" />
+                  Generate fresh
+                </Button>
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                {loadMode === "latest"
+                  ? "Loads the most recent auto-generated report (the one you got the Slack notification for)."
+                  : "Runs a new generation using the date range above."}
+              </p>
+            </div>
+          )}
+
           {/* Generate */}
           <Button
             className="w-full"
@@ -611,7 +710,7 @@ export default function BiweeklyPage() {
             ) : report ? (
               <><RefreshCw className="w-4 h-4 mr-2" /> Regenerate</>
             ) : (
-              "Generate Report"
+              loadMode === "latest" ? "Regenerate" : "Generate Report"
             )}
           </Button>
         </div>

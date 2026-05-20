@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { DEFAULT_THEME_TOKENS } from "@shared/schema";
 import type { DocBlock } from "@/components/biweekly-wysiwyg";
 import { DEFAULT_BIWEEKLY_BLOCKS } from "@/components/biweekly-wysiwyg";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, TrendingUp, TrendingDown } from "lucide-react";
 
 // ─── Spacing helpers ──────────────────────────────────────────────────────────
 
@@ -442,6 +442,22 @@ function KPISummaryBlock({ block, tokens }: BlockProps) {
   );
 }
 
+function StatusCell({ value }: { value: string }) {
+  // Strip any leading emoji and whitespace to find the direction keyword
+  const stripped = value.replace(/^[\u2705\u274C\u26A0\uFE0F\s]+/, "").trim();
+  const lower = stripped.toLowerCase();
+  const isAhead = lower.startsWith("ahead") || lower.startsWith("on track");
+  const isBehind = lower.startsWith("behind");
+  const iconColor = isAhead ? "#22c55e" : isBehind ? "#ef4444" : undefined;
+  const Icon = isAhead ? TrendingUp : isBehind ? TrendingDown : null;
+  return (
+    <span className="inline-flex items-center gap-1">
+      {Icon && <Icon className="w-3.5 h-3.5 shrink-0" style={{ color: iconColor }} />}
+      <span>{value}</span>
+    </span>
+  );
+}
+
 interface DataTableBlockProps extends BlockProps {
   workLogSectionId?: string;
 }
@@ -585,7 +601,11 @@ function DataTableBlock({ block, tokens, edits, onEdit, workLogSectionId, printM
                         />
                       ) : (
                         <>
-                          <RenderLines text={cell} />
+                          {block.id === "blk-nsm" && ci === 4 ? (
+                            <StatusCell value={cell} />
+                          ) : (
+                            <RenderLines text={cell} />
+                          )}
                           {cellSources.length > 0 && (
                             <div className="mt-1 flex flex-wrap gap-0.5">
                               {cellSources.map(s => <SourceChip key={s} source={s} />)}

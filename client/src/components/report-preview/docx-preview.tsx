@@ -522,92 +522,69 @@ function DocxSectionBlock({
 
       {section.type === "pulse" && section.metrics && bwTheme && (() => {
         const metrics = section.metrics!;
-        const get = (label: string) => metrics.find(m => m.label === label)?.current ?? "—";
-        const nsmQuarter      = get("NSM Quarter");
-        const nsmSessGoal     = get("NSM Sessions Goal");
-        const nsmSessActual   = get("NSM Sessions Actual");
-        const nsmSessPct      = get("NSM Sessions %");
-        const nsmSessTrack    = get("NSM Sessions On Track");
-        const mvpMetric       = metrics.find(m => /NSM MVP .* Goal/.test(m.label));
-        const mvpLabel        = mvpMetric?.label.replace(" Goal", "") ?? "NSM MVP";
-        const nsmMvpGoal      = mvpMetric?.current ?? "—";
-        const nsmMvpActual    = get(mvpLabel + " Actual");
-        const nsmMvpPct       = get(mvpLabel + " %");
-        const nsmMvpTrack     = get(mvpLabel + " On Track");
-        const mainMetrics     = metrics.filter(m => !m.label.startsWith("NSM"));
-        const hasNsm          = nsmQuarter !== "—";
-        return (
-          <div className="space-y-2 text-[12px]">
-            {mainMetrics.map((m, mi) => {
-              const insightKey = `bw_pulse_insight_${mi}`;
-              return (
-                <div key={mi}>
-                  <div className="flex items-start gap-1.5">
-                    <span style={{ color: accentColor }} className="font-bold mt-0.5 shrink-0">●</span>
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="font-bold" style={{ color: accentColor }}>{m.label}: </span>
-                      <span>{m.current}</span>
-                      {m.source && <SourceBadge source={m.source} />}
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-1.5 pl-5 mt-0.5 text-[11px] text-gray-500">
-                    <span className="shrink-0 mt-0.5">○</span>
-                    <EditableSection
-                      editKey={insightKey}
-                      value={edits[insightKey] ?? ""}
-                      edits={edits}
-                      onEdit={onEdit}
-                      as="span"
-                      className="italic flex-1"
-                    />
-                  </div>
-                </div>
-              );
-            })}
-            {hasNsm && (
+        // v2 warning case: a single metric with label starting with ⚠
+        const warningMetric = metrics.find(m => typeof m.label === "string" && m.label.startsWith("⚠"));
+        if (warningMetric) {
+          return (
+            <div className="space-y-2 text-[12px]">
               <div className="mt-3 border rounded-md overflow-hidden text-[11px]" style={{ borderColor: accentColor + "40" }}>
                 <div className="px-3 py-1.5 font-semibold" style={{ backgroundColor: "#FEF6F1", color: accentColor, borderLeft: `4px solid ${accentColor}` }}>
-                  NSM Goals — {nsmQuarter}
+                  {warningMetric.label}
                 </div>
-                <table className="w-full">
-                  <thead>
-                    <tr className="text-[10px] text-gray-500 border-b" style={{ backgroundColor: "#F9FAFB" }}>
-                      <th className="text-left px-3 py-1 font-medium">Metric</th>
-                      <th className="text-right px-2 py-1 font-medium">Goal</th>
-                      <th className="text-right px-2 py-1 font-medium">Actual</th>
-                      <th className="text-right px-2 py-1 font-medium">%</th>
-                      <th className="text-right px-3 py-1 font-medium">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr className="border-b border-gray-100">
-                      <td className="px-3 py-1.5 font-medium">Organic Sessions</td>
-                      <td className="text-right px-2 py-1.5">{nsmSessGoal}</td>
-                      <td className="text-right px-2 py-1.5">{nsmSessActual}</td>
-                      <td className="text-right px-2 py-1.5">{nsmSessPct}</td>
-                      <td className="text-right px-3 py-1.5">{nsmSessTrack}</td>
-                    </tr>
-                    <tr>
-                      <td className="px-3 py-1.5 font-medium">{mvpLabel.replace("NSM MVP ", "").replace("(", "").replace(")", "")}</td>
-                      <td className="text-right px-2 py-1.5">{nsmMvpGoal}</td>
-                      <td className="text-right px-2 py-1.5">{nsmMvpActual}</td>
-                      <td className="text-right px-2 py-1.5">{nsmMvpPct}</td>
-                      <td className="text-right px-3 py-1.5">{nsmMvpTrack}</td>
-                    </tr>
-                  </tbody>
-                </table>
-                <div className="px-3 py-2 border-t border-gray-100 text-[11px]">
-                  <EditableSection
-                    editKey="bw_nsm_notes"
-                    value={edits["bw_nsm_notes"] ?? "Add notes on NSM progress..."}
-                    edits={edits}
-                    onEdit={onEdit}
-                    as="span"
-                    className="italic text-gray-400"
-                  />
+                <div className="px-3 py-2 text-[11px] italic text-gray-600">
+                  {warningMetric.current ?? "NSM data could not be loaded."}
                 </div>
               </div>
-            )}
+            </div>
+          );
+        }
+        // v2 normal case: each metric is a row; current = "Goal | Actual | % | Status"
+        const parseRow = (m: any): { label: string; goal: string; actual: string; pct: string; status: string } => {
+          const parts = String(m.current ?? "").split("|").map((s: string) => s.trim());
+          const [goal = "—", actual = "—", pct = "—", status = "—"] = parts;
+          return { label: m.label, goal, actual, pct, status };
+        };
+        if (metrics.length === 0) return null;
+        const rows = metrics.map(parseRow);
+        return (
+          <div className="space-y-2 text-[12px]">
+            <div className="mt-1 border rounded-md overflow-hidden text-[11px]" style={{ borderColor: accentColor + "40" }}>
+              <div className="px-3 py-1.5 font-semibold" style={{ backgroundColor: "#FEF6F1", color: accentColor, borderLeft: `4px solid ${accentColor}` }}>
+                NSM Goals
+              </div>
+              <table className="w-full">
+                <thead>
+                  <tr className="text-[10px] text-gray-500 border-b" style={{ backgroundColor: "#F9FAFB" }}>
+                    <th className="text-left px-3 py-1 font-medium">Metric</th>
+                    <th className="text-right px-2 py-1 font-medium">Goal</th>
+                    <th className="text-right px-2 py-1 font-medium">Actual</th>
+                    <th className="text-right px-2 py-1 font-medium">%</th>
+                    <th className="text-right px-3 py-1 font-medium">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r, ri) => (
+                    <tr key={ri} className={ri < rows.length - 1 ? "border-b border-gray-100" : ""}>
+                      <td className="px-3 py-1.5 font-medium">{r.label}</td>
+                      <td className="text-right px-2 py-1.5">{r.goal}</td>
+                      <td className="text-right px-2 py-1.5">{r.actual}</td>
+                      <td className="text-right px-2 py-1.5">{r.pct}</td>
+                      <td className="text-right px-3 py-1.5">{r.status}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="px-3 py-2 border-t border-gray-100 text-[11px]">
+                <EditableSection
+                  editKey="bw_nsm_notes"
+                  value={edits["bw_nsm_notes"] ?? ""}
+                  edits={edits}
+                  onEdit={onEdit}
+                  as="span"
+                  className="italic text-gray-400"
+                />
+              </div>
+            </div>
           </div>
         );
       })()}

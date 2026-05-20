@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { IntegrationsPanel } from "@/components/IntegrationsPanel";
+import { CrawlAssetSelector } from "@/components/reports/CrawlAssetSelector";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -501,7 +502,7 @@ function CallRailCompanyPicker({ value, onChange, onAccountIdChange }: { value: 
   );
 }
 
-function ClientForm({ initial, onSubmit, isPending }: { initial: ClientFormData; onSubmit: (data: ClientFormData) => void; isPending: boolean }) {
+function ClientForm({ initial, onSubmit, isPending, clientId }: { initial: ClientFormData; onSubmit: (data: ClientFormData) => void; isPending: boolean; clientId?: number | null }) {
   const [form, setForm] = useState<ClientFormData>(initial);
 
   const update = (field: keyof ClientFormData, value: any) => {
@@ -610,6 +611,25 @@ function ClientForm({ initial, onSubmit, isPending }: { initial: ClientFormData;
               <Input id="screamingfrog" value={form.screamingFrogProfile} onChange={e => update("screamingFrogProfile", e.target.value)} placeholder="Profile name" data-testid="input-sf-profile" />
             </div>
           </div>
+
+          {clientId && (
+            <div className="space-y-2 pt-4 border-t">
+              <Label className="flex items-center gap-1.5 text-sm font-medium">
+                <Bug className="w-3.5 h-3.5" />
+                Screaming Frog Crawl Uploads
+              </Label>
+              <p className="text-[11px] text-muted-foreground mb-2">
+                Upload a Screaming Frog crawl for this client. The most recent crawl is used by Monthly, QBR, and other reports that include SF data. Upload as often as you crawl — typically monthly.
+              </p>
+              <CrawlAssetSelector
+                clientId={clientId}
+                clientName={form.name}
+                currentCrawlId={null}
+                onCurrentChange={() => { /* no-op; the latest crawl is auto-selected by report generators */ }}
+                showComparison={false}
+              />
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="config" className="space-y-4 mt-4">
@@ -1539,6 +1559,7 @@ export default function ClientsPage() {
                 ctmOrganicSourceTerms: editingClient.ctmOrganicSourceTerms || ["google / organic"],
                 slackChannelId: editingClient.slackChannelId || "",
               }}
+              clientId={editingClient.id ?? null}
               onSubmit={(data) => updateMutation.mutate(data)}
               isPending={updateMutation.isPending}
             />

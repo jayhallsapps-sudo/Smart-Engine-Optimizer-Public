@@ -374,12 +374,15 @@ function makeCalloutBlock(block: DocBlock, t: BrandTokens): Table {
   const lines = block.content.split("\n").filter(Boolean);
   if (lines.length === 0) lines.push(block.content);
 
+  const TOTAL_DXA = 9240;
   return new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
+    width: { size: TOTAL_DXA, type: WidthType.DXA },
+    columnWidths: [TOTAL_DXA],
     rows: [
       new TableRow({
         children: [
           new TableCell({
+            width: { size: TOTAL_DXA, type: WidthType.DXA },
             children: lines.map((line, i) =>
               new Paragraph({
                 children: [new TextRun({ text: line, size: 19, color: hex(t.calloutText), italics: true })],

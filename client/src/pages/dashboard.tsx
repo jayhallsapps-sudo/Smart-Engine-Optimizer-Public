@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth-context";
+import { useClientSourceHealth, HEALTH_DOT_COLOR, type HealthStatus } from "@/hooks/useClientSourceHealth";
 import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -1632,6 +1633,7 @@ function ClientCard({
   const [selectedMetricLabel, setSelectedMetricLabel] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"stats" | "client-data" | "competitors">("stats");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const { data: sourceHealth } = useClientSourceHealth(client.id);
 
   const mutation = useMutation<ClientDashboardData, Error, void>({
     mutationFn: async () => {
@@ -1696,12 +1698,18 @@ function ClientCard({
             {connectedServices.map(svc => {
               const cfg = SERVICE_LABELS[svc];
               if (!cfg) return null;
+              const healthKey = svc as keyof typeof sourceHealth;
+              const status: HealthStatus | undefined = sourceHealth && healthKey in sourceHealth ? (sourceHealth as any)[healthKey]?.status : undefined;
+              const dotColor = status ? HEALTH_DOT_COLOR[status] : "#6b7280";
+              const healthMsg = status && sourceHealth ? (sourceHealth as any)[healthKey]?.message : "Checking...";
               return (
                 <span
                   key={svc}
-                  className={`inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-semibold text-white ${cfg.color}`}
+                  className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-semibold text-white ${cfg.color}`}
                   data-testid={`badge-service-${svc}-${client.id}`}
+                  title={`${cfg.label}: ${healthMsg}`}
                 >
+                  <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: dotColor }} />
                   {cfg.label}
                 </span>
               );

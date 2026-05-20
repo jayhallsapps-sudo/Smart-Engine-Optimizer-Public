@@ -26,7 +26,7 @@ async function getGoogleAccessToken(refreshToken: string): Promise<string> {
   return data.access_token;
 }
 
-async function testGSC(refreshToken: string): Promise<TestResult> {
+export async function testGSC(refreshToken: string): Promise<TestResult> {
   try {
     const token = await getGoogleAccessToken(refreshToken);
     const resp = await fetch("https://www.googleapis.com/webmasters/v3/sites", {
@@ -41,7 +41,7 @@ async function testGSC(refreshToken: string): Promise<TestResult> {
   }
 }
 
-async function testGA4(refreshToken: string): Promise<TestResult> {
+export async function testGA4(refreshToken: string): Promise<TestResult> {
   try {
     const token = await getGoogleAccessToken(refreshToken);
     const resp = await fetch("https://analyticsadmin.googleapis.com/v1beta/accountSummaries", {
@@ -98,7 +98,7 @@ async function testGoogleSheets(refreshToken: string): Promise<TestResult> {
   }
 }
 
-async function testCallRail(apiKey: string): Promise<TestResult> {
+export async function testCallRail(apiKey: string): Promise<TestResult> {
   try {
     const resp = await fetch("https://api.callrail.com/v3/a.json", {
       headers: { Authorization: `Token token="${apiKey}"` },
@@ -139,7 +139,7 @@ async function testAhrefs(apiKey: string): Promise<TestResult> {
   }
 }
 
-async function testSEMrush(apiKey: string): Promise<TestResult> {
+export async function testSEMrush(apiKey: string): Promise<TestResult> {
   try {
     const resp = await fetch(
       `https://api.semrush.com/?type=phrase_this&key=${apiKey}&phrase=seo&database=us&export_columns=Ph,Nq`
@@ -160,7 +160,7 @@ async function testSEMrush(apiKey: string): Promise<TestResult> {
   }
 }
 
-async function testCTM(apiKey: string, apiSecret: string): Promise<TestResult> {
+export async function testCTM(apiKey: string, apiSecret: string): Promise<TestResult> {
   try {
     const auth = Buffer.from(`${apiKey}:${apiSecret}`).toString("base64");
     const resp = await fetch("https://api.calltrackingmetrics.com/api/v1/accounts", {
@@ -175,7 +175,7 @@ async function testCTM(apiKey: string, apiSecret: string): Promise<TestResult> {
   }
 }
 
-async function testAirtable(pat: string): Promise<TestResult> {
+export async function testAirtable(pat: string): Promise<TestResult> {
   try {
     const resp = await fetch("https://api.airtable.com/v0/meta/whoami", {
       headers: { Authorization: `Bearer ${pat}` },

@@ -1,6 +1,7 @@
-import { CheckCircle2, XCircle, MinusCircle, AlertCircle } from "lucide-react";
+import { CheckCircle2, XCircle, MinusCircle, AlertCircle, Loader2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Client } from "@shared/schema";
+import { useClientSourceHealth, HEALTH_DOT_COLOR, type HealthStatus, type SourceHealth } from "@/hooks/useClientSourceHealth";
 
 export interface SourceSpec {
   id: string;
@@ -108,12 +109,30 @@ interface Props {
 }
 
 export function SourceReadinessBanner({ client, sourceIds }: Props) {
+  const { data: health, isLoading: healthLoading } = useClientSourceHealth(client.id);
   const specs = ALL_SOURCE_SPECS.filter((s) => sourceIds.includes(s.id));
 
-  const connected = specs.filter((s) => s.connected(client));
-  const partial = specs.filter((s) => !s.connected(client) && s.isPartial?.(client));
-  const missingRequired = specs.filter((s) => s.required && !s.connected(client));
-  const missingOptional = specs.filter((s) => !s.required && !s.connected(client) && !s.isPartial?.(client));
+  const getStatus = (spec: SourceSpec): { status: HealthStatus; message: string } => {
+    if (!health) {
+      const isConnected = spec.connected(client);
+      const isPartial = !isConnected && (spec.isPartial?.(client) ?? false);
+      if (isConnected) return { status: "ok", message: `${spec.label} connected` };
+      if (isPartial) return { status: "partial", message: spec.partialNote ?? `${spec.label} partially configured` };
+      return { status: spec.required ? "broken" : "not_configured", message: spec.missingNote ?? `${spec.label} not configured` };
+    }
+    const h = (health as any)[spec.id] as SourceHealth | undefined;
+    if (h) return { status: h.status, message: h.message };
+    const isConnected = spec.connected(client);
+    const isPartial = !isConnected && (spec.isPartial?.(client) ?? false);
+    if (isConnected) return { status: "ok", message: `${spec.label} connected` };
+    if (isPartial) return { status: "partial", message: spec.partialNote ?? `${spec.label} partially configured` };
+    return { status: spec.required ? "broken" : "not_configured", message: spec.missingNote ?? `${spec.label} not configured` };
+  };
+
+  const connected = specs.filter((s) => getStatus(s).status === "ok");
+  const partial = specs.filter((s) => getStatus(s).status === "partial");
+  const missingRequired = specs.filter((s) => s.required && getStatus(s).status !== "ok");
+  const missingOptional = specs.filter((s) => !s.required && getStatus(s).status !== "ok" && getStatus(s).status !== "partial");
 
   return (
     <div className="rounded-md border border-border/60 bg-muted/30 px-3 py-2.5 space-y-1.5" data-testid="source-readiness-banner">
@@ -127,42 +146,40 @@ export function SourceReadinessBanner({ client, sourceIds }: Props) {
       </div>
       <div className="flex flex-wrap gap-1.5">
         {specs.map((spec) => {
-          const isConnected = spec.connected(client);
-          const isPartial = !isConnected && (spec.isPartial?.(client) ?? false);
+          const { status, message } = getStatus(spec);
+          const dotColor = HEALTH_DOT_COLOR[status];
           return (
             <Tooltip key={spec.id}>
               <TooltipTrigger asChild>
                 <span
                   className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full border cursor-default select-none ${
-                    isConnected
+                    status === "ok"
                       ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300"
-                      : isPartial
+                      : status === "partial"
                       ? "bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 text-amber-600 dark:text-amber-400"
-                      : spec.required
+                      : status === "broken"
                       ? "bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-800 text-red-700 dark:text-red-300"
                       : "bg-muted border-border/40 text-muted-foreground"
                   }`}
                   data-testid={`source-chip-${spec.id}`}
                 >
-                  {isConnected ? (
+                  {healthLoading ? (
+                    <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                  ) : status === "ok" ? (
                     <CheckCircle2 className="w-2.5 h-2.5" />
-                  ) : isPartial ? (
+                  ) : status === "partial" ? (
                     <AlertCircle className="w-2.5 h-2.5" />
-                  ) : spec.required ? (
+                  ) : status === "broken" ? (
                     <XCircle className="w-2.5 h-2.5" />
                   ) : (
                     <MinusCircle className="w-2.5 h-2.5" />
                   )}
                   {spec.label}
-                  {isPartial && <span className="text-[8px] opacity-70">partial</span>}
+                  {status === "partial" && <span className="text-[8px] opacity-70">partial</span>}
                 </span>
               </TooltipTrigger>
               <TooltipContent className="text-xs max-w-xs">
-                {isConnected
-                  ? `${spec.label} connected`
-                  : isPartial
-                  ? (spec.partialNote ?? `${spec.label} partially configured`)
-                  : (spec.missingNote ?? `${spec.label} not configured`)}
+                {message}
               </TooltipContent>
             </Tooltip>
           );

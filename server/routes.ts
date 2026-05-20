@@ -955,6 +955,20 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/clients/:id/source-health", async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const client = await storage.getClient(id);
+      if (!client) return res.status(404).json({ message: "Client not found" });
+      const { getClientSourceHealth } = await import("./clientSourceHealth");
+      const health = await getClientSourceHealth(client);
+      res.json(health);
+    } catch (err: any) {
+      console.error("Source health check failed:", err);
+      res.status(500).json({ message: err?.message ?? "Health check failed" });
+    }
+  });
+
   app.get("/api/users", async (req, res) => {
     try {
       const role = req.query.role as string | undefined;

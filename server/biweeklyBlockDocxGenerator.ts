@@ -152,54 +152,44 @@ function hydrateBlocks(blocks: DocBlock[], report: any): DocBlock[] {
           ? { ...block, settings: { ...block.settings, items: purposeSection.bullets.map(san) } }
           : block;
 
-      // ── NSM table ─────────────────────────────────────────────────────────
+      // ── NSM table (Bi-Weekly v2) ──────────────────────────────────────────
       case "blk-nsm": {
         const metrics: any[] = pulseSection?.metrics ?? [];
-        const get = (label: string): string =>
-          san(metrics.find((m: any) => m.label === label)?.current ?? "—");
-
-        const nsmQuarter = get("NSM Quarter");
-        const sessGoal   = get("NSM Sessions Goal");
-        const sessActual = get("NSM Sessions Actual");
-        const sessPct    = get("NSM Sessions %");
-        const sessTrack  = get("NSM Sessions On Track");
-
-        const mvpMetric   = metrics.find((m: any) => /NSM MVP .* Goal/.test(m.label));
-        const mvpFull     = mvpMetric?.label ?? "";
-        const mvpRowLabel = mvpFull.replace(/\s*Goal$/, "").replace(/^NSM MVP\s*/, "").trim() || "MVP Metric";
-        const mvpGoal     = san(mvpMetric?.current ?? "—");
-        const mvpBase     = mvpFull.replace(" Goal", "");
-        const mvpActual   = get(`${mvpBase} Actual`);
-        const mvpPct      = get(`${mvpBase} %`);
-        const mvpTrack    = get(`${mvpBase} On Track`);
-
-        if (sessGoal !== "—" || mvpGoal !== "—") {
-          const tableRows: string[][] = [];
-          if (sessGoal !== "—") tableRows.push(["Organic Sessions", sessGoal, sessActual, sessPct, sessTrack]);
-          if (mvpGoal  !== "—") tableRows.push([mvpRowLabel, mvpGoal, mvpActual, mvpPct, mvpTrack]);
+        // v2 warning case: a single metric whose label starts with ⚠
+        const warningMetric = metrics.find((m: any) => typeof m.label === "string" && m.label.startsWith("⚠"));
+        if (warningMetric) {
           return {
             ...block,
-            content: `NSM Goals — ${nsmQuarter}`,
-            settings: { ...block.settings, colHeaders: ["Metric","Goal","Actual","%","Status"], tableRows, cols: 5, rows: tableRows.length },
+            content: san(warningMetric.label),
+            settings: {
+              ...block.settings,
+              colHeaders: ["Warning"],
+              tableRows: [[san(warningMetric.current ?? "NSM data could not be loaded.")]],
+              cols: 1,
+              rows: 1,
+            },
           };
         }
-        return block;
-      }
-
-      // ── Performance insight callout ────────────────────────────────────────
-      // Only hydrate if genuinely non-NSM GA4/channel metrics exist.
-      // If all metrics are NSM-prefixed (covered by the table above), leave the
-      // callout as an editable placeholder — do NOT dump raw metric label strings.
-      case "blk-insight": {
-        const metrics: any[] = pulseSection?.metrics ?? [];
-        const nonNsm = metrics.filter((m: any) => !m.label.startsWith("NSM"));
-        if (nonNsm.length > 0) {
-          const summary = nonNsm
-            .map((m: any) => `${san(m.label)}: ${san(m.current)}${m.delta ? ` (${san(m.delta)})` : ""}`)
-            .join("  |  ");
-          return { ...block, content: summary };
+        // v2 normal case: each metric is a row; current = "Goal | Actual | % | Status"
+        const parseRow = (m: any): string[] => {
+          const parts = String(m.current ?? "").split("|").map((s: string) => s.trim());
+          const [goal = "—", actual = "—", pct = "—", status = "—"] = parts;
+          return [san(m.label), san(goal), san(actual), san(pct), san(status)];
+        };
+        if (metrics.length > 0) {
+          const tableRows = metrics.map(parseRow);
+          return {
+            ...block,
+            content: "NSM Goals",
+            settings: {
+              ...block.settings,
+              colHeaders: ["Metric","Goal","Actual","%","Status"],
+              tableRows,
+              cols: 5,
+              rows: tableRows.length,
+            },
+          };
         }
-        // No non-NSM metrics — leave the editable placeholder intact
         return block;
       }
 

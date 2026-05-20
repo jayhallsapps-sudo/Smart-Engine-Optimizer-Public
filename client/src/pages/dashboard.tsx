@@ -176,6 +176,7 @@ const SERVICE_LABELS: Record<string, { label: string; color: string }> = {
   semrush: { label: "SEMrush", color: "bg-red-600" },
   gbp: { label: "GBP", color: "bg-blue-500" },
   airtable: { label: "Airtable", color: "bg-cyan-700" },
+  asana: { label: "Asana", color: "bg-orange-400" },
 };
 
 const GROUP_ORDER = ["GSC", "GA4", "Calls"];

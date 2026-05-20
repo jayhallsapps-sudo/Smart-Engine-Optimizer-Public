@@ -3627,6 +3627,7 @@ export async function registerRoutes(
     if (client.ahrefsProjectUrl) connectedServices.push("ahrefs");
     if (client.gbpLocationName) connectedServices.push("gbp");
     if (client.airtableBaseId) connectedServices.push("airtable");
+    if (client.asanaProjectId) connectedServices.push("asana");
 
     res.json({
       clientId: client.id,
@@ -3735,6 +3736,7 @@ export async function registerRoutes(
     if (client.ahrefsProjectUrl) connectedServices.push("ahrefs");
     if (client.gbpLocationName) connectedServices.push("gbp");
     if (client.airtableBaseId) connectedServices.push("airtable");
+    if (client.asanaProjectId) connectedServices.push("asana");
 
     res.json({ clientId: client.id, clientName: client.name, lastUpdated: new Date().toISOString(), connectedServices, groups });
   });

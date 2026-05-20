@@ -47,7 +47,7 @@ const MODULES: ModuleCard[] = [
     icon: FileText,
     label: "Prepare a Report",
     description: "Generate any report type for a client — Bi-Weekly, Monthly, QBR, QBS, or Mid-Strategy.",
-    href: "/workflow",
+    href: "/prepare",
     status: "live",
     accentColor: "#C0392B",
     group: "primary",

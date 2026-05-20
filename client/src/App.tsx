@@ -30,6 +30,7 @@ import SampleReportsPage from "@/pages/sample-reports";
 import TemplateBuilderPage from "@/pages/template-builder";
 import SecurityPage from "@/pages/security";
 import CommandCenterPage from "@/pages/command-center";
+import PrepareReportPage from "@/pages/prepare-report";
 import WorkflowPage from "@/pages/workflow";
 import AdminPage from "@/pages/admin";
 import AdminConfigPage from "@/pages/admin-config";
@@ -143,6 +144,7 @@ function Router() {
       <Route path="/command-center" component={CommandCenterPage} />
 
       {/* MVP 1 — AM-visible routes */}
+      <Route path="/prepare" component={PrepareReportPage} />
       <Route path="/workflow" component={WorkflowPage} />
       <Route path="/dashboard" component={DashboardPage} />
       <Route path="/saved-reports" component={SavedReportsPage} />

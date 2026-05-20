@@ -36,8 +36,6 @@ import { BiweeklyReportRenderer } from "@/components/biweekly-report-renderer";
 import type { Client } from "@shared/schema";
 import { useReportSave } from "@/hooks/useReportSave";
 import { SaveStatusIndicator } from "@/components/reports/SaveStatusIndicator";
-import { ReportSaveSelector } from "@/components/reports/ReportSaveSelector";
-import { CrawlAssetSelector } from "@/components/reports/CrawlAssetSelector";
 import { SourceReadinessBanner, BIWEEKLY_SOURCES } from "@/components/reports/SourceReadinessBanner";
 
 function toYMD(d: Date): string {
@@ -592,45 +590,6 @@ export default function BiweeklyPage() {
             </p>
           </div>
 
-          {/* Optional crawl */}
-          {clientId && (
-            <div className="space-y-1.5">
-              <Label className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Screaming Frog Crawl</Label>
-              <CrawlAssetSelector
-                clientId={clientId ? Number(clientId) : null}
-                clientName={clientName}
-                currentCrawlId={currentCrawlId}
-                comparisonCrawlId={comparisonCrawlId}
-                onCurrentChange={setCurrentCrawlId}
-                onComparisonChange={setComparisonCrawlId}
-                showComparison={false}
-              />
-            </div>
-          )}
-
-          {/* Past Reports / Load saved */}
-          {clientId && (
-            <div className="space-y-1.5 rounded-md border border-dashed border-border px-3 py-2.5">
-              <Label className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Past Reports</Label>
-              <ReportSaveSelector
-                clientId={clientId ? Number(clientId) : null}
-                reportType="biweekly"
-                onLoad={(data, savedEdits, id) => {
-                  setReport(data);
-                  setEdits(savedEdits);
-                  editsRef.current = savedEdits;
-                  reportSave.setSavedReportId(id);
-                  reportSave.pendingPayloadRef.current = {
-                    reportData: data,
-                    edits: savedEdits,
-                    meta: { reportPeriodLabel: windowLabel, analysisWindowStart: startDate, analysisWindowEnd: endDate },
-                  };
-                  syncUrlParams({ client: clientId, load: String(id) });
-                  toast({ title: "Report loaded" });
-                }}
-              />
-            </div>
-          )}
 
           {/* Source Readiness */}
           {clientId && (() => {

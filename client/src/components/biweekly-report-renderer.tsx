@@ -479,6 +479,8 @@ function DataTableBlock({ block, tokens, edits, onEdit, workLogSectionId, printM
   const isEditableCell = (ci: number): boolean => {
     if (!onEdit) return false;
     if (isProgressTable) return ci === 1 || ci === 2;
+    // The NSM Status column (col 4 of blk-nsm) is auto-generated from data; not user-editable.
+    if (block.id === "blk-nsm" && ci === 4) return false;
     return ci > 0;
   };
 

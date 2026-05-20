@@ -477,7 +477,8 @@ function makeDataTableBlock(block: DocBlock, t: BrandTokens): (Paragraph | Table
   );
 
   result.push(new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
+    width: { size: TOTAL_DXA, type: WidthType.DXA },
+    columnWidths: fracs.map(f => Math.round(f * TOTAL_DXA)),
     rows: [headerRow, ...dataRows],
     borders: { top: thinBdr, bottom: thinBdr, left: thinBdr, right: thinBdr, insideH: thinBdr, insideV: thinBdr },
   }));

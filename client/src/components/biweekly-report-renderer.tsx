@@ -275,7 +275,7 @@ function CalloutBlock({ block, tokens, edits, onEdit, printMode }: BlockProps) {
           edits={edits}
           onEdit={onEdit}
           style={{
-            color: tokens.calloutText,
+            color: tokens.tableBodyText,
             fontFamily: tokens.bodyFont,
             fontSize: tokens.bodyMD,
             lineHeight: 1.6,

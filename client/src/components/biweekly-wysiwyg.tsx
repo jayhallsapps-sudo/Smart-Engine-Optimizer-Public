@@ -125,8 +125,7 @@ export const DEFAULT_BIWEEKLY_BLOCKS: DocBlock[] = [
   {
     id: "blk-insight",
     type: "callout",
-    content:
-      "Quality is currently outperforming quantity. The traffic number suggests there is still room to grow top-of-funnel visibility, but the call metric suggests the people finding the business are the right people and are converting at a strong rate. That gives you a good foundation: improve traffic while protecting what is already working in conversion and local intent capture.",
+    content: "",
     settings: { spacing: "normal", alignment: "left", visible: true },
   },
   // ── Section 3: Progress & Quick Wins ────────────────────────────────────────

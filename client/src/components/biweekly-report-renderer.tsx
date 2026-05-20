@@ -251,8 +251,14 @@ function SpacerBlock({ block }: BlockProps) {
   return <div style={{ height: block.settings.height ?? 24 }} />;
 }
 
-function CalloutBlock({ block, tokens, edits, onEdit }: BlockProps) {
+function CalloutBlock({ block, tokens, edits, onEdit, printMode }: BlockProps) {
   const editKey = `${block.id}_content`;
+  const resolvedContent = edits?.[editKey] !== undefined ? edits[editKey] : block.content;
+  const isEmpty = !resolvedContent || resolvedContent.trim() === "";
+
+  // In print/export mode, hide the entire block when empty
+  if (printMode && isEmpty) return null;
+
   return (
     <div className={SPACING_PY[block.settings.spacing]}>
       <div
@@ -274,7 +280,7 @@ function CalloutBlock({ block, tokens, edits, onEdit }: BlockProps) {
             fontSize: tokens.bodyMD,
             lineHeight: 1.6,
           }}
-          placeholder="Add performance insight here…"
+          placeholder="Add optional commentary about this period (will be hidden on export when empty)…"
         />
       </div>
     </div>
@@ -831,18 +837,6 @@ function hydrateBlocks(blocks: DocBlock[], report: any): DocBlock[] {
           };
         }
 
-        return block;
-      }
-
-      case "blk-insight": {
-        const metrics: any[] = pulseSection?.metrics ?? [];
-        const nonNsm = metrics.filter((m: any) => !m.label.startsWith("NSM"));
-        if (nonNsm.length > 0) {
-          const summary = nonNsm
-            .map((m: any) => `${m.label}: ${m.current}${m.delta ? ` (${m.delta})` : ""}`)
-            .join(" · ");
-          return { ...block, content: summary };
-        }
         return block;
       }
 

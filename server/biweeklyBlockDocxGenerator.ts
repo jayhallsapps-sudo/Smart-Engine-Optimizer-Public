@@ -268,12 +268,15 @@ function shade(hexColor: string) {
 // ─── Block element builders ───────────────────────────────────────────────────
 
 function makeHeaderBar(clientName: string, preparedBy: string, t: BrandTokens): Table {
+  const TOTAL_DXA = 9240;
   return new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
+    width: { size: TOTAL_DXA, type: WidthType.DXA },
+    columnWidths: [TOTAL_DXA],
     rows: [
       new TableRow({
         children: [
           new TableCell({
+            width: { size: TOTAL_DXA, type: WidthType.DXA },
             children: [
               new Paragraph({
                 children: [

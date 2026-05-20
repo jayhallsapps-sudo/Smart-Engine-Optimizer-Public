@@ -102,7 +102,7 @@ const DEFAULT_BLOCKS: DocBlock[] = [
   { id: "blk-purpose", type: "bulletList",content: "", settings: { spacing: "compact", alignment: "left", visible: true, items: ["To review recent SEO progress, share quick wins, and align on upcoming priorities that support your business goals."] } },
   { id: "blk-s2",      type: "subtitle",  content: "2. Performance Pulse",      settings: { spacing: "normal", alignment: "left", visible: true } },
   { id: "blk-nsm",     type: "dataTable", content: "NSM Goals — Q1 2026",      settings: { spacing: "compact", alignment: "left", visible: true, cols: 5, rows: 2, colHeaders: ["Metric","Goal","Actual","%","Status"], tableRows: [["Organic Sessions","—","—","—","—"],["MVP Metric","—","—","—","—"]] } },
-  { id: "blk-insight", type: "callout",   content: "Add your key performance insight here. What story does the data tell this period?", settings: { spacing: "normal", alignment: "left", visible: true } },
+  { id: "blk-insight", type: "callout",   content: "", settings: { spacing: "normal", alignment: "left", visible: true } },
   { id: "blk-s3",      type: "subtitle",  content: "3. Progress & Quick Wins",  settings: { spacing: "normal", alignment: "left", visible: true } },
   { id: "blk-progress",type: "dataTable", content: "Progress & Quick Wins",    settings: { spacing: "compact", alignment: "left", visible: true, cols: 3, rows: 4, colHeaders: ["Area","What We Did / Learned","What's Next"], tableRows: [["Content","—","—"],["Optimization","—","—"],["Technical SEO","—","—"],["Local SEO","—","—"]] } },
   { id: "blk-s4",      type: "subtitle",  content: "4. Partnership & Alignment",settings: { spacing: "normal", alignment: "left", visible: true } },
@@ -151,6 +151,12 @@ function hydrateBlocks(blocks: DocBlock[], report: any): DocBlock[] {
         return purposeSection?.bullets?.length
           ? { ...block, settings: { ...block.settings, items: purposeSection.bullets.map(san) } }
           : block;
+
+      // ── Performance insight callout ────────────────────────────────────────
+      case "blk-insight": {
+        const content = report?.insightContent ?? block.content;
+        return { ...block, content };
+      }
 
       // ── NSM table (Bi-Weekly v2) ──────────────────────────────────────────
       case "blk-nsm": {
@@ -529,7 +535,11 @@ export async function generateBiweeklyBlockDocx(
       case "bulletList":
       case "numberedList":
       case "workLog":     children.push(...makeBulletList(block));           break;
-      case "callout":     children.push(makeCalloutBlock(block, t));         break;
+      case "callout":
+        if ((block.content ?? "").trim() !== "") {
+          children.push(makeCalloutBlock(block, t));
+        }
+        break;
       case "dataTable":   children.push(...makeDataTableBlock(block, t));    break;
       case "closingSummary":
         children.push(new Paragraph({

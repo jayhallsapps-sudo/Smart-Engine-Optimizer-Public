@@ -128,6 +128,7 @@ function parseCustomRowsFromEdits(edits: Record<string, string> | undefined, tab
 
 function applyBiweeklyEditsToReport(report: any, edits?: Record<string, string>): any {
   if (!edits || Object.keys(edits).length === 0) return report;
+  const insightContent = edits["blk-insight_content"];
   const sections = (report?.sections ?? []).map((s: any) => {
     const updated = { ...s };
     if (s.bullets?.length) {
@@ -170,7 +171,7 @@ function applyBiweeklyEditsToReport(report: any, edits?: Record<string, string>)
     }
     return updated;
   });
-  return { ...report, sections };
+  return { ...report, sections, insightContent };
 }
 
 function logExport(label: string, startMs: number, ok: boolean, err?: string) {
@@ -955,7 +956,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/clients/:id/source-health", async (req, res) => {
+  app.get("/api/clients/:id/source-health", requireAuth, async (req, res) => {
     try {
       const id = Number(req.params.id);
       const client = await storage.getClient(id);

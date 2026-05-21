@@ -79,10 +79,19 @@ export function asanaSectionToCategory(sectionName: string): { category: string;
 async function fetchAllTasks(projectGid: string): Promise<any[]> {
   const connectors = new ReplitConnectors();
   const fields = "name,completed,completed_at,due_on,memberships.section.name,notes";
-  const url = `/api/1.0/tasks?project=${projectGid}&opt_fields=${fields}&limit=100`;
-  const resp = await connectors.proxy("asana", url, { method: "GET" });
-  const data = await resp.json() as any;
-  return data.data ?? [];
+  const all: any[] = [];
+  let cursor: string | null = null;
+  do {
+    const url = cursor
+      ? `/api/1.0/tasks?project=${projectGid}&opt_fields=${fields}&limit=100&offset=${cursor}`
+      : `/api/1.0/tasks?project=${projectGid}&opt_fields=${fields}&limit=100`;
+    const resp = await connectors.proxy("asana", url, { method: "GET" });
+    const data = await resp.json() as any;
+    const batch = data.data ?? [];
+    all.push(...batch);
+    cursor = data.next_page?.offset ?? null;
+  } while (cursor);
+  return all;
 }
 
 function taskSection(task: any): string {

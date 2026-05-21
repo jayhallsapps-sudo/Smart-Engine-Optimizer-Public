@@ -1370,6 +1370,23 @@ export type InsertReusableBlock = z.infer<typeof insertReusableBlockSchema>;
 
 // ─── Template Default Slides ──────────────────────────────────────────────────
 
+export const clientQcrConfig = pgTable("client_qcr_config", {
+  clientId: integer("client_id").primaryKey().references(() => clients.id, { onDelete: "cascade" }),
+  asanaSectionIds: jsonb("asana_section_ids").notNull().default({}),
+  urlPatternOverrides: jsonb("url_pattern_overrides").notNull().default({}),
+  lastScanAt: timestamp("last_scan_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertClientQcrConfigSchema = createInsertSchema(clientQcrConfig).omit({
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type ClientQcrConfig = typeof clientQcrConfig.$inferSelect;
+export type InsertClientQcrConfig = z.infer<typeof insertClientQcrConfigSchema>;
+
 export const DEFAULT_TEMPLATE_SLIDES: Record<string, SlideEntry[]> = {
   "monthly-pptx": [
     { id: "s1", typeId: "title", label: "Title Slide" },

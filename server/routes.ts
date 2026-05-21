@@ -10,6 +10,7 @@ import { storage } from "./storage";
 import { insertClientSchema, users } from "@shared/schema";
 import { registerAuthRoutes } from "./authRoutes";
 import { requireAuth, requireAdminRole } from "./auth";
+import { registerQcrRoutes } from "./qcr/routes";
 import {
   createSavedReport,
   updateSavedReport,
@@ -43,7 +44,6 @@ import { db } from "./db";
 import { eq, and, desc } from "drizzle-orm";
 import { generateBiweeklyDocx, generatePptx, generateMidStrategyPptx, generateQbrPrepDocx } from "./reportGenerators";
 import { generateBiweeklyBlockDocx } from "./biweeklyBlockDocxGenerator";
-import { generateQcrPptx } from "./qcrPptxGenerator";
 import { generateBiweeklyPdf, generateMonthlyPdf } from "./pdfGenerator";
 import { generatePdfViaPuppeteer } from "./puppeteerPdfGenerator";
 import type { SectionData } from "./reportGenerators";
@@ -3075,91 +3075,6 @@ export async function registerRoutes(
     }
   });
 
-  // ─── Quarterly Content Roadmap ────────────────────────────────────────────
-
-  app.post("/api/reports/quarterly-content-roadmap/generate", async (req, res) => {
-    const { clientId, quarter, year } = req.body;
-    if (!clientId || !quarter || !year) {
-      return res.status(400).json({ message: "clientId, quarter, and year are required" });
-    }
-    try {
-      const { generateQuarterlyContentRoadmap } = await import("./quarterlyContentRoadmapGenerator");
-      const result = await generateQuarterlyContentRoadmap({
-        clientId: Number(clientId),
-        quarter: Number(quarter),
-        year: Number(year),
-      });
-      res.json(result);
-    } catch (err: any) {
-      console.error("[QCR] Generation error:", err);
-      res.status(500).json({ message: "Failed to generate Quarterly Content Roadmap: " + err.message });
-    }
-  });
-
-  app.post("/api/reports/quarterly-content-roadmap/pptx", async (req, res) => {
-    const t0 = Date.now();
-    const { json, edits } = req.body as { json: any; edits?: Record<string, string> };
-    if (!json || !json.slides?.length) {
-      logExport("QCR PPTX", t0, false, "No slides");
-      return res.status(400).json({ message: "No slide data found. Generate the report first." });
-    }
-    try {
-      // ── Read saved template styling (if committed) ──────────────────────────
-      const templateCfg = readTemplateConfig();
-      const qcrLayout = templateCfg?.qcr_layout?.layout ?? {};
-      const templateOpts = {
-        accentColor: qcrLayout?.globalStyles?.accentColor ?? templateCfg?.qcr_layout?.accentColor ?? "C0392B",
-        darkColor:   qcrLayout?.globalStyles?.darkColor   ?? templateCfg?.qcr_layout?.darkColor   ?? "1B3A6B",
-        fontFamily:  qcrLayout?.globalStyles?.fontFamily  ?? templateCfg?.qcr_layout?.fontFamily  ?? "Calibri",
-      };
-
-      // ── Map slides to QcrPptxSection ──────────────────────────────────────
-      // Include divider slides (rendered as branded month-break slides) and
-      // exclude only the cover title slide (handled separately).
-      const sections = (json.slides ?? [])
-        .filter((s: any) => s.type !== "title")
-        .map((s: any) => {
-          const title = edits?.[`${s.id}_title`] ?? s.title ?? "";
-          if (s.type === "divider") {
-            return {
-              title,
-              isDivider: true as const,
-              dividerMonth: title,
-              dividerSubtitle: edits?.[`${s.id}_subtitle`] ?? s.subtitle ?? "",
-            };
-          }
-          if (s.table) {
-            const resolvedRows = (s.table.rows as any[][]).map((row: any[], ri: number) =>
-              row.map((cell: any, ci: number) => edits?.[`${s.id}_cell_${ri}_${ci}`] ?? String(cell))
-            );
-            const tableKey = `${s.id}_table`;
-            const crRows = parseCustomRowsFromEdits(edits, tableKey);
-            return { title, table: { headers: s.table.headers, rows: [...resolvedRows, ...crRows] } };
-          }
-          if (s.bullets) {
-            const bullets = (s.bullets as string[]).map((b: string, bi: number) => edits?.[`${s.id}_bullet_${bi}`] ?? b);
-            return { title, bullets };
-          }
-          return { title, bullets: [] };
-        });
-
-      const clientName = edits?.["qcr_title_client"] ?? json.client_name ?? "Client";
-      const reportTitle = edits?.["qcr_title_title"] ?? json.report_title ?? "Quarterly Content Roadmap";
-      const generatedAt = json.generated_at ? new Date(json.generated_at).toLocaleDateString("en-US") : new Date().toLocaleDateString("en-US");
-
-      const buffer = await generateQcrPptx(clientName, reportTitle, generatedAt, sections, templateOpts);
-      const slug = clientName.toLowerCase().replace(/\s+/g, "_");
-      const qLabel = (json.quarter_label ?? "quarterly").replace(/\s/g, "_");
-      logExport("QCR PPTX", t0, true);
-      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
-      res.setHeader("Content-Disposition", `attachment; filename="${slug}_Content_Roadmap_${qLabel}.pptx"`);
-      res.send(buffer);
-    } catch (err: any) {
-      logExport("QCR PPTX", t0, false, err.message);
-      res.status(500).json({ message: "Failed to generate PPTX: " + err.message });
-    }
-  });
-
   // ─── Mid-Strategy SEO Report ─────────────────────────────────────────────
   app.post("/api/reports/mid-strategy/health-check", async (req, res) => {
     const { clientId } = req.body;
@@ -3843,7 +3758,7 @@ export async function registerRoutes(
   });
 
   const ALLOWED_TEMPLATE_TYPES = new Set([
-    "biweekly", "monthly", "qbr", "qbr_prep", "qcr_layout", "mid_strategy",
+    "biweekly", "monthly", "qbr", "qbr_prep", "mid_strategy",
   ]);
 
   app.post("/api/template/save", (req, res) => {
@@ -6270,6 +6185,8 @@ Return ONLY valid JSON:
       res.status(500).json({ error: err.message });
     }
   });
+
+  registerQcrRoutes(app);
 
   return httpServer;
 }

@@ -9,6 +9,7 @@ import { attachSession } from "./auth";
 import { bootstrapAdminIfNeeded } from "./auth";
 import { pool } from "./db";
 import { startReportScheduler } from "./reportScheduler";
+import { startJobCleanup } from "./qcr/jobStore";
 
 const app = express();
 const httpServer = createServer(app);
@@ -114,6 +115,7 @@ app.use(attachSession);
   await bootstrapAdminIfNeeded();
   await registerRoutes(httpServer, app);
   startReportScheduler();
+  startJobCleanup();
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

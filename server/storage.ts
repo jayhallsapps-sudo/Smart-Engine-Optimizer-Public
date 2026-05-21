@@ -15,6 +15,9 @@ import {
   findingHistory,
   reportTemplateSections,
   clientCompetitors,
+  clientQcrConfig,
+  type ClientQcrConfig,
+  type InsertClientQcrConfig,
   evalBatches,
   evalCompetitorRows,
   evalCrawlRows,
@@ -234,6 +237,11 @@ export interface IStorage {
   createImportedSlide(data: InsertImportedSlide): Promise<ImportedSlide>;
   updateImportedSlide(id: number, data: Partial<InsertImportedSlide>): Promise<ImportedSlide | undefined>;
   deleteImportedSlide(id: number): Promise<boolean>;
+
+  // QCR Config
+  getClientQcrConfig(clientId: number): Promise<ClientQcrConfig | undefined>;
+  upsertClientQcrConfig(input: InsertClientQcrConfig): Promise<ClientQcrConfig>;
+  updateClientQcrConfigLastScanAt(clientId: number, ts: Date): Promise<void>;
 
   // Reusable Blocks
   listReusableBlocks(includeArchived?: boolean): Promise<ReusableBlock[]>;
@@ -1111,6 +1119,44 @@ export class DatabaseStorage implements IStorage {
   async deleteReusableBlock(id: number): Promise<boolean> {
     const res = await db.delete(reusableBlocks).where(eq(reusableBlocks.id, id));
     return (res.rowCount ?? 0) > 0;
+  }
+
+  // ─── QCR Config ─────────────────────────────────────────────
+
+  async getClientQcrConfig(clientId: number): Promise<ClientQcrConfig | undefined> {
+    const [row] = await db.select().from(clientQcrConfig).where(eq(clientQcrConfig.clientId, clientId));
+    return row;
+  }
+
+  async upsertClientQcrConfig(input: InsertClientQcrConfig): Promise<ClientQcrConfig> {
+    const [row] = await db
+      .insert(clientQcrConfig)
+      .values({
+        clientId: input.clientId,
+        asanaSectionIds: input.asanaSectionIds ?? {},
+        urlPatternOverrides: input.urlPatternOverrides ?? {},
+        lastScanAt: input.lastScanAt ?? null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: clientQcrConfig.clientId,
+        set: {
+          asanaSectionIds: input.asanaSectionIds ?? {},
+          urlPatternOverrides: input.urlPatternOverrides ?? {},
+          lastScanAt: input.lastScanAt ?? null,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return row;
+  }
+
+  async updateClientQcrConfigLastScanAt(clientId: number, ts: Date): Promise<void> {
+    await db
+      .update(clientQcrConfig)
+      .set({ lastScanAt: ts, updatedAt: new Date() })
+      .where(eq(clientQcrConfig.clientId, clientId));
   }
 }
 

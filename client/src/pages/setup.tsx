@@ -62,6 +62,7 @@ import {
   MapPin,
   CheckSquare,
 } from "lucide-react";
+import { QcrConfigPanel } from "@/components/qcr/QcrConfigPanel";
 import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
 import { SERVICE_CONFIGS, type ServiceConfig } from "@shared/schema";
@@ -781,6 +782,15 @@ export default function SetupPage() {
           </div>
         </Card>
         <Separator />
+
+        {selectedClientId && (
+          <>
+            <Card className="p-4">
+              <QcrConfigPanel clientId={Number(selectedClientId)} />
+            </Card>
+            <Separator />
+          </>
+        )}
 
         {attentionServices.length > 0 && (
           <Card className="p-4 border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30">

@@ -2660,7 +2660,9 @@ export async function registerRoutes(
     const id = "qbr-prep-" + Date.now();
     printCache.set(id, { data: { reportData, edits }, ts: Date.now() });
     try {
-      const buffer = await generatePdfViaPuppeteer(id, "qbr-prep-print");
+      const sessionCookie = req.cookies?.smarteo_session;
+      const cookies = sessionCookie ? [{ name: "smarteo_session", value: sessionCookie }] : undefined;
+      const buffer = await generatePdfViaPuppeteer(id, "qbr-prep-print", cookies);
       printCache.delete(id);
       const slug = (reportData.meta?.site ?? "report").toLowerCase().replace(/\s+/g, "_");
       logExport("QBS PDF", t0, true);
@@ -2799,7 +2801,9 @@ export async function registerRoutes(
     const id = Math.random().toString(36).slice(2) + Date.now().toString(36);
     printCache.set(id, { data: { report, edits: edits ?? {} }, ts: Date.now() });
     try {
-      const buffer = await generatePdfViaPuppeteer(id);
+      const sessionCookie = req.cookies?.smarteo_session;
+      const cookies = sessionCookie ? [{ name: "smarteo_session", value: sessionCookie }] : undefined;
+      const buffer = await generatePdfViaPuppeteer(id, undefined, cookies);
       printCache.delete(id);
       const clientName = edits?.["client_name"] ?? report.client_name ?? "report";
       const slug = clientName.toLowerCase().replace(/\s+/g, "_");
@@ -3337,7 +3341,9 @@ export async function registerRoutes(
     const pdfJson = { ...json, slides: (json.slides ?? []).filter((s: any) => s.exportAllowed !== false) };
     printCache.set(id, { data: { report: pdfJson, edits: edits ?? {} }, ts: Date.now() });
     try {
-      const buffer = await generatePdfViaPuppeteer(id, "mid-strategy/pdf-render");
+      const sessionCookie = req.cookies?.smarteo_session;
+      const cookies = sessionCookie ? [{ name: "smarteo_session", value: sessionCookie }] : undefined;
+      const buffer = await generatePdfViaPuppeteer(id, "mid-strategy/pdf-render", cookies);
       const clientName = json.client_name ?? "Client";
       const slug = clientName.toLowerCase().replace(/\s+/g, "_");
       logExport("Mid-Strategy PDF", t0, true);
@@ -4112,7 +4118,9 @@ export async function registerRoutes(
 
       printCache.set(cacheId, { data: cacheData, ts: Date.now() });
       try {
-        const buffer = await generatePdfViaPuppeteer(cacheId, renderPath);
+        const sessionCookie = req.cookies?.smarteo_session;
+        const cookies = sessionCookie ? [{ name: "smarteo_session", value: sessionCookie }] : undefined;
+        const buffer = await generatePdfViaPuppeteer(cacheId, renderPath, cookies);
         printCache.delete(cacheId);
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);

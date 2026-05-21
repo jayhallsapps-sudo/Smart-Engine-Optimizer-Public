@@ -12,7 +12,7 @@ function findChromium(): string | undefined {
   return undefined;
 }
 
-export async function generatePdfViaPuppeteer(token: string, renderPath?: string): Promise<Buffer> {
+export async function generatePdfViaPuppeteer(token: string, renderPath?: string, cookies?: Array<{ name: string; value: string }>): Promise<Buffer> {
   const route = renderPath || "biweekly/pdf-render";
   const printUrl = `http://localhost:5000/${route}?token=${token}`;
   const startMs = Date.now();
@@ -37,6 +37,10 @@ export async function generatePdfViaPuppeteer(token: string, renderPath?: string
   try {
     const page = await browser.newPage();
     await page.setViewport({ width: 816, height: 1056, deviceScaleFactor: 1 });
+
+    if (cookies && cookies.length > 0) {
+      await page.setCookie(...cookies.map(c => ({ name: c.name, value: c.value, domain: "localhost", path: "/" })));
+    }
 
     const gotoResult = await page.goto(printUrl, { waitUntil: "networkidle2", timeout: 45000 });
     if (!gotoResult?.ok()) {

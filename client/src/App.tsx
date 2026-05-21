@@ -217,8 +217,8 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
 function AppShell() {
   const [location] = useLocation();
-  const isPrintPage = PRINT_ROUTES.includes(location);
-  const isPublicPage = PUBLIC_ROUTES.includes(location);
+  const isPrintPage = PRINT_ROUTES.some((route) => location === route || location.startsWith(route + "?"));
+  const isPublicPage = PUBLIC_ROUTES.some((route) => location === route || location.startsWith(route + "?"));
 
   if (isPrintPage) {
     return (

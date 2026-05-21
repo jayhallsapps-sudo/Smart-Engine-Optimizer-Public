@@ -51,6 +51,7 @@ function perPageRule(
     description,
     appliesTo,
     detector: (page, _ctx) => {
+      if (page.status !== 200) return [];
       if (appliesTo !== "all" && !appliesTo.includes(page.pageType)) return [];
       const result = check(page);
       if (!result || result.pass) return [];
@@ -326,16 +327,33 @@ export const TECHNICAL_RULES: Rule[] = [
     appliesTo: "all",
     detector: (page, _ctx) => {
       if (page.jsonLdBlocks.length === 0) return [];
-      const types = new Set(page.jsonLdBlocks.flatMap(b => {
-        const t = b["@type"];
-        return Array.isArray(t) ? t : [t];
-      }).filter(Boolean));
+      // Extract @type from top-level blocks AND from nested @graph items
+      function extractTypes(block: any): string[] {
+        if (!block || typeof block !== "object") return [];
+        const types: string[] = [];
+        // Handle @graph arrays (Rank Math, Yoast output format)
+        if (Array.isArray(block["@graph"])) {
+          for (const item of block["@graph"]) {
+            types.push(...extractTypes(item));
+          }
+        }
+        const t = block["@type"];
+        if (t) {
+          if (Array.isArray(t)) {
+            types.push(...t.filter(Boolean));
+          } else {
+            types.push(t);
+          }
+        }
+        return types;
+      }
+      const types = new Set(page.jsonLdBlocks.flatMap(extractTypes));
 
       const expected: string[] = [];
       switch (page.pageType) {
-        case "homepage": expected.push("Organization", "LocalBusiness", "MedicalBusiness"); break;
+        case "homepage": expected.push("Organization", "LocalBusiness", "MedicalBusiness", "MedicalOrganization"); break;
         case "informational": expected.push("Article", "BlogPosting"); break;
-        case "service": expected.push("Service", "MedicalBusiness", "MedicalWebPage"); break;
+        case "service": expected.push("Service", "MedicalBusiness", "MedicalWebPage", "MedicalTherapy"); break;
         case "cro": expected.push("ContactPage", "WebPage"); break;
         case "homepage_hub": expected.push("CollectionPage", "WebPage"); break;
       }

@@ -9,7 +9,6 @@ import { useQcrJob } from "@/hooks/useQcrJob";
 import { ClientPicker } from "@/components/qcr/ClientPicker";
 import { ScanProgress } from "@/components/qcr/ScanProgress";
 import { FindingsView } from "@/components/qcr/FindingsView";
-import { PastReportsList } from "@/components/qcr/PastReportsList";
 import { AsanaPushDialog } from "@/components/qcr/AsanaPushDialog";
 import type { Client } from "@shared/schema";
 
@@ -82,12 +81,6 @@ export default function QuarterlyContentRoadmapPage() {
     }
   }, [clientId, toast]);
 
-  function handleLoadPastReport(savedId: number, reportJson: any) {
-    setReportData(reportJson);
-    setSavedReportId(savedId);
-    setView("findings");
-  }
-
   function handlePushed(findingId: string, taskGid: string, taskUrl: string) {
     if (!reportData) return;
     const updated = { ...reportData };
@@ -137,8 +130,6 @@ export default function QuarterlyContentRoadmapPage() {
                 onRunScan={startScan}
                 isScanning={false}
               />
-              <Separator />
-              <PastReportsList clientId={clientId} onSelectReport={handleLoadPastReport} />
             </>
           )}
           {view === "scanning" && (

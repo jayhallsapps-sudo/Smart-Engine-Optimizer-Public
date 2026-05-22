@@ -97,6 +97,7 @@ export const UNIVERSAL_RULES: Rule[] = [
     description: "Headings must not skip levels",
     appliesTo: "all",
     detector: (page, _ctx) => {
+      if (page.status !== 200) return [];
       if (page.headings.length < 2) return [];
       const findings: QcrFinding[] = [];
       let lastLevel = page.headings[0].level;
@@ -201,19 +202,20 @@ export const UNIVERSAL_RULES: Rule[] = [
 
   perPageRule(
     "universal.image_alt_coverage",
-    "Less than 50% of images have alt text",
+    "Less than 50% of meaningful (non-SVG) images have alt text",
     "all",
     "low",
     (page) => {
-      if (page.images.length === 0) return null;
-      const withAlt = page.images.filter(img => img.alt && img.alt.trim().length > 0).length;
-      const pct = withAlt / page.images.length;
+      const meaningful = page.images.filter(img => !/\.svg(\?.*)?$/i.test(img.src ?? ""));
+      if (meaningful.length < 5) return null;
+      const withAlt = meaningful.filter(img => img.alt && img.alt.trim().length > 0).length;
+      const pct = withAlt / meaningful.length;
       if (pct >= 0.5) return null;
       return {
         pass: false,
         title: `Poor image alt coverage on ${page.path}`,
-        description: `Only ${withAlt} of ${page.images.length} images on ${page.url} have alt text (${Math.round(pct * 100)}%). Add descriptive alt text to all meaningful images.`,
-        evidence: { totalImages: page.images.length, withAlt, withoutAlt: page.images.length - withAlt },
+        description: `Only ${withAlt} of ${meaningful.length} meaningful images on ${page.url} have alt text (${Math.round(pct * 100)}%). Add descriptive alt text to all meaningful images.`,
+        evidence: { totalImages: meaningful.length, withAlt, withoutAlt: meaningful.length - withAlt },
       };
     },
   ),
@@ -255,6 +257,7 @@ export const UNIVERSAL_RULES: Rule[] = [
     description: "First paragraph after H1 should contain an internal link",
     appliesTo: ["informational"],
     detector: (page, _ctx) => {
+      if (page.status !== 200) return [];
       if (page.pageType !== "informational") return [];
       if (page.introInternalLink) return [];
       return [createFinding({
@@ -273,6 +276,7 @@ export const UNIVERSAL_RULES: Rule[] = [
     description: "Informational page should have TL;DR block",
     appliesTo: ["informational"],
     detector: (page, _ctx) => {
+      if (page.status !== 200) return [];
       if (page.pageType !== "informational") return [];
       if (page.tldrDetected) return [];
       return [createFinding({
@@ -291,6 +295,7 @@ export const UNIVERSAL_RULES: Rule[] = [
     description: "Page should have Key Takeaways section",
     appliesTo: ["informational", "service", "homepage_hub"],
     detector: (page, _ctx) => {
+      if (page.status !== 200) return [];
       if (!["informational", "service", "homepage_hub"].includes(page.pageType)) return [];
       if (page.keyTakeawaysDetected) return [];
       return [createFinding({
@@ -312,7 +317,17 @@ export const TECHNICAL_RULES: Rule[] = [
     "all",
     "low",
     (page) => {
-      if (page.jsonLdBlocks.length > 0) return null;
+      function hasSchema(blocks: any[]): boolean {
+        for (const block of blocks) {
+          if (block["@type"]) return true;
+          if (Array.isArray(block["@graph"])) {
+            const hasTypedEntity = block["@graph"].some((entity: any) => entity?.["@type"]);
+            if (hasTypedEntity) return true;
+          }
+        }
+        return false;
+      }
+      if (hasSchema(page.jsonLdBlocks)) return null;
       return {
         pass: false,
         title: `No JSON-LD schema on ${page.path}`,

@@ -727,8 +727,8 @@ async function insertBrandBanner(
   // paragraph shading extends over every character in the paragraph,
   // including newlines. spaceAbove/spaceBelow create WHITE gaps.
   const blankBefore = "\n";
-  const blankAfter  = "\n\n\n";
-  const labelText   = "|Bi-Weekly SEO Report";
+  const blankAfter  = "\n\n";
+  const labelText   = "    Bi-Weekly SEO Report";
   const payload     = blankBefore + labelText + blankAfter + "\n";
 
   // ─── Insert the banner paragraph ────────────────────────────────────
@@ -763,8 +763,8 @@ async function insertBrandBanner(
           shading: { backgroundColor: rgbColor(t.primaryColor) },
           spaceAbove:  { magnitude: 0, unit: "PT" },
           spaceBelow:  { magnitude: 0, unit: "PT" },
-          indentStart: { magnitude: 24, unit: "PT" },
-          indentEnd:   { magnitude: 24, unit: "PT" },
+          indentStart: { magnitude: 48, unit: "PT" },
+          indentEnd:   { magnitude: 48, unit: "PT" },
         },
         fields: "alignment,shading,spaceAbove,spaceBelow,indentStart,indentEnd",
       },
@@ -805,8 +805,8 @@ async function insertBrandBanner(
               location: { index: labelStart },
               uri: WEBSERV_LOGO_URL,
               objectSize: {
-                height: { magnitude: 28, unit: "PT" },
-                width:  { magnitude: 28, unit: "PT" },
+                height: { magnitude: 48, unit: "PT" },
+                width:  { magnitude: 48, unit: "PT" },
               },
             },
           },

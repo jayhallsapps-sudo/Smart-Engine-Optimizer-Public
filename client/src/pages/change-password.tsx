@@ -1,12 +1,10 @@
 import { useState } from "react";
-import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/auth-context";
 import smarteoIconPath from "@assets/SmartEO-Icon_1773606395230.png";
 import { apiRequest } from "@/lib/queryClient";
 
 export default function ChangePasswordPage() {
-  const { user, refresh } = useAuth();
-  const [, navigate] = useLocation();
+  const { user } = useAuth();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -29,13 +27,24 @@ export default function ChangePasswordPage() {
     setLoading(true);
     try {
       await apiRequest("POST", "/api/auth/change-password", { currentPassword, newPassword });
-      await refresh();
-      navigate("/command-center");
+      // Hard reload to /command-center. This avoids a race where wouter's
+      // navigate() fires before the auth context's refresh() has updated
+      // requiresPasswordChange — which previously bounced the user right
+      // back to /change-password and made it look like nothing happened.
+      window.location.assign("/command-center");
     } catch (err: any) {
       const msg = err.message ?? "";
-      const jsonMatch = msg.match(/\d+: (.*)/);
-      setError(jsonMatch ? jsonMatch[1].replace(/^[{"]|["}]$/g, "").replace(/"message":"/, "").replace(/"$/, "") : msg || "Failed to change password.");
-    } finally {
+      // apiRequest throws `${status}: ${text}` where text is usually a JSON body
+      // like '{"message":"Current password is incorrect."}'. Extract a clean message.
+      const jsonMatch = msg.match(/^\d+:\s*(.*)$/);
+      let clean = jsonMatch ? jsonMatch[1] : msg;
+      try {
+        const parsed = JSON.parse(clean);
+        if (parsed?.message) clean = parsed.message;
+      } catch {
+        // Not JSON — leave clean as-is
+      }
+      setError(clean || "Failed to change password.");
       setLoading(false);
     }
   }
@@ -128,7 +137,7 @@ export default function ChangePasswordPage() {
             type="submit"
             disabled={loading}
             data-testid="button-change-password"
-            className="w-full rounded-lg bg-[#1B3A6B] hover:bg-[#1B3A6B]/90 text-white font-medium py-2.5 text-sm transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            className="w-full rounded-lg bg-[#C0392B] hover:bg-[#C0392B]/90 text-white font-medium py-2.5 text-sm transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {loading ? "Updating…" : "Set new password"}
           </button>

@@ -1,36 +1,30 @@
-import { useState, useEffect, createContext, useContext } from "react";
+import { useEffect, createContext, useContext } from "react";
 
-type Theme = "light" | "dark";
+type Theme = "dark";
 
 interface ThemeContextType {
   theme: Theme;
   toggleTheme: () => void;
 }
 
+// SmartEO is dark-mode-only. The toggle is intentionally a no-op so any UI
+// that still imports useTheme()/toggleTheme() compiles without changes.
 const ThemeContext = createContext<ThemeContextType>({
-  theme: "light",
+  theme: "dark",
   toggleTheme: () => {},
 });
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>(() => {
-    if (typeof window !== "undefined") {
-      return (localStorage.getItem("smarteo-theme") as Theme) || "light";
-    }
-    return "light";
-  });
-
   useEffect(() => {
     const root = document.documentElement;
-    root.classList.remove("light", "dark");
-    root.classList.add(theme);
-    localStorage.setItem("smarteo-theme", theme);
-  }, [theme]);
-
-  const toggleTheme = () => setTheme(t => t === "light" ? "dark" : "light");
+    root.classList.remove("light");
+    root.classList.add("dark");
+    // Clean up any stale preference written by older builds.
+    try { localStorage.removeItem("smarteo-theme"); } catch {}
+  }, []);
 
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+    <ThemeContext.Provider value={{ theme: "dark", toggleTheme: () => {} }}>
       {children}
     </ThemeContext.Provider>
   );

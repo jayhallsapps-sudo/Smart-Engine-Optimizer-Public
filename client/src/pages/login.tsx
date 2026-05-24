@@ -18,13 +18,18 @@ export default function LoginPage() {
     try {
       const { requiresPasswordChange } = await login(email, password);
       if (requiresPasswordChange) {
+        // Password-change flow needs the auth context populated for the
+        // change-password page to know whether it's first-login or reset.
         navigate("/change-password");
       } else {
-        navigate("/command-center");
+        // Hard reload to /command-center. A wouter navigate() fires before
+        // the Set-Cookie has fully landed in the browser cookie jar, so any
+        // child component that fetches on mount can get a 401 and bounce the
+        // user back to /login — making it look like login failed.
+        window.location.assign("/command-center");
       }
     } catch (err: any) {
       setError(err.message ?? "Login failed. Please try again.");
-    } finally {
       setLoading(false);
     }
   }
@@ -88,7 +93,7 @@ export default function LoginPage() {
             type="submit"
             disabled={loading}
             data-testid="button-login"
-            className="w-full rounded-lg bg-[#1B3A6B] hover:bg-[#1B3A6B]/90 text-white font-medium py-2.5 text-sm transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            className="w-full rounded-lg bg-[#C0392B] hover:bg-[#C0392B]/90 text-white font-medium py-2.5 text-sm transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {loading ? "Signing in…" : "Sign in"}
           </button>

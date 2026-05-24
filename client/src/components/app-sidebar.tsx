@@ -15,7 +15,6 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/contexts/auth-context";
 
@@ -216,7 +215,6 @@ export function AppSidebar() {
             <div className="text-[10px] text-muted-foreground">SmartEO v2.0</div>
           )}
           <div className="flex items-center gap-1 group-data-[collapsible=icon]:flex-col">
-            <ThemeToggle />
             <SidebarTrigger data-testid="button-sidebar-toggle" />
           </div>
         </div>

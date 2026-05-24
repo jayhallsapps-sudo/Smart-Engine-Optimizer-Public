@@ -755,8 +755,8 @@ async function insertBrandBanner(
         paragraphStyle: {
           alignment: "START",
           shading: { backgroundColor: rgbColor(t.primaryColor) },
-          spaceAbove:  { magnitude: 18, unit: "PT" },
-          spaceBelow:  { magnitude: 18, unit: "PT" },
+          spaceAbove:  { magnitude: 36, unit: "PT" },
+          spaceBelow:  { magnitude: 36, unit: "PT" },
           indentStart: { magnitude: 12, unit: "PT" },
           indentEnd:   { magnitude: 12, unit: "PT" },
         },

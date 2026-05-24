@@ -359,7 +359,7 @@ function BiweeklyPreview({
 
       <div style={{ padding: "24px 56px 40px" }}>
         <div style={{ marginBottom: "6px", fontSize: "20px", fontWeight: 700 }}>
-          SEO Bi-weekly Meeting: Acme Plumbing &amp; HVAC
+          SEO Bi-weekly Report: Acme Plumbing &amp; HVAC
         </div>
         <div style={{ fontSize: "12px", marginBottom: "4px" }}>
           <strong>Attendees:</strong> Sarah Mitchell (Acme), James Carter (Webserv), Dana Reyes (Webserv)

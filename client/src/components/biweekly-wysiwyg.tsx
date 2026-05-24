@@ -64,7 +64,7 @@ export const DEFAULT_BIWEEKLY_BLOCKS: DocBlock[] = [
   {
     id: "blk-title",
     type: "title",
-    content: "SEO Bi-weekly Meeting: [Client Name]",
+    content: "SEO Bi-weekly Report: [Client Name]",
     settings: { spacing: "compact", alignment: "left", visible: true },
   },
   {

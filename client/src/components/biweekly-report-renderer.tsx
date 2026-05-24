@@ -795,7 +795,7 @@ function hydrateBlocks(blocks: DocBlock[], report: any): DocBlock[] {
         return {
           ...block,
           content: report?.client_name
-            ? `SEO Bi-weekly Meeting: ${report.client_name}`
+            ? `SEO Bi-weekly Report: ${report.client_name}`
             : block.content,
         };
 

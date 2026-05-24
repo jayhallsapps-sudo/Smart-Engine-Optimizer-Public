@@ -138,7 +138,7 @@ const DEFAULT_TOKENS: BiweeklyBrandTokens = {
 // Webserv "W" logo. The Google Docs API requires a publicly accessible URL
 // for inline images. The /file/d/[ID]/view share URL doesn't serve image
 // bytes; we use the /uc?export=view&id=[ID] form which does.
-const WEBSERV_LOGO_FILE_ID = "1ZlD6iAvCqjEn3jKnPIglYdLvAPFG_H3S";
+const WEBSERV_LOGO_FILE_ID = "14-ox8HDssUHVSMWSfv29ULPhDnXzglnQ";
 const WEBSERV_LOGO_URL =
   `https://drive.google.com/uc?export=view&id=${WEBSERV_LOGO_FILE_ID}`;
 
@@ -274,8 +274,8 @@ class DocsBuilder {
     this.styleRequests.push({
       updateParagraphStyle: {
         range: { startIndex: start, endIndex: end },
-        paragraphStyle: { namedStyleType: "TITLE" },
-        fields: "namedStyleType",
+        paragraphStyle: { namedStyleType: "TITLE", alignment: "CENTER" },
+        fields: "namedStyleType,alignment",
       },
     });
     this.styleRequests.push({
@@ -559,7 +559,7 @@ function hydrateBlocks(blocks: BiweeklyBlock[], report: any): BiweeklyBlock[] {
         return {
           ...block,
           content: report?.client_name
-            ? `SEO Bi-weekly Meeting: ${san(report.client_name)}`
+            ? `SEO Bi-weekly Report: ${san(report.client_name)}`
             : block.content,
         };
 
@@ -661,7 +661,7 @@ function hydrateBlocks(blocks: BiweeklyBlock[], report: any): BiweeklyBlock[] {
 // ─── Default block layout (mirrors biweeklyBlockDocxGenerator DEFAULT_BLOCKS) ─
 
 const DEFAULT_BLOCKS: BiweeklyBlock[] = [
-  { id: "blk-title",    type: "title",      content: "SEO Bi-weekly Meeting: [Client Name]", settings: { visible: true } },
+  { id: "blk-title",    type: "title",      content: "SEO Bi-weekly Report: [Client Name]", settings: { visible: true } },
   { id: "blk-meta",     type: "paragraph",  content: "", settings: { visible: true } },
   { id: "blk-div0",     type: "divider",    content: "", settings: { visible: true } },
   { id: "blk-s1",       type: "subtitle",   content: "1. Purpose", settings: { visible: true } },
@@ -700,101 +700,52 @@ async function insertBrandBanner(
   documentId: string,
   t: BiweeklyBrandTokens,
 ): Promise<number> {
-  // ─── Single-paragraph banner ────────────────────────────────────────────
+  // ─── Centered red logo + spacer ─────────────────────────────────────────
   //
-  // Previously this used a 1×2 table for left-cell-image + right-cell-text.
-  // That kept hitting "Index N must be less than the end index of the
-  // referenced segment, N" because the cell paragraphs in a brand-new doc
-  // have start == end == cellStart, which violates Google's strict
-  // `index < endIndex` rule for inserts.
-  //
-  // The single-paragraph approach sidesteps the entire problem:
-  //   - One paragraph at the top of the doc, LEFT-aligned
-  //   - Logo image inserted inline at the start (sits on the left edge)
-  //   - Leading spaces + label text immediately after, on the same line
-  //   - Paragraph shading = red background, paragraph alignment = START
-  //
-  // No table cells, no degenerate index ranges, no batch-order gymnastics.
-  //
-  // We return the cursor position immediately after the banner paragraph
-  // so the rest of the document content lands below it.
+  // No red banner bar. Just a centered Webserv red logo at the top,
+  // followed by a blank paragraph so subsequent content starts cleanly.
 
-  // Seed the paragraph with a few leading spaces + the label. After the
-  // image is inserted at index 1 (logo on the left), the spaces give a
-  // small visual gap between the logo and the text.
-  // Build a tall banner: blank lines BEFORE and AFTER the label, all
-  // inside one paragraph so the red shading covers them. Google Docs
-  // paragraph shading extends over every character in the paragraph,
-  // including newlines. spaceAbove/spaceBelow create WHITE gaps.
-  const blankBefore = "\n";
-  const blankAfter  = "\n\n";
-  const labelText   = "    Bi-Weekly SEO Report";
-  const payload     = blankBefore + labelText + blankAfter + "\n";
+  const spacer = "\n";
 
-  // ─── Insert the banner paragraph ────────────────────────────────────
+  // Insert a blank paragraph first so we can center the logo in its own paragraph
   try {
     await docsClient.documents.batchUpdate({
       documentId,
       requestBody: {
         requests: [
-          { insertText: { location: { index: 1 }, text: payload } },
+          { insertText: { location: { index: 1 }, text: spacer } },
         ],
       },
     });
   } catch (err: any) {
-    console.warn("[biweeklyGoogleDocs] Banner insert failed:", err?.message ?? err);
+    console.warn("[biweeklyGoogleDocs] Banner spacer insert failed:", err?.message ?? err);
     return 1;
   }
 
-  const bannerStart = 1;
-  const labelStart  = bannerStart + blankBefore.length;
-  const labelEnd    = labelStart + labelText.length;
-  const bannerEnd   = bannerStart + payload.length;
+  const paragraphStart = 1;
+  const paragraphEnd   = paragraphStart + spacer.length;
 
-  // ─── Style the banner paragraph ───────────────────────────────────────
-  // Red background, white bold Archivo text, LEFT-aligned (so the logo
-  // sits at the left edge and the label reads to its right).
-  const styleRequests: docs_v1.Schema$Request[] = [
-    {
-      updateParagraphStyle: {
-        range: { startIndex: bannerStart, endIndex: bannerEnd },
-        paragraphStyle: {
-          alignment: "START",
-          shading: { backgroundColor: rgbColor(t.primaryColor) },
-          spaceAbove:  { magnitude: 0, unit: "PT" },
-          spaceBelow:  { magnitude: 0, unit: "PT" },
-          indentStart: { magnitude: 48, unit: "PT" },
-          indentEnd:   { magnitude: 48, unit: "PT" },
-        },
-        fields: "alignment,shading,spaceAbove,spaceBelow,indentStart,indentEnd",
-      },
-    },
-    {
-      updateTextStyle: {
-        // Style ONLY the label text (not the blank lines)
-        range: { startIndex: labelStart, endIndex: labelEnd },
-        textStyle: {
-          bold: true,
-          fontSize: { magnitude: 12, unit: "PT" },
-          foregroundColor: rgbColor("#FFFFFF"),
-          weightedFontFamily: { fontFamily: t.headingFont, weight: 700 },
-        },
-        fields: "bold,fontSize,foregroundColor,weightedFontFamily",
-      },
-    },
-  ];
-
+  // Center the paragraph
   try {
     await docsClient.documents.batchUpdate({
       documentId,
-      requestBody: { requests: styleRequests },
+      requestBody: {
+        requests: [
+          {
+            updateParagraphStyle: {
+              range: { startIndex: paragraphStart, endIndex: paragraphEnd },
+              paragraphStyle: { alignment: "CENTER" },
+              fields: "alignment",
+            },
+          },
+        ],
+      },
     });
   } catch (err: any) {
-    console.warn("[biweeklyGoogleDocs] Banner styling failed:", err?.message ?? err);
+    console.warn("[biweeklyGoogleDocs] Banner centering failed:", err?.message ?? err);
   }
 
-  // ─── Try to insert the logo image inline at the start ─────────────────
-  // (Optional — the banner still looks good without it.)
+  // Insert the red logo image inline, centered
   try {
     await docsClient.documents.batchUpdate({
       documentId,
@@ -802,11 +753,11 @@ async function insertBrandBanner(
         requests: [
           {
             insertInlineImage: {
-              location: { index: labelStart },
+              location: { index: paragraphStart },
               uri: WEBSERV_LOGO_URL,
               objectSize: {
-                height: { magnitude: 48, unit: "PT" },
-                width:  { magnitude: 48, unit: "PT" },
+                height: { magnitude: 72, unit: "PT" },
+                width:  { magnitude: 72, unit: "PT" },
               },
             },
           },
@@ -814,14 +765,15 @@ async function insertBrandBanner(
       },
     });
 
-    // After the image insert, the cursor positions shift forward by 1.
-    return bannerEnd + 1;
+    // After the image insert, the cursor shifts forward by 1.
+    // Return the position after the paragraph (image + trailing newline).
+    return paragraphEnd + 1;
   } catch (err: any) {
     console.warn(
       "[biweeklyGoogleDocs] Banner logo image insertion failed (continuing without logo):",
       err?.message ?? err,
     );
-    return bannerEnd;
+    return paragraphEnd;
   }
 }
 

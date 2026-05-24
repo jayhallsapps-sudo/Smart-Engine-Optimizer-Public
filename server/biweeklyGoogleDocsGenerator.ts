@@ -755,8 +755,8 @@ async function insertBrandBanner(
         paragraphStyle: {
           alignment: "START",
           shading: { backgroundColor: rgbColor(t.primaryColor) },
-          spaceAbove:  { magnitude: 36, unit: "PT" },
-          spaceBelow:  { magnitude: 36, unit: "PT" },
+          spaceAbove:  { magnitude: 8, unit: "PT" },
+          spaceBelow:  { magnitude: 8, unit: "PT" },
           indentStart: { magnitude: 12, unit: "PT" },
           indentEnd:   { magnitude: 12, unit: "PT" },
         },
@@ -769,7 +769,7 @@ async function insertBrandBanner(
         range: { startIndex: bannerStart, endIndex: bannerEnd - 1 },
         textStyle: {
           bold: true,
-          fontSize: { magnitude: 12, unit: "PT" },
+          fontSize: { magnitude: 24, unit: "PT" },
           foregroundColor: rgbColor("#FFFFFF"),
           weightedFontFamily: { fontFamily: t.headingFont, weight: 700 },
         },
@@ -799,8 +799,8 @@ async function insertBrandBanner(
               location: { index: bannerStart },
               uri: WEBSERV_LOGO_URL,
               objectSize: {
-                height: { magnitude: 26, unit: "PT" },
-                width:  { magnitude: 26, unit: "PT" },
+                height: { magnitude: 32, unit: "PT" },
+                width:  { magnitude: 32, unit: "PT" },
               },
             },
           },

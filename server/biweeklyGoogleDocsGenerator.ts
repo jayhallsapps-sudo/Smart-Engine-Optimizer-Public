@@ -105,6 +105,15 @@ const DEFAULT_TOKENS: BiweeklyBrandTokens = {
   bodyFont:           "Inter",
 };
 
+// ─── Brand assets ─────────────────────────────────────────────────────────────
+
+// Webserv "W" logo. The Google Docs API requires a publicly accessible URL
+// for inline images. The /file/d/[ID]/view share URL doesn't serve image
+// bytes; we use the /uc?export=view&id=[ID] form which does.
+const WEBSERV_LOGO_FILE_ID = "1ZlD6iAvCqjEn3jKnPIglYdLvAPFG_H3S";
+const WEBSERV_LOGO_URL =
+  `https://drive.google.com/uc?export=view&id=${WEBSERV_LOGO_FILE_ID}`;
+
 // ─── Block shape (mirrors biweeklyBlockDocxGenerator.ts) ─────────────────────
 
 export type BiweeklyBlockType =
@@ -171,11 +180,17 @@ interface PendingRange {
 class DocsBuilder {
   private requests: docs_v1.Schema$Request[] = [];
   private styleRequests: docs_v1.Schema$Request[] = [];
-  private cursor = 1; // Docs API: position 1 is the start of the body
+  private cursor: number;
+  private startCursor: number;
   private t: BiweeklyBrandTokens;
+  // Track the last heading/subheading text so a following table can skip
+  // its caption when it'd just duplicate that heading.
+  private lastHeadingText: string = "";
 
-  constructor(tokens: BiweeklyBrandTokens) {
+  constructor(tokens: BiweeklyBrandTokens, startCursor: number = 1) {
     this.t = tokens;
+    this.cursor = startCursor;
+    this.startCursor = startCursor;
   }
 
   /** Insert a line of text and return its [start, end] range. End is exclusive. */
@@ -224,6 +239,7 @@ class DocsBuilder {
   }
 
   heading(text: string, level: 1 | 2 = 1): void {
+    this.lastHeadingText = text;
     const { start, end } = this.insertLine(text);
     this.styleRequests.push({
       updateParagraphStyle: {
@@ -364,7 +380,42 @@ class DocsBuilder {
 
   table(headers: string[], rows: string[][], title?: string): void {
     if (title) {
-      this.heading(title, 2);
+      // Skip the caption entirely if the section heading just above the
+      // table is the same text (e.g. "Progress & Quick Wins" section
+      // already has a "Progress & Quick Wins" table — the caption is noise).
+      const normalize = (s: string) =>
+        s.replace(/^\s*\d+\.\s*/, "")  // strip leading "3. "
+         .trim()
+         .toLowerCase();
+
+      const isDuplicate = normalize(title) === normalize(this.lastHeadingText);
+
+      if (!isDuplicate) {
+        // Caption is its own small all-caps red label, not a full heading.
+        // Render it as an inline-styled paragraph: uppercase, smaller, red,
+        // bold, in the heading font.
+        const captionText = title.toUpperCase();
+        const { start, end } = this.insertLine(captionText);
+        this.styleRequests.push({
+          updateParagraphStyle: {
+            range: { startIndex: start, endIndex: end },
+            paragraphStyle: { namedStyleType: "NORMAL_TEXT" },
+            fields: "namedStyleType",
+          },
+        });
+        this.styleRequests.push({
+          updateTextStyle: {
+            range: { startIndex: start, endIndex: end - 1 },
+            textStyle: {
+              bold: true,
+              fontSize: { magnitude: 10, unit: "PT" },
+              foregroundColor: rgbColor(this.t.primaryColor),
+              weightedFontFamily: { fontFamily: this.t.headingFont, weight: 700 },
+            },
+            fields: "bold,fontSize,foregroundColor,weightedFontFamily",
+          },
+        });
+      }
     }
     // Reserve a position — we'll insert the table here after the first
     // batchUpdate (text + styles) completes. The pendingTables list is
@@ -402,13 +453,38 @@ class DocsBuilder {
 
   // ── Build phase ──────────────────────────────────────────────────────────
 
-  /** Returns the two batchUpdate request arrays (text/styles, then tables). */
+  /**
+   * Returns the two batchUpdate request arrays (text/styles, then tables).
+   *
+   * Prepends `updateDocumentStyle` and `updateParagraphStyle`-style requests
+   * for the document's named styles (Title, Heading 1, Heading 2, Normal
+   * Text). Without this, Google Docs falls back to Times New Roman because
+   * the document's default style isn't aware of Archivo/Inter. By forcing
+   * the font at the named-style level, every paragraph inherits the right
+   * font even before the per-range `updateTextStyle` calls land.
+   */
   build(): {
     textAndStyles: docs_v1.Schema$Request[];
     pendingTables: { afterIndex: number; headers: string[]; rows: string[][]; title?: string }[];
   } {
+    const fontBaseline: docs_v1.Schema$Request[] = [
+      // Default style for all body text → Inter
+      {
+        updateTextStyle: {
+          range: { startIndex: this.startCursor, endIndex: this.cursor },
+          textStyle: {
+            weightedFontFamily: { fontFamily: this.t.bodyFont, weight: 400 },
+            fontSize: { magnitude: 10, unit: "PT" },
+            foregroundColor: rgbColor(this.t.bodyColor),
+          },
+          fields: "weightedFontFamily,fontSize,foregroundColor",
+        },
+      },
+    ];
+
     return {
-      textAndStyles: [...this.requests, ...this.styleRequests],
+      // Order matters: baseline first, then our per-range overrides win.
+      textAndStyles: [...this.requests, ...fontBaseline, ...this.styleRequests],
       pendingTables: this.pendingTables,
     };
   }
@@ -526,6 +602,211 @@ export interface CreateBiweeklyDocResult {
 }
 
 /**
+ * Insert a brand banner at the top of an empty Google Doc.
+ *
+ * Layout: a 1-row, 2-column table at index 1.
+ *   Left cell  → Webserv "W" logo image (inline)
+ *   Right cell → "Bi-Weekly SEO Report" in white Archivo bold, right-aligned
+ * Both cells share a red background (#C0392B). Borders are zero-width so the
+ * banner reads as a solid bar.
+ *
+ * Returns the cursor position where subsequent content should start
+ * (immediately after the banner table's closing paragraph).
+ */
+async function insertBrandBanner(
+  docsClient: docs_v1.Docs,
+  documentId: string,
+  t: BiweeklyBrandTokens,
+): Promise<number> {
+  // ─── Insert the empty 1x2 table at index 1 ─────────────────────────────
+  await docsClient.documents.batchUpdate({
+    documentId,
+    requestBody: {
+      requests: [
+        { insertTable: { location: { index: 1 }, rows: 1, columns: 2 } },
+      ],
+    },
+  });
+
+  // Re-fetch to learn the actual cell indices
+  let docState = await docsClient.documents.get({ documentId });
+  let body = docState.data.body?.content ?? [];
+  let bannerTable = body.find((el) => el.table && el.startIndex !== undefined && el.startIndex !== null);
+  if (!bannerTable?.table) {
+    // Banner insert failed — return cursor at start so content still flows
+    return 1;
+  }
+
+  const tRows = bannerTable.table.tableRows ?? [];
+  const leftCell = tRows[0]?.tableCells?.[0];
+  const rightCell = tRows[0]?.tableCells?.[1];
+  const leftStart = leftCell?.content?.[0]?.startIndex;
+  const rightStart = rightCell?.content?.[0]?.startIndex;
+
+  if (leftStart === undefined || leftStart === null ||
+      rightStart === undefined || rightStart === null) {
+    return 1;
+  }
+
+  // ─── Insert image (left) and text (right) ──────────────────────────────
+  // IMPORTANT: insert right cell text FIRST, then left cell image. We
+  // process in reverse-index order so later insertions don't shift earlier
+  // tracked positions.
+  const labelText = "Bi-Weekly SEO Report";
+
+  await docsClient.documents.batchUpdate({
+    documentId,
+    requestBody: {
+      requests: [
+        // Right cell text
+        {
+          insertText: {
+            location: { index: rightStart },
+            text: labelText,
+          },
+        },
+      ],
+    },
+  });
+
+  // Inserting the image is a separate batch because it might fail if the
+  // logo URL isn't publicly accessible — we don't want it to take down the
+  // text insertion if so.
+  try {
+    await docsClient.documents.batchUpdate({
+      documentId,
+      requestBody: {
+        requests: [
+          {
+            insertInlineImage: {
+              location: { index: leftStart },
+              uri: WEBSERV_LOGO_URL,
+              objectSize: {
+                height: { magnitude: 28, unit: "PT" },
+                width: { magnitude: 28, unit: "PT" },
+              },
+            },
+          },
+        ],
+      },
+    });
+  } catch (err: any) {
+    console.warn("[biweeklyGoogleDocs] Banner logo image insertion failed:", err.message ?? err);
+    // Fall back to a styled "W" character in the left cell so the banner
+    // isn't blank — better than no logo at all.
+    await docsClient.documents.batchUpdate({
+      documentId,
+      requestBody: {
+        requests: [
+          { insertText: { location: { index: leftStart }, text: "W" } },
+        ],
+      },
+    });
+  }
+
+  // ─── Re-fetch again to find post-insert ranges for styling ────────────
+  docState = await docsClient.documents.get({ documentId });
+  body = docState.data.body?.content ?? [];
+  bannerTable = body.find((el) => el.table && el.startIndex !== undefined && el.startIndex !== null);
+  if (!bannerTable?.table) return 1;
+
+  const tableStart = bannerTable.startIndex!;
+  const tableEnd = bannerTable.endIndex!;
+  const styledRows = bannerTable.table.tableRows ?? [];
+  const styledLeft = styledRows[0]?.tableCells?.[0];
+  const styledRight = styledRows[0]?.tableCells?.[1];
+
+  const styleRequests: docs_v1.Schema$Request[] = [];
+
+  // Both cells: red background, no border
+  for (let ci = 0; ci < 2; ci++) {
+    styleRequests.push({
+      updateTableCellStyle: {
+        tableCellStyle: {
+          backgroundColor: rgbColor(t.primaryColor),
+          borderTop:    { color: rgbColor(t.primaryColor), width: { magnitude: 0, unit: "PT" }, dashStyle: "SOLID" },
+          borderBottom: { color: rgbColor(t.primaryColor), width: { magnitude: 0, unit: "PT" }, dashStyle: "SOLID" },
+          borderLeft:   { color: rgbColor(t.primaryColor), width: { magnitude: 0, unit: "PT" }, dashStyle: "SOLID" },
+          borderRight:  { color: rgbColor(t.primaryColor), width: { magnitude: 0, unit: "PT" }, dashStyle: "SOLID" },
+          paddingTop:    { magnitude: 8, unit: "PT" },
+          paddingBottom: { magnitude: 8, unit: "PT" },
+          paddingLeft:   { magnitude: 12, unit: "PT" },
+          paddingRight:  { magnitude: 12, unit: "PT" },
+        },
+        tableRange: {
+          tableCellLocation: {
+            tableStartLocation: { index: tableStart },
+            rowIndex: 0,
+            columnIndex: ci,
+          },
+          rowSpan: 1,
+          columnSpan: 1,
+        },
+        fields: "backgroundColor,borderTop,borderBottom,borderLeft,borderRight,paddingTop,paddingBottom,paddingLeft,paddingRight",
+      },
+    });
+  }
+
+  // Right cell text: white, bold, Archivo, right-aligned, slightly larger
+  if (styledRight) {
+    const rStart = styledRight.startIndex;
+    const rEnd = styledRight.endIndex;
+    if (rStart !== undefined && rStart !== null && rEnd !== undefined && rEnd !== null) {
+      // Right-align the paragraph in the cell
+      styleRequests.push({
+        updateParagraphStyle: {
+          range: { startIndex: rStart, endIndex: rEnd },
+          paragraphStyle: { alignment: "END" },
+          fields: "alignment",
+        },
+      });
+      // White Archivo bold text
+      styleRequests.push({
+        updateTextStyle: {
+          range: { startIndex: rStart, endIndex: rEnd - 1 },
+          textStyle: {
+            bold: true,
+            fontSize: { magnitude: 11, unit: "PT" },
+            foregroundColor: rgbColor("#FFFFFF"),
+            weightedFontFamily: { fontFamily: t.headingFont, weight: 700 },
+          },
+          fields: "bold,fontSize,foregroundColor,weightedFontFamily",
+        },
+      });
+    }
+  }
+
+  // Left cell: just ensure the image paragraph has no extra indentation
+  if (styledLeft) {
+    const lStart = styledLeft.startIndex;
+    const lEnd = styledLeft.endIndex;
+    if (lStart !== undefined && lStart !== null && lEnd !== undefined && lEnd !== null) {
+      styleRequests.push({
+        updateParagraphStyle: {
+          range: { startIndex: lStart, endIndex: lEnd },
+          paragraphStyle: { alignment: "START" },
+          fields: "alignment",
+        },
+      });
+    }
+  }
+
+  if (styleRequests.length > 0) {
+    await docsClient.documents.batchUpdate({
+      documentId,
+      requestBody: { requests: styleRequests },
+    });
+  }
+
+  // Return cursor position immediately after the banner table.
+  // Re-fetch one more time to get the up-to-date end-of-table index.
+  const finalState = await docsClient.documents.get({ documentId });
+  const finalBody = finalState.data.body?.content ?? [];
+  const finalBanner = finalBody.find((el) => el.table && el.startIndex !== undefined && el.startIndex !== null);
+  return (finalBanner?.endIndex ?? tableEnd) + 1;
+}
+
+/**
  * Build a native Google Doc from a biweekly report.
  *
  * @param report          The biweekly report JSON (same shape used by the docx generator)
@@ -561,8 +842,19 @@ export async function createBiweeklyGoogleDoc(
   const documentId = createRes.data.documentId;
   if (!documentId) throw new Error("Google Docs API: documents.create returned no documentId");
 
-  // ── Step 2: build text + styles in document order ────────────────────
-  const builder = new DocsBuilder(t);
+  // ── Step 2: insert the brand banner at the top ─────────────────────────
+  //
+  // The banner is a 1×2 table at the very top of the document:
+  //   [ W logo image ] [ "Bi-Weekly SEO Report" right-aligned, white ]
+  // Both cells share a #C0392B red background. Borders are removed.
+  //
+  // We do this BEFORE the block builder runs so all subsequent content
+  // appears below the banner. The function returns the cursor position
+  // after the banner — that becomes the builder's starting index.
+  const postBannerCursor = await insertBrandBanner(docsClient, documentId, t);
+
+  // ── Step 3: build text + styles in document order ─────────────────────
+  const builder = new DocsBuilder(t, postBannerCursor);
 
   for (const block of blocks) {
     if (block.settings.visible === false) continue;
@@ -620,7 +912,7 @@ export async function createBiweeklyGoogleDoc(
 
   const { textAndStyles, pendingTables } = builder.build();
 
-  // ── Step 3: apply text + styles ──────────────────────────────────────
+  // ── Step 4: apply text + styles ──────────────────────────────────────
   if (textAndStyles.length > 0) {
     await docsClient.documents.batchUpdate({
       documentId,
@@ -628,7 +920,7 @@ export async function createBiweeklyGoogleDoc(
     });
   }
 
-  // ── Step 4: insert tables (in reverse order so indices stay valid) ───
+  // ── Step 5: insert tables (in reverse order so indices stay valid) ───
   // After the text pass, indices in pendingTables reflect the doc state
   // AT THE END of pass 3. We insert each table at its recorded position
   // and then style the cells. Reverse order = later insertions don't
@@ -782,10 +1074,40 @@ export async function createBiweeklyGoogleDoc(
           requestBody: { requests: perCellStyleReqs },
         });
       }
+
+      // ─── Narrow the "Area" column on the Progress & Quick Wins table ──
+      // Heuristic: if the first column header is "Area", shrink column 0.
+      // We use updateTableColumnProperties (Docs API exposes per-column width
+      // via tableColumnProperties[columnIndex]).
+      const firstHeader = (tbl.headers[0] ?? "").trim().toLowerCase();
+      if (firstHeader === "area" && styledTable?.startIndex !== undefined && styledTable.startIndex !== null) {
+        try {
+          await docsClient.documents.batchUpdate({
+            documentId,
+            requestBody: {
+              requests: [
+                {
+                  updateTableColumnProperties: {
+                    tableStartLocation: { index: styledTable.startIndex },
+                    columnIndices: [0],
+                    tableColumnProperties: {
+                      widthType: "FIXED_WIDTH",
+                      width: { magnitude: 90, unit: "PT" },
+                    },
+                    fields: "widthType,width",
+                  },
+                },
+              ],
+            },
+          });
+        } catch (err: any) {
+          console.warn("[biweeklyGoogleDocs] Column-width adjustment failed:", err.message ?? err);
+        }
+      }
     }
   }
 
-  // ── Step 5: move the doc into the target folder (if specified) ────────
+  // ── Step 6: move the doc into the target folder (if specified) ────────
   const driveClient = await getDriveClient();
 
   if (parentFolderId) {
@@ -804,7 +1126,7 @@ export async function createBiweeklyGoogleDoc(
     }
   }
 
-  // ── Step 6: get a webViewLink ─────────────────────────────────────────
+  // ── Step 7: get a webViewLink ─────────────────────────────────────────
   const fileMeta = await driveClient.files.get({
     fileId: documentId,
     fields: "id,name,webViewLink",

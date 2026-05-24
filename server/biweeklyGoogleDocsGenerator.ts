@@ -1057,10 +1057,13 @@ export async function createBiweeklyGoogleDoc(
   }
 
   // ── Step 6: move the doc into the target folder (if specified) ────────
-  const driveClient = await getDriveClient();
-
+  // ── Step 7: optional folder move ──────────────────────────────────────
+  // NOTE: the google-docs connector token only covers docs scope.
+  // Drive scope may not be present, so we skip the Drive API metadata
+  // fetch entirely and construct the webViewLink directly.
   if (parentFolderId) {
     try {
+      const driveClient = await getDriveClient();
       const fileMeta = await driveClient.files.get({ fileId: documentId, fields: "parents" });
       const previousParents = (fileMeta.data.parents ?? []).join(",");
       await driveClient.files.update({
@@ -1075,15 +1078,11 @@ export async function createBiweeklyGoogleDoc(
     }
   }
 
-  // ── Step 7: get a webViewLink ─────────────────────────────────────────
-  const fileMeta = await driveClient.files.get({
-    fileId: documentId,
-    fields: "id,name,webViewLink",
-  });
-
+  // Skip Drive API metadata fetch — construct link directly so we
+  // don't fail when the token lacks Drive scope.
   return {
     documentId,
-    webViewLink: fileMeta.data.webViewLink ?? `https://docs.google.com/document/d/${documentId}/edit`,
-    title: fileMeta.data.name ?? title,
+    webViewLink: `https://docs.google.com/document/d/${documentId}/edit`,
+    title,
   };
 }

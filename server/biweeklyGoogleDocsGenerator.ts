@@ -805,8 +805,8 @@ async function insertBrandBanner(
               location: { index: labelStart },
               uri: WEBSERV_LOGO_URL,
               objectSize: {
-                height: { magnitude: 26, unit: "PT" },
-                width:  { magnitude: 26, unit: "PT" },
+                height: { magnitude: 52, unit: "PT" },
+                width:  { magnitude: 52, unit: "PT" },
               },
             },
           },

@@ -529,16 +529,33 @@ function hydrateBlocks(blocks: BiweeklyBlock[], report: any): BiweeklyBlock[] {
 
       case "blk-nsm": {
         const metrics: any[] = pulseSection?.metrics ?? [];
+        // v2 warning case: a single metric whose label starts with ⚠
+        const warningMetric = metrics.find((m: any) => typeof m.label === "string" && m.label.startsWith("⚠"));
+        if (warningMetric) {
+          return {
+            ...block,
+            content: san(warningMetric.label),
+            settings: {
+              ...block.settings,
+              colHeaders: ["Warning"],
+              tableRows: [[san(warningMetric.current ?? "NSM data could not be loaded.")]],
+            },
+          };
+        }
+        // v2 normal case: each metric's `current` is a pipe-delimited string
+        //   "Goal | Actual | % | Status"
+        // — NOT separate fields. This matches the old DOCX generator and the
+        // upstream report JSON shape produced by biweeklyGenerator.ts.
+        const parseRow = (m: any): string[] => {
+          const parts = String(m.current ?? "").split("|").map((s: string) => s.trim());
+          const [goal = "—", actual = "—", pct = "—", status = "—"] = parts;
+          return [san(m.label ?? "—"), san(goal), san(actual), san(pct), san(status)];
+        };
         if (metrics.length === 0) return block;
-        const tableRows = metrics.map((m: any) => [
-          san(m.label ?? "—"),
-          san(m.goal ?? "—"),
-          san(m.actual ?? "—"),
-          san(m.percent ?? "—"),
-          san(m.status ?? "—"),
-        ]);
+        const tableRows = metrics.map(parseRow);
         return {
           ...block,
+          content: "NSM Goals",
           settings: {
             ...block.settings,
             colHeaders: ["Metric", "Goal", "Actual", "%", "Status"],
@@ -548,15 +565,31 @@ function hydrateBlocks(blocks: BiweeklyBlock[], report: any): BiweeklyBlock[] {
       }
 
       case "blk-progress": {
-        const rows: any[] = progressSection?.rows ?? [];
-        if (rows.length === 0) return block;
-        const tableRows = rows.map((r: any) => [
-          san(r.area ?? "—"),
-          san(r.whatWeDid ?? "—"),
-          san(r.whatsNext ?? "—"),
-        ]);
+        // Real data lives in `workLog`, not `rows`. Each entry can carry
+        // either flat strings (`whatWeDid` / `whatsNext`) or item arrays
+        // (`items[]` / `nextItems[]`) that need joining.
+        const workLog: any[] = progressSection?.workLog ?? [];
+        if (workLog.length === 0) return block;
+        const tableRows: string[][] = workLog.map((row: any) => {
+          const didText = san(
+            row.whatWeDid ||
+            (Array.isArray(row.items)
+              ? row.items.map((i: any) => (typeof i === "string" ? i : i.text ?? "")).filter(Boolean).join("\n")
+              : "")
+          ) || "—";
+
+          const nextText = san(
+            row.whatsNext ||
+            (Array.isArray(row.nextItems)
+              ? row.nextItems.map((i: any) => (typeof i === "string" ? i : i.text ?? "")).filter(Boolean).join("\n")
+              : "")
+          ) || "—";
+
+          return [san(row.area ?? "—"), didText, nextText];
+        });
         return {
           ...block,
+          content: "Progress & Quick Wins",
           settings: {
             ...block.settings,
             colHeaders: ["Area", "What We Did / Learned", "What's Next"],
@@ -627,33 +660,20 @@ async function insertBrandBanner(
   // `index < endIndex` rule for inserts.
   //
   // The single-paragraph approach sidesteps the entire problem:
-  //   - One paragraph at the top of the doc
-  //   - Image inserted inline at the start (left-aligned implicitly)
-  //   - Tab + label text after the image (text alignment is right-end)
-  //   - Paragraph shading = red background, paragraph alignment = JUSTIFIED
+  //   - One paragraph at the top of the doc, LEFT-aligned
+  //   - Logo image inserted inline at the start (sits on the left edge)
+  //   - Leading spaces + label text immediately after, on the same line
+  //   - Paragraph shading = red background, paragraph alignment = START
   //
   // No table cells, no degenerate index ranges, no batch-order gymnastics.
   //
   // We return the cursor position immediately after the banner paragraph
   // so the rest of the document content lands below it.
 
-  // Step 1: insert the banner text content into the first paragraph.
-  // The starter paragraph in a fresh doc has startIndex==endIndex==1, so
-  // we insert text at index 1 (which IS valid for the doc's first paragraph
-  // because the segment "body" has endIndex > 1 — it's the cell case that
-  // breaks, not the body case).
-  //
-  // We use a tab character to push the label text to the right side, then
-  // we'll right-align the text at the tab stop later. But since we don't
-  // have a Tab Stop API for paragraphs, we instead use a different approach:
-  // simply right-align the whole paragraph, put a spacer image at the start,
-  // and let the text sit on the right.
-  //
-  // Actually the cleanest visual: just put the label text right-aligned in
-  // a red-shaded paragraph, no image at all on the first try — we'll add
-  // the image as a SECOND attempt and degrade gracefully.
-
-  const labelText = "Bi-Weekly SEO Report";
+  // Seed the paragraph with a few leading spaces + the label. After the
+  // image is inserted at index 1 (logo on the left), the spaces give a
+  // small visual gap between the logo and the text.
+  const labelText = "    Bi-Weekly SEO Report";
 
   // ─── Insert the label text into the first paragraph ───────────────────
   try {
@@ -677,13 +697,14 @@ async function insertBrandBanner(
   const bannerEnd = 1 + labelText.length + 1; // +1 for the trailing newline
 
   // ─── Style the banner paragraph ───────────────────────────────────────
-  // Red background, white bold Archivo text, right-aligned, with some padding.
+  // Red background, white bold Archivo text, LEFT-aligned (so the logo
+  // sits at the left edge and the label reads to its right).
   const styleRequests: docs_v1.Schema$Request[] = [
     {
       updateParagraphStyle: {
         range: { startIndex: bannerStart, endIndex: bannerEnd },
         paragraphStyle: {
-          alignment: "END",
+          alignment: "START",
           shading: { backgroundColor: rgbColor(t.primaryColor) },
           spaceAbove:  { magnitude: 6, unit: "PT" },
           spaceBelow:  { magnitude: 6, unit: "PT" },
@@ -1057,13 +1078,10 @@ export async function createBiweeklyGoogleDoc(
   }
 
   // ── Step 6: move the doc into the target folder (if specified) ────────
-  // ── Step 7: optional folder move ──────────────────────────────────────
-  // NOTE: the google-docs connector token only covers docs scope.
-  // Drive scope may not be present, so we skip the Drive API metadata
-  // fetch entirely and construct the webViewLink directly.
+  const driveClient = await getDriveClient();
+
   if (parentFolderId) {
     try {
-      const driveClient = await getDriveClient();
       const fileMeta = await driveClient.files.get({ fileId: documentId, fields: "parents" });
       const previousParents = (fileMeta.data.parents ?? []).join(",");
       await driveClient.files.update({
@@ -1078,11 +1096,15 @@ export async function createBiweeklyGoogleDoc(
     }
   }
 
-  // Skip Drive API metadata fetch — construct link directly so we
-  // don't fail when the token lacks Drive scope.
+  // ── Step 7: get a webViewLink ─────────────────────────────────────────
+  const fileMeta = await driveClient.files.get({
+    fileId: documentId,
+    fields: "id,name,webViewLink",
+  });
+
   return {
     documentId,
-    webViewLink: `https://docs.google.com/document/d/${documentId}/edit`,
-    title,
+    webViewLink: fileMeta.data.webViewLink ?? `https://docs.google.com/document/d/${documentId}/edit`,
+    title: fileMeta.data.name ?? title,
   };
 }

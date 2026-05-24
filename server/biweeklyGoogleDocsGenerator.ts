@@ -722,28 +722,34 @@ async function insertBrandBanner(
   // Seed the paragraph with a few leading spaces + the label. After the
   // image is inserted at index 1 (logo on the left), the spaces give a
   // small visual gap between the logo and the text.
-  const labelText = "    Bi-Weekly SEO Report";
+  // Build a tall banner: blank lines BEFORE and AFTER the label, all
+  // inside one paragraph so the red shading covers them. Google Docs
+  // paragraph shading extends over every character in the paragraph,
+  // including newlines. spaceAbove/spaceBelow create WHITE gaps.
+  const blankBefore = "\n\n";
+  const blankAfter  = "\n\n";
+  const labelText   = "    Bi-Weekly SEO Report";
+  const payload     = blankBefore + labelText + blankAfter + "\n";
 
-  // ─── Insert the label text into the first paragraph ───────────────────
+  // ─── Insert the banner paragraph ────────────────────────────────────
   try {
     await docsClient.documents.batchUpdate({
       documentId,
       requestBody: {
         requests: [
-          { insertText: { location: { index: 1 }, text: labelText + "\n" } },
+          { insertText: { location: { index: 1 }, text: payload } },
         ],
       },
     });
   } catch (err: any) {
-    console.warn("[biweeklyGoogleDocs] Banner label insert failed:", err?.message ?? err);
+    console.warn("[biweeklyGoogleDocs] Banner insert failed:", err?.message ?? err);
     return 1;
   }
 
-  // After insertion, the banner text occupies indices 1..labelText.length+1.
-  // The newline at the end starts the next paragraph (where the rest of
-  // the report will go).
   const bannerStart = 1;
-  const bannerEnd = 1 + labelText.length + 1; // +1 for the trailing newline
+  const labelStart  = bannerStart + blankBefore.length;
+  const labelEnd    = labelStart + labelText.length;
+  const bannerEnd   = bannerStart + payload.length;
 
   // ─── Style the banner paragraph ───────────────────────────────────────
   // Red background, white bold Archivo text, LEFT-aligned (so the logo
@@ -755,8 +761,8 @@ async function insertBrandBanner(
         paragraphStyle: {
           alignment: "START",
           shading: { backgroundColor: rgbColor(t.primaryColor) },
-          spaceAbove:  { magnitude: 8, unit: "PT" },
-          spaceBelow:  { magnitude: 8, unit: "PT" },
+          spaceAbove:  { magnitude: 0, unit: "PT" },
+          spaceBelow:  { magnitude: 0, unit: "PT" },
           indentStart: { magnitude: 12, unit: "PT" },
           indentEnd:   { magnitude: 12, unit: "PT" },
         },
@@ -765,11 +771,11 @@ async function insertBrandBanner(
     },
     {
       updateTextStyle: {
-        // Exclude the trailing newline from text styling
-        range: { startIndex: bannerStart, endIndex: bannerEnd - 1 },
+        // Style ONLY the label text (not the blank lines)
+        range: { startIndex: labelStart, endIndex: labelEnd },
         textStyle: {
           bold: true,
-          fontSize: { magnitude: 24, unit: "PT" },
+          fontSize: { magnitude: 12, unit: "PT" },
           foregroundColor: rgbColor("#FFFFFF"),
           weightedFontFamily: { fontFamily: t.headingFont, weight: 700 },
         },
@@ -796,11 +802,11 @@ async function insertBrandBanner(
         requests: [
           {
             insertInlineImage: {
-              location: { index: bannerStart },
+              location: { index: labelStart },
               uri: WEBSERV_LOGO_URL,
               objectSize: {
-                height: { magnitude: 32, unit: "PT" },
-                width:  { magnitude: 32, unit: "PT" },
+                height: { magnitude: 26, unit: "PT" },
+                width:  { magnitude: 26, unit: "PT" },
               },
             },
           },

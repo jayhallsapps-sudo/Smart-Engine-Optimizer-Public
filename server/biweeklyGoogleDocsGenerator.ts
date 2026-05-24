@@ -618,60 +618,107 @@ async function insertBrandBanner(
   documentId: string,
   t: BiweeklyBrandTokens,
 ): Promise<number> {
-  // ─── Insert the empty 1x2 table at index 1 ─────────────────────────────
-  await docsClient.documents.batchUpdate({
-    documentId,
-    requestBody: {
-      requests: [
-        { insertTable: { location: { index: 1 }, rows: 1, columns: 2 } },
-      ],
-    },
-  });
+  // ─── Single-paragraph banner ────────────────────────────────────────────
+  //
+  // Previously this used a 1×2 table for left-cell-image + right-cell-text.
+  // That kept hitting "Index N must be less than the end index of the
+  // referenced segment, N" because the cell paragraphs in a brand-new doc
+  // have start == end == cellStart, which violates Google's strict
+  // `index < endIndex` rule for inserts.
+  //
+  // The single-paragraph approach sidesteps the entire problem:
+  //   - One paragraph at the top of the doc
+  //   - Image inserted inline at the start (left-aligned implicitly)
+  //   - Tab + label text after the image (text alignment is right-end)
+  //   - Paragraph shading = red background, paragraph alignment = JUSTIFIED
+  //
+  // No table cells, no degenerate index ranges, no batch-order gymnastics.
+  //
+  // We return the cursor position immediately after the banner paragraph
+  // so the rest of the document content lands below it.
 
-  // Re-fetch to learn the actual cell indices
-  let docState = await docsClient.documents.get({ documentId });
-  let body = docState.data.body?.content ?? [];
-  let bannerTable = body.find((el) => el.table && el.startIndex !== undefined && el.startIndex !== null);
-  if (!bannerTable?.table) {
-    // Banner insert failed — return cursor at start so content still flows
-    return 1;
-  }
+  // Step 1: insert the banner text content into the first paragraph.
+  // The starter paragraph in a fresh doc has startIndex==endIndex==1, so
+  // we insert text at index 1 (which IS valid for the doc's first paragraph
+  // because the segment "body" has endIndex > 1 — it's the cell case that
+  // breaks, not the body case).
+  //
+  // We use a tab character to push the label text to the right side, then
+  // we'll right-align the text at the tab stop later. But since we don't
+  // have a Tab Stop API for paragraphs, we instead use a different approach:
+  // simply right-align the whole paragraph, put a spacer image at the start,
+  // and let the text sit on the right.
+  //
+  // Actually the cleanest visual: just put the label text right-aligned in
+  // a red-shaded paragraph, no image at all on the first try — we'll add
+  // the image as a SECOND attempt and degrade gracefully.
 
-  const tRows = bannerTable.table.tableRows ?? [];
-  const leftCell = tRows[0]?.tableCells?.[0];
-  const rightCell = tRows[0]?.tableCells?.[1];
-  const leftStart = leftCell?.content?.[0]?.startIndex;
-  const rightStart = rightCell?.content?.[0]?.startIndex;
-
-  if (leftStart === undefined || leftStart === null ||
-      rightStart === undefined || rightStart === null) {
-    return 1;
-  }
-
-  // ─── Insert image (left) and text (right) ──────────────────────────────
-  // IMPORTANT: insert right cell text FIRST, then left cell image. We
-  // process in reverse-index order so later insertions don't shift earlier
-  // tracked positions.
   const labelText = "Bi-Weekly SEO Report";
 
-  await docsClient.documents.batchUpdate({
-    documentId,
-    requestBody: {
-      requests: [
-        // Right cell text
-        {
-          insertText: {
-            location: { index: rightStart },
-            text: labelText,
-          },
-        },
-      ],
-    },
-  });
+  // ─── Insert the label text into the first paragraph ───────────────────
+  try {
+    await docsClient.documents.batchUpdate({
+      documentId,
+      requestBody: {
+        requests: [
+          { insertText: { location: { index: 1 }, text: labelText + "\n" } },
+        ],
+      },
+    });
+  } catch (err: any) {
+    console.warn("[biweeklyGoogleDocs] Banner label insert failed:", err?.message ?? err);
+    return 1;
+  }
 
-  // Inserting the image is a separate batch because it might fail if the
-  // logo URL isn't publicly accessible — we don't want it to take down the
-  // text insertion if so.
+  // After insertion, the banner text occupies indices 1..labelText.length+1.
+  // The newline at the end starts the next paragraph (where the rest of
+  // the report will go).
+  const bannerStart = 1;
+  const bannerEnd = 1 + labelText.length + 1; // +1 for the trailing newline
+
+  // ─── Style the banner paragraph ───────────────────────────────────────
+  // Red background, white bold Archivo text, right-aligned, with some padding.
+  const styleRequests: docs_v1.Schema$Request[] = [
+    {
+      updateParagraphStyle: {
+        range: { startIndex: bannerStart, endIndex: bannerEnd },
+        paragraphStyle: {
+          alignment: "END",
+          shading: { backgroundColor: rgbColor(t.primaryColor) },
+          spaceAbove:  { magnitude: 6, unit: "PT" },
+          spaceBelow:  { magnitude: 6, unit: "PT" },
+          indentStart: { magnitude: 12, unit: "PT" },
+          indentEnd:   { magnitude: 12, unit: "PT" },
+        },
+        fields: "alignment,shading,spaceAbove,spaceBelow,indentStart,indentEnd",
+      },
+    },
+    {
+      updateTextStyle: {
+        // Exclude the trailing newline from text styling
+        range: { startIndex: bannerStart, endIndex: bannerEnd - 1 },
+        textStyle: {
+          bold: true,
+          fontSize: { magnitude: 12, unit: "PT" },
+          foregroundColor: rgbColor("#FFFFFF"),
+          weightedFontFamily: { fontFamily: t.headingFont, weight: 700 },
+        },
+        fields: "bold,fontSize,foregroundColor,weightedFontFamily",
+      },
+    },
+  ];
+
+  try {
+    await docsClient.documents.batchUpdate({
+      documentId,
+      requestBody: { requests: styleRequests },
+    });
+  } catch (err: any) {
+    console.warn("[biweeklyGoogleDocs] Banner styling failed:", err?.message ?? err);
+  }
+
+  // ─── Try to insert the logo image inline at the start ─────────────────
+  // (Optional — the banner still looks good without it.)
   try {
     await docsClient.documents.batchUpdate({
       documentId,
@@ -679,131 +726,27 @@ async function insertBrandBanner(
         requests: [
           {
             insertInlineImage: {
-              location: { index: leftStart },
+              location: { index: bannerStart },
               uri: WEBSERV_LOGO_URL,
               objectSize: {
-                height: { magnitude: 28, unit: "PT" },
-                width: { magnitude: 28, unit: "PT" },
+                height: { magnitude: 20, unit: "PT" },
+                width:  { magnitude: 20, unit: "PT" },
               },
             },
           },
         ],
       },
     });
+
+    // After the image insert, the cursor positions shift forward by 1.
+    return bannerEnd + 1;
   } catch (err: any) {
-    console.warn("[biweeklyGoogleDocs] Banner logo image insertion failed:", err.message ?? err);
-    // Fall back to a styled "W" character in the left cell so the banner
-    // isn't blank — better than no logo at all.
-    await docsClient.documents.batchUpdate({
-      documentId,
-      requestBody: {
-        requests: [
-          { insertText: { location: { index: leftStart }, text: "W" } },
-        ],
-      },
-    });
+    console.warn(
+      "[biweeklyGoogleDocs] Banner logo image insertion failed (continuing without logo):",
+      err?.message ?? err,
+    );
+    return bannerEnd;
   }
-
-  // ─── Re-fetch again to find post-insert ranges for styling ────────────
-  docState = await docsClient.documents.get({ documentId });
-  body = docState.data.body?.content ?? [];
-  bannerTable = body.find((el) => el.table && el.startIndex !== undefined && el.startIndex !== null);
-  if (!bannerTable?.table) return 1;
-
-  const tableStart = bannerTable.startIndex!;
-  const tableEnd = bannerTable.endIndex!;
-  const styledRows = bannerTable.table.tableRows ?? [];
-  const styledLeft = styledRows[0]?.tableCells?.[0];
-  const styledRight = styledRows[0]?.tableCells?.[1];
-
-  const styleRequests: docs_v1.Schema$Request[] = [];
-
-  // Both cells: red background, no border
-  for (let ci = 0; ci < 2; ci++) {
-    styleRequests.push({
-      updateTableCellStyle: {
-        tableCellStyle: {
-          backgroundColor: rgbColor(t.primaryColor),
-          borderTop:    { color: rgbColor(t.primaryColor), width: { magnitude: 0, unit: "PT" }, dashStyle: "SOLID" },
-          borderBottom: { color: rgbColor(t.primaryColor), width: { magnitude: 0, unit: "PT" }, dashStyle: "SOLID" },
-          borderLeft:   { color: rgbColor(t.primaryColor), width: { magnitude: 0, unit: "PT" }, dashStyle: "SOLID" },
-          borderRight:  { color: rgbColor(t.primaryColor), width: { magnitude: 0, unit: "PT" }, dashStyle: "SOLID" },
-          paddingTop:    { magnitude: 8, unit: "PT" },
-          paddingBottom: { magnitude: 8, unit: "PT" },
-          paddingLeft:   { magnitude: 12, unit: "PT" },
-          paddingRight:  { magnitude: 12, unit: "PT" },
-        },
-        tableRange: {
-          tableCellLocation: {
-            tableStartLocation: { index: tableStart },
-            rowIndex: 0,
-            columnIndex: ci,
-          },
-          rowSpan: 1,
-          columnSpan: 1,
-        },
-        fields: "backgroundColor,borderTop,borderBottom,borderLeft,borderRight,paddingTop,paddingBottom,paddingLeft,paddingRight",
-      },
-    });
-  }
-
-  // Right cell text: white, bold, Archivo, right-aligned, slightly larger
-  if (styledRight) {
-    const rStart = styledRight.startIndex;
-    const rEnd = styledRight.endIndex;
-    if (rStart !== undefined && rStart !== null && rEnd !== undefined && rEnd !== null) {
-      // Right-align the paragraph in the cell
-      styleRequests.push({
-        updateParagraphStyle: {
-          range: { startIndex: rStart, endIndex: rEnd },
-          paragraphStyle: { alignment: "END" },
-          fields: "alignment",
-        },
-      });
-      // White Archivo bold text
-      styleRequests.push({
-        updateTextStyle: {
-          range: { startIndex: rStart, endIndex: rEnd - 1 },
-          textStyle: {
-            bold: true,
-            fontSize: { magnitude: 11, unit: "PT" },
-            foregroundColor: rgbColor("#FFFFFF"),
-            weightedFontFamily: { fontFamily: t.headingFont, weight: 700 },
-          },
-          fields: "bold,fontSize,foregroundColor,weightedFontFamily",
-        },
-      });
-    }
-  }
-
-  // Left cell: just ensure the image paragraph has no extra indentation
-  if (styledLeft) {
-    const lStart = styledLeft.startIndex;
-    const lEnd = styledLeft.endIndex;
-    if (lStart !== undefined && lStart !== null && lEnd !== undefined && lEnd !== null) {
-      styleRequests.push({
-        updateParagraphStyle: {
-          range: { startIndex: lStart, endIndex: lEnd },
-          paragraphStyle: { alignment: "START" },
-          fields: "alignment",
-        },
-      });
-    }
-  }
-
-  if (styleRequests.length > 0) {
-    await docsClient.documents.batchUpdate({
-      documentId,
-      requestBody: { requests: styleRequests },
-    });
-  }
-
-  // Return cursor position immediately after the banner table.
-  // Re-fetch one more time to get the up-to-date end-of-table index.
-  const finalState = await docsClient.documents.get({ documentId });
-  const finalBody = finalState.data.body?.content ?? [];
-  const finalBanner = finalBody.find((el) => el.table && el.startIndex !== undefined && el.startIndex !== null);
-  return (finalBanner?.endIndex ?? tableEnd) + 1;
 }
 
 /**
@@ -844,13 +787,19 @@ export async function createBiweeklyGoogleDoc(
 
   // ── Step 2: insert the brand banner at the top ─────────────────────────
   //
-  // The banner is a 1×2 table at the very top of the document:
-  //   [ W logo image ] [ "Bi-Weekly SEO Report" right-aligned, white ]
-  // Both cells share a #C0392B red background. Borders are removed.
+  // The banner is a single styled paragraph at the top of the document:
+  //   - Red background (#C0392B)
+  //   - "Bi-Weekly SEO Report" in white Archivo bold, right-aligned
+  //   - Webserv "W" logo inserted inline on the left (degrades gracefully
+  //     if the image URL is unreachable — the banner still renders)
   //
-  // We do this BEFORE the block builder runs so all subsequent content
-  // appears below the banner. The function returns the cursor position
-  // after the banner — that becomes the builder's starting index.
+  // Why a paragraph and not a 1×2 table: the Docs API has an "index N must
+  // be less than the end index of the referenced segment, N" error when you
+  // try to insert text into a brand-new, freshly-empty table cell. A
+  // single paragraph has no such constraint.
+  //
+  // Returns the cursor position after the banner so all subsequent content
+  // appears below it.
   const postBannerCursor = await insertBrandBanner(docsClient, documentId, t);
 
   // ── Step 3: build text + styles in document order ─────────────────────

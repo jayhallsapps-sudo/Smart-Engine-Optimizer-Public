@@ -43,6 +43,7 @@ export interface BlockSettings {
   items?: string[];
   height?: number;
   dividerThickness?: number;
+  itemsWithSources?: Array<{ did: Array<{ text: string; source?: string }>; next: Array<{ text: string; source?: string }> }>;
 }
 
 export interface DocBlock {

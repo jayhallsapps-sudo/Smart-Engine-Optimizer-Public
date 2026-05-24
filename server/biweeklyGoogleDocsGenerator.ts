@@ -113,6 +113,7 @@ export interface BiweeklyBrandTokens {
   tableHeaderBg: string;      // table header fill
   tableHeaderText: string;    // table header text
   tableAltRowBg: string;      // alternating row fill
+  tableBorderColor: string;   // cell border color
   calloutBg: string;          // callout background
   calloutBorderColor: string; // callout left accent (mimicked w/ cell shading)
   headingFont: string;        // Archivo
@@ -125,6 +126,7 @@ const DEFAULT_TOKENS: BiweeklyBrandTokens = {
   tableHeaderBg:      "#C0392B",
   tableHeaderText:    "#FFFFFF",
   tableAltRowBg:      "#F8FAFC",
+  tableBorderColor:   "#E2E8F0",
   calloutBg:          "#FEF2F2",
   calloutBorderColor: "#C0392B",
   headingFont:        "Archivo",
@@ -184,10 +186,36 @@ function rgbColor(hex: string) {
   return { color: { rgbColor: hexToRgb(hex) } };
 }
 
+function cellBorder(hex: string) {
+  return {
+    color: rgbColor(hex),
+    width: { magnitude: 1, unit: "PT" },
+    dashStyle: "SOLID",
+  };
+}
+
 function san(s: string): string {
   return (s ?? "")
     .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+}
+
+function extractSources(items: any[]): Array<{ text: string; source?: string }> {
+  return (items ?? []).map((i: any) =>
+    typeof i === "string" ? { text: i } : { text: i.text ?? "", source: i.source }
+  );
+}
+
+function sourcesToLabel(items: Array<{ text: string; source?: string }>): string {
+  const sources = Array.from(new Set(items.map(i => i.source).filter(Boolean) as string[]));
+  return sources.length ? `\n(source: ${sources.join(", ")})` : "";
+}
+
+function statusArrow(status: string): string {
+  const s = status.toLowerCase().trim();
+  if (s.startsWith("ahead") || s.startsWith("on track")) return "↑ ";
+  if (s.startsWith("behind")) return "↓ ";
+  return "";
 }
 
 // ─── Builder that streams content into a request list ────────────────────────
@@ -575,7 +603,8 @@ function hydrateBlocks(blocks: BiweeklyBlock[], report: any): BiweeklyBlock[] {
         const parseRow = (m: any): string[] => {
           const parts = String(m.current ?? "").split("|").map((s: string) => s.trim());
           const [goal = "—", actual = "—", pct = "—", status = "—"] = parts;
-          return [san(m.label ?? "—"), san(goal), san(actual), san(pct), san(status)];
+          const statusWithArrow = statusArrow(status) + san(status);
+          return [san(m.label ?? "—"), san(goal), san(actual), san(pct), statusWithArrow];
         };
         if (metrics.length === 0) return block;
         const tableRows = metrics.map(parseRow);
@@ -595,27 +624,21 @@ function hydrateBlocks(blocks: BiweeklyBlock[], report: any): BiweeklyBlock[] {
         // either flat strings (`whatWeDid` / `whatsNext`) or item arrays
         // (`items[]` / `nextItems[]`) that need joining.
         const workLog: any[] = progressSection?.workLog ?? [];
-        if (workLog.length === 0) return block;
+        if (workLog.length === 0) return { ...block, content: "" };
         const tableRows: string[][] = workLog.map((row: any) => {
-          const didText = san(
-            row.whatWeDid ||
-            (Array.isArray(row.items)
-              ? row.items.map((i: any) => (typeof i === "string" ? i : i.text ?? "")).filter(Boolean).join("\n")
-              : "")
-          ) || "—";
-
-          const nextText = san(
-            row.whatsNext ||
-            (Array.isArray(row.nextItems)
-              ? row.nextItems.map((i: any) => (typeof i === "string" ? i : i.text ?? "")).filter(Boolean).join("\n")
-              : "")
-          ) || "—";
-
+          const didItems = extractSources(row.items ?? []);
+          const nextItems = extractSources(row.nextItemsRich ?? row.nextItems ?? []);
+          const didText = (
+            san(row.whatWeDid || didItems.map(i => i.text).filter(Boolean).join("\n")) || "—"
+          ) + sourcesToLabel(didItems);
+          const nextText = (
+            san(row.whatsNext || nextItems.map(i => i.text).filter(Boolean).join("\n")) || "—"
+          ) + sourcesToLabel(nextItems);
           return [san(row.area ?? "—"), didText, nextText];
         });
         return {
           ...block,
-          content: "Progress & Quick Wins",
+          content: "", // heading already covers "3. Progress & Quick Wins"
           settings: {
             ...block.settings,
             colHeaders: ["Area", "What We Did / Learned", "What's Next"],
@@ -732,8 +755,8 @@ async function insertBrandBanner(
         paragraphStyle: {
           alignment: "START",
           shading: { backgroundColor: rgbColor(t.primaryColor) },
-          spaceAbove:  { magnitude: 6, unit: "PT" },
-          spaceBelow:  { magnitude: 6, unit: "PT" },
+          spaceAbove:  { magnitude: 12, unit: "PT" },
+          spaceBelow:  { magnitude: 12, unit: "PT" },
           indentStart: { magnitude: 12, unit: "PT" },
           indentEnd:   { magnitude: 12, unit: "PT" },
         },
@@ -1032,6 +1055,10 @@ export async function createBiweeklyGoogleDoc(
             updateTableCellStyle: {
               tableCellStyle: {
                 backgroundColor: rgbColor(isHeader ? t.tableHeaderBg : (altShade ? t.tableAltRowBg : "#FFFFFF")),
+                borderTop:    cellBorder(t.tableBorderColor),
+                borderBottom: cellBorder(t.tableBorderColor),
+                borderLeft:   cellBorder(t.tableBorderColor),
+                borderRight:  cellBorder(t.tableBorderColor),
               },
               tableRange: {
                 tableCellLocation: {
@@ -1042,7 +1069,7 @@ export async function createBiweeklyGoogleDoc(
                 rowSpan: 1,
                 columnSpan: 1,
               },
-              fields: "backgroundColor",
+              fields: "backgroundColor,borderTop,borderBottom,borderLeft,borderRight",
             },
           });
 

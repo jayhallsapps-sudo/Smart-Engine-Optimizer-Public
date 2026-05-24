@@ -349,7 +349,7 @@ function BulletListBlock({ block, tokens, edits, onEdit }: BlockProps) {
         </p>
       )}
       <ul className="space-y-1 pl-3">
-        {allItems.map(({ idx, val, isExtra, extraIdx }) => (
+        {allItems.map(({ idx, val, isExtra, extraIdx }: { idx: number; val: string; isExtra: boolean; extraIdx?: number }) => (
           <li key={idx} className="flex items-start gap-2 group">
             <span
               className="mt-1.5 shrink-0"
@@ -888,7 +888,7 @@ function hydrateBlocks(blocks: DocBlock[], report: any): DocBlock[] {
 
           return {
             ...block,
-            content: "Progress & Quick Wins",
+            content: "", // subtitle already covers "3. Progress & Quick Wins"
             settings: {
               ...block.settings,
               colHeaders: ["Area", "What We Did / Learned", "What's Next"],
@@ -899,7 +899,7 @@ function hydrateBlocks(blocks: DocBlock[], report: any): DocBlock[] {
             },
           };
         }
-        return block;
+        return { ...block, content: "" };
       }
 
       case "blk-closing":
@@ -960,7 +960,7 @@ export function BiweeklyReportRenderer({ report, printMode, edits, onEdit }: Biw
     >
       {tokens.showHeader && (
         <div
-          className="px-12 py-2.5 flex items-center justify-between"
+          className="px-12 py-4 flex items-center justify-between"
           style={{ backgroundColor: tokens.headerColor }}
         >
           {tokens.logoUrl ? (

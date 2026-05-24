@@ -72,8 +72,34 @@ async function getDocsClient(): Promise<docs_v1.Docs> {
   return google.docs({ version: "v1", auth: oauth2Client });
 }
 
+async function getDriveAccessToken(): Promise<string | null> {
+  const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
+  const xReplitToken = process.env.REPL_IDENTITY
+    ? "repl " + process.env.REPL_IDENTITY
+    : process.env.WEB_REPL_RENEWAL
+    ? "depl " + process.env.WEB_REPL_RENEWAL
+    : null;
+  if (!xReplitToken || !hostname) return null;
+  try {
+    const data = await fetch(
+      "https://" + hostname + "/api/v2/connection?include_secrets=true&connector_names=google-drive",
+      { headers: { Accept: "application/json", "X-Replit-Token": xReplitToken } }
+    ).then((res) => res.json());
+    const item = data.items?.[0];
+    const accessToken =
+      item?.settings?.access_token ||
+      item?.settings?.oauth?.credentials?.access_token;
+    return accessToken || null;
+  } catch {
+    return null;
+  }
+}
+
 async function getDriveClient() {
-  const accessToken = await getDocsAccessToken();
+  const accessToken = await getDriveAccessToken();
+  if (!accessToken) {
+    throw new Error("Google Drive not connected — check the google-drive Replit connector");
+  }
   const oauth2Client = new google.auth.OAuth2();
   oauth2Client.setCredentials({ access_token: accessToken });
   return google.drive({ version: "v3", auth: oauth2Client });
@@ -1078,13 +1104,15 @@ export async function createBiweeklyGoogleDoc(
   }
 
   // ── Step 6: move the doc into the target folder (if specified) ────────
-  // NOTE: the google-docs connector token only covers docs scope.
-  // Drive scope may not be present, so we skip the Drive API metadata
-  // fetch entirely and construct the webViewLink directly.
+  // NOTE: we now fetch the Drive token from the *google-drive* Replit
+  // connector, which carries the correct Drive scope. The docs connector
+  // only has docs scope.
+  let webViewLink = `https://docs.google.com/document/d/${documentId}/edit`;
+  let driveTitle = title;
   if (parentFolderId) {
     try {
       const driveClient = await getDriveClient();
-      const fileMeta = await driveClient.files.get({ fileId: documentId, fields: "parents" });
+      const fileMeta = await driveClient.files.get({ fileId: documentId, fields: "parents,name,webViewLink" });
       const previousParents = (fileMeta.data.parents ?? []).join(",");
       await driveClient.files.update({
         fileId: documentId,
@@ -1092,17 +1120,32 @@ export async function createBiweeklyGoogleDoc(
         removeParents: previousParents,
         fields: "id, parents",
       });
+      webViewLink = fileMeta.data.webViewLink ?? webViewLink;
+      driveTitle = fileMeta.data.name ?? driveTitle;
     } catch (err: any) {
-      // Non-fatal: the doc still exists in My Drive root if folder move fails.
       console.warn("[biweeklyGoogleDocs] Folder move failed:", err.message ?? err);
     }
   }
 
-  // Skip Drive API metadata fetch — construct link directly so we
-  // don't fail when the token lacks Drive scope.
+  // ── Step 7: make the doc editable by anyone with the link ───────────
+  try {
+    const driveClient = await getDriveClient();
+    await driveClient.permissions.create({
+      fileId: documentId,
+      requestBody: {
+        role: "writer",
+        type: "anyone",
+      },
+    });
+    console.log("[biweeklyGoogleDocs] Document shared with anyone (writer).");
+  } catch (err: any) {
+    // Non-fatal: doc still exists but may not be publicly editable.
+    console.warn("[biweeklyGoogleDocs] Permission share failed:", err.message ?? err);
+  }
+
   return {
     documentId,
-    webViewLink: `https://docs.google.com/document/d/${documentId}/edit`,
-    title,
+    webViewLink,
+    title: driveTitle,
   };
 }

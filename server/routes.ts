@@ -2740,57 +2740,26 @@ export async function registerRoutes(
       const themeTokens = activeTheme?.tokens ?? undefined;
 
       const patchedReport = applyBiweeklyEditsToReport(reportData, edits);
-      const buffer = await generateBiweeklyBlockDocx(patchedReport, savedBlocks, themeTokens as any);
-      const clientName = reportData.client_name ?? "report";
-      const date = reportData.date ?? "";
-      const filename = `${clientName} Biweekly SEO ${date}`;
 
-      const { ReplitConnectors } = await import("@replit/connectors-sdk");
-      const connectors = new ReplitConnectors();
-      const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-
-      // Resumable upload — same approach as QBR Prep for reliability
-      const initRes = await connectors.proxy(
-        "google-drive",
-        `/upload/drive/v3/files?uploadType=resumable&fields=id,name,webViewLink`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json; charset=UTF-8",
-            "X-Upload-Content-Type": DOCX_MIME,
-            "X-Upload-Content-Length": String(buffer.length),
-          },
-          // mimeType: google-apps.document triggers automatic DOCX→Google-Doc conversion
-          body: Buffer.from(JSON.stringify({ name: filename, mimeType: "application/vnd.google-apps.document" })),
-        }
+      // Native Google Docs generation — bypasses the docx→GDoc auto-convert
+      // that was mangling fonts, colors, and table formatting. The result is
+      // a real Google Doc the AM can edit in the browser immediately.
+      const { createBiweeklyGoogleDoc } = await import("./biweeklyGoogleDocsGenerator");
+      const result = await createBiweeklyGoogleDoc(
+        patchedReport,
+        savedBlocks,
+        themeTokens as any,
       );
 
-      if (!initRes.ok) {
-        const e = await initRes.json().catch(() => ({}) as any);
-        return res.status(initRes.status).json({ message: `Drive upload init failed: ${(e as any)?.error?.message ?? initRes.statusText}` });
-      }
-
-      const sessionUri = initRes.headers.get("location") as string;
-      if (!sessionUri) {
-        return res.status(502).json({ message: "Google Drive did not return a resumable upload session URI" });
-      }
-
-      // Upload directly to the session URI (auth embedded in URI, no proxy needed)
-      const uploadRes = await fetch(sessionUri, {
-        method: "PUT",
-        headers: { "Content-Type": DOCX_MIME, "Content-Length": String(buffer.length) },
-        body: buffer,
+      res.json({
+        success: true,
+        fileId: result.documentId,
+        fileName: result.title,
+        webViewLink: result.webViewLink,
       });
-
-      if (!uploadRes.ok) {
-        const e = await uploadRes.json().catch(() => ({}) as any);
-        return res.status(uploadRes.status).json({ message: `Drive upload failed: ${(e as any)?.error?.message ?? uploadRes.statusText}` });
-      }
-
-      const driveFile = await uploadRes.json() as any;
-      res.json({ success: true, fileId: driveFile.id, fileName: driveFile.name, webViewLink: driveFile.webViewLink });
     } catch (err: any) {
-      res.status(500).json({ message: "Upload failed: " + err.message });
+      console.error("[biweekly/upload-to-drive] Native GDoc generation failed:", err);
+      res.status(500).json({ message: "Upload failed: " + (err.message ?? "unknown error") });
     }
   });
 

@@ -138,7 +138,6 @@ export function AddClientModal({ open, onOpenChange, onCreated }: AddClientModal
     if (!form.airtableBaseId.trim()) e.airtableBaseId = "Airtable base ID is required";
     if (!form.airtableTableName.trim()) e.airtableTableName = "Airtable table name is required";
     if (!form.airtableProductionView.trim()) e.airtableProductionView = "Production view is required";
-    if (!form.airtableEverythingView.trim()) e.airtableEverythingView = "Everything view is required";
     if (!form.slackChannelId.trim()) e.slackChannelId = "Slack channel ID is required";
     if (!form.slackUserId.trim()) e.slackUserId = "Slack user ID is required";
     if (adminMode && !form.assignedAmUserId) e.assignedAmUserId = "Please assign an AM";
@@ -344,7 +343,7 @@ export function AddClientModal({ open, onOpenChange, onCreated }: AddClientModal
             </div>
             <div className="space-y-1 mt-2">
               <Label className="flex items-center gap-1.5">
-                Airtable Everything View *
+                Airtable Everything View
                 <FieldHelp text="The 'Everything' view — typically named '{Client Name} Everything'. Make sure this view exists in Airtable and contains all records, not filtered." />
               </Label>
               <Input value={form.airtableEverythingView} onChange={e => update("airtableEverythingView", e.target.value)} placeholder="e.g., Client Everything" data-testid="input-airtable-everything-view" />

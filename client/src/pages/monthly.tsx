@@ -22,7 +22,17 @@ import {
   ChevronRight,
   MessageSquare,
   CheckCircle2,
+  Plus,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { PptxPreview } from "@/components/report-preview/pptx-preview";
 import type { Client, SavedReport } from "@shared/schema";
@@ -62,6 +72,13 @@ export default function MonthlyPage() {
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [isUploading, setIsUploading] = useState(false);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+
+  // Phase 3h — custom slide builder state
+  const [customSlideOpen, setCustomSlideOpen] = useState(false);
+  const [customTitle, setCustomTitle] = useState("");
+  const [customPosition, setCustomPosition] = useState<string>("");  // "after-N" stringified for the Select
+  const [customBrief, setCustomBrief] = useState("");
+  const [isSynthesizing, setIsSynthesizing] = useState(false);
   const [currentCrawlId, setCurrentCrawlId] = useState<number | null>(null);
   const [comparisonCrawlId, setComparisonCrawlId] = useState<number | null>(null);
   const [showAdditionalInputs, setShowAdditionalInputs] = useState(false);
@@ -264,6 +281,66 @@ export default function MonthlyPage() {
       toast({ title: "PDF download failed", description: err.message ?? String(err), variant: "destructive" });
     } finally {
       setIsDownloadingPdf(false);
+    }
+  }
+
+  function resetCustomSlideForm() {
+    setCustomTitle("");
+    setCustomPosition("");
+    setCustomBrief("");
+  }
+
+  async function submitCustomSlide() {
+    if (!report) return;
+    const trimmedTitle = customTitle.trim();
+    const trimmedBrief = customBrief.trim();
+    if (!trimmedTitle || !trimmedBrief) {
+      toast({
+        title: "Title and brief are required",
+        description: "Both fields need text before the AI can synthesize a slide.",
+        variant: "destructive",
+      });
+      return;
+    }
+    // Position is "after-<index>" where index = 0 means insert at top (before
+    // the cover slide), index = slides.length means append. Default: after the
+    // currently-final slide (append).
+    const slides: any[] = report.slides ?? [];
+    const positionStr = customPosition || `after-${slides.length}`;
+    const insertIndex = Math.max(0, Math.min(slides.length, parseInt(positionStr.replace("after-", ""), 10)));
+
+    setIsSynthesizing(true);
+    try {
+      const res = await apiRequest("POST", "/api/reports/monthly/synthesize-custom-slide", {
+        title: trimmedTitle,
+        brief: trimmedBrief,
+        clientName: edits["cover_client"] ?? report.client_name ?? clientName ?? "Client",
+        monthLabel: report.month_label ?? "",
+      });
+      const data = await res.json();
+      if (!data?.slide) throw new Error(data?.message ?? "AI returned no slide");
+
+      const newSlide = data.slide;
+      const nextSlides = [...slides.slice(0, insertIndex), newSlide, ...slides.slice(insertIndex)];
+      handleSlidesChange(nextSlides);
+
+      if (data.fallbackTriggered) {
+        toast({
+          title: "Custom slide inserted (AI fallback)",
+          description: "AI synthesis failed; the slide ships with your raw brief in a prose layout. Edit any text block in-place.",
+        });
+      } else {
+        toast({
+          title: "Custom slide inserted",
+          description: `Layout: ${newSlide.layout ?? "prose_card"} · via ${data.provider ?? "AI"}`,
+        });
+      }
+      setCustomSlideOpen(false);
+      resetCustomSlideForm();
+    } catch (err: any) {
+      toast({ title: "Synthesis failed", description: err.message ?? String(err), variant: "destructive" });
+    } finally {
+      setIsSynthesizing(false);
     }
   }
 
@@ -681,6 +758,15 @@ export default function MonthlyPage() {
         {report && (
           <div className="p-4 border-t space-y-2">
             <Button
+              variant="outline"
+              className="w-full text-xs"
+              onClick={() => setCustomSlideOpen(true)}
+              data-testid="btn-add-custom-slide"
+            >
+              <Plus className="w-3 h-3 mr-1.5" />
+              Add Custom Slide
+            </Button>
+            <Button
               className="w-full text-xs"
               onClick={downloadPdf}
               disabled={isDownloadingPdf}
@@ -780,6 +866,92 @@ export default function MonthlyPage() {
           onAnswersChange={handleAnswersChange}
         />
       )}
+
+      {/* ─── Phase 3h — Add Custom Slide dialog ───────────────────────── */}
+      <Dialog
+        open={customSlideOpen}
+        onOpenChange={(open) => {
+          if (!isSynthesizing) {
+            setCustomSlideOpen(open);
+            if (!open) resetCustomSlideForm();
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Add custom slide</DialogTitle>
+            <DialogDescription>
+              Give the AI a free-form brief. It will pick the right layout (stats, prose, table, or story) and produce
+              an editable slide. Insert it anywhere in the deck.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="custom-title" className="text-xs">Slide title</Label>
+              <Input
+                id="custom-title"
+                value={customTitle}
+                onChange={(e) => setCustomTitle(e.target.value)}
+                placeholder="e.g. Custom code is fighting the platform"
+                disabled={isSynthesizing}
+                data-testid="input-custom-title"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="custom-position" className="text-xs">Insert position</Label>
+              <Select
+                value={customPosition}
+                onValueChange={setCustomPosition}
+                disabled={isSynthesizing}
+              >
+                <SelectTrigger id="custom-position" data-testid="select-custom-position">
+                  <SelectValue placeholder={`Append to end (after slide ${(report?.slides ?? []).length})`} />
+                </SelectTrigger>
+                <SelectContent>
+                  {((report?.slides ?? []) as any[]).map((s, i) => (
+                    <SelectItem key={i} value={`after-${i + 1}`}>
+                      After slide {i + 1}{s.title ? ` · ${s.title}` : ""}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value={`after-0`}>Insert at the very top (before cover)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="custom-brief" className="text-xs">Brief</Label>
+              <Textarea
+                id="custom-brief"
+                value={customBrief}
+                onChange={(e) => setCustomBrief(e.target.value)}
+                placeholder="Type a paragraph of prose, a bulleted list, or a mix of prose and numbers. The AI picks the layout from the shape of what you write."
+                rows={6}
+                disabled={isSynthesizing}
+                data-testid="textarea-custom-brief"
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setCustomSlideOpen(false);
+                resetCustomSlideForm();
+              }}
+              disabled={isSynthesizing}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={submitCustomSlide}
+              disabled={isSynthesizing || !customTitle.trim() || !customBrief.trim()}
+              data-testid="btn-synthesize-custom-slide"
+            >
+              {isSynthesizing ? <Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> : null}
+              {isSynthesizing ? "Synthesizing…" : "Synthesize slide"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

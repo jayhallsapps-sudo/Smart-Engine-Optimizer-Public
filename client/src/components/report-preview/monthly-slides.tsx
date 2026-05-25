@@ -1434,6 +1434,216 @@ export function MonthlyInitiativesPanelSlide({ slide, edits, onEdit, headerUrl: 
   );
 }
 
+// ─── MonthlyCustomSlide (V2 — AM-authored, AI-synthesized) ───────────────────
+// Renders a custom slide inserted by the AM. AI picks `slide.layout` from
+// the AM's free-form brief; this component branches on layout. Every text
+// block is editable via EditableSection so the AM can polish output.
+export function MonthlyCustomSlide({ slide, edits, onEdit, headerUrl: _headerUrl }: SlideProps) {
+  const title = edits[`${slide.id}_title`] ?? slide.title ?? "Custom slide";
+  const subtitle = edits[`${slide.id}_subtitle`] ?? slide.subtitle;
+  const commentary = edits[`${slide.id}_commentary`] ?? slide.commentary;
+  const layout = slide.layout ?? "prose_card";
+
+  // Layout: stat_grid — numbers-heavy brief becomes stat cards + callout
+  if (layout === "stat_grid") {
+    const metrics = (slide.metrics ?? []).slice(0, 4);
+    return (
+      <MV2SlideShell title={title} subtitle={subtitle} sourceLabel="Custom (AM-authored)">
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, height: "100%" }}>
+          {metrics.length > 0 && (
+            <div style={{ display: "grid", gridTemplateColumns: `repeat(${metrics.length}, 1fr)`, gap: 8 }}>
+              {metrics.map((m, mi) => (
+                <MV2StatCard
+                  key={mi}
+                  label={m.label}
+                  value={String(m.current ?? "—")}
+                  delta={m.delta}
+                  deltaPositive={m.isPositive}
+                  accent
+                />
+              ))}
+            </div>
+          )}
+          {commentary && (
+            <div style={{ flex: 1, minHeight: 0 }}>
+              <MV2InsightCallout
+                text={
+                  <EditableSection
+                    editKey={`${slide.id}_commentary`}
+                    value={commentary}
+                    edits={edits}
+                    onEdit={onEdit}
+                    as="span"
+                    multiline
+                    style={{ fontSize: 10, lineHeight: 1.5, color: "#2C2C2A" } as any}
+                  />
+                }
+                style={{ height: "100%" }}
+              />
+            </div>
+          )}
+        </div>
+      </MV2SlideShell>
+    );
+  }
+
+  // Layout: prose_card — sections (eyebrow + body) stacked, AM edits any.
+  if (layout === "prose_card") {
+    const sections = slide.sections ?? [];
+    return (
+      <MV2SlideShell title={title} subtitle={subtitle} sourceLabel="Custom (AM-authored)">
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, height: "100%", overflow: "auto" }}>
+          {sections.length > 0 ? sections.map((s, si) => (
+            <MV2ContentCard key={si} padding="10px 14px">
+              <div
+                style={{
+                  fontSize: 7,
+                  color: MV2_ACCENT,
+                  letterSpacing: "1px",
+                  textTransform: "uppercase",
+                  marginBottom: 4,
+                  fontWeight: 600,
+                }}
+              >
+                <EditableSection
+                  editKey={`${slide.id}_section_${si}_eyebrow`}
+                  value={s.eyebrow}
+                  edits={edits}
+                  onEdit={onEdit}
+                  as="span"
+                  style={{ fontSize: 7, color: MV2_ACCENT, fontWeight: 600, letterSpacing: "1px" } as any}
+                />
+              </div>
+              <EditableSection
+                editKey={`${slide.id}_section_${si}_body`}
+                value={s.body}
+                edits={edits}
+                onEdit={onEdit}
+                as="div"
+                multiline
+                style={{ fontSize: 10, lineHeight: 1.5, color: MV2_TEXT_PRIMARY } as any}
+              />
+            </MV2ContentCard>
+          )) : (
+            <div style={{ color: MV2_TEXT_MUTED, fontSize: 11, fontStyle: "italic" }}>
+              No content. Re-synthesize the slide from the builder.
+            </div>
+          )}
+          {commentary && (
+            <MV2InsightCallout
+              text={
+                <EditableSection
+                  editKey={`${slide.id}_commentary`}
+                  value={commentary}
+                  edits={edits}
+                  onEdit={onEdit}
+                  as="span"
+                  multiline
+                  style={{ fontSize: 9.5, lineHeight: 1.5, color: "#2C2C2A" } as any}
+                />
+              }
+            />
+          )}
+        </div>
+      </MV2SlideShell>
+    );
+  }
+
+  // Layout: comparison_table — full-bleed table + optional commentary
+  if (layout === "comparison_table") {
+    const { headers = [], rows = [] } = slide.table ?? {};
+    const columns = autoColumnsFromHeaders(headers);
+    return (
+      <MV2SlideShell title={title} subtitle={subtitle} sourceLabel="Custom (AM-authored)">
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, height: "100%" }}>
+          <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
+            {rows.length > 0 ? (
+              <MV2Table columns={columns} rows={rows} fontSize={9} />
+            ) : (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: MV2_TEXT_MUTED, fontSize: 11, fontStyle: "italic" }}>
+                No comparison rows. Re-synthesize the slide from the builder.
+              </div>
+            )}
+          </div>
+          {commentary && (
+            <MV2InsightCallout
+              text={
+                <EditableSection
+                  editKey={`${slide.id}_commentary`}
+                  value={commentary}
+                  edits={edits}
+                  onEdit={onEdit}
+                  as="span"
+                  multiline
+                  style={{ fontSize: 9.5, lineHeight: 1.5, color: "#2C2C2A" } as any}
+                />
+              }
+            />
+          )}
+        </div>
+      </MV2SlideShell>
+    );
+  }
+
+  // Layout: story — headline + narrative + supporting facts (reuses metrics).
+  // Mirrors the exec_summary shape but framed as a single-slide story.
+  const headline = edits[`${slide.id}_headline`] ?? slide.headline ?? "";
+  const narrative = edits[`${slide.id}_narrative`] ?? slide.narrative ?? "";
+  const facts = (slide.metrics ?? []).slice(0, 4);
+  return (
+    <MV2SlideShell title={title} subtitle={subtitle} sourceLabel="Custom (AM-authored)">
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, height: "100%" }}>
+        {headline && (
+          <MV2ContentCard padding="12px 14px">
+            <div style={{ fontSize: 7, color: MV2_TEXT_MUTED, letterSpacing: "1.2px", textTransform: "uppercase", marginBottom: 4 }}>
+              Headline
+            </div>
+            <EditableSection
+              editKey={`${slide.id}_headline`}
+              value={headline}
+              edits={edits}
+              onEdit={onEdit}
+              as="div"
+              multiline
+              style={{ fontFamily: MV2_FONT_HEADER, fontSize: 16, fontWeight: 500, color: MV2_TEXT_PRIMARY, lineHeight: 1.2, letterSpacing: "-0.3px" } as any}
+            />
+          </MV2ContentCard>
+        )}
+        <div style={{ flex: 1, minHeight: 0 }}>
+          <MV2InsightCallout
+            text={
+              <EditableSection
+                editKey={`${slide.id}_narrative`}
+                value={narrative || "—"}
+                edits={edits}
+                onEdit={onEdit}
+                as="div"
+                multiline
+                style={{ fontSize: 10, lineHeight: 1.55, color: "#2C2C2A" } as any}
+              />
+            }
+            style={{ height: "100%" }}
+          />
+        </div>
+        {facts.length > 0 && (
+          <div style={{ display: "grid", gridTemplateColumns: `repeat(${facts.length}, 1fr)`, gap: 8 }}>
+            {facts.map((f, fi) => (
+              <MV2StatCard
+                key={fi}
+                label={f.label}
+                value={String(f.current ?? "—")}
+                delta={f.delta}
+                deltaPositive={f.isPositive}
+                accent
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </MV2SlideShell>
+  );
+}
+
 // ─── MonthlyTwoColSlide ───────────────────────────────────────────────────────
 export function MonthlyTwoColSlide({ slide, edits, onEdit, headerUrl }: SlideProps) {
   const lc = slide.leftContent;

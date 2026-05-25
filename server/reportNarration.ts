@@ -872,6 +872,152 @@ Same count and order as input bullets.`;
   }
 }
 
+// ─── Phase 3h: synthesize custom slide from AM brief (deep) ─────────────────
+
+export type CustomSlideLayout = "stat_grid" | "prose_card" | "comparison_table" | "story";
+
+export interface SynthesizeCustomSlideResult {
+  layout: CustomSlideLayout;
+  // Layout-specific fields. Only the fields relevant to `layout` are populated.
+  headline?: string;
+  narrative?: string;
+  metrics?: Array<{ label: string; current: string; delta?: string; isPositive?: boolean }>;
+  table?: { headers: string[]; rows: (string | number)[][] };
+  sections?: Array<{ eyebrow: string; body: string }>;
+  commentary?: string;
+  provider: string | null;
+  fallbackTriggered: boolean;
+}
+
+export async function synthesizeCustomSlide(opts: {
+  title: string;
+  brief: string;
+  clientName: string;
+  monthLabel: string;
+}): Promise<SynthesizeCustomSlideResult> {
+  const systemPrompt = `You are a senior SEO account manager building a custom slide for a Monthly Report. The AM gives you a free-form brief and a title; your job is to (1) choose the strongest layout for the content shape and (2) synthesize the brief into that layout.
+${VERTICAL_CONTEXT}
+${BRAND_VOICE}
+
+Layout options:
+- "stat_grid" — pick this when the brief is numbers-heavy. Surface 3-4 key stats. Each stat is { label, current, delta?, isPositive? }. Add a commentary callout (2-3 sentences) tying the numbers together.
+- "prose_card" — pick this when the brief is an argument or explanation. Produce 2-4 sections, each { eyebrow, body }. The eyebrow is a 2-4 word label; the body is 1-3 sentences. Optionally add commentary at the bottom.
+- "comparison_table" — pick this when the brief explicitly compares 2+ options or things. Produce a table { headers, rows }. 2-5 rows is ideal. Add commentary.
+- "story" — pick this when the brief reads like a narrative (problem statement + situation + supporting facts). Produce headline (6-12 words), narrative (3-5 sentences), and 2-4 supporting facts as metrics.
+
+Populate ONLY the fields relevant to the chosen layout. The AM edits everything afterwards, so polish the copy but don't over-think — translate raw AM notes into client-facing language with the brand voice.
+
+Return compact JSON only.`;
+
+  const userPrompt = `Client: ${opts.clientName}
+Window: ${opts.monthLabel}
+
+Title given by AM: ${opts.title}
+
+Raw brief:
+"""
+${opts.brief}
+"""
+
+Pick a layout and return JSON in one of these shapes:
+
+stat_grid:
+{ "layout": "stat_grid", "metrics": [{"label":"...", "current":"...", "delta":"+12%", "isPositive": true}], "commentary": "..." }
+
+prose_card:
+{ "layout": "prose_card", "sections": [{"eyebrow":"WHY", "body":"..."}, {"eyebrow":"WHAT", "body":"..."}], "commentary": "..." }
+
+comparison_table:
+{ "layout": "comparison_table", "table": { "headers": ["Option", "Pros", "Cons"], "rows": [["A","...","..."]] }, "commentary": "..." }
+
+story:
+{ "layout": "story", "headline": "...", "narrative": "...", "metrics": [{"label":"...", "current":"..."}], "commentary": "..." }`;
+
+  try {
+    const { result, provider } = await callAIJson(systemPrompt, userPrompt, {
+      tier: "deep",
+      maxOutputTokens: 1200,
+    });
+    const layout = result.layout as CustomSlideLayout;
+    if (!["stat_grid", "prose_card", "comparison_table", "story"].includes(layout)) {
+      throw new Error(`invalid layout: ${layout}`);
+    }
+
+    const out: SynthesizeCustomSlideResult = {
+      layout,
+      provider,
+      fallbackTriggered: false,
+    };
+
+    if (layout === "stat_grid") {
+      out.metrics = Array.isArray(result.metrics)
+        ? result.metrics
+            .filter((m: any) => m && typeof m.label === "string" && typeof m.current === "string")
+            .slice(0, 4)
+            .map((m: any) => ({
+              label: m.label.trim(),
+              current: String(m.current).trim(),
+              delta: typeof m.delta === "string" ? m.delta.trim() : undefined,
+              isPositive: typeof m.isPositive === "boolean" ? m.isPositive : undefined,
+            }))
+        : [];
+      if (typeof result.commentary === "string") out.commentary = result.commentary.trim();
+      if ((out.metrics ?? []).length === 0 && !out.commentary) throw new Error("empty stat_grid output");
+    } else if (layout === "prose_card") {
+      out.sections = Array.isArray(result.sections)
+        ? result.sections
+            .filter((s: any) => s && typeof s.eyebrow === "string" && typeof s.body === "string")
+            .slice(0, 4)
+            .map((s: any) => ({ eyebrow: s.eyebrow.trim(), body: s.body.trim() }))
+        : [];
+      if (typeof result.commentary === "string") out.commentary = result.commentary.trim();
+      if ((out.sections ?? []).length === 0) throw new Error("empty prose_card output");
+    } else if (layout === "comparison_table") {
+      const t = result.table;
+      if (!t || !Array.isArray(t.headers) || !Array.isArray(t.rows)) {
+        throw new Error("comparison_table missing table");
+      }
+      out.table = {
+        headers: t.headers.map((h: any) => String(h)),
+        rows: t.rows.map((row: any[]) => row.map((c: any) => String(c))),
+      };
+      if (typeof result.commentary === "string") out.commentary = result.commentary.trim();
+      if (out.table.rows.length === 0) throw new Error("empty comparison_table rows");
+    } else {
+      // story
+      out.headline = typeof result.headline === "string" ? result.headline.trim() : undefined;
+      out.narrative = typeof result.narrative === "string" ? result.narrative.trim() : undefined;
+      out.metrics = Array.isArray(result.metrics)
+        ? result.metrics
+            .filter((m: any) => m && typeof m.label === "string")
+            .slice(0, 4)
+            .map((m: any) => ({
+              label: m.label.trim(),
+              current: String(m.current ?? "—").trim(),
+              delta: typeof m.delta === "string" ? m.delta.trim() : undefined,
+              isPositive: typeof m.isPositive === "boolean" ? m.isPositive : undefined,
+            }))
+        : [];
+      if (typeof result.commentary === "string") out.commentary = result.commentary.trim();
+      if (!out.headline && !out.narrative) throw new Error("empty story output");
+    }
+
+    return out;
+  } catch (err: any) {
+    console.warn("[synthesizeCustomSlide] AI synthesis failed, returning fallback:", err?.message ?? err);
+    // Fallback — drop the brief into a prose_card unchanged so the slide
+    // still ships and the AM can edit it.
+    return {
+      layout: "prose_card",
+      sections: [
+        { eyebrow: "Brief", body: opts.brief.trim() },
+      ],
+      provider: null,
+      fallbackTriggered: true,
+    };
+  }
+}
+
 // ─── Specific fallback copy for empty-section states ─────────────────────────
 
 export function noContentFallback(area: string, period: string): string {

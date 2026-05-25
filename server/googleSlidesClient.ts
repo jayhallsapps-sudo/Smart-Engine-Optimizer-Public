@@ -933,6 +933,127 @@ function buildInitiativesSlide(pageId: string, slide: Slide, edits: Record<strin
 // Visibility looks like stat_grid + cluster table — same shape, different
 // source label. Use the stat_grid builder.
 
+// ─── Phase 3h — custom slides ────────────────────────────────────────────────
+// Branches on slide.layout. Each layout reuses an existing primitive (stat
+// row, prose card, table, story-style headline+narrative+facts) so the visual
+// vocabulary matches the rest of the deck.
+function buildCustomSlide(pageId: string, slide: Slide, edits: Record<string, string> | undefined): slides_v1.Schema$Request[] {
+  const reqs: slides_v1.Schema$Request[] = [];
+  const title = editsResolve(edits, `${slide.id}_title`, slide.title ?? "Custom slide");
+  const subtitle = editsResolve(edits, `${slide.id}_subtitle`, slide.subtitle ?? "");
+  const commentary = editsResolve(edits, `${slide.id}_commentary`, slide.commentary ?? "");
+  const layout = slide.layout ?? "prose_card";
+  reqs.push(...chromeRequests({ pageId, title, subtitle, sourceLabel: "Custom (AM-authored)", dateLabel: subtitle }));
+
+  if (layout === "stat_grid") {
+    const cards = statCardRow({ pageId, metrics: slide.metrics ?? [], topY: BODY_TOP });
+    reqs.push(...cards.requests);
+    if (commentary) {
+      const calloutY = cards.bottomY + 12;
+      const calloutH = Math.max(40, SLIDE_H - BODY_BOTTOM_PAD - calloutY);
+      reqs.push(...insightCallout({ pageId, topY: calloutY, height: calloutH, text: commentary }));
+    }
+    return reqs;
+  }
+
+  if (layout === "comparison_table") {
+    const headers = slide.table?.headers ?? [];
+    const rows = slide.table?.rows ?? [];
+    const tableH = BODY_HEIGHT - (commentary ? 60 : 0) - 10;
+    if (rows.length > 0) {
+      reqs.push(...tableRequests({ pageId, x: SIDE_INSET, y: BODY_TOP, w: SLIDE_W - SIDE_INSET * 2, h: tableH, headers, rows }));
+    } else {
+      const empty = textBoxRequests({
+        pageId, x: SIDE_INSET, y: BODY_TOP + tableH / 2 - 10, w: SLIDE_W - SIDE_INSET * 2, h: 20,
+        text: "No comparison rows.", fontSize: 11, textColor: COLORS.textMuted, align: "CENTER",
+      });
+      reqs.push(...empty.requests);
+    }
+    if (commentary) {
+      const calloutY = BODY_TOP + tableH + 8;
+      const calloutH = SLIDE_H - BODY_BOTTOM_PAD - calloutY;
+      reqs.push(...insightCallout({ pageId, topY: calloutY, height: calloutH, text: commentary }));
+    }
+    return reqs;
+  }
+
+  if (layout === "story") {
+    const headline = editsResolve(edits, `${slide.id}_headline`, slide.headline ?? "");
+    const narrative = editsResolve(edits, `${slide.id}_narrative`, slide.narrative ?? "—");
+    const facts = (slide.metrics ?? []).slice(0, 4);
+
+    // Headline card
+    let nextY = BODY_TOP;
+    const headlineH = 50;
+    if (headline) {
+      const bg = rectRequests({ pageId, x: SIDE_INSET, y: nextY, w: SLIDE_W - SIDE_INSET * 2, h: headlineH, fill: COLORS.card });
+      reqs.push(...bg.requests);
+      const ey = textBoxRequests({
+        pageId, x: SIDE_INSET + 10, y: nextY + 6, w: 100, h: 10,
+        text: "Headline", fontSize: 7, textColor: COLORS.textMuted, letterSpacing: 1.2, uppercase: true,
+      });
+      reqs.push(...ey.requests);
+      const hl = textBoxRequests({
+        pageId, x: SIDE_INSET + 10, y: nextY + 20, w: SLIDE_W - SIDE_INSET * 2 - 20, h: headlineH - 26,
+        text: headline, fontFamily: FONT_HEADER, fontSize: 16, textColor: COLORS.textPrimary,
+      });
+      reqs.push(...hl.requests);
+      nextY += headlineH + 10;
+    }
+
+    // Narrative callout fills middle
+    const factsH = facts.length > 0 ? 64 : 0;
+    const factsGap = facts.length > 0 ? 10 : 0;
+    const narrativeH = SLIDE_H - BODY_BOTTOM_PAD - nextY - factsH - factsGap;
+    reqs.push(...insightCallout({ pageId, topY: nextY, height: narrativeH, text: narrative }));
+    nextY += narrativeH + factsGap;
+
+    if (facts.length > 0) {
+      const cards = statCardRow({ pageId, metrics: facts, topY: nextY });
+      reqs.push(...cards.requests);
+    }
+    return reqs;
+  }
+
+  // Default — prose_card: stacked eyebrow + body cards, optional commentary.
+  const sections = slide.sections ?? [];
+  const calloutH = commentary ? 50 : 0;
+  const calloutGap = commentary ? 10 : 0;
+  const sectionsAreaH = BODY_HEIGHT - calloutH - calloutGap;
+  if (sections.length > 0) {
+    const sectionH = (sectionsAreaH - (sections.length - 1) * 6) / sections.length;
+    for (let i = 0; i < sections.length; i++) {
+      const s = sections[i];
+      const y = BODY_TOP + i * (sectionH + 6);
+      const bg = rectRequests({ pageId, x: SIDE_INSET, y, w: SLIDE_W - SIDE_INSET * 2, h: sectionH, fill: COLORS.card });
+      reqs.push(...bg.requests);
+      const ey = textBoxRequests({
+        pageId, x: SIDE_INSET + 12, y: y + 8, w: SLIDE_W - SIDE_INSET * 2 - 24, h: 10,
+        text: editsResolve(edits, `${slide.id}_section_${i}_eyebrow`, s.eyebrow),
+        fontSize: 7, textColor: COLORS.accent, letterSpacing: 1, uppercase: true, bold: true,
+      });
+      reqs.push(...ey.requests);
+      const body = textBoxRequests({
+        pageId, x: SIDE_INSET + 12, y: y + 22, w: SLIDE_W - SIDE_INSET * 2 - 24, h: sectionH - 28,
+        text: editsResolve(edits, `${slide.id}_section_${i}_body`, s.body),
+        fontSize: 10, textColor: COLORS.textPrimary,
+      });
+      reqs.push(...body.requests);
+    }
+  } else {
+    const empty = textBoxRequests({
+      pageId, x: SIDE_INSET, y: BODY_TOP + sectionsAreaH / 2 - 10, w: SLIDE_W - SIDE_INSET * 2, h: 20,
+      text: "No content. Re-synthesize the slide from the builder.", fontSize: 11, textColor: COLORS.textMuted, align: "CENTER",
+    });
+    reqs.push(...empty.requests);
+  }
+  if (commentary) {
+    const calloutY = BODY_TOP + sectionsAreaH + calloutGap;
+    reqs.push(...insightCallout({ pageId, topY: calloutY, height: calloutH, text: commentary }));
+  }
+  return reqs;
+}
+
 // ─── Slide-type dispatch ─────────────────────────────────────────────────────
 
 function buildSlideRequests(pageId: string, slide: Slide, edits: Record<string, string> | undefined): slides_v1.Schema$Request[] {
@@ -946,6 +1067,7 @@ function buildSlideRequests(pageId: string, slide: Slide, edits: Record<string, 
     case "stat_grid":        return buildStatGridSlide(pageId, slide, edits, slide.sourceNote ?? "");
     case "content_pipeline": return buildContentPipelineSlide(pageId, slide, edits);
     case "initiatives":      return buildInitiativesSlide(pageId, slide, edits);
+    case "custom":           return buildCustomSlide(pageId, slide, edits);
     // Legacy V1 types — render minimally so older saved decks still export.
     case "metrics":          return buildStatGridSlide(pageId, slide, edits, slide.sourceNote ?? "");
     case "table":            return buildKeywordTableSlide(pageId, slide, edits);

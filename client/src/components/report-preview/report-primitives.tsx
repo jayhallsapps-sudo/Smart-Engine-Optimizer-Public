@@ -47,7 +47,10 @@ export interface Slide {
     | "intent_alignment"
     | "stat_grid"
     | "content_pipeline"
-    | "initiatives";
+    | "initiatives"
+    // Phase 3h — AM-authored custom slides. AI synthesizes the layout from a
+    // free-form brief; the chosen `layout` field drives MonthlyCustomSlide.
+    | "custom";
   title?: string;
   subtitle?: string;
   commentary?: string;
@@ -118,6 +121,11 @@ export interface Slide {
     observed: string;
     recommendation: string;
   }>;
+  // ─── Phase 3h — custom slide fields ────────────────────────────────────
+  // Layout picked by the AI from the AM's brief. MonthlyCustomSlide branches
+  // on this value. `sections` is the prose-card body (eyebrow + body pairs).
+  layout?: "stat_grid" | "prose_card" | "comparison_table" | "story";
+  sections?: Array<{ eyebrow: string; body: string }>;
 }
 
 // ─── Design tokens (single source of truth for the slide system) ─────────────

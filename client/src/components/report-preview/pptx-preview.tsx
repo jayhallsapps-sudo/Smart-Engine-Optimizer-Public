@@ -28,6 +28,7 @@ import {
   MonthlyStatGridSlide,
   MonthlyContentPipelineSlide,
   MonthlyInitiativesPanelSlide,
+  MonthlyCustomSlide,
 } from "./monthly-slides";
 import {
   QcrTitleSlide,
@@ -348,6 +349,7 @@ export function SlideRenderer({
     case "stat_grid":          return <MonthlyStatGridSlide {...props} />;
     case "content_pipeline":   return <MonthlyContentPipelineSlide {...props} />;
     case "initiatives":        return <MonthlyInitiativesPanelSlide {...props} />;
+    case "custom":             return <MonthlyCustomSlide {...props} />;
     default:
       return (
         <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>

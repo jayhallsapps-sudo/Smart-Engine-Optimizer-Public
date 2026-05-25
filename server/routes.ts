@@ -2886,6 +2886,67 @@ export async function registerRoutes(
     }
   });
 
+  // ─── /api/reports/monthly/synthesize-custom-slide ─────────────────────────
+  // Phase 3h: AM provides a free-form brief + title + insert position; AI
+  // picks the best MV2 layout (stat_grid / prose_card / comparison_table /
+  // story) and returns a fully-formed Slide object. The client inserts the
+  // slide into the report at the requested position; everything else (auto-
+  // save, preview, export) is shared with the locked 14-slide path.
+  app.post("/api/reports/monthly/synthesize-custom-slide", async (req, res) => {
+    const t0 = Date.now();
+    const { title, brief, clientName, monthLabel, slideId } = req.body as {
+      title?: string;
+      brief?: string;
+      clientName?: string;
+      monthLabel?: string;
+      slideId?: string;
+    };
+    if (!title || !brief) {
+      return res.status(400).json({ message: "title and brief are required" });
+    }
+    try {
+      const { synthesizeCustomSlide } = await import("./reportNarration");
+      const synth = await synthesizeCustomSlide({
+        title: title.trim(),
+        brief: brief.trim(),
+        clientName: clientName?.trim() || "Client",
+        monthLabel: monthLabel?.trim() || "",
+      });
+
+      // Build the Slide object the client inserts directly into report.slides.
+      // ID format per spec: custom_<uuid>. If the caller passed one (re-synth
+      // of an existing custom slide), honor it; otherwise mint a new one.
+      const id = slideId && /^custom_/.test(slideId)
+        ? slideId
+        : `custom_${randomUUID()}`;
+
+      const slide: any = {
+        id,
+        type: "custom",
+        layout: synth.layout,
+        title: title.trim(),
+      };
+      if (synth.headline) slide.headline = synth.headline;
+      if (synth.narrative) slide.narrative = synth.narrative;
+      if (synth.metrics && synth.metrics.length > 0) slide.metrics = synth.metrics;
+      if (synth.table) slide.table = synth.table;
+      if (synth.sections && synth.sections.length > 0) slide.sections = synth.sections;
+      if (synth.commentary) slide.commentary = synth.commentary;
+
+      logExport("Monthly Custom Slide", t0, true);
+      res.json({
+        success: true,
+        slide,
+        provider: synth.provider,
+        fallbackTriggered: synth.fallbackTriggered,
+      });
+    } catch (err: any) {
+      logExport("Monthly Custom Slide", t0, false, err.message);
+      console.error("[monthly/synthesize-custom-slide] failed:", err);
+      res.status(500).json({ message: "Custom slide synthesis failed: " + (err.message ?? "unknown error") });
+    }
+  });
+
   // ─── /api/reports/monthly/preview-pdf ─────────────────────────────────────
   // Puppeteer-based PDF that renders the EXACT same SlideRenderer the preview
   // uses. The output therefore mirrors what the AM sees on screen. The

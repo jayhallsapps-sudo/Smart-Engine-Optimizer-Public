@@ -44,7 +44,7 @@ import { db } from "./db";
 import { eq, and, desc } from "drizzle-orm";
 import { generateBiweeklyDocx, generatePptx, generateMidStrategyPptx, generateQbrPrepDocx } from "./reportGenerators";
 import { generateBiweeklyBlockDocx } from "./biweeklyBlockDocxGenerator";
-import { generateBiweeklyPdf, generateMonthlyPdf } from "./pdfGenerator";
+import { generateBiweeklyPdf } from "./pdfGenerator";
 import { generatePdfViaPuppeteer } from "./puppeteerPdfGenerator";
 import type { SectionData } from "./reportGenerators";
 import { getSampleBiweeklySections, getSampleMonthlySections, getSampleQbrSections, getSampleQbrPrepJson, SAMPLE_CLIENT_NAME, SAMPLE_ATTENDEES } from "./sampleData";
@@ -2850,101 +2850,47 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/reports/monthly/pptx", async (req, res) => {
+  // ─── /api/reports/monthly/slides — native Google Slides export ───────────
+  // Phase 3g replaces the legacy PPTX-upload-to-Drive path. We create the
+  // deck directly as a native Google Slides presentation via the Slides API,
+  // so the result is editable in the browser the moment the API call
+  // returns. No file-format conversion. See server/googleSlidesClient.ts.
+  app.post("/api/reports/monthly/slides", async (req, res) => {
     const t0 = Date.now();
     const { json, edits } = req.body as { json: any; edits?: Record<string, string> };
-    if (!json || !json.slides?.length) { logExport("Monthly PPTX", t0, false, "No slides"); return res.status(400).json({ message: "No slide data found. Generate the report first." }); }
-    try {
-      const sections: SectionData[] = (json.slides ?? []).filter((s: any) => s.type !== "title").map((s: any, idx: number) => {
-        const items: any[] = [];
-        if (s.metrics?.length) items.push({ summary: s.metrics.map((m: any) => ({ label: m.label, current: m.current, previous: m.previous ?? "—", deltaPercent: m.delta ?? "—", isPositive: m.isPositive ?? true })) });
-        const commentary = edits?.[`${s.id}_commentary`] ?? s.commentary;
-        if (commentary) items.push({ manualText: commentary });
-        if (s.table) { const resolvedRows = (s.table.rows as any[][]).map((row: any[], ri: number) => row.map((cell: any, ci: number) => edits?.[`${s.id}_cell_${ri}_${ci}`] ?? String(cell))); const tableKey = s.type === "scorecard" ? `${s.id}_scorecard` : `${s.id}_table`; const crRows = parseCustomRowsFromEdits(edits, tableKey); items.push({ tables: [{ title: edits?.[`${s.id}_subtitle`] ?? s.subtitle ?? "", headers: s.table.headers, rows: [...resolvedRows, ...crRows] }] }); }
-        if (s.bullets) items.push({ manualText: (s.bullets as string[]).map((b: string, bi: number) => edits?.[`${s.id}_bullet_${bi}`] ?? b).join("\n") });
-        return { sectionId: `slide_${idx}`, title: edits?.[`${s.id}_title`] ?? s.title ?? "", items };
-      });
-      const clientName = edits?.["title_client"] ?? json.client_name ?? "Client";
-      const reportTitle = edits?.["title_title"] ?? json.report_title ?? "Monthly Report";
-      const generatedAt = json.generated_at ? new Date(json.generated_at).toLocaleDateString("en-US") : new Date().toLocaleDateString("en-US");
-      const buffer = await generatePptx(clientName, reportTitle, generatedAt, sections);
-      const slug = clientName.toLowerCase().replace(/\s+/g, "_");
-      const monthSlug = (json.month_label ?? "report").replace(/\s/g, "_");
-      logExport("Monthly PPTX", t0, true);
-      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
-      res.setHeader("Content-Disposition", `attachment; filename="${slug}_monthly_${monthSlug}.pptx"`);
-      res.send(buffer);
-    } catch (err: any) {
-      logExport("Monthly PPTX", t0, false, err.message);
-      res.status(500).json({ message: "Failed to generate PPTX: " + err.message });
+    if (!json || !Array.isArray(json.slides) || json.slides.length === 0) {
+      logExport("Monthly Slides", t0, false, "No slides");
+      return res.status(400).json({ message: "No slide data found. Generate the report first." });
     }
-  });
-
-  app.post("/api/reports/monthly/upload-to-drive", async (req, res) => {
-    const { json, edits } = req.body as { json: any; edits?: Record<string, string> };
-    if (!json) return res.status(400).json({ message: "json is required" });
     try {
-      const sections: SectionData[] = (json.slides ?? []).filter((s: any) => s.type !== "title").map((s: any, idx: number) => {
-        const items: any[] = [];
-        if (s.metrics?.length) items.push({ summary: s.metrics.map((m: any) => ({ label: m.label, current: m.current, previous: m.previous ?? "—", deltaPercent: m.delta ?? "—", isPositive: m.isPositive ?? true })) });
-        const driveCommentary = edits?.[`${s.id}_commentary`] ?? s.commentary;
-        if (driveCommentary) items.push({ manualText: driveCommentary });
-        if (s.table) { const resolvedRows = (s.table.rows as any[][]).map((row: any[], ri: number) => row.map((cell: any, ci: number) => edits?.[`${s.id}_cell_${ri}_${ci}`] ?? String(cell))); const tableKey = s.type === "scorecard" ? `${s.id}_scorecard` : `${s.id}_table`; const crRows = parseCustomRowsFromEdits(edits, tableKey); items.push({ tables: [{ title: edits?.[`${s.id}_subtitle`] ?? s.subtitle ?? "", headers: s.table.headers, rows: [...resolvedRows, ...crRows] }] }); }
-        if (s.bullets) items.push({ manualText: (s.bullets as string[]).map((b: string, bi: number) => edits?.[`${s.id}_bullet_${bi}`] ?? b).join("\n") });
-        return { sectionId: `slide_${idx}`, title: edits?.[`${s.id}_title`] ?? s.title ?? "", items };
-      });
-      const driveClientName = edits?.["title_client"] ?? json.client_name ?? "Client";
-      const driveReportTitle = edits?.["title_title"] ?? json.report_title ?? "Monthly Report";
-      const driveGeneratedAt = json.generated_at ? new Date(json.generated_at).toLocaleDateString("en-US") : new Date().toLocaleDateString("en-US");
-      const buffer = await generatePptx(driveClientName, driveReportTitle, driveGeneratedAt, sections);
-      const { ReplitConnectors } = await import("@replit/connectors-sdk");
-      const connectors = new ReplitConnectors();
-      const filename = `${driveClientName} Monthly SEO ${json.month_label ?? "Report"}.pptx`;
-      const metadata = JSON.stringify({ name: filename });
-      const boundary = "-------smarteo_mo_boundary";
-      const CRLF = "\r\n";
-      const metaBuf = Buffer.from(`--${boundary}${CRLF}Content-Type: application/json; charset=UTF-8${CRLF}${CRLF}${metadata}${CRLF}`, "utf8");
-      const filePrefixBuf = Buffer.from(`--${boundary}${CRLF}Content-Type: application/vnd.openxmlformats-officedocument.presentationml.presentation${CRLF}${CRLF}`, "utf8");
-      const closeBuf = Buffer.from(`${CRLF}--${boundary}--`, "utf8");
-      const bodyBuffer = Buffer.concat([metaBuf, filePrefixBuf, buffer, closeBuf]);
-      const uploadRes = await connectors.proxy("google-drive", "/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink", { method: "POST", headers: { "Content-Type": `multipart/related; boundary=${boundary}` }, body: bodyBuffer });
-      if (!uploadRes.ok) { const e = await uploadRes.json().catch(() => ({}) as any); return res.status(uploadRes.status).json({ message: `Drive upload failed: ${(e as any)?.error?.message ?? uploadRes.statusText}` }); }
-      const driveFile = await uploadRes.json() as any;
-      res.json({ success: true, fileId: driveFile.id, fileName: driveFile.name, webViewLink: driveFile.webViewLink });
-    } catch (err: any) {
-      res.status(500).json({ message: "Upload failed: " + err.message });
-    }
-  });
-
-  app.post("/api/reports/monthly/pdf", async (req, res) => {
-    const { json, edits } = req.body as { json: any; edits?: Record<string, string> };
-    if (!json) return res.status(400).json({ message: "json is required" });
-    try {
-      const sections: SectionData[] = (json.slides ?? []).filter((s: any) => s.type !== "title" && s.type !== "chart-bar" && s.type !== "chart-line").map((s: any, idx: number) => {
-        const items: any[] = [];
-        if (s.metrics?.length) items.push({ summary: s.metrics.map((m: any) => ({ label: m.label, current: m.current, previous: m.previous ?? "—", deltaPercent: m.delta ?? "—", isPositive: m.isPositive ?? true })) });
-        if (s.table) { const tableKey = s.type === "scorecard" ? `${s.id}_scorecard` : `${s.id}_table`; const crRows = parseCustomRowsFromEdits(edits, tableKey); items.push({ tables: [{ title: s.subtitle ?? "", headers: s.table.headers, rows: [...s.table.rows, ...crRows] }] }); }
-        if (s.bullets) items.push({ manualText: (s.bullets as string[]).join("\n") });
-        return { sectionId: `slide_${idx}`, title: edits?.[`${s.id}_title`] ?? s.title ?? "", items };
-      });
-      const clientName = edits?.["title_client"] ?? json.client_name;
+      const { createMonthlyGoogleSlides } = await import("./googleSlidesClient");
+      const clientName = edits?.["cover_client"] ?? edits?.["title_client"] ?? json.client_name ?? "Client";
       const monthLabel = json.month_label ?? "";
-      const buffer = await generateMonthlyPdf(clientName, monthLabel, sections);
-      const slug = clientName.toLowerCase().replace(/\s+/g, "_");
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="${slug}_monthly_${monthLabel.replace(/\s/g, "_")}.pdf"`);
-      res.send(buffer);
+      const result = await createMonthlyGoogleSlides({
+        slides: json.slides,
+        edits,
+        clientName,
+        monthLabel,
+      });
+      logExport("Monthly Slides", t0, true);
+      res.json({
+        success: true,
+        fileId: result.presentationId,
+        fileName: result.title,
+        webViewLink: result.webViewLink,
+      });
     } catch (err: any) {
-      console.error("Monthly PDF error:", err);
-      res.status(500).json({ message: "Failed to generate PDF: " + err.message });
+      logExport("Monthly Slides", t0, false, err.message);
+      console.error("[monthly/slides] Native Google Slides export failed:", err);
+      res.status(500).json({ message: "Slides export failed: " + (err.message ?? "unknown error") });
     }
   });
 
   // ─── /api/reports/monthly/preview-pdf ─────────────────────────────────────
   // Puppeteer-based PDF that renders the EXACT same SlideRenderer the preview
-  // uses. The output therefore mirrors what the AM sees on screen. This
-  // replaces the legacy /api/reports/monthly/pdf endpoint which used a
-  // separate pdfkit pipeline whose output drifted from the React preview.
+  // uses. The output therefore mirrors what the AM sees on screen. The
+  // legacy pdfkit-based /api/reports/monthly/pdf endpoint was removed in
+  // Phase 3g; preview-pdf is now the only Monthly PDF route.
   app.post("/api/reports/monthly/preview-pdf", async (req, res) => {
     const t0 = Date.now();
     const { report, edits } = req.body as { report: any; edits?: Record<string, string> };

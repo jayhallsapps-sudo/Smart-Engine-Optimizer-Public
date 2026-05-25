@@ -271,7 +271,7 @@ export default function MonthlyPage() {
     if (!report) return;
     setIsUploading(true);
     try {
-      const res = await apiRequest("POST", "/api/reports/monthly/upload-to-drive", { json: report, edits });
+      const res = await apiRequest("POST", "/api/reports/monthly/slides", { json: report, edits });
       const data = await res.json();
       if (data.webViewLink) {
         toast({

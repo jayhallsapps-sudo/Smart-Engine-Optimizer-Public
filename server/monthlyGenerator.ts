@@ -12,7 +12,16 @@ import { fetchNsmGoalsForSpecificQuarter } from "./sheetsClient";
 import { scanSiteForEeat, type SiteEeatSummary } from "./pageContentClient";
 import type { Slide } from "../client/src/components/report-preview/pptx-preview";
 import { type GapContext } from "./gapAnswerContext";
-import { narrateWorkLog, narratePriorities, type MonthlySourceFacts, NARRATION_PROMPT_VERSION } from "./reportNarration";
+import {
+  narrateWorkLog, narratePriorities,
+  // Phase 3f — V2 narrations
+  narrateExecSummary, narrateOutcomes, narrateVisibility,
+  narrateClusterNotes, narrateIntentMisalignments, narrateEeat,
+  narrateTechnical, narrateSpeed, narrateCro, narrateAuthority,
+  narrateAiDiscoverability, narratePipelineReasoning, narratePrioritiesRationale,
+  type ClusterNoteInput, type PipelineRowInput,
+  type MonthlySourceFacts, NARRATION_PROMPT_VERSION,
+} from "./reportNarration";
 
 export interface MonthlyAmInputs {
   clientSentiment?: string;
@@ -430,6 +439,9 @@ export async function generateMonthly(input: {
   }
 
   let visibilityTable: Slide["table"] | undefined;
+  // Lifted to function scope so the narration block (Phase 3f) can read raw
+  // numeric aggregates instead of formatted strings.
+  let visibilityClusters: Array<{ topic: string; queryCount: number; impressions: number; clicks: number }> = [];
   if (gscTopic && gscTopic.currentRows.length > 0) {
     const currQs = gscTopic.currentRows.map(r => ({
       query: r.keys?.[0] ?? "",
@@ -439,18 +451,18 @@ export async function generateMonthly(input: {
       position: r.position ?? 0,
     }));
     const clusters = clusterQueriesByTopic(currQs, client);
-    const ordered = [...clusters.entries()]
+    visibilityClusters = [...clusters.entries()]
       .map(([topic, queries]) => ({
         topic,
         queryCount: queries.length,
-        impressions: queries.reduce((s, q) => s + q.impressions, 0),
-        clicks: queries.reduce((s, q) => s + q.clicks, 0),
+        impressions: queries.reduce((s: number, q: any) => s + q.impressions, 0),
+        clicks: queries.reduce((s: number, q: any) => s + q.clicks, 0),
       }))
       .sort((a, b) => b.impressions - a.impressions)
       .slice(0, 8);
     visibilityTable = {
       headers: ["Cluster", "# Queries", "Impressions", "Clicks"],
-      rows: ordered.map(t => [
+      rows: visibilityClusters.map(t => [
         t.topic,
         String(t.queryCount),
         t.impressions.toLocaleString("en-US"),
@@ -476,6 +488,9 @@ export async function generateMonthly(input: {
   // Cluster-level table: # queries, Δ queries, clicks, Δ clicks per topic
   // cluster, with intent classification via topicAdmitConnection.
   let kwTable: Slide["table"];
+  // Lifted to function scope so narrateClusterNotes (Phase 3f) gets the raw
+  // aggregates, not the formatted table rows.
+  let kwClusterDetail: ClusterNoteInput[] = [];
   if (gscTopic && gscTopic.currentRows.length > 0) {
     const toQs = (rows: any[]) => rows.map(r => ({
       query: r.keys?.[0] ?? "",
@@ -492,11 +507,11 @@ export async function generateMonthly(input: {
       const d = ((curr - prev) / prev) * 100;
       return `${d >= 0 ? "+" : ""}${d.toFixed(0)}%`;
     };
-    const rows: (string | number)[][] = [...currClusters.entries()]
+    kwClusterDetail = [...currClusters.entries()]
       .map(([topic, qs]) => {
         const prevQs = prevClusters.get(topic) ?? [];
-        const currClicks = qs.reduce((s, q) => s + q.clicks, 0);
-        const prevClicks = prevQs.reduce((s, q) => s + q.clicks, 0);
+        const currClicks = qs.reduce((s: number, q: any) => s + q.clicks, 0);
+        const prevClicks = prevQs.reduce((s: number, q: any) => s + q.clicks, 0);
         return {
           topic,
           intent: topicAdmitConnection(topic),
@@ -507,16 +522,16 @@ export async function generateMonthly(input: {
         };
       })
       .sort((a, b) => b.clicks - a.clicks)
-      .slice(0, 12)
-      .map(t => [
-        t.topic,
-        t.intent,
-        String(t.queries),
-        t.deltaQueries,
-        t.clicks.toLocaleString("en-US"),
-        t.deltaClicks,
-        "Cluster note pending AI synthesis.",
-      ]);
+      .slice(0, 12);
+    const rows: (string | number)[][] = kwClusterDetail.map(t => [
+      t.topic,
+      t.intent,
+      String(t.queries),
+      t.deltaQueries,
+      t.clicks.toLocaleString("en-US"),
+      t.deltaClicks,
+      "Cluster note pending AI synthesis.",
+    ]);
     kwTable = { headers: ["Cluster", "Intent", "# Queries", "Δ Queries", "Clicks", "Δ Clicks", "Notes"], rows };
   } else {
     kwTable = {
@@ -535,20 +550,31 @@ export async function generateMonthly(input: {
   });
 
   // ─── SLIDE 6: Search intent alignment ─────────────────────────────
-  // Phase 3f will do real intent classification + misalignment detection.
-  // Step 2b surfaces high-volume query-to-page pairs as candidates so the
-  // structure is in place; recommendation copy is placeholder.
+  // Phase 3f does real intent classification + misalignment detection (deep
+  // tier). Placeholder findings stay as fallback if AI fails.
   const intentFindings: NonNullable<Slide["intentFindings"]> = [];
+  // Lifted to function scope so narrateIntentMisalignments gets the raw pairs.
+  // GSC query-to-page map columns: [query, page, clicks, impressions, ctr, position].
+  const intentQpmPairs: Array<{ query: string; url: string; clicks: number; impressions: number; position: number }> = [];
   if (gscQpm?.tables?.[0]?.rows?.length > 0) {
     const rows = gscQpm.tables[0].rows as any[][];
-    for (const r of rows.slice(0, 5)) {
+    for (const r of rows) {
       const query = String(r[0] ?? "");
       const url = String(r[1] ?? "");
-      if (!url) continue;
+      if (!query || !url) continue;
+      const clicks = parseInt(String(r[2] ?? "0").replace(/,/g, ""), 10) || 0;
+      const impressions = parseInt(String(r[3] ?? "0").replace(/,/g, ""), 10) || 0;
+      const position = parseFloat(String(r[5] ?? "0")) || 0;
+      intentQpmPairs.push({ query, url, clicks, impressions, position });
+    }
+    // Placeholder findings: top 5 pairs by impressions — replaced by AI output
+    // when narration succeeds.
+    const top = [...intentQpmPairs].sort((a, b) => b.impressions - a.impressions).slice(0, 5);
+    for (const p of top) {
       intentFindings.push({
-        url,
+        url: p.url,
         expected: "Pending AI classification",
-        observed: query,
+        observed: p.query,
         recommendation: "Misalignment review pending — Phase 3f flags + recommends fixes.",
       });
     }
@@ -750,21 +776,29 @@ export async function generateMonthly(input: {
   // ─── SLIDE 13: Next month's content pipeline ──────────────────────
   // Production view = items currently scheduled / in progress. Each row
   // becomes a planned-content entry with credit cost, URL, and reasoning.
-  const pipelineRows: (string | number)[][] = [];
+  // Raw rows lifted to function scope so narratePipelineReasoning (Phase 3f)
+  // can re-derive reasoning per row from structured inputs.
+  const pipelineRawInputs: PipelineRowInput[] = [];
   if (airtableProd?.success) {
     for (const items of Object.values(airtableProd.data.byCreditType) as any[]) {
       for (const item of items) {
-        pipelineRows.push([
-          item.targetKeyword ?? "—",
-          getCreditCost(item.creditType),
-          item.url ?? "—",
-          item.task && item.task !== item.targetKeyword
-            ? item.task
-            : "Reasoning pending AI synthesis.",
-        ]);
+        pipelineRawInputs.push({
+          targetKeyword: item.targetKeyword ?? "—",
+          url: item.url ?? "—",
+          creditCost: getCreditCost(item.creditType),
+          rawTask: item.task ?? "",
+        });
       }
     }
   }
+  const pipelineRows: (string | number)[][] = pipelineRawInputs.map(r => [
+    r.targetKeyword,
+    r.creditCost,
+    r.url,
+    r.rawTask && r.rawTask !== r.targetKeyword
+      ? r.rawTask
+      : "Reasoning pending AI synthesis.",
+  ]);
   slides.push({
     id: "content_pipeline",
     type: "content_pipeline",
@@ -788,20 +822,23 @@ export async function generateMonthly(input: {
     ...Object.keys(completedByCategory),
     ...Object.keys(upcomingByCategory),
   ]);
-  const thisMonthRows: (string | number)[][] = [];
+  // Lifted to function scope so narratePrioritiesRationale (Phase 3f) gets
+  // typed objects, not formatted table rows.
+  const thisMonthSummary: Array<{ category: string; status: string; completed: number }> = [];
   for (const cat of allCategories) {
     const done = (completedByCategory[cat] ?? []).length;
     const upcoming = (upcomingByCategory[cat] ?? []).length;
     const status = done > 0 && upcoming === 0 ? "Complete" : done > 0 ? "In Progress" : "Planned";
-    thisMonthRows.push([cat, status, String(done)]);
+    thisMonthSummary.push({ category: cat, status, completed: done });
   }
-  if (thisMonthRows.length === 0 && airtable?.success) {
+  if (thisMonthSummary.length === 0 && airtable?.success) {
     const totalPublished = Object.values(airtable.data?.byCreditType ?? {})
       .reduce((s: number, v: any) => s + (Array.isArray(v) ? v.length : 0), 0);
     if (totalPublished > 0) {
-      thisMonthRows.push(["Published content", "Complete", String(totalPublished)]);
+      thisMonthSummary.push({ category: "Published content", status: "Complete", completed: totalPublished });
     }
   }
+  const thisMonthRows: (string | number)[][] = thisMonthSummary.map(s => [s.category, s.status, String(s.completed)]);
 
   const nextMonthBullets: string[] = [];
   if (am.focusNextMonth?.trim()) nextMonthBullets.push(am.focusNextMonth.trim());
@@ -828,10 +865,231 @@ export async function generateMonthly(input: {
     commentary: "Priorities rationale pending — Phase 3f drafts per-bullet rationale.",
   });
 
-  // ─── sourceFacts — for narration / audit trail ─────────────────────
-  // Phase 3f will consume rawWorkLogItems + rawNextPriorityItems when it
-  // wires AI commentary. Step 2b emits the data shape without running
-  // narration so the slides ship with placeholder copy.
+  // ─── Phase 3f — Run AI narrations in parallel ──────────────────────
+  // All 13 narration calls fire concurrently. Failures fall back to the
+  // placeholder copy already in the slides (set above). Tier routing keeps
+  // simple per-row rewrites on cheap providers; deep synthesis (exec
+  // summary, EEAT, intent, outcomes) goes to Claude Sonnet 4.
+  const clientDomain = (client.gscSiteUrl ?? "").replace(/^sc-domain:/, "").replace(/^https?:\/\//, "").replace(/\/$/, "");
+  const topClustersForExec = kwClusterDetail.slice(0, 6).map(c => ({
+    topic: c.topic,
+    clicks: c.clicks,
+    deltaClicks: c.deltaClicks,
+    intent: c.intent,
+  }));
+  const ahrefsDomainRating = (ahrefs?.summary as any[] | undefined)?.find(s => /domain rating/i.test(s.label))?.current ?? null;
+
+  console.log(`[Monthly Phase 3f] Kicking off ${13} narration calls in parallel for ${client.name} (${label})…`);
+  const t0 = Date.now();
+  const narrationResults = await Promise.allSettled([
+    narrateExecSummary({
+      clientName: client.name,
+      windowLabel: label,
+      outcomeMetrics: outcomesMetrics.map(m => ({ label: m.label, current: m.current, delta: m.delta, isPositive: m.isPositive })),
+      pacingBadges,
+      visibilityMetrics: visibilityMetrics.map(m => ({ label: m.label, current: m.current, delta: m.delta, isPositive: m.isPositive })),
+      topClusters: topClustersForExec,
+      eeatSummary: eeat ? {
+        totalPagesScanned: eeat.totalPagesScanned,
+        pagesWithAuthorSchema: eeat.pagesWithAuthorSchema,
+        pagesWithReviewerInfo: eeat.pagesWithReviewerInfo,
+        pagesWithFaqs: eeat.pagesWithFaqs,
+        shellPagesDetected: eeat.shellPagesDetected,
+      } : null,
+      ahrefsDomainRating,
+      airtablePublished: airtable?.success
+        ? Object.values(airtable.data?.byCreditType ?? {}).reduce((s: number, v: any) => s + (Array.isArray(v) ? v.length : 0), 0)
+        : 0,
+      asanaCompleted: asanaData
+        ? Object.values(completedByCategory).reduce((s, v) => s + v.length, 0)
+        : 0,
+    }),
+    narrateOutcomes({
+      windowLabel: label,
+      outcomesMetrics: outcomesMetrics.map(m => ({ label: m.label, current: m.current, delta: m.delta, isPositive: m.isPositive })),
+      pacingBadges,
+      outcomesBySource: outcomesTable,
+    }),
+    narrateVisibility({
+      windowLabel: label,
+      visibilityMetrics: visibilityMetrics.map(m => ({ label: m.label, current: m.current, delta: m.delta, isPositive: m.isPositive })),
+      topClusters: visibilityClusters,
+    }),
+    narrateClusterNotes(kwClusterDetail, label),
+    narrateIntentMisalignments({
+      windowLabel: label,
+      clientDomain,
+      queryPagePairs: intentQpmPairs,
+    }),
+    narrateEeat({
+      windowLabel: label,
+      eeatSummary: eeat ? {
+        totalPagesScanned: eeat.totalPagesScanned,
+        pagesWithAuthorSchema: eeat.pagesWithAuthorSchema,
+        pagesWithReviewerInfo: eeat.pagesWithReviewerInfo,
+        pagesWithFaqs: eeat.pagesWithFaqs,
+        pagesWithLastReviewed: eeat.pagesWithLastReviewed,
+        pagesWithBylines: eeat.pagesWithBylines,
+        shellPagesDetected: eeat.shellPagesDetected,
+        topGapsByCategory: eeat.topGapsByCategory,
+      } : null,
+      ahrefsDomainRating,
+    }),
+    narrateTechnical({
+      windowLabel: label,
+      shellPagesDetected: eeat?.shellPagesDetected ?? null,
+      hasGscIndexCoverage: false,
+    }),
+    narrateSpeed({ windowLabel: label, hasPageSpeedData: false }),
+    narrateCro({
+      windowLabel: label,
+      croMetrics: croMetrics.map(m => ({ label: m.label, current: m.current, delta: m.delta, isPositive: m.isPositive })),
+      landingPages: croTable,
+    }),
+    narrateAuthority({
+      windowLabel: label,
+      ahrefsSummary: ahrefs?.summary
+        ? (ahrefs.summary as any[]).map(s => ({ label: s.label, current: s.current }))
+        : null,
+    }),
+    narrateAiDiscoverability({
+      windowLabel: label,
+      eeatSummary: eeat ? {
+        totalPagesScanned: eeat.totalPagesScanned,
+        pagesWithFaqs: eeat.pagesWithFaqs,
+        pages: eeat.pages.map(p => ({ url: p.url, schemaBlockCount: p.schemaBlockCount, schemaTypes: p.schemaTypes })),
+      } : null,
+    }),
+    narratePipelineReasoning(pipelineRawInputs, label),
+    narratePrioritiesRationale(nextMonthBullets, thisMonthSummary, label),
+  ]);
+  const tElapsed = Date.now() - t0;
+
+  // Unwrap. Null = call rejected entirely; the narrate* function's own
+  // try/catch usually catches errors and returns a "fallbackTriggered" shape,
+  // so a rejected promise is rare (network panic, etc.). Treat null as fallback.
+  const unwrap = <T,>(r: PromiseSettledResult<T>): T | null =>
+    r.status === "fulfilled" ? r.value : null;
+  const execRes        = unwrap(narrationResults[0]);
+  const outcomesRes    = unwrap(narrationResults[1]);
+  const visRes         = unwrap(narrationResults[2]);
+  const clusterRes     = unwrap(narrationResults[3]);
+  const intentRes      = unwrap(narrationResults[4]);
+  const eeatRes        = unwrap(narrationResults[5]);
+  const techRes        = unwrap(narrationResults[6]);
+  const speedRes       = unwrap(narrationResults[7]);
+  const croRes         = unwrap(narrationResults[8]);
+  const authRes        = unwrap(narrationResults[9]);
+  const aiDiscRes      = unwrap(narrationResults[10]);
+  const pipelineRes    = unwrap(narrationResults[11]);
+  const prioritiesRes  = unwrap(narrationResults[12]);
+
+  // Collect audit metadata across all calls.
+  const providersUsed = new Set<string>();
+  let fallbackTriggered = false;
+  let anyNarrationSucceeded = false;
+  const trackResult = (r: { provider: string | null; fallbackTriggered: boolean } | null) => {
+    if (!r) { fallbackTriggered = true; return; }
+    if (r.provider) { providersUsed.add(r.provider); anyNarrationSucceeded = true; }
+    if (r.fallbackTriggered) fallbackTriggered = true;
+  };
+  [execRes, outcomesRes, visRes, clusterRes, intentRes, eeatRes, techRes, speedRes, croRes, authRes, aiDiscRes, pipelineRes, prioritiesRes]
+    .forEach(trackResult);
+
+  console.log(`[Monthly Phase 3f] Narrations completed in ${tElapsed}ms. Providers used: ${Array.from(providersUsed).join(", ") || "none"}. Any fallback: ${fallbackTriggered}.`);
+
+  // Merge narration results back into slides by id.
+  const findSlide = (id: string) => slides.find(s => s.id === id);
+
+  if (execRes?.headline && execRes.narrative && execRes.keyMoves.length > 0) {
+    const s = findSlide("exec");
+    if (s) {
+      s.headline = execRes.headline;
+      s.narrative = execRes.narrative;
+      s.keyMoves = execRes.keyMoves;
+    }
+  }
+  if (outcomesRes?.commentary) {
+    const s = findSlide("outcomes");
+    if (s) s.commentary = outcomesRes.commentary;
+  }
+  if (visRes?.commentary) {
+    const s = findSlide("visibility");
+    if (s) s.commentary = visRes.commentary;
+  }
+  // Replace last column ("Notes") of slide 5 keyword table rows with AI notes.
+  if (clusterRes && clusterRes.notes.length === kwClusterDetail.length && kwClusterDetail.length > 0) {
+    const s = findSlide("keywords");
+    if (s?.table) {
+      s.table = {
+        ...s.table,
+        rows: s.table.rows.map((row, i) =>
+          clusterRes.notes[i] && clusterRes.notes[i].length > 0
+            ? [...row.slice(0, -1), clusterRes.notes[i]]
+            : row
+        ),
+      };
+    }
+  }
+  if (intentRes) {
+    const s = findSlide("intent");
+    if (s) {
+      // Replace placeholder findings with AI findings on success. Keep
+      // placeholder findings (already set above) if AI returned none AND
+      // commentary failed — that way the slide still has substance.
+      if (intentRes.findings.length > 0) s.intentFindings = intentRes.findings;
+      if (intentRes.commentary) s.commentary = intentRes.commentary;
+    }
+  }
+  if (eeatRes?.commentary) {
+    const s = findSlide("eeat");
+    if (s) s.commentary = eeatRes.commentary;
+  }
+  if (techRes?.commentary) {
+    const s = findSlide("technical");
+    if (s) s.commentary = techRes.commentary;
+  }
+  if (speedRes?.commentary) {
+    const s = findSlide("speed");
+    if (s) s.commentary = speedRes.commentary;
+  }
+  if (croRes?.commentary) {
+    const s = findSlide("cro");
+    if (s) s.commentary = croRes.commentary;
+  }
+  if (authRes?.commentary) {
+    const s = findSlide("authority");
+    if (s) s.commentary = authRes.commentary;
+  }
+  if (aiDiscRes?.commentary) {
+    const s = findSlide("ai_discoverability");
+    if (s) s.commentary = aiDiscRes.commentary;
+  }
+  // Replace last column ("Reasoning") of slide 13 pipeline rows.
+  if (pipelineRes && pipelineRes.reasoning.length === pipelineRawInputs.length && pipelineRawInputs.length > 0) {
+    const s = findSlide("content_pipeline");
+    if (s?.table) {
+      s.table = {
+        ...s.table,
+        rows: s.table.rows.map((row, i) =>
+          pipelineRes.reasoning[i] && pipelineRes.reasoning[i].length > 0
+            ? [...row.slice(0, -1), pipelineRes.reasoning[i]]
+            : row
+        ),
+      };
+    }
+  }
+  if (prioritiesRes) {
+    const s = findSlide("initiatives_priorities");
+    if (s) {
+      if (prioritiesRes.rationale.length === nextMonthBullets.length && nextMonthBullets.length > 0) {
+        s.bullets = prioritiesRes.rationale;
+      }
+      if (prioritiesRes.commentary) s.commentary = prioritiesRes.commentary;
+    }
+  }
+
+  // ─── sourceFacts — narration audit trail ───────────────────────────
   const rawWorkLogItems: Array<{ area: string; task: string; url?: string }> = [];
   if (airtable?.success) {
     for (const [creditType, items] of Object.entries(airtable.data.byCreditType) as [string, any[]][]) {
@@ -852,11 +1110,17 @@ export async function generateMonthly(input: {
     rawNextPriorityItems.push(...tasks.map(t => t.name));
   }
 
+  // Canonical-order provider summary, e.g. "claude+gemini+groq".
+  const PROVIDER_ORDER = ["claude", "openai", "gemini", "groq"];
+  const providerSummary = PROVIDER_ORDER
+    .filter(p => providersUsed.has(p))
+    .join("+") || null;
+
   const sourceFacts: MonthlySourceFacts = {
     windowLabel: label,
-    aiNarrationUsed: false,
-    aiNarrationProvider: null,
-    fallbackTriggered: false,
+    aiNarrationUsed: anyNarrationSucceeded,
+    aiNarrationProvider: providerSummary,
+    fallbackTriggered,
     promptVersion: NARRATION_PROMPT_VERSION,
     generatedAt: now.toISOString(),
     airtableRecords: airtable?.success

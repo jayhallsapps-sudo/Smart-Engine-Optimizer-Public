@@ -36,6 +36,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import { ClientSchedulesTab } from "@/components/ClientSchedulesTab";
 import {
   Plus,
   Globe,
@@ -504,7 +505,7 @@ function CallRailCompanyPicker({ value, onChange, onAccountIdChange }: { value: 
   );
 }
 
-function ClientForm({ initial, onSubmit, isPending, clientId }: { initial: ClientFormData; onSubmit: (data: ClientFormData) => void; isPending: boolean; clientId?: number | null }) {
+function ClientForm({ initial, onSubmit, isPending, clientId, editingClient }: { initial: ClientFormData; onSubmit: (data: ClientFormData) => void; isPending: boolean; clientId?: number | null; editingClient?: Client | null }) {
   const [form, setForm] = useState<ClientFormData>(initial);
 
   const update = (field: keyof ClientFormData, value: any) => {
@@ -523,6 +524,7 @@ function ClientForm({ initial, onSubmit, isPending, clientId }: { initial: Clien
           <TabsTrigger value="data-sources">Data Sources</TabsTrigger>
           <TabsTrigger value="seo-tools">SEO Tools</TabsTrigger>
           <TabsTrigger value="config">Config</TabsTrigger>
+          {clientId && <TabsTrigger value="scheduling">Scheduling</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="data-sources" className="space-y-4 mt-4">
@@ -675,6 +677,12 @@ function ClientForm({ initial, onSubmit, isPending, clientId }: { initial: Clien
             </p>
           </div>
         </TabsContent>
+
+        {clientId && editingClient && (
+          <TabsContent value="scheduling" className="mt-4">
+            <ClientSchedulesTab client={editingClient} />
+          </TabsContent>
+        )}
       </Tabs>
 
       <DialogFooter>
@@ -1567,6 +1575,7 @@ export default function ClientsPage() {
                 slackChannelId: editingClient.slackChannelId || "",
               }}
               clientId={editingClient.id ?? null}
+              editingClient={editingClient}
               onSubmit={(data) => updateMutation.mutate(data)}
               isPending={updateMutation.isPending}
             />

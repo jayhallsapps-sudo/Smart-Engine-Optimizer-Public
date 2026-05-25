@@ -13,18 +13,20 @@ import {
   DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Calendar, Clock, Trash2, Plus, CalendarClock, Play } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { Client } from "@shared/schema";
+import {
+  ScheduleFormFields,
+  defaultScheduleForm,
+  buildSchedulePayload,
+  describeSchedule,
+  formatDateTime,
+  freqBadgeLabel,
+  ALL_REPORT_TYPES,
+  type ScheduleFormState,
+} from "@/components/ScheduleFormFields";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -44,303 +46,12 @@ type ReportSchedule = {
   createdAt: string;
 };
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-const DAY_NAMES_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const WEEK_ORDINALS = [
-  { value: "1", label: "1st" },
-  { value: "2", label: "2nd" },
-  { value: "3", label: "3rd" },
-  { value: "4", label: "4th" },
-  { value: "5", label: "Last" },
-];
-const FREQUENCIES = [
-  { value: "weekly", label: "Weekly" },
-  { value: "biweekly", label: "Bi-weekly" },
-  { value: "monthly", label: "Monthly" },
-  { value: "quarterly", label: "Quarterly" },
-];
-const TIMEZONES = [
-  "America/New_York",
-  "America/Chicago",
-  "America/Denver",
-  "America/Los_Angeles",
-  "America/Phoenix",
-  "America/Anchorage",
-  "Pacific/Honolulu",
-  "Europe/London",
-  "Europe/Paris",
-  "Australia/Sydney",
-];
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function formatDateTime(ts: string | null): string {
-  if (!ts) return "—";
-  return new Date(ts).toLocaleString(undefined, {
-    month: "short", day: "numeric", year: "numeric",
-    hour: "numeric", minute: "2-digit",
-  });
-}
-
-function formatHour(h: number): string {
-  if (h === 0) return "12:00 AM";
-  if (h < 12) return `${h}:00 AM`;
-  if (h === 12) return "12:00 PM";
-  return `${h - 12}:00 PM`;
-}
-
-function ordinalLabel(n: number): string {
-  return WEEK_ORDINALS.find(w => w.value === String(n))?.label ?? String(n);
-}
-
-function describeSchedule(s: ReportSchedule): string {
-  const freq = s.frequency ?? "biweekly";
-  const time = formatHour(s.recurrenceHour);
-  const tz = s.timezone.replace("America/", "").replace("_", " ");
-
-  if (freq === "weekly") {
-    return `Every ${DAY_NAMES[s.recurrenceDay]} at ${time} (${tz})`;
-  }
-  if (freq === "biweekly") {
-    return `Every other ${DAY_NAMES[s.recurrenceDay]} at ${time} (${tz})`;
-  }
-  if (freq === "monthly" || freq === "quarterly") {
-    const period = freq === "monthly" ? "month" : "quarter";
-    if (s.recurrenceWeekOfMonth != null) {
-      return `${ordinalLabel(s.recurrenceWeekOfMonth)} ${DAY_NAMES[s.recurrenceDay]} of every ${period} at ${time} (${tz})`;
-    }
-    if (s.recurrenceDayOfMonth != null) {
-      return `Day ${s.recurrenceDayOfMonth} of every ${period} at ${time} (${tz})`;
-    }
-  }
-  return `Every ${DAY_NAMES[s.recurrenceDay]} at ${time} (${tz})`;
-}
-
-function freqBadgeLabel(freq: string): string {
-  return FREQUENCIES.find(f => f.value === freq)?.label ?? freq;
-}
-
-// ─── Schedule Form State ──────────────────────────────────────────────────────
-
-const REPORT_TYPES = [
-  { value: "biweekly", label: "Bi-Weekly" },
-  { value: "monthly", label: "Monthly" },
-];
-
-const defaultForm = {
-  clientId: "",
-  reportType: "biweekly",
-  frequency: "biweekly",
-  recurrenceType: "dayofweek", // dayofweek | dayofmonth | nthweekday
-  recurrenceDay: "1",           // 0-6 weekday (Sun-Sat)
-  recurrenceWeekOfMonth: "1",   // 1-5
-  recurrenceDayOfMonth: "1",    // 1-28
-  recurrenceHour: "8",
-  timezone: "America/New_York",
-};
-
-// ─── ScheduleForm subcomponent ────────────────────────────────────────────────
-
-function ScheduleForm({
-  form,
-  setForm,
-  clients,
-  showClientSelect = true,
-}: {
-  form: typeof defaultForm;
-  setForm: React.Dispatch<React.SetStateAction<typeof defaultForm>>;
-  clients: Client[];
-  showClientSelect?: boolean;
-}) {
-  const update = (key: string, val: string) => setForm(f => ({ ...f, [key]: val }));
-  const needsMonthly = form.frequency === "monthly" || form.frequency === "quarterly";
-  const needsWeekday = !needsMonthly || form.recurrenceType === "dayofweek" || form.recurrenceType === "nthweekday";
-
-  return (
-    <div className="space-y-3">
-      {showClientSelect && (
-        <div className="space-y-1.5">
-          <Label className="text-xs">Client</Label>
-          <Select value={form.clientId} onValueChange={v => update("clientId", v)}>
-            <SelectTrigger className="h-8 text-xs" data-testid="select-schedule-client">
-              <SelectValue placeholder="Select a client…" />
-            </SelectTrigger>
-            <SelectContent>
-              {clients.map(c => (
-                <SelectItem key={c.id} value={String(c.id)} className="text-xs">{c.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
-
-      <div className="space-y-1.5">
-        <Label className="text-xs">Report Type</Label>
-        <Select value={form.reportType} onValueChange={v => update("reportType", v)}>
-          <SelectTrigger className="h-8 text-xs" data-testid="select-report-type">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {REPORT_TYPES.map(rt => (
-              <SelectItem key={rt.value} value={rt.value} className="text-xs">{rt.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="space-y-1.5">
-        <Label className="text-xs">Frequency</Label>
-        <Select value={form.frequency} onValueChange={v => update("frequency", v)}>
-          <SelectTrigger className="h-8 text-xs" data-testid="select-schedule-frequency">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {FREQUENCIES.map(f => (
-              <SelectItem key={f.value} value={f.value} className="text-xs">{f.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {needsMonthly && (
-        <div className="space-y-1.5">
-          <Label className="text-xs">Recurrence type</Label>
-          <Select value={form.recurrenceType} onValueChange={v => update("recurrenceType", v)}>
-            <SelectTrigger className="h-8 text-xs" data-testid="select-recurrence-type">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="nthweekday" className="text-xs">Nth weekday (e.g. 3rd Thursday)</SelectItem>
-              <SelectItem value="dayofmonth" className="text-xs">Specific day of month (e.g. 15th)</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      )}
-
-      {needsMonthly && form.recurrenceType === "nthweekday" && (
-        <div className="flex gap-2">
-          <div className="flex-1 space-y-1.5">
-            <Label className="text-xs">Which week</Label>
-            <Select value={form.recurrenceWeekOfMonth} onValueChange={v => update("recurrenceWeekOfMonth", v)}>
-              <SelectTrigger className="h-8 text-xs" data-testid="select-week-of-month">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {WEEK_ORDINALS.map(w => (
-                  <SelectItem key={w.value} value={w.value} className="text-xs">{w.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex-1 space-y-1.5">
-            <Label className="text-xs">Weekday</Label>
-            <Select value={form.recurrenceDay} onValueChange={v => update("recurrenceDay", v)}>
-              <SelectTrigger className="h-8 text-xs" data-testid="select-recurrence-day">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {DAY_NAMES.map((d, i) => (
-                  <SelectItem key={i} value={String(i)} className="text-xs">{d}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      )}
-
-      {needsMonthly && form.recurrenceType === "dayofmonth" && (
-        <div className="space-y-1.5">
-          <Label className="text-xs">Day of month (1–28)</Label>
-          <Select value={form.recurrenceDayOfMonth} onValueChange={v => update("recurrenceDayOfMonth", v)}>
-            <SelectTrigger className="h-8 text-xs" data-testid="select-day-of-month">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {Array.from({ length: 28 }, (_, i) => (
-                <SelectItem key={i + 1} value={String(i + 1)} className="text-xs">{i + 1}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
-
-      {!needsMonthly && (
-        <div className="space-y-1.5">
-          <Label className="text-xs">Day of week</Label>
-          <Select value={form.recurrenceDay} onValueChange={v => update("recurrenceDay", v)}>
-            <SelectTrigger className="h-8 text-xs" data-testid="select-recurrence-day">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {DAY_NAMES.map((d, i) => (
-                <SelectItem key={i} value={String(i)} className="text-xs">{d}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
-
-      <div className="flex gap-2">
-        <div className="flex-1 space-y-1.5">
-          <Label className="text-xs">Time</Label>
-          <Select value={form.recurrenceHour} onValueChange={v => update("recurrenceHour", v)}>
-            <SelectTrigger className="h-8 text-xs" data-testid="select-schedule-hour">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {Array.from({ length: 24 }, (_, i) => (
-                <SelectItem key={i} value={String(i)} className="text-xs">{formatHour(i)}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex-1 space-y-1.5">
-          <Label className="text-xs">Timezone</Label>
-          <Select value={form.timezone} onValueChange={v => update("timezone", v)}>
-            <SelectTrigger className="h-8 text-xs" data-testid="select-schedule-timezone">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {TIMEZONES.map(tz => (
-                <SelectItem key={tz} value={tz} className="text-xs">{tz.replace("America/", "").replace("_", " ")}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Build payload from form ──────────────────────────────────────────────────
-
-function buildPayload(form: typeof defaultForm, clientId?: number) {
-  const needsMonthly = form.frequency === "monthly" || form.frequency === "quarterly";
-  return {
-    clientId: clientId ?? Number(form.clientId),
-    reportType: form.reportType,
-    frequency: form.frequency,
-    recurrenceDay: Number(form.recurrenceDay),
-    recurrenceHour: Number(form.recurrenceHour),
-    timezone: form.timezone,
-    recurrenceWeekOfMonth: needsMonthly && form.recurrenceType === "nthweekday"
-      ? Number(form.recurrenceWeekOfMonth)
-      : null,
-    recurrenceDayOfMonth: needsMonthly && form.recurrenceType === "dayofmonth"
-      ? Number(form.recurrenceDayOfMonth)
-      : null,
-    enabled: true,
-  };
-}
-
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function AdminSchedulesPage() {
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [form, setForm] = useState({ ...defaultForm });
+  const [form, setForm] = useState<ScheduleFormState>({ ...defaultScheduleForm });
 
   const { data: clients = [] } = useQuery<Client[]>({ queryKey: ["/api/clients"] });
 
@@ -353,7 +64,7 @@ export default function AdminSchedulesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/report-schedules"] });
       setDialogOpen(false);
-      setForm({ ...defaultForm });
+      setForm({ ...defaultScheduleForm });
       toast({ title: "Schedule created" });
     },
     onError: (err: any) => toast({ title: "Failed to create schedule", description: err.message, variant: "destructive" }),
@@ -395,7 +106,7 @@ export default function AdminSchedulesPage() {
       toast({ title: "Please select a client", variant: "destructive" });
       return;
     }
-    createMut.mutate(buildPayload(form));
+    createMut.mutate(buildSchedulePayload(form));
   };
 
   const clientName = (id: number) => clients.find(c => c.id === id)?.name ?? `Client ${id}`;
@@ -502,7 +213,7 @@ export default function AdminSchedulesPage() {
               Auto-generate reports on a schedule and notify via Slack.
             </DialogDescription>
           </DialogHeader>
-          <ScheduleForm form={form} setForm={setForm} clients={clients} />
+          <ScheduleFormFields form={form} setForm={setForm} clients={clients} reportTypes={ALL_REPORT_TYPES} />
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
             <Button onClick={handleCreate} disabled={createMut.isPending} data-testid="button-confirm-create-schedule">

@@ -61,6 +61,7 @@ import {
   CheckCircle,
   MapPin,
   CheckSquare,
+  Presentation,
 } from "lucide-react";
 import { QcrConfigPanel } from "@/components/qcr/QcrConfigPanel";
 import { useToast } from "@/hooks/use-toast";
@@ -91,6 +92,7 @@ function getServiceIcon(serviceId: string) {
     case "semrush": return LineChart;
     case "screaming_frog": return Bug;
     case "google_business_profile": return MapPin;
+    case "google_slides": return Presentation;
     case "asana": return CheckSquare;
     default: return Key;
   }
@@ -829,7 +831,7 @@ export default function SetupPage() {
           <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
             Analytics & Search
           </h2>
-          {SERVICE_CONFIGS.filter(s => ["google_search_console", "google_analytics_4", "google_business_profile"].includes(s.id)).map(config => (
+          {SERVICE_CONFIGS.filter(s => ["google_search_console", "google_analytics_4", "google_business_profile", "google_slides"].includes(s.id)).map(config => (
             <ServiceSection key={config.id} config={config} {...sharedSectionProps} />
           ))}
         </div>

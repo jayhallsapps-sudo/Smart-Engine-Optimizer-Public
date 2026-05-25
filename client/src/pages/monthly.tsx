@@ -20,7 +20,6 @@ import {
   RefreshCw,
   ChevronDown,
   ChevronRight,
-  Save,
   MessageSquare,
   CheckCircle2,
 } from "lucide-react";
@@ -236,33 +235,33 @@ export default function MonthlyPage() {
     reportSave.markDirty();
   }, [currentCrawlId, comparisonCrawlId, clientName, month, year]);
 
-  function handleManualSave() {
+  // ─── Download PDF — Puppeteer renders the EXACT preview as PDF ────────────
+  // Auto-save handles persistence (via useReportSave above); no manual Save
+  // button is exposed. The Drive button uploads the deck to Google Drive;
+  // the PDF button downloads a PDF that mirrors what's on screen.
+  async function downloadPdf() {
     if (!report) return;
-    const meta = getMeta();
-    reportSave.pendingPayloadRef.current = { reportData: report, edits, meta };
-    reportSave.save(report, edits, meta);
-    toast({ title: "Saved" });
-  }
-
-  const downloadMut = useMutation({
-    mutationFn: async () => {
-      if (!report) throw new Error("Generate report first");
-      const res = await apiRequest("POST", "/api/reports/monthly/pptx", { json: report, edits });
-      if (!res.ok) throw new Error((await res.json()).message ?? "Export failed");
+    try {
+      const res = await fetch("/api/reports/monthly/preview-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ report, edits }),
+      });
+      if (!res.ok) throw new Error(await res.text());
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
       const cd = res.headers.get("content-disposition") ?? "";
       const match = cd.match(/filename="([^"]+)"/);
-      a.download = match?.[1] ?? "monthly_report.pptx";
+      a.download = match?.[1] ?? `${report.client_name ?? "report"} - Monthly Report.pdf`;
       a.click();
       URL.revokeObjectURL(url);
-    },
-    onError: (err: any) => {
-      toast({ title: "Download failed", description: err.message, variant: "destructive" });
-    },
-  });
+    } catch (err: any) {
+      toast({ title: "PDF download failed", description: err.message ?? String(err), variant: "destructive" });
+    }
+  }
 
   async function uploadToDrive() {
     if (!report) return;
@@ -673,27 +672,17 @@ export default function MonthlyPage() {
           )}
         </div>
 
-        {/* Export footer */}
+        {/* Export footer — matches biweekly's button stack: PDF + Drive only.
+            Auto-save handles persistence; no manual Save button exposed. */}
         {report && (
           <div className="p-4 border-t space-y-2">
             <Button
-              variant="outline"
               className="w-full text-xs"
-              onClick={handleManualSave}
-              disabled={reportSave.saveStatus === "saving"}
-              data-testid="btn-manual-save"
+              onClick={downloadPdf}
+              data-testid="btn-download-pdf"
             >
-              <Save className="w-3 h-3 mr-1.5" />
-              Save
-            </Button>
-            <Button
-              className="w-full text-xs"
-              onClick={() => downloadMut.mutate()}
-              disabled={downloadMut.isPending}
-              data-testid="btn-download-pptx"
-            >
-              {downloadMut.isPending ? <Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> : <Download className="w-3 h-3 mr-1.5" />}
-              Download PPTX
+              <Download className="w-3 h-3 mr-1.5" />
+              Download PDF
             </Button>
             <Button
               variant="outline"

@@ -2940,6 +2940,37 @@ export async function registerRoutes(
     }
   });
 
+  // ─── /api/reports/monthly/preview-pdf ─────────────────────────────────────
+  // Puppeteer-based PDF that renders the EXACT same SlideRenderer the preview
+  // uses. The output therefore mirrors what the AM sees on screen. This
+  // replaces the legacy /api/reports/monthly/pdf endpoint which used a
+  // separate pdfkit pipeline whose output drifted from the React preview.
+  app.post("/api/reports/monthly/preview-pdf", async (req, res) => {
+    const t0 = Date.now();
+    const { report, edits } = req.body as { report: any; edits?: Record<string, string> };
+    if (!report) return res.status(400).json({ message: "report is required" });
+    const id = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    printCache.set(id, { data: { report, edits: edits ?? {} }, ts: Date.now() });
+    try {
+      const sessionCookie = req.cookies?.smarteo_session;
+      const cookies = sessionCookie ? [{ name: "smarteo_session", value: sessionCookie }] : undefined;
+      // The MonthlyPrint page lives at /monthly/print in client/src/App.tsx.
+      const buffer = await generatePdfViaPuppeteer(id, "monthly/print", cookies);
+      printCache.delete(id);
+      const clientName = edits?.["title_client"] ?? report.client_name ?? "report";
+      const slug = clientName.toLowerCase().replace(/\s+/g, "_");
+      const monthSlug = (report.month_label ?? "").replace(/\s/g, "_");
+      logExport("Monthly PDF", t0, true);
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="${slug}_monthly_${monthSlug}.pdf"`);
+      res.send(buffer);
+    } catch (err: any) {
+      printCache.delete(id);
+      logExport("Monthly PDF", t0, false, err.message);
+      res.status(500).json({ message: "Failed to generate PDF: " + err.message });
+    }
+  });
+
   app.post("/api/reports/qbr/generate", async (req, res) => {
     const { clientId, quarter, year, timezone, amInputs, currentCrawlAssetId, comparisonCrawlAssetId, gapAnswers, gapSessionId } = req.body;
     if (!clientId || !quarter || !year) return res.status(400).json({ message: "clientId, quarter, year are required" });

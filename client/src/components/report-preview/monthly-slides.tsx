@@ -308,18 +308,54 @@ export function MonthlyKpiSlide({ slide, edits, onEdit, headerUrl: _headerUrl }:
   );
 }
 
-// ─── MonthlyConversionSlide (bar chart — conversion / traffic) ────────────────
-export function MonthlyConversionSlide({ slide, edits, onEdit, headerUrl }: SlideProps) {
+// ─── MonthlyConversionSlide (V2 Dashboard) ───────────────────────────────────
+// Bar chart slide for conversion / traffic metrics. Same dashboard wrapper as
+// MonthlyTrendSlide — black header band, chart in white card, dark footer.
+export function MonthlyConversionSlide({ slide, edits: _edits, onEdit: _onEdit, headerUrl: _headerUrl }: SlideProps) {
+  const title = _edits[`${slide.id}_title`] ?? slide.title ?? "Performance";
+  const subtitle = _edits[`${slide.id}_subtitle`] ?? slide.subtitle;
+
   return (
-    <div style={{ position: "absolute", inset: 0, background: PAGE_BG }}>
-      <ReportTopHeader slideTitle={edits[`${slide.id}_title`] ?? slide.title} headerUrl={headerUrl} />
-      <div style={{ position: "absolute", ...BODY_INSET, display: "flex", flexDirection: "column", justifyContent: "center" }}>
-        {slide.subtitle && <div style={{ fontSize: 9, color: TEXT_SECONDARY, marginBottom: 8 }}>{slide.subtitle}</div>}
-        {slide.chartData && (
-          <ReportBarChart data={slide.chartData} keys={slide.chartKeys ?? ["value"]} height={265} />
-        )}
+    <div style={{ position: "absolute", inset: 0, background: MV2_BG_PAGE, fontFamily: MV2_FONT_BODY }}>
+      <MV2HeaderBand title={title} subtitle={subtitle} />
+
+      <div
+        style={{
+          position: "absolute",
+          top: 76,
+          left: 28,
+          right: 28,
+          bottom: 32,
+        }}
+      >
+        <MV2ContentCard padding="14px 16px" style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+          <div style={{ flex: 1, minHeight: 0 }}>
+            {slide.chartData && (
+              <ReportBarChart data={slide.chartData} keys={slide.chartKeys ?? ["value"]} height={235} />
+            )}
+            {!slide.chartData && (
+              <div
+                style={{
+                  height: "100%",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: MV2_TEXT_MUTED,
+                  fontSize: 11,
+                  fontStyle: "italic",
+                }}
+              >
+                No chart data for this period.
+              </div>
+            )}
+          </div>
+        </MV2ContentCard>
       </div>
-      <ReportFooter />
+
+      <MV2Footer
+        sourceLabel={slide.sourceNote ?? ""}
+        dateLabel={subtitle ?? ""}
+      />
     </div>
   );
 }

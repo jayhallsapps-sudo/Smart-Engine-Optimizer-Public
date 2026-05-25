@@ -61,6 +61,7 @@ export default function MonthlyPage() {
   const [report, setReport] = useState<any>(null);
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [isUploading, setIsUploading] = useState(false);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [currentCrawlId, setCurrentCrawlId] = useState<number | null>(null);
   const [comparisonCrawlId, setComparisonCrawlId] = useState<number | null>(null);
   const [showAdditionalInputs, setShowAdditionalInputs] = useState(false);
@@ -241,6 +242,7 @@ export default function MonthlyPage() {
   // the PDF button downloads a PDF that mirrors what's on screen.
   async function downloadPdf() {
     if (!report) return;
+    setIsDownloadingPdf(true);
     try {
       const res = await fetch("/api/reports/monthly/preview-pdf", {
         method: "POST",
@@ -260,6 +262,8 @@ export default function MonthlyPage() {
       URL.revokeObjectURL(url);
     } catch (err: any) {
       toast({ title: "PDF download failed", description: err.message ?? String(err), variant: "destructive" });
+    } finally {
+      setIsDownloadingPdf(false);
     }
   }
 
@@ -679,10 +683,11 @@ export default function MonthlyPage() {
             <Button
               className="w-full text-xs"
               onClick={downloadPdf}
+              disabled={isDownloadingPdf}
               data-testid="btn-download-pdf"
             >
-              <Download className="w-3 h-3 mr-1.5" />
-              Download PDF
+              {isDownloadingPdf ? <Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> : <Download className="w-3 h-3 mr-1.5" />}
+              {isDownloadingPdf ? "Generating PDF…" : "Download PDF"}
             </Button>
             <Button
               variant="outline"

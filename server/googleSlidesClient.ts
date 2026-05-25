@@ -12,9 +12,16 @@
  * presentation via the Slides API. The output is editable in the browser
  * the moment the API call returns. No file-format conversion is involved.
  *
- * Architecture mirrors biweeklyGoogleDocsGenerator.ts:
- *   - OAuth token comes from the `google-slides` Replit connector
- *   - Uses the official `googleapis` npm package
+ * Auth: reuses the existing OAuth flow in server/googleAuth.ts (same path
+ * GSC, GA4, Sheets, and GBP use). The "google_slides" service entry in
+ * GOOGLE_SCOPES grants the `presentations` + `drive.file` scopes so the
+ * deck can be created and surfaced in the AM's Drive. Tokens are refreshed
+ * transparently by getGoogleAccessToken.
+ *
+ * NOTE: an earlier draft (since corrected) wired this to a Replit
+ * `google-slides` connector — Replit doesn't offer one. The codebase's
+ * own OAuth flow is the right pattern and is already used by four other
+ * Google integrations.
  *
  * Brand: Webserv (red #C0392B, near-black #1A1A1A, warm off-white #FAFAF7),
  * Archivo headings, Inter body — matches the on-screen preview palette.
@@ -23,48 +30,20 @@
 
 import { google, slides_v1 } from "googleapis";
 import type { Slide } from "../client/src/components/report-preview/pptx-preview";
+import { getGoogleAccessToken } from "./googleToken";
 
-// ─── OAuth via the Replit google-slides connector ────────────────────────────
-
-let slidesConnectionSettings: any;
-
-async function getSlidesAccessToken(): Promise<string> {
-  if (
-    slidesConnectionSettings &&
-    slidesConnectionSettings.settings?.expires_at &&
-    new Date(slidesConnectionSettings.settings.expires_at).getTime() > Date.now()
-  ) {
-    return slidesConnectionSettings.settings.access_token;
-  }
-
-  const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
-  const xReplitToken = process.env.REPL_IDENTITY
-    ? "repl " + process.env.REPL_IDENTITY
-    : process.env.WEB_REPL_RENEWAL
-    ? "depl " + process.env.WEB_REPL_RENEWAL
-    : null;
-
-  if (!xReplitToken) throw new Error("X-Replit-Token not found for repl/depl");
-
-  slidesConnectionSettings = await fetch(
-    "https://" + hostname + "/api/v2/connection?include_secrets=true&connector_names=google-slides",
-    { headers: { Accept: "application/json", "X-Replit-Token": xReplitToken } },
-  )
-    .then((res) => res.json())
-    .then((data) => data.items?.[0]);
-
-  const accessToken =
-    slidesConnectionSettings?.settings?.access_token ||
-    slidesConnectionSettings?.settings?.oauth?.credentials?.access_token;
-
-  if (!slidesConnectionSettings || !accessToken) {
-    throw new Error("Google Slides not connected — set up the google-slides Replit connector with the presentations + drive.file scopes.");
-  }
-  return accessToken;
-}
+// ─── OAuth via server/googleAuth.ts ──────────────────────────────────────────
+// Connects to the same per-AM consent flow as GSC / GA4 / Sheets / GBP.
+// Setup happens once per AM in the Setup page; refresh tokens persist in
+// the api_credentials table (encrypted).
 
 async function getSlidesClient(): Promise<slides_v1.Slides> {
-  const accessToken = await getSlidesAccessToken();
+  const accessToken = await getGoogleAccessToken("google_slides");
+  if (!accessToken) {
+    throw new Error(
+      "Google Slides not connected — connect a Google account with Slides access in the Setup page (service: google_slides).",
+    );
+  }
   const oauth2Client = new google.auth.OAuth2();
   oauth2Client.setCredentials({ access_token: accessToken });
   return google.slides({ version: "v1", auth: oauth2Client });

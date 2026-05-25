@@ -7,6 +7,10 @@ const GOOGLE_SCOPES: Record<string, string> = {
   google_analytics_4: "https://www.googleapis.com/auth/analytics.readonly",
   google_sheets: "https://www.googleapis.com/auth/spreadsheets.readonly",
   google_business_profile: "https://www.googleapis.com/auth/business.manage",
+  // Phase 3g — native Google Slides export. Needs `presentations` (read +
+  // create + batchUpdate) and `drive.file` so the created deck surfaces in
+  // the AM's Drive. Space-separated scopes in one consent grant.
+  google_slides: "https://www.googleapis.com/auth/presentations https://www.googleapis.com/auth/drive.file",
 };
 
 interface OAuthState {

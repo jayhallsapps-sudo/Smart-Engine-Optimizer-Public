@@ -234,11 +234,44 @@ export async function generateMonthly(input: {
     }),
   ]);
 
+  // ─── Phase 3d Step 2b — 14-slide emission ──────────────────────────────
+  // Emits the locked 14-slide spec (CLAUDE.md). Every slide ALWAYS renders;
+  // missing data sources become empty states. AI commentary (headline,
+  // narrative, key moves, per-slide interpretations) is wired in Phase 3f.
+
+  // Unwrap PromiseSettledResults into typed locals.
+  const val = <T,>(p: PromiseSettledResult<T>): T | null =>
+    p.status === "fulfilled" ? (p.value as T) : null;
+  const gscQ = val(gscQueries) as any;
+  const gscP = val(gscPages) as any;
+  const ga4F = val(ga4Funnel) as any;
+  const ga4L = val(ga4Landing) as any;
+  const ct = val(ctResult) as any;
+  const sem = val(semResult) as any;
+  const airtable = val(airtableResult) as any;
+  const asana = val(asanaResult) as any;
+  const ga4FQtd = val(ga4FunnelQtd) as any;
+  const ctQtd = val(ctResultQtd) as any;
+  const gscQpm = val(gscQueryPageMap) as any;
+  const gscTopic = val(gscTopicClusterData) as { currentRows: any[]; previousRows: any[] } | null;
+  const gscDaily = val(gscDailyTrend) as any;
+  const ga4Daily = val(ga4DailyTrend) as any;
+  const nsm = val(nsmResult) as any;
+  const ctSum = val(ctSummaryResult) as any;
+  const airtableProd = val(airtableProductionResult) as any;
+  const ahrefs = val(ahrefsOverview) as any;
+  const eeat = val(eeatScanResult) as SiteEeatSummary | null;
+
+  const prevMonthName = new Date(input.year, input.month - 2, 1).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  const nextMonthName = new Date(input.year, input.month, 1).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  const quarter = Math.ceil(input.month / 3);
+  const monthsIntoQuarter = ((input.month - 1) % 3) + 1;
+
   const slides: Slide[] = [];
 
-  // ─── SLIDE 1: Title ───────────────────────────────────────────────
+  // ─── SLIDE 1: Cover ───────────────────────────────────────────────
   slides.push({
-    id: "title",
+    id: "cover",
     type: "title",
     title: `SEO Monthly Report — ${label}`,
     clientName: client.name,
@@ -246,880 +279,599 @@ export async function generateMonthly(input: {
     ...(am.producedBy?.trim() ? { producedBy: am.producedBy.trim() } : {}),
   });
 
-  // ─── SLIDE 2: Monthly Performance Overview ────────────────────────
-  const perfMetrics: Array<{
-    label: string;
-    current: string;
-    previous?: string;
-    delta?: string;
-    isPositive?: boolean;
-    source?: string;
-  }> = [];
+  // ─── SLIDE 2: Headline & executive summary ────────────────────────
+  // Phase 3f wires AI synthesis here. Step 2b emits placeholder copy so
+  // the slide always renders with the right shape.
+  slides.push({
+    id: "exec",
+    type: "exec_summary",
+    title: "Headline & executive summary",
+    subtitle: label,
+    headline: "Headline pending AI synthesis.",
+    narrative: "Executive narrative pending — Phase 3f synthesizes outcomes, visibility, and trust signals into a single read.",
+    keyMoves: [
+      "Key move 1 pending AI synthesis.",
+      "Key move 2 pending AI synthesis.",
+      "Key move 3 pending AI synthesis.",
+    ],
+  });
 
-  if (ga4Funnel.status === "fulfilled" && ga4Funnel.value) {
-    const summary = (ga4Funnel.value as any).summary ?? [];
-    perfMetrics.push(
-      ...summary.slice(0, 4).map((s: any) => ({
+  // ─── SLIDE 3: Business outcomes + QTD goal pacing ─────────────────
+  const outcomesMetrics: NonNullable<Slide["metrics"]> = [];
+  if (ga4F?.summary) {
+    for (const s of (ga4F.summary as any[]).slice(0, 2)) {
+      outcomesMetrics.push({
         label: s.label,
         current: s.current,
         previous: s.previous,
         delta: s.deltaPercent,
         isPositive: s.isPositive,
         source: "GA4",
-      }))
+      });
+    }
+  }
+  if (ct?.summary) {
+    const callSrc = client.callrailCompanyId ? "CallRail" : (client as any).ctmAccountId ? "CTM" : "Calls";
+    for (const s of (ct.summary as any[]).slice(0, 1)) {
+      outcomesMetrics.push({
+        label: s.label,
+        current: s.current,
+        previous: s.previous,
+        delta: s.deltaPercent,
+        isPositive: s.isPositive,
+        source: callSrc,
+      });
+    }
+  }
+  if (outcomesMetrics.length === 0) {
+    outcomesMetrics.push(
+      { label: "Organic Sessions", current: "—", sourceNote: "Connect GA4 to populate" },
+      { label: "Conversions", current: "—", sourceNote: "Connect GA4 to populate" },
+      { label: "Organic Calls", current: "—", sourceNote: "Connect CallRail or CTM to populate" },
     );
   }
-  if (gscQueries.status === "fulfilled" && gscQueries.value) {
-    const summary = (gscQueries.value as any).summary ?? [];
-    perfMetrics.push(
-      ...summary.slice(0, 2).map((s: any) => ({
+
+  // QTD goal pacing from NSM Tracker sheet.
+  // monthsIntoQuarter / 3 = the share of the quarter we should have hit by now.
+  // pacingPercent = (actual − expected) / expected × 100.
+  const pacingBadges: NonNullable<Slide["pacingBadges"]> = [];
+  if (nsm) {
+    const computeBadge = (
+      badgeLabel: string,
+      actualRaw: any,
+      goalRaw: any,
+    ): NonNullable<Slide["pacingBadges"]>[number] => {
+      const actual = parseFloat(String(actualRaw ?? "").replace(/[^0-9.-]/g, ""));
+      const goal = parseFloat(String(goalRaw ?? "").replace(/[^0-9.-]/g, ""));
+      if (isNaN(actual) || isNaN(goal) || goal <= 0) {
+        return {
+          label: badgeLabel,
+          current: actualRaw && actualRaw !== "—" ? String(actualRaw) : "—",
+          goal: goalRaw && goalRaw !== "—" ? String(goalRaw) : "—",
+          status: "—",
+          pacingPercent: "—",
+        };
+      }
+      const expectedByNow = goal * (monthsIntoQuarter / 3);
+      const pacingPercent = ((actual - expectedByNow) / expectedByNow) * 100;
+      const status = pacingPercent >= 10 ? "Ahead" : pacingPercent >= -10 ? "On Pace" : "At Risk";
+      return {
+        label: badgeLabel,
+        current: String(actualRaw),
+        goal: String(goalRaw),
+        status,
+        pacingPercent: `${pacingPercent >= 0 ? "+" : ""}${pacingPercent.toFixed(0)}%`,
+      };
+    };
+
+    const qtdSessActual = (ga4FQtd?.summary as any[] | undefined)?.find(s => /session/i.test(s.label))?.current;
+    const qtdConvActual = (ga4FQtd?.summary as any[] | undefined)?.find(s => /conver|admit|lead/i.test(s.label))?.current;
+    const qtdCallActual = (ctQtd?.summary as any[] | undefined)?.find(s => /call/i.test(s.label))?.current;
+
+    if (nsm.sessionsGoal && nsm.sessionsGoal !== "—") {
+      pacingBadges.push(computeBadge(`Organic Sessions Q${quarter}TD`, qtdSessActual, nsm.sessionsGoal));
+    }
+    if (nsm.mvpGoal && nsm.mvpGoal !== "—") {
+      const isCallBased = !nsm.mvpType || nsm.mvpType === "—" || /call/i.test(String(nsm.mvpType));
+      const mvpActual = isCallBased ? qtdCallActual : qtdConvActual;
+      const mvpLabel = nsm.mvpType && nsm.mvpType !== "—" ? `Qualified ${nsm.mvpType} Q${quarter}TD` : `Qualified MVP Q${quarter}TD`;
+      pacingBadges.push(computeBadge(mvpLabel, mvpActual, nsm.mvpGoal));
+    }
+  }
+
+  // Outcomes by source — CallRail/CTM summary surfaces calls split across
+  // Google My Business, Organic Search, Direct, etc.
+  let outcomesTable: Slide["table"] | undefined;
+  if (ctSum?.tables?.length > 0 && ctSum.tables[0].rows?.length > 0) {
+    outcomesTable = { headers: ctSum.tables[0].headers, rows: ctSum.tables[0].rows };
+  }
+
+  const outcomesHasData = outcomesMetrics.some(m => m.current !== "—") || pacingBadges.length > 0 || !!outcomesTable;
+  slides.push({
+    id: "outcomes",
+    type: "outcomes",
+    title: "Business outcomes",
+    subtitle: `${label} — Q${quarter} ${input.year}`,
+    metrics: outcomesMetrics,
+    ...(pacingBadges.length > 0 ? { pacingBadges } : {}),
+    ...(outcomesTable ? { table: outcomesTable } : {}),
+    commentary: outcomesHasData
+      ? "Outcomes-and-pacing interpretation pending — Phase 3f synthesizes commentary."
+      : "Conversion tracking + NSM goals not yet connected. Once linked, business outcomes and goal pacing will populate.",
+  });
+
+  // ─── SLIDE 4: Organic visibility & discoverability ────────────────
+  const visibilityMetrics: NonNullable<Slide["metrics"]> = [];
+  if (gscQ?.summary) {
+    for (const s of (gscQ.summary as any[]).slice(0, 2)) {
+      visibilityMetrics.push({
         label: s.label,
         current: s.current,
         previous: s.previous,
         delta: s.deltaPercent,
         isPositive: s.isPositive,
         source: "GSC",
-      }))
-    );
-  }
-  if (ctResult.status === "fulfilled" && ctResult.value) {
-    const summary = (ctResult.value as any).summary ?? [];
-    const callSource = client.callrailCompanyId ? "CallRail" : (client as any).ctmAccountId ? "CTM" : "Calls";
-    perfMetrics.push(
-      ...summary.slice(0, 1).map((s: any) => ({
-        label: s.label,
-        current: s.current,
-        previous: s.previous,
-        delta: s.deltaPercent,
-        isPositive: s.isPositive,
-        source: callSource,
-      }))
-    );
-  }
-
-  const perfCommentary = buildPerformanceCommentary(am);
-  let finalCommentary = perfCommentary;
-  if (input.gapContext && input.gapContext.hasAnswers) {
-    const gapParts = [
-      input.gapContext.sentimentContext,
-      input.gapContext.businessChanges,
-      input.gapContext.narrativeNotes
-    ].filter(Boolean);
-    if (gapParts.length > 0) {
-      finalCommentary = (finalCommentary ? finalCommentary + " " : "") + "Gap Insights: " + gapParts.join("; ");
-    }
-  }
-
-  slides.push({
-    id: "performance",
-    type: "metrics",
-    title: "Monthly Performance Overview",
-    subtitle: `${label} vs ${new Date(input.year, input.month - 2, 1).toLocaleDateString("en-US", { month: "long", year: "numeric" })}`,
-    ...(finalCommentary ? { commentary: finalCommentary } : {}),
-    metrics:
-      perfMetrics.length > 0
-        ? perfMetrics
-        : [
-            { label: "Organic Sessions", current: "—", sourceNote: "Connect GA4 to populate" },
-            { label: "Conversions", current: "—", sourceNote: "Connect GA4 to populate" },
-            { label: "Organic Clicks", current: "—", sourceNote: "Connect GSC to populate" },
-            { label: "Organic Calls", current: "—", sourceNote: "Connect CallRail or CTM to populate" },
-          ],
-  });
-
-  // ─── SLIDE 2a: SEO Strategy Focus (quarterly tactics) ───────────────────────
-  // Shown when AM has filled in the quarterly strategy focus field.
-  // Mirrors the "SEO Q[N] Tactics" slide in the PDF report.
-  const qNum2 = Math.ceil(input.month / 3);
-  const strategyBullets: string[] = [];
-  if (am.quarterlyStrategyFocus?.trim()) {
-    // AM-provided text: split on newlines or semicolons into bullets
-    const lines = am.quarterlyStrategyFocus.trim().split(/\n|;/).map(l => l.trim()).filter(Boolean);
-    strategyBullets.push(...lines);
-  }
-  // Always include default pillars so slide has substance even without AM input
-  if (strategyBullets.length === 0) {
-    strategyBullets.push(
-      "Capture Demand Early — Answer symptom- and risk-based questions before users identify as needing help, building trust and topical authority early.",
-      "Guide Evaluation — Create treatment-focused and geo-specific pages that help users compare levels of care, facilities, and treatment options.",
-      "Convert With Clarity — Remove friction with clear insurance messaging, admissions CTAs, and credibility signals to convert VOB-ready intent."
-    );
-  }
-  slides.push({
-    id: "strategy_focus",
-    type: "bullets",
-    title: `Q${qNum2} SEO Strategy Focus`,
-    subtitle: `${label} — Scaling with a Treatment Center-Specific SEO Funnel`,
-    bullets: strategyBullets,
-  });
-
-  // ─── SLIDE 2b: Top Conversion Sources ───────────────────────────
-  // Primary: CallRail source breakdown (callrail_summary → tables[0] = "Calls by Source")
-  // Shows which tracking sources (Google My Business, Organic Search, etc.) generated calls.
-  // VVOBs column: populated from AM input (vvobsCount) when call-level VVOB tagging is unavailable.
-  const vvobTotal = parseInt(String(am.vvobsCount ?? "0").replace(/[^0-9]/g, ""), 10) || 0;
-  if (ctSummaryResult.status === "fulfilled" && ctSummaryResult.value) {
-    const sourceTables = (ctSummaryResult.value as any).tables ?? [];
-    if (sourceTables.length > 0 && sourceTables[0].rows?.length > 0) {
-      const totalCalls = sourceTables[0].rows.reduce((sum: number, r: any[]) => {
-        return sum + (parseInt(String(r[1] ?? "0").replace(/,/g, ""), 10) || 0);
-      }, 0);
-      const enhancedRows = sourceTables[0].rows.map((r: any[]) => {
-        const cnt = parseInt(String(r[1] ?? "0").replace(/,/g, ""), 10) || 0;
-        const share = totalCalls > 0 ? `${Math.round((cnt / totalCalls) * 100)}%` : "—";
-        return [...r, share];
-      });
-      const callProviderLabel = client.callrailCompanyId ? "CallRail" : (client as any).ctmAccountId ? "CTM" : "Call Tracker";
-      // Add VVOBs column (manual entry via AM input; shown as total in first data row)
-      const vvobRows = enhancedRows.map((r: any[], idx: number) => [
-        ...r,
-        idx === 0 && vvobTotal > 0 ? String(vvobTotal) : "—",
-      ]);
-      slides.push({
-        id: "conversion_sources",
-        type: "table",
-        title: "Top Conversion Sources",
-        subtitle: `${label} — Calls by Tracking Source (${callProviderLabel})`,
-        table: {
-          headers: [...sourceTables[0].headers, "Share", "VVOBs"],
-          rows: vvobRows,
-        },
-        ...(vvobTotal === 0 ? { sourceNote: "VVOBs: Enter total in 'VVOB Count' field above to populate" } : {}),
       });
     }
   }
-
-  // ─── SLIDE 3: Top Organic Queries ────────────────────────────────
-  if (gscQueries.status === "fulfilled" && gscQueries.value) {
-    const tables = (gscQueries.value as any).tables ?? [];
-    slides.push({
-      id: "gsc_queries",
-      type: "table",
-      title: "Top Organic Queries",
-      subtitle: `${label} — Ranked by Clicks`,
-      table:
-        tables.length > 0
-          ? { headers: tables[0].headers, rows: tables[0].rows }
-          : {
-              headers: ["Query", "Clicks", "Impressions", "CTR", "Position"],
-              rows: [["—", "—", "—", "—", "—"]],
-              sourceNote: "GSC connected but no rows returned for this period",
-            },
-    });
-  } else {
-    slides.push({
-      id: "gsc_queries",
-      type: "table",
-      title: "Top Organic Queries",
-      subtitle: `${label} — Ranked by Clicks`,
-      table: {
-        headers: ["Query", "Clicks", "Impressions", "CTR", "Position"],
-        rows: [["—", "—", "—", "—", "—"]],
-      },
-      sourceNote: "GSC not connected — connect Google Search Console to populate",
-    });
+  if (ahrefs?.summary) {
+    const drRow = (ahrefs.summary as any[]).find(s => /domain rating/i.test(s.label));
+    const kwRow = (ahrefs.summary as any[]).find(s => /organic keywords/i.test(s.label));
+    if (drRow) visibilityMetrics.push({ label: "Domain Rating", current: drRow.current, source: "Ahrefs" });
+    if (kwRow) visibilityMetrics.push({ label: "Organic Keywords", current: kwRow.current, source: "Ahrefs" });
+  }
+  if (visibilityMetrics.length === 0) {
+    visibilityMetrics.push(
+      { label: "Organic Clicks", current: "—", sourceNote: "GSC not connected" },
+      { label: "Organic Impressions", current: "—", sourceNote: "GSC not connected" },
+      { label: "Domain Rating", current: "—", sourceNote: "Ahrefs not connected" },
+      { label: "Organic Keywords", current: "—", sourceNote: "Ahrefs not connected" },
+    );
   }
 
-  // ─── SLIDE 3b: Query Groups (Topic-Level Aggregation with % Deltas) ──
-  if (gscTopicClusterData.status === "fulfilled" && gscTopicClusterData.value) {
-    const { currentRows, previousRows } = gscTopicClusterData.value as { currentRows: any[]; previousRows: any[] };
-    if (currentRows.length > 0) {
-      const currQueryData = currentRows.map(r => ({
-        query: r.keys?.[0] ?? "",
-        clicks: r.clicks ?? 0,
-        impressions: r.impressions ?? 0,
-        ctr: r.ctr ?? 0,
-        position: r.position ?? 0,
-      }));
-      const clusters = clusterQueriesByTopic(currQueryData, client);
+  let visibilityTable: Slide["table"] | undefined;
+  if (gscTopic && gscTopic.currentRows.length > 0) {
+    const currQs = gscTopic.currentRows.map(r => ({
+      query: r.keys?.[0] ?? "",
+      clicks: r.clicks ?? 0,
+      impressions: r.impressions ?? 0,
+      ctr: r.ctr ?? 0,
+      position: r.position ?? 0,
+    }));
+    const clusters = clusterQueriesByTopic(currQs, client);
+    const ordered = [...clusters.entries()]
+      .map(([topic, queries]) => ({
+        topic,
+        queryCount: queries.length,
+        impressions: queries.reduce((s, q) => s + q.impressions, 0),
+        clicks: queries.reduce((s, q) => s + q.clicks, 0),
+      }))
+      .sort((a, b) => b.impressions - a.impressions)
+      .slice(0, 8);
+    visibilityTable = {
+      headers: ["Cluster", "# Queries", "Impressions", "Clicks"],
+      rows: ordered.map(t => [
+        t.topic,
+        String(t.queryCount),
+        t.impressions.toLocaleString("en-US"),
+        t.clicks.toLocaleString("en-US"),
+      ]),
+    };
+  }
 
-      const prevClusters = new Map<string, { queryCount: number; impressions: number; clicks: number }>();
-      if (previousRows.length > 0) {
-        const prevQueryData = previousRows.map(r => ({
-          query: r.keys?.[0] ?? "",
-          clicks: r.clicks ?? 0,
-          impressions: r.impressions ?? 0,
-          ctr: r.ctr ?? 0,
-          position: r.position ?? 0,
-        }));
-        const prevTopicClusters = clusterQueriesByTopic(prevQueryData, client);
-        for (const [topic, queries] of prevTopicClusters.entries()) {
-          prevClusters.set(topic, {
-            queryCount: queries.length,
-            impressions: queries.reduce((s, q) => s + q.impressions, 0),
-            clicks: queries.reduce((s, q) => s + q.clicks, 0),
-          });
-        }
-      }
+  const visibilityHasData = visibilityMetrics.some(m => m.current !== "—") || !!visibilityTable;
+  slides.push({
+    id: "visibility",
+    type: "visibility",
+    title: "Organic visibility & discoverability",
+    subtitle: label,
+    metrics: visibilityMetrics,
+    ...(visibilityTable ? { table: visibilityTable } : {}),
+    commentary: visibilityHasData
+      ? "Visibility-vs-clicks interpretation pending — Phase 3f synthesizes commentary."
+      : "GSC + Ahrefs not connected. Once linked, visibility data will populate.",
+  });
 
-      const pctDelta = (curr: number, prev: number): string => {
-        if (prev === 0 && curr === 0) return "0%";
-        if (prev === 0) return "+100%";
-        const d = ((curr - prev) / prev) * 100;
-        return `${d >= 0 ? "+" : ""}${d.toFixed(1)}%`;
-      };
-
-      // Generate a brief trend note per topic based on click and impression movement
-      function topicNote(topic: string, currClicks: number, currImpressions: number, prev?: { queryCount: number; impressions: number; clicks: number }): string {
-        if (!prev) return "New topic this period.";
-        const clickDelta = currClicks - prev.clicks;
-        const impDelta = currImpressions - prev.impressions;
-        const clickPct = prev.clicks > 0 ? ((clickDelta / prev.clicks) * 100) : 0;
-        const impPct = prev.impressions > 0 ? ((impDelta / prev.impressions) * 100) : 0;
-        if (Math.abs(clickPct) < 5 && Math.abs(impPct) < 5) return "Stable MoM.";
-        if (clickPct > 20) return `Strong click growth (+${clickPct.toFixed(0)}% MoM).`;
-        if (clickPct < -20) return `Click decline (${clickPct.toFixed(0)}% MoM) — monitor.`;
-        if (impPct > 15) return `Impression growth (+${impPct.toFixed(0)}% MoM).`;
-        if (impPct < -15) return `Impression decline (${impPct.toFixed(0)}% MoM) — review.`;
-        return `${clickDelta >= 0 ? "+" : ""}${clickDelta} clicks MoM.`;
-      }
-
-      const topicRows = [...clusters.entries()]
-        .map(([topic, queries]) => ({
+  // ─── SLIDE 5: Keyword & intent movement ───────────────────────────
+  // Cluster-level table: # queries, Δ queries, clicks, Δ clicks per topic
+  // cluster, with intent classification via topicAdmitConnection.
+  let kwTable: Slide["table"];
+  if (gscTopic && gscTopic.currentRows.length > 0) {
+    const toQs = (rows: any[]) => rows.map(r => ({
+      query: r.keys?.[0] ?? "",
+      clicks: r.clicks ?? 0,
+      impressions: r.impressions ?? 0,
+      ctr: r.ctr ?? 0,
+      position: r.position ?? 0,
+    }));
+    const currClusters = clusterQueriesByTopic(toQs(gscTopic.currentRows), client);
+    const prevClusters = clusterQueriesByTopic(toQs(gscTopic.previousRows ?? []), client);
+    const pctDelta = (curr: number, prev: number) => {
+      if (prev === 0 && curr === 0) return "0%";
+      if (prev === 0) return "+100%";
+      const d = ((curr - prev) / prev) * 100;
+      return `${d >= 0 ? "+" : ""}${d.toFixed(0)}%`;
+    };
+    const rows: (string | number)[][] = [...currClusters.entries()]
+      .map(([topic, qs]) => {
+        const prevQs = prevClusters.get(topic) ?? [];
+        const currClicks = qs.reduce((s, q) => s + q.clicks, 0);
+        const prevClicks = prevQs.reduce((s, q) => s + q.clicks, 0);
+        return {
           topic,
-          queryCount: queries.length,
-          totalClicks: queries.reduce((s, q) => s + q.clicks, 0),
-          totalImpressions: queries.reduce((s, q) => s + q.impressions, 0),
-          connection: topicAdmitConnection(topic),
-        }))
-        .sort((a, b) => b.queryCount - a.queryCount)
-        .slice(0, 10);
-
-      const prevMonthLabel = new Date(input.year, input.month - 2, 1).toLocaleDateString("en-US", { month: "long", year: "numeric" });
-
-      const tableRows = topicRows.map(t => {
-        const prev = prevClusters.get(t.topic);
-        return [
-          t.topic,
-          String(t.queryCount),
-          prev ? pctDelta(t.queryCount, prev.queryCount) : "—",
-          t.totalClicks.toLocaleString("en-US"),
-          prev ? pctDelta(t.totalClicks, prev.clicks) : "—",
-          t.totalImpressions.toLocaleString("en-US"),
-          prev ? pctDelta(t.totalImpressions, prev.impressions) : "—",
-          topicNote(t.topic, t.totalClicks, t.totalImpressions, prev),
-        ];
-      });
-
-      slides.push({
-        id: "query_groups",
-        type: "table",
-        title: "Query Groups",
-        subtitle: `${label} vs ${prevMonthLabel} — Topic-Level Aggregation`,
-        table: {
-          headers: ["Query Group", "# Queries", "Δ Queries", "Clicks", "Δ Clicks", "Impressions", "Δ Impressions", "Notes"],
-          rows: tableRows,
-        },
-      });
-    }
+          intent: topicAdmitConnection(topic),
+          queries: qs.length,
+          deltaQueries: pctDelta(qs.length, prevQs.length),
+          clicks: currClicks,
+          deltaClicks: pctDelta(currClicks, prevClicks),
+        };
+      })
+      .sort((a, b) => b.clicks - a.clicks)
+      .slice(0, 12)
+      .map(t => [
+        t.topic,
+        t.intent,
+        String(t.queries),
+        t.deltaQueries,
+        t.clicks.toLocaleString("en-US"),
+        t.deltaClicks,
+        "Cluster note pending AI synthesis.",
+      ]);
+    kwTable = { headers: ["Cluster", "Intent", "# Queries", "Δ Queries", "Clicks", "Δ Clicks", "Notes"], rows };
+  } else {
+    kwTable = {
+      headers: ["Cluster", "Intent", "# Queries", "Δ Queries", "Clicks", "Δ Clicks", "Notes"],
+      rows: [["—", "—", "—", "—", "—", "—", "GSC not connected"]],
+    };
   }
-
-  // ─── SLIDE 4: QTD Key Performance Indicators ─────────────────────
-  // Primary: GA4 QTD organic sessions + conversions, CallRail QTD calls.
-  // Goals from NSM Tracker (Google Sheets).
-  const qtdRows: (string | number)[][] = [];
-
-  const ga4QtdSummary =
-    ga4FunnelQtd.status === "fulfilled" && ga4FunnelQtd.value
-      ? ((ga4FunnelQtd.value as any).summary ?? [])
-      : [];
-  const ctQtdSummary =
-    ctResultQtd.status === "fulfilled" && ctResultQtd.value
-      ? ((ctResultQtd.value as any).summary ?? [])
-      : [];
-
-  const qtdSessions =
-    ga4QtdSummary.find((s: any) => /session/i.test(s.label))?.current ?? "—";
-  const qtdConversions =
-    ga4QtdSummary.find((s: any) => /conver|admit|lead/i.test(s.label))?.current ?? "—";
-  const qtdCalls =
-    ctQtdSummary.find((s: any) => /call/i.test(s.label))?.current ?? "—";
-
-  const qNum = Math.ceil(input.month / 3);
-  const qtdLabel = `Q${qNum} ${input.year} to date`;
-
-  const nsmGoals = nsmResult.status === "fulfilled" ? nsmResult.value : null;
-  const ME = "—";
-
-  function pctToGoal(actual: string | number, goal: string): string {
-    const a = typeof actual === "number" ? actual : parseFloat(String(actual).replace(/[^0-9.-]/g, ""));
-    const g = parseFloat(String(goal).replace(/[^0-9.-]/g, ""));
-    if (isNaN(a) || isNaN(g) || g === 0) return ME;
-    return `${Math.round((a / g) * 100)}%`;
-  }
-
-  function onTrackStatus(actual: string | number, goal: string): string {
-    const a = typeof actual === "number" ? actual : parseFloat(String(actual).replace(/[^0-9.-]/g, ""));
-    const g = parseFloat(String(goal).replace(/[^0-9.-]/g, ""));
-    if (isNaN(a) || isNaN(g) || g === 0) return ME;
-    const pct = a / g;
-    if (pct >= 0.9) return "On Track";
-    if (pct >= 0.7) return "Monitor";
-    return "At Risk";
-  }
-
-  const sessGoal = nsmGoals?.sessionsGoal && nsmGoals.sessionsGoal !== ME ? nsmGoals.sessionsGoal : null;
-  const mvpGoal = nsmGoals?.mvpGoal && nsmGoals.mvpGoal !== ME ? nsmGoals.mvpGoal : null;
-  const rawMvpType = nsmGoals?.mvpType && nsmGoals.mvpType !== ME ? nsmGoals.mvpType : null;
-  const mvpType = rawMvpType ?? "Calls";
-  const isMvpCallBased = !rawMvpType || /call/i.test(rawMvpType);
-  const mvpActual = isMvpCallBased ? qtdCalls : qtdConversions;
-
-  qtdRows.push(
-    [
-      "Organic Sessions",
-      qtdSessions,
-      sessGoal ?? "—",
-      sessGoal ? pctToGoal(qtdSessions, sessGoal) : ME,
-      sessGoal ? onTrackStatus(qtdSessions, sessGoal) : ME,
-    ],
-    [
-      "Organic Conversions / Leads",
-      qtdConversions,
-      "—",
-      ME,
-      ME,
-    ],
-    [
-      `Qualified ${mvpType}`,
-      mvpActual,
-      mvpGoal ?? "—",
-      mvpGoal ? pctToGoal(mvpActual, mvpGoal) : ME,
-      mvpGoal ? onTrackStatus(mvpActual, mvpGoal) : ME,
-    ]
-  );
 
   slides.push({
-    id: "qtd_kpi",
-    type: "table",
-    title: "QTD Key Performance Indicators",
-    subtitle: qtdLabel,
-    table: {
-      headers: ["KPI", "QTD Actual", "Goal", "% to Goal", "Status"],
-      rows: qtdRows,
-    },
+    id: "keywords",
+    type: "keyword_table",
+    title: "Keyword & intent movement",
+    subtitle: `${label} vs ${prevMonthName}`,
+    table: kwTable,
+    commentary: "Cluster-level notes pending — Phase 3f synthesizes per-cluster commentary.",
   });
 
-  // ─── SLIDE 5: Top Landing Pages (enhanced with multi-metric deltas) ─
-  const queryPageMapData =
-    gscQueryPageMap.status === "fulfilled" && gscQueryPageMap.value
-      ? ((gscQueryPageMap.value as any).tables?.[0]?.rows ?? [])
-      : [];
-  const queryCountByPageMonthly = new Map<string, number>();
-  for (const row of queryPageMapData) {
-    const page = String(row[1] ?? "");
-    queryCountByPageMonthly.set(page, (queryCountByPageMonthly.get(page) ?? 0) + 1);
-  }
-
-  if (gscPages.status === "fulfilled" && gscPages.value) {
-    const tables = (gscPages.value as any).tables ?? [];
-    if (tables.length > 0) {
-      const enhancedHeaders = ["Page", "Clicks", "Δ Clicks", "Impressions", "Δ Impressions", "# Queries", "CTR", "Avg Position"];
-      const enhancedRows = tables[0].rows.map((row: any[]) => {
-        const page = String(row[0] ?? "");
-        const clicks = row[1] ?? "—";
-        const deltaClicks = row[2] ?? "—";
-        const impressions = row[3] ?? "—";
-        const deltaImpressions = row[4] ?? "—";
-        const ctr = row[5] ?? "—";
-        const pos = row[6] ?? "—";
-        const queryCount = queryCountByPageMonthly.get(page) ?? queryCountByPageMonthly.get(page.startsWith("/") ? `${client.gscSiteUrl?.replace(/\/$/, "")}${page}` : page) ?? 0;
-        return [page, clicks, deltaClicks, impressions, deltaImpressions, queryCount > 0 ? String(queryCount) : "—", ctr, pos];
-      });
-      slides.push({
-        id: "landing_pages",
-        type: "table",
-        title: "Top Landing Pages",
-        subtitle: `${label} — GSC Organic Performance with Deltas`,
-        table: { headers: enhancedHeaders, rows: enhancedRows },
-      });
-    } else {
-      slides.push({
-        id: "landing_pages",
-        type: "table",
-        title: "Top Landing Pages",
-        subtitle: `${label} — Organic Clicks`,
-        table: {
-          headers: ["Page", "Clicks", "Δ Clicks", "Impressions", "Δ Impressions", "# Queries", "CTR", "Avg Position"],
-          rows: [["—", "—", "—", "—", "—", "—", "—", "—"]],
-        },
-        sourceNote: "GSC connected but no page rows returned for this period",
-      });
-    }
-  } else if (ga4Landing.status === "fulfilled" && ga4Landing.value) {
-    const tables = (ga4Landing.value as any).tables ?? [];
-    slides.push({
-      id: "landing_pages",
-      type: "table",
-      title: "Top Landing Pages",
-      subtitle: `${label} — Organic Sessions (GA4)`,
-      table:
-        tables.length > 0
-          ? { headers: tables[0].headers, rows: tables[0].rows }
-          : {
-              headers: ["Page", "Sessions", "Conversions", "CVR"],
-              rows: [["—", "—", "—", "—"]],
-            },
-      ...(tables.length === 0 ? { sourceNote: "GA4 connected but no landing page rows returned" } : {}),
-    });
-  } else {
-    slides.push({
-      id: "landing_pages",
-      type: "table",
-      title: "Top Landing Pages",
-      subtitle: `${label} — Organic Performance`,
-      table: {
-        headers: ["Page", "Clicks", "Δ Clicks", "Impressions", "Δ Impressions", "# Queries", "CTR", "Avg Position"],
-        rows: [["—", "—", "—", "—", "—", "—", "—", "—"]],
-      },
-      sourceNote: "GSC not connected — connect Google Search Console to populate",
-    });
-  }
-
-  // ─── SLIDE 6: Top Pages by Clicks ────────────────────────────────
-  if (gscPages.status === "fulfilled" && gscPages.value) {
-    const tables = (gscPages.value as any).tables ?? [];
-    if (tables.length > 0) {
-      const chartData = tables[0].rows.slice(0, 10).map((row: any[]) => ({
-        label: cleanPageLabel(String(row[0] ?? "")),
-        Clicks: parseInt(String(row[1] ?? "0").replace(/,/g, ""), 10) || 0,
-        Impressions: parseInt(String(row[3] ?? "0").replace(/,/g, ""), 10) || 0,
-      }));
-      slides.push({
-        id: "pages_chart",
-        type: "chart-bar",
-        title: "Top Pages by Clicks",
-        subtitle: `${label} — GSC Organic`,
-        chartData,
-        chartKeys: ["Clicks", "Impressions"],
-      });
-    } else {
-      slides.push({
-        id: "pages_chart",
-        type: "table",
-        title: "Top Pages by Clicks",
-        subtitle: `${label} — GSC Organic`,
-        table: {
-          headers: ["Page", "Clicks", "Impressions", "CTR", "Position"],
-          rows: [["—", "—", "—", "—", "—"]],
-        },
-        sourceNote: "GSC connected but no page rows returned for this period",
-      });
-    }
-  } else {
-    slides.push({
-      id: "pages_chart",
-      type: "table",
-      title: "Top Pages by Clicks",
-      subtitle: `${label} — GSC Organic`,
-      table: {
-        headers: ["Page", "Clicks", "Impressions", "CTR", "Position"],
-        rows: [["—", "—", "—", "—", "—"]],
-      },
-      sourceNote: "GSC not connected — connect Google Search Console to populate",
-    });
-  }
-
-  // ─── SLIDE 7: Keyword Visibility Distribution ─────────────────────
-  // Primary: SEMrush keyword distribution (only SEMrush source available for position buckets).
-  // Note: SEMrush does not support calendar month windows; uses rolling last-30-day approximation.
-  if (semResult.status === "fulfilled" && semResult.value) {
-    const tables = (semResult.value as any).tables ?? [];
-    slides.push({
-      id: "keywords",
-      type: "table",
-      title: "Keyword Visibility Distribution",
-      subtitle: `${label} — Position Ranges (SEMrush supplemental — 30-day rolling window; GSC is primary for clicks/impressions/CTR/position)`,
-      table:
-        tables.length > 0
-          ? { headers: tables[0].headers, rows: tables[0].rows }
-          : {
-              headers: ["Position Range", "Keywords", "Share"],
-              rows: [["—", "—", "—"]],
-            },
-      ...(tables.length === 0 ? { sourceNote: "SEMrush connected but no keyword distribution rows returned" } : {}),
-    });
-  } else {
-    slides.push({
-      id: "keywords",
-      type: "table",
-      title: "Keyword Visibility Distribution",
-      subtitle: `${label} — Position Ranges`,
-      table: {
-        headers: ["Position Range", "Keywords", "Share"],
-        rows: [["—", "—", "—"]],
-      },
-      sourceNote: "SEMrush not connected — connect SEMrush to populate keyword distribution",
-    });
-  }
-
-  // ─── SLIDE 8: Work Completed This Month ──────────────────────────
-  const asanaData =
-    asanaResult.status === "fulfilled" &&
-    asanaResult.value &&
-    (asanaResult.value as any).success
-      ? (asanaResult.value as {
-          success: true;
-          completed: import("./asanaClient").AsanaTask[];
-          upcoming: import("./asanaClient").AsanaTask[];
-        })
-      : null;
-  const asanaCompletedByCategory = asanaData ? groupAsanaTasks(asanaData.completed) : {};
-  const asanaUpcomingByCategory = asanaData ? groupAsanaTasks(asanaData.upcoming) : {};
-
-  let workLogRows: Array<{ area: string; task: string; notes: string }> = [];
-
-  if (airtableResult.status === "fulfilled" && airtableResult.value?.success) {
-    const data = airtableResult.value.data;
-    for (const [creditType, items] of Object.entries(data.byCreditType)) {
-      for (const item of items as any[]) {
-        workLogRows.push({ area: creditType, task: item.task, notes: item.url ?? "—" });
-      }
-    }
-  }
-
-  for (const [category, tasks] of Object.entries(asanaCompletedByCategory)) {
-    for (const t of tasks) {
-      const { italicize } = asanaSectionToCategory(t.section);
-      workLogRows.push({
-        area: category,
-        task: italicize ? `*${t.name}*` : t.name,
-        notes: t.notes || "—",
+  // ─── SLIDE 6: Search intent alignment ─────────────────────────────
+  // Phase 3f will do real intent classification + misalignment detection.
+  // Step 2b surfaces high-volume query-to-page pairs as candidates so the
+  // structure is in place; recommendation copy is placeholder.
+  const intentFindings: NonNullable<Slide["intentFindings"]> = [];
+  if (gscQpm?.tables?.[0]?.rows?.length > 0) {
+    const rows = gscQpm.tables[0].rows as any[][];
+    for (const r of rows.slice(0, 5)) {
+      const query = String(r[0] ?? "");
+      const url = String(r[1] ?? "");
+      if (!url) continue;
+      intentFindings.push({
+        url,
+        expected: "Pending AI classification",
+        observed: query,
+        recommendation: "Misalignment review pending — Phase 3f flags + recommends fixes.",
       });
     }
   }
 
-  // De-duplicate by task name
-  const seen = new Set<string>();
-  workLogRows = workLogRows.filter(r => {
-    if (seen.has(r.task)) return false;
-    seen.add(r.task);
-    return true;
+  slides.push({
+    id: "intent",
+    type: "intent_alignment",
+    title: "Search intent alignment",
+    subtitle: label,
+    intentFindings,
+    commentary: intentFindings.length === 0
+      ? "No major intent misalignments detected (or GSC query-to-page map not connected)."
+      : "Intent alignment findings pending — Phase 3f synthesizes recommendations.",
   });
 
-  // ─── AI Narration: Work Log ───────────────────────────────────────
-  const rawWorkItems = workLogRows.map(r => ({ area: r.area, task: r.task, url: r.notes !== "—" ? r.notes : undefined }));
-  let narrationProvider: string | null = null;
-  let narrationFallback = false;
-  if (rawWorkItems.length > 0) {
-    try {
-      const narRes = await narrateWorkLog(rawWorkItems, label, "monthly");
-      if (narRes.narratedRows.length === rawWorkItems.length) {
-        workLogRows = workLogRows.map((r, i) => ({ ...r, task: narRes.narratedRows[i].task }));
-      }
-      narrationProvider = narRes.provider;
-      narrationFallback = narRes.fallbackTriggered;
-      console.log(`[Monthly] Work log narration: ${narRes.fallbackTriggered ? "deterministic fallback" : `AI via ${narRes.provider}`}. ${rawWorkItems.length} items processed.`);
-    } catch (e: any) {
-      console.warn("[Monthly] Work log narration failed:", e.message);
-      narrationFallback = true;
-    }
+  // ─── SLIDE 7: Content quality, trust & E-E-A-T ────────────────────
+  // Structural signals from the page HTML scan (pageContentClient) get
+  // surfaced as stat cards + a gap table. Behavioral + link signals join
+  // in Phase 3f via AI synthesis.
+  const eeatMetrics: NonNullable<Slide["metrics"]> = [];
+  if (eeat) {
+    const total = Math.max(eeat.totalPagesScanned, 1);
+    eeatMetrics.push(
+      { label: "Pages with author schema", current: `${eeat.pagesWithAuthorSchema}/${total}`, source: "EEAT scan" },
+      { label: "Pages with reviewer markup", current: `${eeat.pagesWithReviewerInfo}/${total}`, source: "EEAT scan" },
+      { label: "Pages with FAQs", current: `${eeat.pagesWithFaqs}/${total}`, source: "EEAT scan" },
+      { label: "Pages with last-reviewed dates", current: `${eeat.pagesWithLastReviewed}/${total}`, source: "EEAT scan" },
+    );
+  } else {
+    eeatMetrics.push(
+      { label: "Pages with author schema", current: "—", sourceNote: "EEAT scan unavailable" },
+      { label: "Pages with reviewer markup", current: "—", sourceNote: "EEAT scan unavailable" },
+      { label: "Pages with FAQs", current: "—", sourceNote: "EEAT scan unavailable" },
+      { label: "Branded click share", current: "—", sourceNote: "Computed in Phase 3f" },
+    );
   }
 
-  // ─── SLIDE 8b: Supporting Strategic Initiatives ──────────────────
-  // Primary: Asana (tasks grouped by category/section with completion status)
-  // Shows initiative area, tasks completed vs. upcoming, and pacing status.
-  if (asanaData) {
-    const allCategories = new Set([
-      ...Object.keys(asanaCompletedByCategory),
-      ...Object.keys(asanaUpcomingByCategory),
-    ]);
-    const initiativeRows: string[][] = [];
-    for (const cat of allCategories) {
-      const completed = (asanaCompletedByCategory[cat] ?? []).length;
-      const upcoming = (asanaUpcomingByCategory[cat] ?? []).length;
-      const status = completed > 0 && upcoming === 0 ? "Complete" : completed > 0 ? "In Progress" : "Planned";
-      const taskNames = [
-        ...(asanaCompletedByCategory[cat] ?? []).slice(0, 2).map(t => t.name),
-        ...(asanaUpcomingByCategory[cat] ?? []).slice(0, 1).map(t => `[Next] ${t.name}`),
-      ].join("; ") || "—";
-      initiativeRows.push([cat, status, String(completed), String(upcoming), taskNames]);
-    }
-    if (initiativeRows.length > 0) {
-      slides.push({
-        id: "strategic_initiatives",
-        type: "table",
-        title: "Supporting Strategic Initiatives",
-        subtitle: `${label} — Asana Work Progress by Category`,
-        table: {
-          headers: ["Initiative Area", "Status", "Completed", "Upcoming", "Key Tasks"],
-          rows: initiativeRows,
-        },
-      });
-    }
+  let eeatTable: Slide["table"] | undefined;
+  if (eeat?.topGapsByCategory && eeat.topGapsByCategory.length > 0) {
+    eeatTable = {
+      headers: ["Gap category", "Pages affected", "Sample URLs"],
+      rows: eeat.topGapsByCategory.slice(0, 6).map(g => [
+        g.category,
+        String(g.pagesAffected),
+        g.sampleUrls.slice(0, 3).join(", ") || "—",
+      ]),
+    };
   }
 
-  // ─── SLIDE 8b: Audit Progress (from Airtable production view) ────────────────
-  // Shows in-progress content audit items grouped by audit level
-  const auditLevelMap: Record<string, string> = {
-    "Remove & Redirect": "Redirects",
-    "Cannibal Review": "Redirects",
-    "Content Refresh": "Low Level Rewrite",
-    "New Content": "Low Level Rewrite",
-    "Canonical Review": "Low Level Rewrite",
-  };
-  const auditLevelOrder = ["Redirects", "Low Level Rewrite", "Medium Level Rewrite", "High Level Rewrite"];
-  const auditByLevel: Record<string, string[]> = {};
+  slides.push({
+    id: "eeat",
+    type: "stat_grid",
+    title: "Content quality & E-E-A-T",
+    subtitle: label,
+    metrics: eeatMetrics,
+    ...(eeatTable ? { table: eeatTable } : {}),
+    commentary: eeat
+      ? "E-E-A-T posture summary pending — Phase 3f synthesizes per-dimension assessment + top 3 priorities."
+      : "EEAT scan requires GSC + page HTML fetch. Connect GSC and ensure the client domain is reachable to populate.",
+  });
 
-  if (airtableProductionResult.status === "fulfilled" && airtableProductionResult.value?.success) {
-    const prodData = airtableProductionResult.value.data;
-    for (const [, items] of Object.entries(prodData.byCreditType)) {
-      for (const item of items as any[]) {
-        const rawStatus = item.statusLabel ?? item.status ?? "";
-        const level = auditLevelMap[rawStatus] ?? (item.creditType === "Scale" ? "High Level Rewrite" : "Medium Level Rewrite");
-        if (!auditByLevel[level]) auditByLevel[level] = [];
-        if (item.url) auditByLevel[level].push(item.url);
-        else auditByLevel[level].push(item.task);
-      }
-    }
-  }
-
-  const hasAuditItems = Object.keys(auditByLevel).some(k => auditByLevel[k].length > 0);
-  if (hasAuditItems) {
-    const auditTableRows = auditLevelOrder
-      .filter(level => auditByLevel[level]?.length > 0)
-      .map(level => {
-        const items = auditByLevel[level] ?? [];
-        return [
-          level,
-          String(items.length),
-          items.slice(0, 3).join(", "),
-        ];
-      });
-    slides.push({
-      id: "audit_progress",
-      type: "table",
-      title: `${label} Audit Content`,
-      subtitle: `In-Progress Audit Items by Level (Airtable Production View)`,
-      table: {
-        headers: ["Audit Level", "# Items", "Sample Pages"],
-        rows: auditTableRows,
-      },
+  // ─── SLIDE 8: Technical SEO health ────────────────────────────────
+  // GSC Index Coverage + Crawl Stats not yet wired through the GSC client.
+  // Shell-page detection from the EEAT scanner is a useful proxy for
+  // JS-rendered content risk in the meantime.
+  const techMetrics: NonNullable<Slide["metrics"]> = [
+    { label: "Indexed pages", current: "—", sourceNote: "Connect GSC Index Coverage to populate" },
+    { label: "Pages with errors", current: "—", sourceNote: "Connect GSC Index Coverage to populate" },
+    { label: "Crawl issues", current: "—", sourceNote: "Connect GSC Crawl Stats to populate" },
+  ];
+  if (eeat) {
+    techMetrics.push({
+      label: "Shell pages detected",
+      current: String(eeat.shellPagesDetected),
+      source: "EEAT scan",
     });
   }
+  slides.push({
+    id: "technical",
+    type: "stat_grid",
+    title: "Technical SEO health",
+    subtitle: label,
+    metrics: techMetrics,
+    commentary: "Technical SEO assessment pending — Phase 3f flags top issues.",
+  });
 
-  // ─── SLIDE 8c: Content Credits Table ──────────────────────────────────────────
-  // Shows published content items with credit type, cost, keyword, and URL.
-  // Mirrors the "Content Completion" table in the PDF report.
-  if (airtableResult.status === "fulfilled" && airtableResult.value?.success) {
-    const aData = airtableResult.value.data;
-    const creditRows: string[][] = [];
-    for (const [, items] of Object.entries(aData.byCreditType)) {
-      for (const item of items as any[]) {
-        const creditLabel = item.creditType === "Scale" ? "New Content" : item.creditType === "Optimization" ? "Optimize" : item.creditType;
-        creditRows.push([
-          item.url ?? item.task,
+  // ─── SLIDE 9: Page speed & Core Web Vitals ────────────────────────
+  // PageSpeed Insights API not yet wired. Empty state is acceptable.
+  slides.push({
+    id: "speed",
+    type: "stat_grid",
+    title: "Page speed & Core Web Vitals",
+    subtitle: label,
+    metrics: [
+      { label: "LCP (avg)", current: "—", sourceNote: "PageSpeed Insights not connected" },
+      { label: "INP (avg)", current: "—", sourceNote: "PageSpeed Insights not connected" },
+      { label: "CLS (avg)", current: "—", sourceNote: "PageSpeed Insights not connected" },
+    ],
+    commentary: "Page speed monitoring not connected. Once linked, CWV trend will populate.",
+  });
+
+  // ─── SLIDE 10: CRO & user experience ──────────────────────────────
+  const croMetrics: NonNullable<Slide["metrics"]> = [];
+  if (ga4F?.summary) {
+    const cvr = (ga4F.summary as any[]).find(s => /cvr|conversion\s*rate/i.test(s.label));
+    const eng = (ga4F.summary as any[]).find(s => /engage/i.test(s.label));
+    if (cvr) croMetrics.push({
+      label: cvr.label,
+      current: cvr.current,
+      previous: cvr.previous,
+      delta: cvr.deltaPercent,
+      isPositive: cvr.isPositive,
+      source: "GA4",
+    });
+    if (eng) croMetrics.push({
+      label: eng.label,
+      current: eng.current,
+      previous: eng.previous,
+      delta: eng.deltaPercent,
+      isPositive: eng.isPositive,
+      source: "GA4",
+    });
+  }
+  if (croMetrics.length === 0) {
+    croMetrics.push(
+      { label: "Conversion rate", current: "—", sourceNote: "GA4 conversion events not configured" },
+      { label: "Engagement rate", current: "—", sourceNote: "GA4 conversion events not configured" },
+      { label: "Avg engagement time", current: "—", sourceNote: "GA4 conversion events not configured" },
+    );
+  }
+  let croTable: Slide["table"] | undefined;
+  if (ga4L?.tables?.[0]?.rows?.length > 0) {
+    croTable = { headers: ga4L.tables[0].headers, rows: ga4L.tables[0].rows };
+  }
+  slides.push({
+    id: "cro",
+    type: "stat_grid",
+    title: "CRO & user experience",
+    subtitle: label,
+    metrics: croMetrics,
+    ...(croTable ? { table: croTable } : {}),
+    commentary: "High-traffic-low-conversion pages pending — Phase 3f surfaces specific CRO opportunities.",
+  });
+
+  // ─── SLIDE 11: Authority, internal linking & site structure ───────
+  const authMetrics: NonNullable<Slide["metrics"]> = [];
+  if (ahrefs?.summary) {
+    for (const s of ahrefs.summary as any[]) {
+      authMetrics.push({ label: s.label, current: s.current, source: "Ahrefs" });
+    }
+  } else {
+    authMetrics.push(
+      { label: "Domain Rating", current: "—", sourceNote: "Ahrefs not connected" },
+      { label: "Referring Domains", current: "—", sourceNote: "Ahrefs not connected" },
+      { label: "Backlinks", current: "—", sourceNote: "Ahrefs not connected" },
+    );
+  }
+  slides.push({
+    id: "authority",
+    type: "stat_grid",
+    title: "Authority & internal linking",
+    subtitle: label,
+    metrics: authMetrics,
+    commentary: ahrefs
+      ? "Authority commentary pending — Phase 3f highlights link velocity + structural opportunities."
+      : "Ahrefs not connected — connect Ahrefs in client settings to populate authority signals.",
+  });
+
+  // ─── SLIDE 12: AI discoverability ─────────────────────────────────
+  const aiMetrics: NonNullable<Slide["metrics"]> = [];
+  if (eeat) {
+    const total = Math.max(eeat.totalPagesScanned, 1);
+    const pagesWithSchema = eeat.pages.filter(p => p.schemaBlockCount > 0).length;
+    const totalSchemaBlocks = eeat.pages.reduce((s, p) => s + p.schemaBlockCount, 0);
+    aiMetrics.push(
+      { label: "Pages with structured data", current: `${pagesWithSchema}/${total}`, source: "EEAT scan" },
+      { label: "Total schema blocks", current: String(totalSchemaBlocks), source: "EEAT scan" },
+      { label: "Pages with FAQ schema", current: `${eeat.pagesWithFaqs}/${total}`, source: "EEAT scan" },
+    );
+  } else {
+    aiMetrics.push(
+      { label: "Pages with structured data", current: "—", sourceNote: "EEAT scan unavailable" },
+      { label: "Total schema blocks", current: "—", sourceNote: "EEAT scan unavailable" },
+      { label: "GBP completeness", current: "—", sourceNote: "GBP not connected" },
+    );
+  }
+  slides.push({
+    id: "ai_discoverability",
+    type: "stat_grid",
+    title: "AI discoverability",
+    subtitle: label,
+    metrics: aiMetrics,
+    commentary: eeat
+      ? "AI discoverability assessment pending — Phase 3f synthesizes entity coverage + structured data improvements."
+      : "AI discoverability assessment pending — EEAT scan + GBP connection required.",
+  });
+
+  // ─── SLIDE 13: Next month's content pipeline ──────────────────────
+  // Production view = items currently scheduled / in progress. Each row
+  // becomes a planned-content entry with credit cost, URL, and reasoning.
+  const pipelineRows: (string | number)[][] = [];
+  if (airtableProd?.success) {
+    for (const items of Object.values(airtableProd.data.byCreditType) as any[]) {
+      for (const item of items) {
+        pipelineRows.push([
           item.targetKeyword ?? "—",
-          "—",
-          item.pageType ?? (item.creditType === "Scale" ? "Blog" : "Page"),
-          creditLabel,
           getCreditCost(item.creditType),
+          item.url ?? "—",
+          item.task && item.task !== item.targetKeyword
+            ? item.task
+            : "Reasoning pending AI synthesis.",
         ]);
       }
     }
-    if (creditRows.length > 0) {
-      slides.push({
-        id: "content_credits",
-        type: "table",
-        title: `${label} Content Completion`,
-        subtitle: `Published Content — Credit Summary`,
-        table: {
-          headers: ["Page", "Target Keyword", "Current Rank", "Page Type", "Credit Type", "Credit Cost"],
-          rows: creditRows,
-        },
-        sourceNote: "Current Rank: requires GSC cross-reference — update manually or connect live rank tracking.",
-      });
-    }
   }
-
   slides.push({
-    id: "work_completed",
-    type: workLogRows.length > 0 ? "table" : "bullets",
-    title: "Work Completed This Month",
-    ...(workLogRows.length > 0
-      ? {
-          table: {
-            headers: ["Type", "Task / Deliverable", "URL / Notes"],
-            rows: workLogRows.map(r => [r.area, r.task, r.notes]),
-          },
-        }
-      : {
-          bullets: ["— No work log data available. Connect Airtable or Asana in Setup to populate."],
-        }),
+    id: "content_pipeline",
+    type: "content_pipeline",
+    title: `${nextMonthName} content pipeline`,
+    subtitle: "Scheduled in Airtable Production",
+    table: {
+      headers: ["Target Keyword", "Credit Cost", "URL", "Reasoning"],
+      rows: pipelineRows.length > 0
+        ? pipelineRows
+        : [["—", "—", "—", "No content scheduled in Airtable Production view for next month."]],
+    },
   });
 
-  // ─── SLIDE 9: Next Month Priorities ──────────────────────────────
-  // Phase 1: Collect raw task names from all automated sources
-  const rawAsanaNextBullets: string[] = [];
-  for (const [, tasks] of Object.entries(asanaUpcomingByCategory)) {
-    rawAsanaNextBullets.push(...tasks.slice(0, 3).map(t => t.name));
+  // ─── SLIDE 14: Strategic initiatives & next month priorities ──────
+  // Two-panel slide: left = this-month category status table from Asana;
+  // right = bullets combining AM priorities + Asana upcoming + AM notes.
+  const asanaData = asana && asana.success ? asana : null;
+  const completedByCategory = asanaData ? groupAsanaTasks(asanaData.completed) : {};
+  const upcomingByCategory = asanaData ? groupAsanaTasks(asanaData.upcoming) : {};
+  const allCategories = new Set([
+    ...Object.keys(completedByCategory),
+    ...Object.keys(upcomingByCategory),
+  ]);
+  const thisMonthRows: (string | number)[][] = [];
+  for (const cat of allCategories) {
+    const done = (completedByCategory[cat] ?? []).length;
+    const upcoming = (upcomingByCategory[cat] ?? []).length;
+    const status = done > 0 && upcoming === 0 ? "Complete" : done > 0 ? "In Progress" : "Planned";
+    thisMonthRows.push([cat, status, String(done)]);
   }
-
-  // Phase 2: Data-driven fallbacks when Asana data is thin
-  const dataDrivenFallbacks: string[] = [];
-  if (rawAsanaNextBullets.length < 3) {
-    if (
-      gscQueries.status === "fulfilled" &&
-      gscQueries.value &&
-      (gscQueries.value as any).summary?.some((s: any) => !s.isPositive)
-    ) {
-      dataDrivenFallbacks.push("Investigate declining query positions and refresh underperforming pages.");
-    }
-    if (
-      ga4Funnel.status === "fulfilled" &&
-      ga4Funnel.value &&
-      (ga4Funnel.value as any).summary?.find((s: any) => /cvr|conversion/i.test(s.label) && !s.isPositive)
-    ) {
-      dataDrivenFallbacks.push("Review conversion rate drop on key landing pages and test CTA improvements.");
-    }
-    if (input.currentCrawlAssetId) {
-      dataDrivenFallbacks.push("Review current crawl findings for technical issues and address top-priority items.");
-    }
-    if (input.comparisonCrawlAssetId) {
-      dataDrivenFallbacks.push("Compare current vs. prior crawl to track technical remediation progress.");
+  if (thisMonthRows.length === 0 && airtable?.success) {
+    const totalPublished = Object.values(airtable.data?.byCreditType ?? {})
+      .reduce((s: number, v: any) => s + (Array.isArray(v) ? v.length : 0), 0);
+    if (totalPublished > 0) {
+      thisMonthRows.push(["Published content", "Complete", String(totalPublished)]);
     }
   }
 
-  const rawNextMonth = [...rawAsanaNextBullets, ...dataDrivenFallbacks];
-
-  // Phase 3: AI narration for asana-sourced bullets (not AM inputs, not data-driven)
-  let narratedNextBullets = rawAsanaNextBullets;
-  if (rawAsanaNextBullets.length > 0) {
-    try {
-      const nextNarRes = await narratePriorities(rawAsanaNextBullets, label, "monthly_next");
-      if (nextNarRes.bullets.length > 0) narratedNextBullets = nextNarRes.bullets;
-      if (!narrationProvider) narrationProvider = nextNarRes.provider;
-      if (nextNarRes.fallbackTriggered) narrationFallback = true;
-      console.log(`[Monthly] Next-month priority narration: ${nextNarRes.fallbackTriggered ? "deterministic fallback" : `AI via ${nextNarRes.provider}`}. ${rawAsanaNextBullets.length} bullets.`);
-    } catch (e: any) {
-      console.warn("[Monthly] Priority narration failed:", e.message);
-      narrationFallback = true;
-    }
-  }
-
-  // Phase 4: Assemble final bullets list
   const nextMonthBullets: string[] = [];
-
-  // AM focus first
-  if (am.focusNextMonth) nextMonthBullets.unshift(am.focusNextMonth);
-
-  // Narrated Asana bullets
-  nextMonthBullets.push(...narratedNextBullets);
-
-  // Data-driven fallbacks (already clean copy)
-  nextMonthBullets.push(...dataDrivenFallbacks);
-
-  // Hard fallback if still empty
-  if (nextMonthBullets.length === 0) {
-    nextMonthBullets.push(
-      "Publish next scheduled content pieces per the content calendar.",
-      "Resolve technical SEO issues identified in the most recent crawl.",
-      "Monitor keyword ranking changes and adjust on-page optimization as needed.",
-      "Review QTD KPI progress ahead of the next planning cycle."
-    );
+  if (am.focusNextMonth?.trim()) nextMonthBullets.push(am.focusNextMonth.trim());
+  for (const tasks of Object.values(upcomingByCategory)) {
+    nextMonthBullets.push(...tasks.slice(0, 2).map(t => t.name));
   }
-
-  // AM override annotations (appended last, not narrated)
-  if (am.priorityChecks?.trim()) {
-    const note = am.priorityChecks.trim();
-    const capStr = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-    const endStr = (s: string) => /[.!?]$/.test(s) ? s : `${s}.`;
-    nextMonthBullets.push(`Technical note: ${endStr(capStr(note))}`);
-  }
-  if (am.leadershipNote) nextMonthBullets.push(`Leadership note: ${am.leadershipNote}`);
-  if (am.amThoughts?.trim()) nextMonthBullets.push(`Strategic focus: ${am.amThoughts}`);
+  if (am.priorityChecks?.trim()) nextMonthBullets.push(`Technical note: ${am.priorityChecks.trim()}`);
+  if (am.leadershipNote?.trim()) nextMonthBullets.push(`Leadership note: ${am.leadershipNote.trim()}`);
+  if (am.amThoughts?.trim()) nextMonthBullets.push(`Strategic focus: ${am.amThoughts.trim()}`);
   if (am.clientNotes?.trim()) nextMonthBullets.push(`Client notes: ${am.clientNotes.trim()}`);
-
-  const nextMonthName = new Date(input.year, input.month, 1).toLocaleDateString("en-US", {
-    month: "long",
-    year: "numeric",
-  });
+  if (nextMonthBullets.length === 0) {
+    nextMonthBullets.push("Add priorities in the AM input form, or connect Asana to surface upcoming tasks.");
+  }
 
   slides.push({
-    id: "next_month",
-    type: "bullets",
-    title: `Next Month Priorities — ${nextMonthName}`,
+    id: "initiatives_priorities",
+    type: "initiatives",
+    title: "Strategic initiatives & next month priorities",
+    subtitle: `${label} → ${nextMonthName}`,
+    table: thisMonthRows.length > 0
+      ? { headers: ["Category", "Status", "Completed"], rows: thisMonthRows }
+      : { headers: ["Category", "Status", "Completed"], rows: [["—", "—", "Connect Asana in client settings to populate"]] },
     bullets: nextMonthBullets.slice(0, 8),
+    commentary: "Priorities rationale pending — Phase 3f drafts per-bullet rationale.",
   });
 
-  // AM Inputs standalone slide removed — context is now distributed into relevant slides:
-  //   clientSentiment → Monthly Performance Overview commentary
-  //   priorityChecks  → Next Month Priorities ("Technical note")
-  //   amThoughts      → Next Month Priorities ("Strategic focus")
-  //   clientNotes     → Next Month Priorities ("Client notes")
-
-  if (gscDailyTrend.status === "fulfilled" && gscDailyTrend.value) {
-    const { current: gscCurr, previous: gscPrev } = gscDailyTrend.value as { current: any[]; previous: any[] };
-    if (gscCurr.length > 0) {
-      const maxLen = Math.max(gscCurr.length, gscPrev.length);
-      const chartData = [];
-      for (let i = 0; i < maxLen; i++) {
-        const dayLabel = `Day ${i + 1}`;
-        chartData.push({
-          label: dayLabel,
-          "Clicks": gscCurr[i]?.clicks ?? 0,
-          "Clicks (prev)": gscPrev[i]?.clicks ?? 0,
-          "Impressions": gscCurr[i]?.impressions ?? 0,
-          "Impressions (prev)": gscPrev[i]?.impressions ?? 0,
-        });
+  // ─── sourceFacts — for narration / audit trail ─────────────────────
+  // Phase 3f will consume rawWorkLogItems + rawNextPriorityItems when it
+  // wires AI commentary. Step 2b emits the data shape without running
+  // narration so the slides ship with placeholder copy.
+  const rawWorkLogItems: Array<{ area: string; task: string; url?: string }> = [];
+  if (airtable?.success) {
+    for (const [creditType, items] of Object.entries(airtable.data.byCreditType) as [string, any[]][]) {
+      for (const item of items) {
+        rawWorkLogItems.push({ area: creditType, task: item.task, url: item.url });
       }
-      slides.push({
-        id: "gsc_daily_trend",
-        type: "chart-line",
-        title: "GSC Daily Trend — Clicks & Impressions",
-        subtitle: `${label} vs Previous Period`,
-        chartData,
-        chartKeys: ["Clicks", "Clicks (prev)", "Impressions", "Impressions (prev)"],
-      });
+    }
+  }
+  if (asanaData) {
+    for (const t of asanaData.completed as any[]) {
+      const { category } = asanaSectionToCategory(t.section);
+      rawWorkLogItems.push({ area: category, task: t.name });
     }
   }
 
-  if (ga4DailyTrend.status === "fulfilled" && ga4DailyTrend.value) {
-    const { current: ga4Curr, previous: ga4Prev } = ga4DailyTrend.value as { current: any[]; previous: any[] };
-    if (ga4Curr.length > 0) {
-      const maxLen = Math.max(ga4Curr.length, ga4Prev.length);
-      const chartData = [];
-      for (let i = 0; i < maxLen; i++) {
-        const dayLabel = `Day ${i + 1}`;
-        chartData.push({
-          label: dayLabel,
-          "Sessions": ga4Curr[i]?.sessions ?? 0,
-          "Sessions (prev)": ga4Prev[i]?.sessions ?? 0,
-          "Engaged": ga4Curr[i]?.engagedSessions ?? 0,
-          "Engaged (prev)": ga4Prev[i]?.engagedSessions ?? 0,
-        });
-      }
-      slides.push({
-        id: "ga4_daily_trend",
-        type: "chart-line",
-        title: "GA4 Organic Daily Trend — Sessions",
-        subtitle: `${label} vs Previous Period`,
-        chartData,
-        chartKeys: ["Sessions", "Sessions (prev)", "Engaged", "Engaged (prev)"],
-      });
-    }
+  const rawNextPriorityItems: string[] = [];
+  for (const tasks of Object.values(upcomingByCategory)) {
+    rawNextPriorityItems.push(...tasks.map(t => t.name));
   }
 
   const sourceFacts: MonthlySourceFacts = {
     windowLabel: label,
-    aiNarrationUsed: rawWorkItems.length > 0 || rawAsanaNextBullets.length > 0,
-    aiNarrationProvider: narrationProvider,
-    fallbackTriggered: narrationFallback,
+    aiNarrationUsed: false,
+    aiNarrationProvider: null,
+    fallbackTriggered: false,
     promptVersion: NARRATION_PROMPT_VERSION,
     generatedAt: now.toISOString(),
-    airtableRecords: airtableResult.status === "fulfilled" && airtableResult.value?.success
-      ? Object.values((airtableResult.value as any).data?.byCreditType ?? {}).reduce((s: number, v: any) => s + (Array.isArray(v) ? v.length : 0), 0)
+    airtableRecords: airtable?.success
+      ? Object.values(airtable.data?.byCreditType ?? {}).reduce((s: number, v: any) => s + (Array.isArray(v) ? v.length : 0), 0)
       : 0,
     asanaCompleted: asanaData
-      ? Object.values(asanaCompletedByCategory).reduce((s, v) => s + v.length, 0)
+      ? Object.values(completedByCategory).reduce((s, v) => s + v.length, 0)
       : 0,
     asanaUpcoming: asanaData
-      ? Object.values(asanaUpcomingByCategory).reduce((s, v) => s + v.length, 0)
+      ? Object.values(upcomingByCategory).reduce((s, v) => s + v.length, 0)
       : 0,
-    hasGsc: gscQueries.status === "fulfilled" && !!gscQueries.value,
-    hasGa4: ga4Funnel.status === "fulfilled" && !!ga4Funnel.value,
-    rawWorkLogItems: rawWorkItems,
-    rawNextPriorityItems: rawNextMonth,
+    hasGsc: !!gscQ,
+    hasGa4: !!ga4F,
+    rawWorkLogItems,
+    rawNextPriorityItems,
   };
 
   return {

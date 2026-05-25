@@ -37,7 +37,17 @@ export interface Slide {
     | "scorecard"
     | "decision-card"
     | "ia-comparison"
-    | "cluster-map";
+    | "cluster-map"
+    // Monthly V2 — Phase 3d Step 2b additions. Renderers land in Phase 3e;
+    // until then the SlideRenderer default branch shows a placeholder card.
+    | "exec_summary"
+    | "outcomes"
+    | "visibility"
+    | "keyword_table"
+    | "intent_alignment"
+    | "stat_grid"
+    | "content_pipeline"
+    | "initiatives";
   title?: string;
   subtitle?: string;
   commentary?: string;
@@ -51,6 +61,7 @@ export interface Slide {
     delta?: string;
     isPositive?: boolean;
     source?: string;
+    sourceNote?: string;
   }>;
   table?: { headers: string[]; rows: (string | number)[][] };
   chartData?: Array<{ label: string; [key: string]: string | number }>;
@@ -84,6 +95,29 @@ export interface Slide {
   producedBy?: string;
   sourceNote?: string;
   reportFamily?: string;
+  // ─── Monthly V2 — Phase 3d Step 2b fields ──────────────────────────────
+  // AI-generated headline / narrative / key moves for the executive summary
+  // slide. Phase 3f populates these; Step 2b sets placeholder strings.
+  headline?: string;
+  narrative?: string;
+  keyMoves?: string[];
+  // QTD goal pacing for the outcomes slide. Computed in the generator from
+  // the NSM Tracker sheet + QTD actuals; rendered as badge row in Phase 3e.
+  pacingBadges?: Array<{
+    label: string;
+    current: string;
+    goal: string;
+    status: string;
+    pacingPercent: string;
+  }>;
+  // Search-intent misalignment findings (slide 6). Phase 3f rewrites the
+  // recommendation copy; Step 2b emits placeholder text from raw GSC data.
+  intentFindings?: Array<{
+    url: string;
+    expected: string;
+    observed: string;
+    recommendation: string;
+  }>;
 }
 
 // ─── Design tokens (single source of truth for the slide system) ─────────────

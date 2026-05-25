@@ -108,7 +108,7 @@ export async function fetchAirtableWorkLog(
   clientId: number,
   startDate: string,
   endDate: string,
-  viewIntent?: "published" | "production" | "biweekly"
+  viewIntent?: "published" | "production" | "biweekly" | "biweekly_did" | "biweekly_next"
 ): Promise<{ success: true; data: WorkLogResult } | { success: false; error: string; setupRequired?: boolean }> {
   const client = await storage.getClient(clientId);
   if (!client) {
@@ -119,7 +119,14 @@ export async function fetchAirtableWorkLog(
   const airtableTableName = (client as any).airtableTableName as string | null;
 
   const configuredViewName: string | null =
-    viewIntent === "biweekly"
+    viewIntent === "biweekly_did"
+      // "What we did" pane: query the Published view (content that was produced and posted)
+      ? ((client as any).airtablePublishedView as string | null)
+      : viewIntent === "biweekly_next"
+      // "What's next" pane: query the Production view (content still to be produced)
+      ? ((client as any).airtableProductionView as string | null)
+      : viewIntent === "biweekly"
+      // Legacy single-pane biweekly: default to Production (preserves old behavior)
       ? ((client as any).airtableProductionView as string | null)
       : viewIntent === "production"
       ? ((client as any).airtableProductionView as string | null)
@@ -147,12 +154,20 @@ export async function fetchAirtableWorkLog(
   const pat = decrypt(creds[0].encryptedValue);
 
   let resolvedViewParam: string | null = configuredViewName;
+  // Track whether the configured view name resolved to an actual Airtable view ID.
+  // This drives the Everything-fallback decision below: we ONLY fall back when the
+  // primary view name doesn't resolve (i.e. doesn't exist in Airtable), not when
+  // the primary view legitimately returned 0 records. Silently masking an empty
+  // view with Everything data hides real problems from AMs.
+  let primaryViewResolved = !configuredViewName; // no configured name = nothing to "resolve"
   if (configuredViewName) {
     const viewId = await resolveViewId(airtableBaseId, airtableTableName, configuredViewName, pat);
     if (viewId) {
       resolvedViewParam = viewId;
+      primaryViewResolved = true;
     } else {
       console.warn(`[Airtable] Could not resolve view "${configuredViewName}" to an ID — using name as-is`);
+      primaryViewResolved = false;
     }
   }
 
@@ -161,11 +176,11 @@ export async function fetchAirtableWorkLog(
 
   if (startDate && endDate) {
     let formula: string;
-    if (viewIntent === "biweekly") {
-      // Bi-Weekly v2: filter on "Last Published / Updated" date field, inclusive on both ends
+    if (viewIntent === "biweekly" || viewIntent === "biweekly_did") {
+      // What-we-did pane: filter on Last Published / Updated (when content actually went live)
       formula = `AND(NOT(IS_BEFORE({Last Published / Updated}, '${startDate}')), IS_BEFORE({Last Published / Updated}, DATEADD('${endDate}', 1, 'days')))`;
-    } else if (viewIntent === "production") {
-      // Inclusive date range on Due field (try Due first, then Published Date as fallback)
+    } else if (viewIntent === "production" || viewIntent === "biweekly_next") {
+      // What's-next pane: filter on Due (when content is scheduled to ship)
       formula = `AND(IS_BEFORE({Due}, DATEADD('${endDate}', 1, 'days')), NOT(IS_BEFORE({Due}, '${startDate}')))`;
     } else {
       // Published view: inclusive start date (NOT IS_BEFORE = >= startDate), inclusive end date via DATEADD
@@ -247,7 +262,7 @@ export async function fetchAirtableWorkLog(
       };
     })
     .filter(item => {
-      if (viewIntent === "biweekly") return true;
+      if (viewIntent === "biweekly" || viewIntent === "biweekly_did" || viewIntent === "biweekly_next") return true;
       if (!item.status) return true;
       if (viewIntent === "production") {
         return item.status !== "4. Live";
@@ -257,8 +272,14 @@ export async function fetchAirtableWorkLog(
       );
     });
 
-  // Bi-Weekly view fallback: if Production view returned 0 records, retry with Everything view
-  if (viewIntent === "biweekly" && items.length === 0) {
+  // Everything-view fallback for biweekly variants.
+  // Trigger: the primary view name did NOT resolve to an Airtable view ID
+  //   (i.e. the configured view doesn't exist in Airtable). We do NOT fall
+  //   back just because the primary view returned 0 records — an empty
+  //   Published or Production view in the relevant window is a legitimate
+  //   "no work this period" signal that AMs need to see honestly.
+  const isBiweekly = viewIntent === "biweekly" || viewIntent === "biweekly_did" || viewIntent === "biweekly_next";
+  if (isBiweekly && !primaryViewResolved) {
     const everythingViewName = (client as any).airtableEverythingView as string | null;
     if (everythingViewName && everythingViewName !== configuredViewName) {
       let everythingViewParam: string | null = everythingViewName;
@@ -269,7 +290,9 @@ export async function fetchAirtableWorkLog(
       const fallbackParams = new URLSearchParams({ maxRecords: "200" });
       fallbackParams.set("view", everythingViewParam);
       if (startDate && endDate) {
-        const fallbackFormula = `AND(NOT(IS_BEFORE({Last Published / Updated}, '${startDate}')), IS_BEFORE({Last Published / Updated}, DATEADD('${endDate}', 1, 'days')))`;
+        // Use the same date field as the primary intent so the fallback window matches.
+        const dateField = (viewIntent === "biweekly_next") ? "Due" : "Last Published / Updated";
+        const fallbackFormula = `AND(NOT(IS_BEFORE({${dateField}}, '${startDate}')), IS_BEFORE({${dateField}}, DATEADD('${endDate}', 1, 'days')))`;
         fallbackParams.set("filterByFormula", fallbackFormula);
       }
       const fallbackUrl = `https://api.airtable.com/v0/${airtableBaseId}/${encodeURIComponent(airtableTableName)}?${fallbackParams}`;
@@ -300,10 +323,10 @@ export async function fetchAirtableWorkLog(
               urlSlug: rawUrlSlug || undefined,
             });
           }
-          console.log(`[Airtable] Biweekly fallback: pulled ${fallbackRecords.length} records from Everything view`);
+          console.log(`[Airtable] ${viewIntent} fallback: primary view "${configuredViewName}" did not resolve — pulled ${fallbackRecords.length} records from Everything view as backup`);
         }
       } catch (err: any) {
-        console.warn(`[Airtable] Biweekly fallback failed:`, err?.message);
+        console.warn(`[Airtable] ${viewIntent} fallback failed:`, err?.message);
       }
     }
   }

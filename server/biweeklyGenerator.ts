@@ -286,8 +286,12 @@ export async function generateBiweekly(input: {
 
   const [didAirtableResult, nextAirtableResult, sfReportsResult, nsmResult, asanaResult] =
     await Promise.allSettled([
-      fetchAirtableWorkLog(clientId, startDate, endDate, "biweekly"),
-      fetchAirtableWorkLog(clientId, nextStart, nextEnd, "biweekly"),
+      // "What we did" — content that was produced and posted in the reporting window.
+      // Queries the client's Published view, filtered on "Last Published / Updated".
+      fetchAirtableWorkLog(clientId, startDate, endDate, "biweekly_did"),
+      // "What's next" — content still to be produced in the upcoming window.
+      // Queries the client's Production view, filtered on "Due".
+      fetchAirtableWorkLog(clientId, nextStart, nextEnd, "biweekly_next"),
       storage.getSfReports(clientId),
       fetchNsmGoals(client.name),
       asanaProjectId ? fetchAsanaWorkLog(asanaProjectId, startDate, nextEnd) : Promise.resolve(null),
@@ -540,15 +544,14 @@ export async function generateBiweekly(input: {
     noAirtable,
     sfIssueCounts: sfCounts,
     aiNarrationUsed: false,
-    aiNarrationProvider: undefined,
   };
 
   return {
-    report_title: "SEO Bi-weekly Meeting",
+    report_title: `${client.name} — Bi-Weekly SEO Report`,
     client_name: client.name,
     date: fmtDate(now),
     reportingWindow: windowLabel,
-    preparedBy: preparedBy || "JAY HALL",
+    preparedBy,
     generated_at: now.toISOString(),
     sections,
     internalAmNotes,

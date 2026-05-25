@@ -4,10 +4,12 @@ import { queryGa4, handlesGa4Command, fetchGa4DailyTrend } from "./ga4Client";
 import { queryCallRail, handlesCallRailCommand } from "./callrailClient";
 import { queryCtm, handlesCtmCommand } from "./ctmClient";
 import { querySemrush, handlesSemrushCommand } from "./semrushClient";
+import { queryAhrefs, handlesAhrefsCommand } from "./ahrefsClient";
 import { fetchAirtableWorkLog, getCreditCost } from "./airtable";
 import { fetchAsanaWorkLog, asanaSectionToCategory, groupAsanaTasks } from "./asanaClient";
 import { clusterQueriesByTopic, topicAdmitConnection } from "./qbrPrepHelpers";
 import { fetchNsmGoalsForSpecificQuarter } from "./sheetsClient";
+import { scanSiteForEeat, type SiteEeatSummary } from "./pageContentClient";
 import type { Slide } from "../client/src/components/report-preview/pptx-preview";
 import { type GapContext } from "./gapAnswerContext";
 import { narrateWorkLog, narratePriorities, type MonthlySourceFacts, NARRATION_PROMPT_VERSION } from "./reportNarration";
@@ -151,6 +153,17 @@ export async function generateMonthly(input: {
     nsmResult,
     ctSummaryResult,
     airtableProductionResult,
+    // ─── Phase 3d additions ─────────────────────────────────────────────
+    // Ahrefs domain authority overview — feeds Slide 11 (Authority, internal
+    // linking) and contributes to Slide 7 (EEAT) for trust signals.
+    ahrefsOverview,
+    // EEAT site scan — fetches HTML for ~20 EEAT-critical pages and extracts
+    // schema, byline, credentials, FAQs, etc. Feeds Slide 7 (EEAT) and
+    // Slide 12 (AI discoverability).
+    // Note: gscPages may not be fulfilled yet when we kick this off, but the
+    // scanner gracefully handles missing inputs and will still scan the
+    // homepage + common EEAT paths. We pass an empty list if GSC fails.
+    eeatScanResult,
   ] = await Promise.allSettled([
     handlesGscCommand("gsc_qoq_queries" as any)
       ? queryGsc("gsc_qoq_queries" as any, client, calMonthRange)
@@ -197,15 +210,28 @@ export async function generateMonthly(input: {
     fetchGa4DailyTrend(client, calMonthRange),
     fetchNsmGoalsForSpecificQuarter(client.name, Math.ceil(input.month / 3), input.year).catch(() => null),
     // Call source breakdown — used for "Top Conversion Sources" slide
-    // CallRail: callrail_summary gives source-level breakdown
-    // CTM: ctm_qoq_sources gives source-level breakdown
     client.callrailCompanyId && handlesCallRailCommand("callrail_summary" as any)
       ? queryCallRail("callrail_summary" as any, client, calMonthRange)
       : (client as any).ctmAccountId && handlesCtmCommand("ctm_qoq_sources" as any)
         ? queryCtm("ctm_qoq_sources" as any, client, calMonthRange)
         : Promise.resolve(null),
-    // Airtable production view — in-progress audit / production items (no date filter, current state)
+    // Airtable production view — in-progress audit / production items
     fetchAirtableWorkLog(client.id, "", "", "production"),
+    // ─── Phase 3d additions ─────────────────────────────────────────────
+    // Ahrefs domain authority overview. Returns null if the client has no
+    // Ahrefs project URL configured or the Ahrefs token isn't set.
+    handlesAhrefsCommand("ahrefs_backlink_overview")
+      ? queryAhrefs("ahrefs_backlink_overview", client, calMonthRange).catch(() => null)
+      : Promise.resolve(null),
+    // EEAT site scan. Kicked off without GSC top-pages context because we
+    // can't `await` gscPages here — instead the scan uses the homepage +
+    // common EEAT paths + any service URLs we can derive later. If we want
+    // GSC-driven page selection, that requires a second-pass scan (deferred).
+    // The scan handles all errors internally and always resolves.
+    scanSiteForEeat({ client }).catch((err: any) => {
+      console.warn("[Monthly] EEAT scan failed:", err?.message ?? err);
+      return null;
+    }),
   ]);
 
   const slides: Slide[] = [];

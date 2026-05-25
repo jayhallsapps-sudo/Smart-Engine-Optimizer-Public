@@ -42,6 +42,7 @@ interface FormState {
   airtableBaseId: string;
   airtableTableName: string;
   airtableProductionView: string;
+  airtablePublishedView: string;
   airtableEverythingView: string;
   slackChannelId: string;
   slackUserId: string;
@@ -58,6 +59,7 @@ const INITIAL_FORM: FormState = {
   airtableBaseId: "",
   airtableTableName: "Content",
   airtableProductionView: "",
+  airtablePublishedView: "",
   airtableEverythingView: "",
   slackChannelId: "",
   slackUserId: "",
@@ -213,6 +215,7 @@ export function AddClientModal({ open, onOpenChange, onCreated }: AddClientModal
         airtableBaseId: form.airtableBaseId.trim(),
         airtableTableName: form.airtableTableName.trim(),
         airtableProductionView: form.airtableProductionView.trim(),
+        airtablePublishedView: form.airtablePublishedView.trim(),
         airtableEverythingView: form.airtableEverythingView.trim(),
         slackChannelId: form.slackChannelId.trim(),
         slackUserId: form.slackUserId.trim(),
@@ -330,6 +333,14 @@ export function AddClientModal({ open, onOpenChange, onCreated }: AddClientModal
               </Label>
               <Input value={form.airtableProductionView} onChange={e => update("airtableProductionView", e.target.value)} placeholder="e.g., Client Production View" data-testid="input-airtable-production-view" />
               {fieldError("airtableProductionView")}
+            </div>
+            <div className="space-y-1 mt-2">
+              <Label className="flex items-center gap-1.5">
+                Airtable Published View
+                <FieldHelp text="The name of the published view — used for completed content reporting. Optional, but recommended for accurate biweekly/monthly reports. Example: 'Client Published View'." />
+              </Label>
+              <Input value={form.airtablePublishedView} onChange={e => update("airtablePublishedView", e.target.value)} placeholder="e.g., Client Published View" data-testid="input-airtable-published-view" />
+              {fieldError("airtablePublishedView")}
             </div>
             <div className="space-y-1 mt-2">
               <Label className="flex items-center gap-1.5">

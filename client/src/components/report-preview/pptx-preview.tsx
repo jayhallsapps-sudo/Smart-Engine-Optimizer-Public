@@ -19,6 +19,15 @@ import {
   MonthlyDecisionSlide,
   MonthlyIaComparisonSlide,
   MonthlyTwoColSlide,
+  // Monthly V2 — Phase 3e components for the locked 14-slide spec.
+  MonthlyExecSummarySlide,
+  MonthlyOutcomesSlide,
+  MonthlyVisibilitySlide,
+  MonthlyKeywordTableSlide,
+  MonthlyIntentAlignmentSlide,
+  MonthlyStatGridSlide,
+  MonthlyContentPipelineSlide,
+  MonthlyInitiativesPanelSlide,
 } from "./monthly-slides";
 import {
   QcrTitleSlide,
@@ -318,18 +327,27 @@ export function SlideRenderer({
   }
 
   switch (slide.type) {
-    case "title":         return <MonthlyTitleSlide {...props} />;
-    case "divider":       return <MonthlyDividerSlide {...props} />;
-    case "metrics":       return <MonthlyKpiSlide {...props} />;
-    case "chart-bar":     return <MonthlyConversionSlide {...props} />;
-    case "chart-line":    return <MonthlyTrendSlide {...props} />;
-    case "table":         return <MonthlyAuditProgressSlide {...props} />;
-    case "bullets":       return <MonthlyInitiativesSlide {...props} />;
-    case "two-col":       return <MonthlyTwoColSlide {...props} />;
-    case "scorecard":     return <MonthlyScorecardSlide {...props} />;
-    case "decision-card": return <MonthlyDecisionSlide {...props} />;
-    case "ia-comparison": return <MonthlyIaComparisonSlide {...props} />;
-    case "cluster-map":   return <MonthlyClusterSlide {...props} />;
+    case "title":              return <MonthlyTitleSlide {...props} />;
+    case "divider":            return <MonthlyDividerSlide {...props} />;
+    case "metrics":            return <MonthlyKpiSlide {...props} />;
+    case "chart-bar":          return <MonthlyConversionSlide {...props} />;
+    case "chart-line":         return <MonthlyTrendSlide {...props} />;
+    case "table":              return <MonthlyAuditProgressSlide {...props} />;
+    case "bullets":            return <MonthlyInitiativesSlide {...props} />;
+    case "two-col":            return <MonthlyTwoColSlide {...props} />;
+    case "scorecard":          return <MonthlyScorecardSlide {...props} />;
+    case "decision-card":      return <MonthlyDecisionSlide {...props} />;
+    case "ia-comparison":      return <MonthlyIaComparisonSlide {...props} />;
+    case "cluster-map":        return <MonthlyClusterSlide {...props} />;
+    // Monthly V2 — Phase 3e components (locked 14-slide spec)
+    case "exec_summary":       return <MonthlyExecSummarySlide {...props} />;
+    case "outcomes":           return <MonthlyOutcomesSlide {...props} />;
+    case "visibility":         return <MonthlyVisibilitySlide {...props} />;
+    case "keyword_table":      return <MonthlyKeywordTableSlide {...props} />;
+    case "intent_alignment":   return <MonthlyIntentAlignmentSlide {...props} />;
+    case "stat_grid":          return <MonthlyStatGridSlide {...props} />;
+    case "content_pipeline":   return <MonthlyContentPipelineSlide {...props} />;
+    case "initiatives":        return <MonthlyInitiativesPanelSlide {...props} />;
     default:
       return (
         <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>

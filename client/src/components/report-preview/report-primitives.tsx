@@ -97,6 +97,29 @@ export const TEXT_PRIMARY   = "#111827";
 export const TEXT_SECONDARY = "#6B7280";
 export const BORDER_COLOR   = "#E5E7EB";
 
+// ─── Monthly V2 — Dashboard tokens ───────────────────────────────────────────
+// Premium research-report aesthetic. Black header band, warm off-white page,
+// white content cards, brand red as accent only. Mockup direction "Option B".
+// These are ADDITIVE — they don't replace the legacy tokens above so existing
+// biweekly / qbr / mid-strategy reports keep their current look.
+export const MV2_BG_PAGE        = "#FAFAF7";   // warm off-white page surface
+export const MV2_BG_CARD        = "#FFFFFF";   // pure white for cards
+export const MV2_BG_HEADER      = "#1A1A1A";   // near-black header band
+export const MV2_BG_FOOTER      = "#1A1A1A";   // matching footer band
+export const MV2_BG_SUBTLE      = "#F4F1E8";   // subtle warm panel (callouts)
+export const MV2_ACCENT         = "#C0392B";   // brand red — accents only
+export const MV2_TEXT_HEADER    = "#FFFFFF";   // text on dark band
+export const MV2_TEXT_PRIMARY   = "#1A1A1A";   // body on light surfaces
+export const MV2_TEXT_SECONDARY = "#5F5E5A";   // muted/secondary text
+export const MV2_TEXT_MUTED     = "#888888";   // tiny labels, page numbers
+export const MV2_BORDER         = "#EDEAE0";   // subtle warm border
+export const MV2_DIVIDER        = "#D3D1C7";   // emphasized divider
+export const MV2_POSITIVE       = "#1F8A4C";   // dark green for positive deltas
+export const MV2_NEGATIVE       = "#C0392B";   // same red for negative deltas
+// Typography stack — matches biweekly Google Docs work (Archivo headers, Inter body)
+export const MV2_FONT_HEADER    = "'Archivo', 'Helvetica Neue', Arial, sans-serif";
+export const MV2_FONT_BODY      = "'Inter', 'Segoe UI', Arial, sans-serif";
+
 // Table header tokens — intentionally matching biweekly system exactly
 // biweekly: backgroundColor="#F9FAFB", color="#6B7280", fontWeight=500 (font-medium), no uppercase
 export const TABLE_HEADER_BG   = "#F9FAFB";
@@ -548,3 +571,436 @@ export function ReportFooter() {
 
 // ─── ReportMetricCard — re-export for the new architecture ───────────────────
 export { MetricCard as ReportMetricCard };
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MONTHLY V2 — Dashboard primitives
+// ─────────────────────────────────────────────────────────────────────────────
+// Building blocks for the new monthly report design ("Option B / Dashboard").
+// All components below assume:
+//   - Slide canvas is SLIDE_W x SLIDE_H (720 x 405)
+//   - Parent is `position: relative; overflow: hidden`
+//   - Page background is MV2_BG_PAGE (warm off-white)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── MV2HeaderBand ────────────────────────────────────────────────────────────
+// Black header band that anchors every content slide.
+// Shows slide title (large) + subtitle (small, lighter) on the left,
+// page indicator (e.g. "06 / 10") on the right.
+export function MV2HeaderBand({
+  title,
+  subtitle,
+  pageIndicator,
+  height = 60,
+}: {
+  title: string;
+  subtitle?: string;
+  pageIndicator?: string;
+  height?: number;
+}) {
+  return (
+    <div
+      style={{
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        height,
+        background: MV2_BG_HEADER,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        paddingLeft: 28,
+        paddingRight: 28,
+        fontFamily: MV2_FONT_HEADER,
+      }}
+    >
+      <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", overflow: "hidden", flex: 1, minWidth: 0 }}>
+        <div
+          style={{
+            color: MV2_TEXT_HEADER,
+            fontSize: 18,
+            fontWeight: 500,
+            letterSpacing: "-0.2px",
+            lineHeight: 1.1,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {title}
+        </div>
+        {subtitle && (
+          <div
+            style={{
+              color: "#9B9A95",
+              fontSize: 9,
+              letterSpacing: "0.5px",
+              lineHeight: 1.3,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              marginTop: 2,
+            }}
+          >
+            {subtitle}
+          </div>
+        )}
+      </div>
+      {pageIndicator && (
+        <div
+          style={{
+            fontFamily: MV2_FONT_BODY,
+            fontSize: 9,
+            color: "#666666",
+            letterSpacing: "1px",
+            whiteSpace: "nowrap",
+            marginLeft: 12,
+          }}
+        >
+          {pageIndicator}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── MV2Footer ────────────────────────────────────────────────────────────────
+// Near-black footer band. Shows source label on left, date label on right,
+// thin red accent line at top.
+export function MV2Footer({
+  sourceLabel,
+  dateLabel,
+  height = 28,
+}: {
+  sourceLabel?: string;
+  dateLabel?: string;
+  height?: number;
+}) {
+  return (
+    <div
+      style={{
+        position: "absolute",
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height,
+        background: MV2_BG_FOOTER,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        paddingLeft: 28,
+        paddingRight: 28,
+        borderTop: `2px solid ${MV2_ACCENT}`,
+        fontFamily: MV2_FONT_BODY,
+      }}
+    >
+      {sourceLabel && (
+        <span style={{ fontSize: 7, color: "#888888", letterSpacing: "0.3px" }}>
+          {sourceLabel}
+        </span>
+      )}
+      {dateLabel && (
+        <span style={{ fontSize: 7, color: "#888888", letterSpacing: "0.3px" }}>
+          {dateLabel}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ─── MV2StatCard ─────────────────────────────────────────────────────────────
+// Small metric card for use inside a dashboard grid. White card, dark label,
+// big number, delta in green/red.
+export function MV2StatCard({
+  label,
+  value,
+  delta,
+  deltaPositive,
+  accent = false,
+}: {
+  label: string;
+  value: string;
+  delta?: string;
+  deltaPositive?: boolean;
+  accent?: boolean;
+}) {
+  const deltaColor = deltaPositive === true
+    ? MV2_POSITIVE
+    : deltaPositive === false
+    ? MV2_NEGATIVE
+    : MV2_TEXT_SECONDARY;
+
+  return (
+    <div
+      style={{
+        background: MV2_BG_CARD,
+        border: `1px solid ${MV2_BORDER}`,
+        borderRadius: 5,
+        padding: "10px 12px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 3,
+        boxShadow: accent ? "0 1px 2px rgba(0,0,0,0.04)" : undefined,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 8,
+          color: MV2_TEXT_MUTED,
+          letterSpacing: "0.4px",
+          textTransform: "uppercase",
+          fontWeight: 500,
+          lineHeight: 1.2,
+        }}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          fontSize: 18,
+          fontWeight: 600,
+          color: MV2_TEXT_PRIMARY,
+          lineHeight: 1.1,
+          letterSpacing: "-0.4px",
+          fontFamily: MV2_FONT_HEADER,
+        }}
+      >
+        {value}
+      </div>
+      {delta && (
+        <div style={{ fontSize: 9, color: deltaColor, fontWeight: 500 }}>
+          {delta}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── MV2ContentCard ─────────────────────────────────────────────────────────
+// Simple white wrapper with subtle border. Used for charts, callouts, tables.
+export function MV2ContentCard({
+  children,
+  padding = "12px",
+  style,
+}: {
+  children: React.ReactNode;
+  padding?: string;
+  style?: React.CSSProperties;
+}) {
+  return (
+    <div
+      style={{
+        background: MV2_BG_CARD,
+        border: `1px solid ${MV2_BORDER}`,
+        borderRadius: 5,
+        padding,
+        ...style,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+// ─── MV2InsightCallout ───────────────────────────────────────────────────────
+// Light-warm panel for AI commentary / narrative blocks.
+export function MV2InsightCallout({
+  text,
+  style,
+}: {
+  text: React.ReactNode;
+  style?: React.CSSProperties;
+}) {
+  return (
+    <div
+      style={{
+        background: MV2_BG_SUBTLE,
+        borderLeft: `2px solid ${MV2_ACCENT}`,
+        borderRadius: 4,
+        padding: "10px 14px",
+        ...style,
+      }}
+    >
+      {text}
+    </div>
+  );
+}
+
+// ─── MV2MoversList ────────────────────────────────────────────────────────────
+// Compact vertical list of items with a red square bullet. Used for
+// keyword movers, top pages, or any ranked list.
+export function MV2MoversList({
+  items,
+  maxItems = 10,
+  renderExtra,
+}: {
+  items: { label: string; value: string; delta?: string; deltaPositive?: boolean }[];
+  maxItems?: number;
+  renderExtra?: (item: (typeof items)[0]) => React.ReactNode;
+}) {
+  const visible = items.slice(0, maxItems);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      {visible.map((it, i) => {
+        const deltaColor = it.deltaPositive === true
+          ? MV2_POSITIVE
+          : it.deltaPositive === false
+          ? MV2_NEGATIVE
+          : MV2_TEXT_SECONDARY;
+        return (
+          <div
+            key={i}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              paddingBottom: i < visible.length - 1 ? 5 : 0,
+              borderBottom: i < visible.length - 1 ? `0.5px solid ${MV2_BORDER}` : "none",
+            }}
+          >
+            <span
+              style={{
+                width: 4,
+                height: 4,
+                background: MV2_ACCENT,
+                flexShrink: 0,
+              }}
+            />
+            <span
+              style={{
+                fontSize: 9,
+                color: MV2_TEXT_PRIMARY,
+                flex: 1,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {it.label}
+            </span>
+            <span style={{ fontSize: 9, fontWeight: 600, color: MV2_TEXT_PRIMARY, whiteSpace: "nowrap" }}>
+              {it.value}
+            </span>
+            {it.delta && (
+              <span style={{ fontSize: 8, color: deltaColor, whiteSpace: "nowrap" }}>
+                {it.delta}
+              </span>
+            )}
+            {renderExtra?.(it)}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── MV2Column type ───────────────────────────────────────────────────────────
+export interface MV2Column {
+  header: string;
+  format?: "text" | "number" | "delta";
+  align?: "left" | "right" | "center";
+  width?: number | string;
+}
+
+// ─── MV2Table ─────────────────────────────────────────────────────────────────
+// Clean dashboard table matching the MV2 aesthetic. Uses the warm border
+// palette, white cells, and auto-formats delta columns (red/green).
+export function MV2Table({
+  columns,
+  rows,
+  fontSize = 9,
+  maxRows,
+  rowHeight = 22,
+}: {
+  columns: MV2Column[];
+  rows: (string | number)[][];
+  fontSize?: number;
+  maxRows?: number;
+  rowHeight?: number;
+}) {
+  const displayRows = maxRows ? rows.slice(0, maxRows) : rows;
+  const truncated = maxRows ? rows.length - maxRows : 0;
+
+  return (
+    <div style={{ height: "100%", overflow: "auto" }}>
+      <table
+        style={{
+          width: "100%",
+          borderCollapse: "collapse",
+          fontSize,
+          fontFamily: MV2_FONT_BODY,
+        }}
+      >
+        <thead>
+          <tr>
+            {columns.map((col, ci) => (
+              <th
+                key={ci}
+                style={{
+                  textAlign: col.align ?? "left",
+                  padding: "4px 8px",
+                  fontWeight: 500,
+                  color: MV2_TEXT_MUTED,
+                  letterSpacing: "0.3px",
+                  borderBottom: `1px solid ${MV2_DIVIDER}`,
+                  whiteSpace: "nowrap",
+                  position: "sticky",
+                  top: 0,
+                  background: MV2_BG_CARD,
+                  fontSize: Math.max(fontSize - 1, 7),
+                }}
+              >
+                {col.header}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {displayRows.map((row, ri) => (
+            <tr
+              key={ri}
+              style={{
+                background: ri % 2 === 0 ? MV2_BG_CARD : MV2_BG_PAGE,
+                height: rowHeight,
+              }}
+            >
+              {row.map((cell, ci) => {
+                const col = columns[ci];
+                const isDelta = col?.format === "delta";
+                const raw = String(cell);
+                const isPositive = isDelta && (raw.startsWith("+") || (!raw.startsWith("-") && raw !== "0" && raw !== "0%" && raw !== "—"));
+                const isNegative = isDelta && raw.startsWith("-");
+                return (
+                  <td
+                    key={ci}
+                    style={{
+                      padding: "3px 8px",
+                      textAlign: col?.align ?? "left",
+                      color: isPositive
+                        ? MV2_POSITIVE
+                        : isNegative
+                        ? MV2_NEGATIVE
+                        : MV2_TEXT_PRIMARY,
+                      borderBottom: `0.5px solid ${MV2_BORDER}`,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      fontWeight: isDelta ? 500 : 400,
+                    }}
+                  >
+                    {raw}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {truncated > 0 && (
+        <div style={{ fontSize: 7, color: MV2_TEXT_MUTED, marginTop: 4, paddingLeft: 8 }}>
+          + {truncated} more rows in full export
+        </div>
+      )}
+    </div>
+  );
+}

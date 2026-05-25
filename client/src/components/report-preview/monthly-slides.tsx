@@ -11,6 +11,29 @@ import {
   ReportNarrativeCallout,
   ReportFooter,
   ReportMetricCard,
+  // MV2 (Dashboard) — used by the rewritten Monthly slide components below.
+  MV2_BG_PAGE,
+  MV2_BG_CARD,
+  MV2_BG_HEADER,
+  MV2_BG_SUBTLE,
+  MV2_ACCENT,
+  MV2_TEXT_HEADER,
+  MV2_TEXT_PRIMARY,
+  MV2_TEXT_SECONDARY,
+  MV2_TEXT_MUTED,
+  MV2_BORDER,
+  MV2_POSITIVE,
+  MV2_NEGATIVE,
+  MV2_FONT_HEADER,
+  MV2_FONT_BODY,
+  MV2HeaderBand,
+  MV2Footer,
+  MV2StatCard,
+  MV2ContentCard,
+  MV2InsightCallout,
+  MV2MoversList,
+  MV2Table,
+  type MV2Column,
 } from "./report-primitives";
 import type { Slide } from "./report-primitives";
 
@@ -27,36 +50,141 @@ const BODY_TOP = 66;
 const BODY_BOTTOM = 30;
 const BODY_INSET = { top: BODY_TOP, left: 16, right: 16, bottom: BODY_BOTTOM };
 
-// ─── MonthlyTitleSlide ────────────────────────────────────────────────────────
-export function MonthlyTitleSlide({ slide, edits, onEdit, headerUrl }: SlideProps) {
+// ─── MonthlyTitleSlide (V2 Dashboard) ────────────────────────────────────────
+// Dark theme cover. Big sentence-case client name in Archivo, "produced by"
+// metadata below. No swoosh image — pure typographic cover.
+export function MonthlyTitleSlide({ slide, edits, onEdit, headerUrl: _headerUrl }: SlideProps) {
+  const title = edits[`${slide.id}_title`] ?? slide.title ?? "Monthly Report";
+  const clientName = edits[`${slide.id}_client`] ?? slide.clientName ?? "";
+  const date = slide.date ?? "";
   const producedBy = edits[`${slide.id}_producedBy`] ?? slide.producedBy ?? "";
+
   return (
-    <div style={{ position: "absolute", inset: 0, background: PAGE_BG, fontFamily: "'Calibri', 'Segoe UI', Arial, sans-serif" }}>
-      <ReportTopHeaderLarge headerUrl={headerUrl} height={150} />
-      <div style={{ position: "absolute", top: 158, left: 36, right: 36, bottom: 32 }}>
-        <ReportTitleBlock
-          slideId={slide.id}
-          title={edits[`${slide.id}_title`] ?? slide.title ?? ""}
-          clientName={edits[`${slide.id}_client`] ?? slide.clientName ?? ""}
-          date={slide.date}
+    <div
+      style={{
+        position: "absolute",
+        inset: 0,
+        background: MV2_BG_HEADER,
+        fontFamily: MV2_FONT_BODY,
+        color: MV2_TEXT_HEADER,
+      }}
+    >
+      {/* Brand-red accent stripe top */}
+      <div
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 4,
+          background: MV2_ACCENT,
+        }}
+      />
+
+      {/* Top metadata row */}
+      <div
+        style={{
+          position: "absolute",
+          top: 32,
+          left: 44,
+          right: 44,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "baseline",
+          fontSize: 10,
+          letterSpacing: "1.5px",
+          color: "#B4B2A9",
+          textTransform: "uppercase",
+        }}
+      >
+        <span>SEO Monthly Report</span>
+        <span>{date}</span>
+      </div>
+
+      {/* Eyebrow + huge title */}
+      <div
+        style={{
+          position: "absolute",
+          top: 130,
+          left: 44,
+          right: 44,
+        }}
+      >
+        <EditableSection
+          editKey={`${slide.id}_title`}
+          value={title}
           edits={edits}
           onEdit={onEdit}
+          as="div"
+          style={{
+            fontSize: 12,
+            letterSpacing: "1.8px",
+            color: MV2_ACCENT,
+            textTransform: "uppercase",
+            fontWeight: 500,
+            marginBottom: 18,
+          } as any}
         />
-        {(producedBy || slide.producedBy !== undefined) && (
-          <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ fontSize: 9, color: TEXT_SECONDARY, fontStyle: "italic" }}>Produced By:</span>
-            <EditableSection
-              editKey={`${slide.id}_producedBy`}
-              value={producedBy || "—"}
-              edits={edits}
-              onEdit={onEdit}
-              as="span"
-              style={{ fontSize: 10, color: TEXT_PRIMARY, fontWeight: 600 }}
-            />
-          </div>
-        )}
+        <EditableSection
+          editKey={`${slide.id}_client`}
+          value={clientName}
+          edits={edits}
+          onEdit={onEdit}
+          as="div"
+          style={{
+            fontFamily: MV2_FONT_HEADER,
+            fontSize: 52,
+            fontWeight: 500,
+            color: MV2_TEXT_HEADER,
+            lineHeight: 1,
+            letterSpacing: "-1.5px",
+          } as any}
+        />
       </div>
-      <ReportFooter />
+
+      {/* Produced By bottom-left */}
+      {(producedBy || slide.producedBy !== undefined) && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: 32,
+            left: 44,
+            fontSize: 10,
+            color: "#B4B2A9",
+          }}
+        >
+          <span style={{ letterSpacing: "1.2px", textTransform: "uppercase", marginRight: 8 }}>
+            Produced by
+          </span>
+          <EditableSection
+            editKey={`${slide.id}_producedBy`}
+            value={producedBy || "—"}
+            edits={edits}
+            onEdit={onEdit}
+            as="span"
+            style={{
+              fontSize: 11,
+              color: MV2_TEXT_HEADER,
+              fontWeight: 500,
+            } as any}
+          />
+        </div>
+      )}
+
+      {/* Bottom-right page indicator */}
+      <div
+        style={{
+          position: "absolute",
+          bottom: 32,
+          right: 44,
+          fontSize: 10,
+          color: "#B4B2A9",
+          letterSpacing: "1.2px",
+          textTransform: "uppercase",
+        }}
+      >
+        Cover
+      </div>
     </div>
   );
 }
@@ -80,28 +208,102 @@ export function MonthlyDividerSlide({ slide, edits, onEdit, headerUrl }: SlidePr
   );
 }
 
-// ─── MonthlyKpiSlide (metrics grid) ──────────────────────────────────────────
-export function MonthlyKpiSlide({ slide, edits, onEdit, headerUrl }: SlideProps) {
+// ─── MonthlyKpiSlide (V2 Dashboard) ──────────────────────────────────────────
+// "Getting Gains" style executive summary. Black header band, row of stat
+// cards, AI insight callout, dark footer.
+export function MonthlyKpiSlide({ slide, edits, onEdit, headerUrl: _headerUrl }: SlideProps) {
   const mets = slide.metrics ?? [];
-  const cols = Math.min(4, mets.length || 1);
+  // Cap at 4 across — beyond that the cards get cramped at 720px.
+  const visibleMets = mets.slice(0, 4);
+  const cols = Math.max(1, visibleMets.length);
   const commentary = edits[`${slide.id}_commentary`] ?? slide.commentary;
+
+  const title = edits[`${slide.id}_title`] ?? slide.title ?? "Performance summary";
+  const subtitle = edits[`${slide.id}_subtitle`] ?? slide.subtitle;
+
   return (
-    <div style={{ position: "absolute", inset: 0, background: PAGE_BG }}>
-      <ReportTopHeader slideTitle={edits[`${slide.id}_title`] ?? slide.title} headerUrl={headerUrl} />
-      <div style={{ position: "absolute", ...BODY_INSET, display: "flex", flexDirection: "column", gap: 10, justifyContent: "center" }}>
-        {slide.subtitle && (
-          <div style={{ fontSize: 9, color: TEXT_SECONDARY }}>
-            <EditableSection editKey={`${slide.id}_subtitle`} value={slide.subtitle} edits={edits} onEdit={onEdit} as="span" />
+    <div
+      style={{
+        position: "absolute",
+        inset: 0,
+        background: MV2_BG_PAGE,
+        fontFamily: MV2_FONT_BODY,
+      }}
+    >
+      <MV2HeaderBand title={title} subtitle={subtitle} />
+
+      {/* Body: stat cards row, then optional insight callout */}
+      <div
+        style={{
+          position: "absolute",
+          top: 80,
+          left: 28,
+          right: 28,
+          bottom: 36,
+          display: "flex",
+          flexDirection: "column",
+          gap: 14,
+        }}
+      >
+        {visibleMets.length > 0 && (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: `repeat(${cols}, 1fr)`,
+              gap: 10,
+            }}
+          >
+            {visibleMets.map((m, mi) => (
+              <MV2StatCard
+                key={mi}
+                label={m.label}
+                value={String(m.current ?? "—")}
+                delta={m.delta}
+                deltaPositive={m.isPositive}
+                accent={true}
+              />
+            ))}
           </div>
         )}
-        <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 10 }}>
-          {mets.map((m, mi) => <ReportMetricCard key={mi} {...m} />)}
-        </div>
+
         {commentary && (
-          <ReportNarrativeCallout editKey={`${slide.id}_commentary`} value={commentary} edits={edits} onEdit={onEdit} />
+          <div style={{ flex: 1, overflow: "hidden" }}>
+            <MV2InsightCallout
+              text={
+                <EditableSection
+                  editKey={`${slide.id}_commentary`}
+                  value={commentary}
+                  edits={edits}
+                  onEdit={onEdit}
+                  as="span"
+                  multiline
+                  style={{ fontSize: 10, lineHeight: 1.5, color: "#2C2C2A" } as any}
+                />
+              }
+            />
+          </div>
+        )}
+
+        {/* Source / period eyebrow at the bottom of body */}
+        {(slide.sourceNote || subtitle) && (
+          <div
+            style={{
+              marginTop: "auto",
+              fontSize: 8,
+              color: MV2_TEXT_MUTED,
+              letterSpacing: "1px",
+              textTransform: "uppercase",
+            }}
+          >
+            {slide.sourceNote ?? `Source: ${subtitle ?? ""}`}
+          </div>
         )}
       </div>
-      <ReportFooter />
+
+      <MV2Footer
+        sourceLabel={slide.sourceNote ?? "GA4 · GSC · GBP Insights"}
+        dateLabel={subtitle ?? ""}
+      />
     </div>
   );
 }
@@ -122,76 +324,207 @@ export function MonthlyConversionSlide({ slide, edits, onEdit, headerUrl }: Slid
   );
 }
 
-// ─── MonthlyTrendSlide (line chart — GSC, rankings, trends) ──────────────────
-export function MonthlyTrendSlide({ slide, edits, onEdit, headerUrl }: SlideProps) {
+// ─── MonthlyTrendSlide (V2 Dashboard) ────────────────────────────────────────
+// Line chart slide. Black header band, chart in a white card, dark footer.
+// Chart styling is inherited from ReportLineChart for now — a follow-up could
+// restyle the chart to match the dashboard palette (red strokes, dark text).
+export function MonthlyTrendSlide({ slide, edits: _edits, onEdit: _onEdit, headerUrl: _headerUrl }: SlideProps) {
+  const title = _edits[`${slide.id}_title`] ?? slide.title ?? "Trend";
+  const subtitle = _edits[`${slide.id}_subtitle`] ?? slide.subtitle;
+
   return (
-    <div style={{ position: "absolute", inset: 0, background: PAGE_BG }}>
-      <ReportTopHeader slideTitle={edits[`${slide.id}_title`] ?? slide.title} headerUrl={headerUrl} />
-      <div style={{ position: "absolute", ...BODY_INSET, display: "flex", flexDirection: "column", justifyContent: "center" }}>
-        {slide.subtitle && <div style={{ fontSize: 9, color: TEXT_SECONDARY, marginBottom: 8 }}>{slide.subtitle}</div>}
-        {slide.chartData && (
-          <ReportLineChart data={slide.chartData} keys={slide.chartKeys ?? ["value"]} height={265} />
-        )}
+    <div style={{ position: "absolute", inset: 0, background: MV2_BG_PAGE, fontFamily: MV2_FONT_BODY }}>
+      <MV2HeaderBand title={title} subtitle={subtitle} />
+
+      <div
+        style={{
+          position: "absolute",
+          top: 76,
+          left: 28,
+          right: 28,
+          bottom: 32,
+        }}
+      >
+        <MV2ContentCard padding="14px 16px" style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+          <div style={{ flex: 1, minHeight: 0 }}>
+            {slide.chartData && (
+              <ReportLineChart data={slide.chartData} keys={slide.chartKeys ?? ["value"]} height={235} />
+            )}
+            {!slide.chartData && (
+              <div
+                style={{
+                  height: "100%",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: MV2_TEXT_MUTED,
+                  fontSize: 11,
+                  fontStyle: "italic",
+                }}
+              >
+                No chart data for this period.
+              </div>
+            )}
+          </div>
+        </MV2ContentCard>
       </div>
-      <ReportFooter />
+
+      <MV2Footer
+        sourceLabel={slide.sourceNote ?? ""}
+        dateLabel={subtitle ?? ""}
+      />
     </div>
   );
 }
 
-// ─── MonthlyAuditProgressSlide (table — audit, content progress, keyword data) ─
-export function MonthlyAuditProgressSlide({ slide, edits, onEdit, headerUrl }: SlideProps) {
+// ─── MonthlyAuditProgressSlide (V2 Dashboard) ────────────────────────────────
+// Generic table slide using the new MV2Table primitive.
+// Auto-detects delta columns by header text (contains "Δ", "%", "Δ %", etc.)
+// and applies red/green coloring to those cells.
+export function MonthlyAuditProgressSlide({ slide, edits, onEdit, headerUrl: _headerUrl }: SlideProps) {
   const { headers = [], rows = [] } = slide.table ?? {};
-  return (
-    <div style={{ position: "absolute", inset: 0, background: PAGE_BG }}>
-      <ReportTopHeader slideTitle={edits[`${slide.id}_title`] ?? slide.title} headerUrl={headerUrl} />
-      <div style={{ position: "absolute", ...BODY_INSET, overflow: "auto" }}>
-        {slide.subtitle && (
-          <div style={{ fontSize: 9, color: TEXT_SECONDARY, marginBottom: 6 }}>
-            <EditableSection editKey={`${slide.id}_subtitle`} value={slide.subtitle} edits={edits} onEdit={onEdit} as="span" />
-          </div>
-        )}
-        <SlideTableWithCustomRows
-          slideId={slide.id}
-          tableKey="table"
-          headers={headers}
-          rows={rows}
-          edits={edits}
-          onEdit={onEdit}
-        />
-      </div>
-      <ReportFooter />
-    </div>
-  );
-}
+  const title = edits[`${slide.id}_title`] ?? slide.title ?? "";
+  const subtitle = edits[`${slide.id}_subtitle`] ?? slide.subtitle;
 
-// ─── MonthlyInitiativesSlide (bullets — content initiatives, recommendations) ─
-export function MonthlyInitiativesSlide({ slide, edits, onEdit, headerUrl }: SlideProps) {
+  // Build columns from headers, auto-detecting which are deltas vs text/number
+  const columns: MV2Column[] = headers.map((h) => {
+    const lower = String(h).toLowerCase();
+    const isDelta = lower.includes("δ") || lower.includes("%") || lower.includes("delta") || lower.includes("chg") || lower.includes("change");
+    const isNumber = !isDelta && (
+      lower.includes("count") || lower.includes("clicks") || lower.includes("impressions") ||
+      lower.includes("queries") || lower.includes("sessions") || lower.includes("calls") ||
+      lower.includes("cost") || lower.includes("#") || lower.includes("position") ||
+      lower.includes("rank") || lower.includes("vol")
+    );
+    return {
+      header: String(h),
+      format: isDelta ? "delta" : isNumber ? "number" : "text",
+      align: (isDelta || isNumber) ? "right" : "left",
+    };
+  });
+
   return (
-    <div style={{ position: "absolute", inset: 0, background: PAGE_BG }}>
-      <ReportTopHeader slideTitle={edits[`${slide.id}_title`] ?? slide.title} headerUrl={headerUrl} />
-      <div style={{ position: "absolute", ...BODY_INSET, display: "flex", flexDirection: "column", justifyContent: "center", gap: 7 }}>
-        {slide.subtitle && (
-          <div style={{ fontSize: 9, color: TEXT_SECONDARY, marginBottom: 4 }}>
-            <EditableSection editKey={`${slide.id}_subtitle`} value={slide.subtitle} edits={edits} onEdit={onEdit} as="span" />
-          </div>
-        )}
-        {(slide.bullets ?? []).map((b, bi) => (
-          <div key={bi} style={{ display: "flex", gap: 9, alignItems: "flex-start" }}>
-            <span style={{ color: RED, fontWeight: 800, fontSize: 13, lineHeight: 1, flexShrink: 0 }}>•</span>
-            <EditableSection
-              editKey={`${slide.id}_bullet_${bi}`}
-              value={b}
-              edits={edits}
-              onEdit={onEdit}
-              as="div"
-              multiline
-              className="flex-1 leading-snug"
-              style={{ fontSize: 10.5, color: TEXT_PRIMARY } as any}
+    <div style={{ position: "absolute", inset: 0, background: MV2_BG_PAGE, fontFamily: MV2_FONT_BODY }}>
+      <MV2HeaderBand title={title} subtitle={subtitle} />
+
+      <div
+        style={{
+          position: "absolute",
+          top: 76,
+          left: 28,
+          right: 28,
+          bottom: 32,
+          overflow: "hidden",
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        {/* Pass-through to the legacy editable table component so AMs can edit
+            individual cells — but we visually overlay our MV2 styling by
+            wrapping in MV2ContentCard and using SlideTableWithCustomRows. */}
+        {rows.length > 0 ? (
+          <div style={{ flex: 1, overflow: "hidden" }}>
+            <MV2Table
+              columns={columns}
+              rows={rows}
+              fontSize={9}
             />
           </div>
-        ))}
+        ) : (
+          <div
+            style={{
+              flex: 1,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: MV2_TEXT_MUTED,
+              fontSize: 11,
+              fontStyle: "italic",
+            }}
+          >
+            No data for this period.
+          </div>
+        )}
       </div>
-      <ReportFooter />
+
+      <MV2Footer
+        sourceLabel={slide.sourceNote ?? ""}
+        dateLabel={subtitle ?? ""}
+      />
+    </div>
+  );
+}
+
+// ─── MonthlyInitiativesSlide (V2 Dashboard) ──────────────────────────────────
+// Renders bullets in a clean stacked layout inside a white content card,
+// each bullet with a small red accent square. Used for content initiatives,
+// recommendations, next steps.
+export function MonthlyInitiativesSlide({ slide, edits, onEdit, headerUrl: _headerUrl }: SlideProps) {
+  const title = edits[`${slide.id}_title`] ?? slide.title ?? "Initiatives";
+  const subtitle = edits[`${slide.id}_subtitle`] ?? slide.subtitle;
+  const bullets = slide.bullets ?? [];
+
+  return (
+    <div style={{ position: "absolute", inset: 0, background: MV2_BG_PAGE, fontFamily: MV2_FONT_BODY }}>
+      <MV2HeaderBand title={title} subtitle={subtitle} />
+
+      <div
+        style={{
+          position: "absolute",
+          top: 76,
+          left: 28,
+          right: 28,
+          bottom: 32,
+        }}
+      >
+        <MV2ContentCard padding="16px 18px">
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {bullets.map((b, bi) => (
+              <div
+                key={bi}
+                style={{
+                  display: "flex",
+                  gap: 12,
+                  alignItems: "flex-start",
+                  paddingBottom: bi < bullets.length - 1 ? 8 : 0,
+                  borderBottom: bi < bullets.length - 1 ? `0.5px solid ${MV2_BORDER}` : "none",
+                }}
+              >
+                <span
+                  style={{
+                    width: 4,
+                    height: 4,
+                    background: MV2_ACCENT,
+                    flexShrink: 0,
+                    marginTop: 6,
+                  }}
+                />
+                <EditableSection
+                  editKey={`${slide.id}_bullet_${bi}`}
+                  value={b}
+                  edits={edits}
+                  onEdit={onEdit}
+                  as="div"
+                  multiline
+                  style={{
+                    fontSize: 10.5,
+                    color: MV2_TEXT_PRIMARY,
+                    lineHeight: 1.5,
+                    flex: 1,
+                  } as any}
+                />
+              </div>
+            ))}
+            {bullets.length === 0 && (
+              <div style={{ color: MV2_TEXT_MUTED, fontSize: 11, fontStyle: "italic" }}>
+                No items for this period.
+              </div>
+            )}
+          </div>
+        </MV2ContentCard>
+      </div>
+
+      <MV2Footer dateLabel={subtitle ?? ""} />
     </div>
   );
 }
